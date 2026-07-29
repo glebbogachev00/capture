@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { z } from "zod";
 import { explain } from "@/lib/aiError";
-import { MODEL } from "@/lib/model-provider";
+import { MODEL, THINKING } from "@/lib/model-provider";
 
 /**
  * Keeps a thread's "Where this stands" block current.
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
           .map((f) => "[" + new Date(f.at).toDateString() + "] " + f.text)
           .join("\n\n") +
         '\n\nWrite a "Where this stands" block: 3-5 sentences of plain prose describing what this idea currently is, what\'s been settled, and what\'s still open. Write it back to them in their own register. Invent nothing. Return only the prose.',
+      providerOptions: THINKING,
     });
     return Response.json({ summary: text.trim() });
   } catch (error) {

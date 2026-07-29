@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { explain } from "@/lib/aiError";
-import { MODEL } from "@/lib/model-provider";
+import { MODEL, THINKING } from "@/lib/model-provider";
 
 /**
  * The sorting engine.
@@ -18,7 +18,7 @@ const Sorted = z.object({
   clean: z
     .string()
     .describe(
-      "the capture rewritten as clear readable prose. Repair transcription garble, drop filler and false starts, keep their voice and every idea. Never add ideas that aren't there."
+      "the capture rewritten so it is easy to read weeks later. Repair transcription garble, drop filler and false starts, keep their voice and every idea, and never add ideas that aren't there. Break it into short paragraphs separated by a blank line, one per distinct idea. Use '- ' bullets on their own lines wherever they are listing things. Never return one unbroken block."
     ),
   kind: z.enum(["action", "thread"]),
   title: z.string().describe("max 6 words"),
@@ -43,7 +43,12 @@ const Body = z.object({
 
 function prompt(raw: string, threads: z.infer<typeof Body>["threads"]) {
   return (
-    "You are the sorting engine inside a personal capture app. The person dictates by voice, so the input is often garbled, repetitive, or half-finished. Do the thinking so they don't have to.\n\n" +
+    "You are the sorting engine inside a personal capture app. Input arrives either dictated by voice — garbled, repetitive, half-finished — or pasted in as a raw unformatted block. Do the thinking so they don't have to.\n\n" +
+    "Shaping the text matters as much as sorting it. A long capture that comes back as one dense paragraph is useless to reread, so:\n" +
+    "- Put a blank line between distinct ideas. A capture covering five things should come back as roughly five short paragraphs.\n" +
+    "- When they list or enumerate, use '- ' bullets on their own lines.\n" +
+    "- If the pasted text already has structure, keep it rather than flattening it.\n" +
+    "- Do not add headings, numbering, or any commentary of your own.\n\n" +
     "Their existing threads:\n" +
     (threads.length ? JSON.stringify(threads) : "(none yet)") +
     '\n\nRaw capture:\n"""' +
@@ -77,6 +82,7 @@ export async function POST(request: Request) {
       model: MODEL,
       schema: Sorted,
       prompt: prompt(body.raw, body.threads),
+      providerOptions: THINKING,
     });
     return Response.json(object);
   } catch (error) {

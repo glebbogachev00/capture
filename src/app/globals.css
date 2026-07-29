@@ -438,6 +438,11 @@ body {
   color: var(--muted);
   letter-spacing: 0.04em;
   margin-bottom: 5px;
+  /* Holds the date alongside its edit and delete controls. */
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
 }
 .frag p {
   margin: 0;
@@ -592,6 +597,61 @@ body {
 }
 .swatch.on {
   border-color: var(--ink);
+}
+
+/* inline editing */
+.act-edit {
+  width: 100%;
+  font: inherit;
+  font-size: 15.5px;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  padding: 5px 8px;
+  outline: none;
+}
+.frag-edit textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  padding: 10px 12px;
+  outline: none;
+  resize: vertical;
+  min-height: 140px;
+}
+.frag-edit .act-meta {
+  gap: 10px;
+  align-items: center;
+}
+.rename {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.rename input {
+  flex: 1;
+  min-width: 160px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  padding: 6px 10px;
+  outline: none;
+}
+/* Fragment text keeps the blank lines and bullets the model wrote. */
+.frag p {
+  white-space: pre-wrap;
 }
 
 /* the password gate */

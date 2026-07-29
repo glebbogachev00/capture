@@ -342,6 +342,110 @@ export function Capture() {
     setTab("threads");
   };
 
+  /**
+   * Rewrite a thread's "Where this stands" from its current fragments.
+   *
+   * Called after a fragment is edited or removed: the summary is derived from
+   * them, so leaving it alone would let it describe text that no longer exists.
+   * A failure here is survivable — the fragments are already saved, and the
+   * stale summary is better than none.
+   */
+  const regenerate = useCallback(
+    async (board: Board, threadId: string) => {
+      const target = board.threads.find((t) => t.id === threadId);
+      if (!target?.frags.length) return;
+      setBusy("Updating what this thread says now");
+      try {
+        const res = await fetch("/api/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: target.name,
+            frags: target.frags.map((f) => ({ at: f.at, text: f.text })),
+          }),
+        });
+        if (res.ok) {
+          const { summary } = await res.json();
+          await persist({
+            ...board,
+            threads: board.threads.map((t) =>
+              t.id === threadId ? { ...t, summary } : t
+            ),
+          });
+        }
+      } catch {
+        /* the fragments are saved; the summary can lag */
+      }
+      setBusy(null);
+    },
+    [persist]
+  );
+
+  const editActionText = (id: string, text: string) =>
+    persist({
+      ...data,
+      actions: data.actions.map((a) => (a.id === id ? { ...a, text } : a)),
+    });
+
+  const renameThread = (id: string, name: string) =>
+    persist({
+      ...data,
+      threads: data.threads.map((t) => (t.id === id ? { ...t, name } : t)),
+    });
+
+  const editFrag = async (threadId: string, fragId: string, text: string) => {
+    const next = {
+      ...data,
+      threads: data.threads.map((t) =>
+        t.id === threadId
+          ? {
+              ...t,
+              frags: t.frags.map((f) => (f.id === fragId ? { ...f, text } : f)),
+            }
+          : t
+      ),
+    };
+    await persist(next);
+    await regenerate(next, threadId);
+  };
+
+  const deleteFrag = async (threadId: string, fragId: string) => {
+    const target = data.threads.find((t) => t.id === threadId);
+    const frag = target?.frags.find((f) => f.id === fragId);
+    await dropImages(frag?.imgs);
+
+    const remaining = (target?.frags || []).filter((f) => f.id !== fragId);
+
+    // A thread with nothing left in it is just a name; drop it and go back.
+    if (!remaining.length) {
+      await persist({
+        ...data,
+        threads: data.threads.filter((t) => t.id !== threadId),
+      });
+      setOpen(null);
+      return;
+    }
+
+    const next = {
+      ...data,
+      threads: data.threads.map((t) =>
+        t.id === threadId ? { ...t, frags: remaining } : t
+      ),
+    };
+    await persist(next);
+    await regenerate(next, threadId);
+  };
+
+  const deleteThread = async (id: string) => {
+    const target = data.threads.find((t) => t.id === id);
+    for (const f of target?.frags || []) await dropImages(f.imgs);
+    await persist({
+      ...data,
+      threads: data.threads.filter((t) => t.id !== id),
+    });
+    setOpen(null);
+  };
+
   const live = data.actions.filter((a) => !a.done && !a.faded);
   const fadedList = data.actions.filter((a) => a.faded && !a.done);
   const done = data.actions.filter((a) => a.done);
@@ -369,6 +473,7 @@ export function Capture() {
       onRestore={() => restore(a.id)}
       onRemove={() => removeNow(a)}
       onMakeThread={() => moveToThread(a)}
+      onEditText={(text) => editActionText(a.id, text)}
     />
   );
 
@@ -482,23 +587,15 @@ export function Capture() {
         )}
 
         {thread ? (
-          <div>
-            <button className="back" onClick={() => setOpen(null)}>
-              ← all threads
-            </button>
-            <div className="tname" style={{ fontSize: 26, marginBottom: 14 }}>
-              {thread.name}
-            </div>
-            {thread.summary && (
-              <div className="state">
-                <h4>Where this stands</h4>
-                <p>{thread.summary}</p>
-              </div>
-            )}
-            {[...thread.frags].reverse().map((f) => (
-              <FragView key={f.id} f={f} />
-            ))}
-          </div>
+          <ThreadView
+            thread={thread}
+            onBack={() => setOpen(null)}
+            onRename={(name) => renameThread(thread.id, name)}
+            onDelete={() => deleteThread(thread.id)}
+            onEditFrag={(fragId, text) => editFrag(thread.id, fragId, text)}
+            onDeleteFrag={(fragId) => deleteFrag(thread.id, fragId)}
+            onRefresh={() => regenerate(data, thread.id)}
+          />
         ) : (
           <>
             <div className="tabs">
@@ -650,6 +747,7 @@ function Row({
   onRestore,
   onRemove,
   onMakeThread,
+  onEditText,
 }: {
   a: Action;
   faded?: boolean;
@@ -661,15 +759,47 @@ function Row({
   onRestore: () => void;
   onRemove: () => void;
   onMakeThread: () => void;
+  onEditText: (text: string) => void;
 }) {
   const ms = a.expires ? a.expires - now : null;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(a.text);
+
+  const commit = () => {
+    if (draft.trim()) onEditText(draft.trim());
+    setEditing(false);
+  };
+
   return (
     <div className={"act" + (faded ? " is-faded" : "")}>
       <button className="box" onClick={onToggle} aria-label="Mark done" />
       <div className="act-body">
-        <div className="act-text">{a.text}</div>
+        {editing ? (
+          <input
+            className="act-edit"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            aria-label="Action text"
+            autoFocus
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") {
+                setDraft(a.text);
+                setEditing(false);
+              }
+            }}
+          />
+        ) : (
+          <div className="act-text">{a.text}</div>
+        )}
         <div className="act-meta">
           <span>{fmt(a.at)}</span>
+          {!editing && (
+            <button className="ghost" onClick={() => setEditing(true)}>
+              edit
+            </button>
+          )}
           {faded ? (
             <>
               <span>
@@ -680,9 +810,11 @@ function Row({
               </button>
             </>
           ) : (
-            <button className="ghost" onClick={onMakeThread}>
-              → make a thread
-            </button>
+            !editing && (
+              <button className="ghost" onClick={onMakeThread}>
+                → make a thread
+              </button>
+            )
           )}
         </div>
         {shelfOpen && (
@@ -745,8 +877,137 @@ function TCard({
   );
 }
 
-function FragView({ f }: { f: Frag }) {
+function ThreadView({
+  thread,
+  onBack,
+  onRename,
+  onDelete,
+  onEditFrag,
+  onDeleteFrag,
+  onRefresh,
+}: {
+  thread: Thread;
+  onBack: () => void;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+  onEditFrag: (fragId: string, text: string) => void;
+  onDeleteFrag: (fragId: string) => void;
+  onRefresh: () => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(thread.name);
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <div>
+      <button className="back" onClick={onBack}>
+        ← all threads
+      </button>
+
+      {renaming ? (
+        <div className="rename">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-label="Thread name"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && name.trim()) {
+                onRename(name.trim());
+                setRenaming(false);
+              }
+              if (e.key === "Escape") {
+                setName(thread.name);
+                setRenaming(false);
+              }
+            }}
+          />
+          <button
+            className="capture-btn"
+            disabled={!name.trim()}
+            onClick={() => {
+              onRename(name.trim());
+              setRenaming(false);
+            }}
+          >
+            Save
+          </button>
+          <button
+            className="ghost"
+            onClick={() => {
+              setName(thread.name);
+              setRenaming(false);
+            }}
+          >
+            cancel
+          </button>
+        </div>
+      ) : (
+        <div className="tname" style={{ fontSize: 26 }}>
+          {thread.name}
+        </div>
+      )}
+
+      {!renaming && (
+        <div className="act-meta" style={{ marginBottom: 16 }}>
+          <button className="ghost" onClick={() => setRenaming(true)}>
+            rename
+          </button>
+          <button className="ghost" onClick={onRefresh}>
+            refresh summary
+          </button>
+          <button className="ghost" onClick={() => setConfirming((v) => !v)}>
+            delete thread
+          </button>
+        </div>
+      )}
+
+      {confirming && (
+        <div className="shelf" style={{ marginBottom: 16 }}>
+          <span className="cap-hint" style={{ flex: "1 1 100%" }}>
+            Delete this thread and all {thread.frags.length} fragment
+            {thread.frags.length > 1 ? "s" : ""}? This cannot be undone.
+          </span>
+          <button className="warn" onClick={onDelete}>
+            delete for good
+          </button>
+          <button onClick={() => setConfirming(false)}>keep it</button>
+        </div>
+      )}
+
+      {thread.summary && (
+        <div className="state">
+          <h4>Where this stands</h4>
+          <p>{thread.summary}</p>
+        </div>
+      )}
+
+      {[...thread.frags].reverse().map((f) => (
+        <FragView
+          key={f.id}
+          f={f}
+          onSave={(text) => onEditFrag(f.id, text)}
+          onDelete={() => onDeleteFrag(f.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function FragView({
+  f,
+  onSave,
+  onDelete,
+}: {
+  f: Frag;
+  onSave: (text: string) => void;
+  onDelete: () => void;
+}) {
   const [srcs, setSrcs] = useState<string[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(f.text);
+  const [confirming, setConfirming] = useState(false);
+
   useEffect(() => {
     (async () => {
       const out: string[] = [];
@@ -764,8 +1025,63 @@ function FragView({ f }: { f: Frag }) {
 
   return (
     <div className="frag">
-      <div className="frag-date">{fmt(f.at)}</div>
-      <p>{f.text}</p>
+      <div className="frag-date">
+        {fmt(f.at)}
+        {!editing && (
+          <>
+            <button className="ghost" onClick={() => setEditing(true)}>
+              edit
+            </button>
+            <button className="ghost" onClick={() => setConfirming((v) => !v)}>
+              delete
+            </button>
+          </>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="frag-edit">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            aria-label="Fragment text"
+            autoFocus
+          />
+          <div className="act-meta">
+            <button
+              className="capture-btn"
+              disabled={!draft.trim()}
+              onClick={() => {
+                onSave(draft.trim());
+                setEditing(false);
+              }}
+            >
+              Save
+            </button>
+            <button
+              className="ghost"
+              onClick={() => {
+                setDraft(f.text);
+                setEditing(false);
+              }}
+            >
+              cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p>{f.text}</p>
+      )}
+
+      {confirming && !editing && (
+        <div className="shelf">
+          <button className="warn" onClick={onDelete}>
+            delete this fragment
+          </button>
+          <button onClick={() => setConfirming(false)}>keep it</button>
+        </div>
+      )}
+
       {srcs.map((s, i) => (
         // eslint-disable-next-line @next/next/no-img-element
         <img key={i} src={s} alt="" />

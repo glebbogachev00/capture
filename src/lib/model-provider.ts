@@ -10,3 +10,13 @@ import { google } from "@ai-sdk/google";
  * inside the free tier.
  */
 export const MODEL = google("gemini-3.6-flash");
+
+/**
+ * Gemini 3 reasons at length by default, which pushed a one-fragment summary
+ * to 35 seconds — far too slow for something you use while standing in a
+ * doorway. Neither job needs deep deliberation: one is a two-way sort with a
+ * shelf-life judgement, the other is five sentences of synthesis.
+ */
+export const THINKING = {
+  google: { thinkingConfig: { thinkingLevel: "low" as const } },
+};
