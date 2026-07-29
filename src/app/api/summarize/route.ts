@@ -1,5 +1,7 @@
 import { generateText } from "ai";
 import { z } from "zod";
+import { explain } from "@/lib/aiError";
+import { MODEL } from "@/lib/model-provider";
 
 /**
  * Keeps a thread's "Where this stands" block current.
@@ -11,8 +13,6 @@ import { z } from "zod";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const MODEL = "anthropic/claude-sonnet-5";
 
 const Body = z.object({
   name: z.string(),
@@ -42,6 +42,7 @@ export async function POST(request: Request) {
     return Response.json({ summary: text.trim() });
   } catch (error) {
     console.error("summarize failed", error);
-    return Response.json({ error: "summarize failed" }, { status: 502 });
+    const { message, status } = explain(error);
+    return Response.json({ error: message }, { status });
   }
 }

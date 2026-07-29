@@ -1,19 +1,18 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { explain } from "@/lib/gatewayError";
+import { explain } from "@/lib/aiError";
+import { MODEL } from "@/lib/model-provider";
 
 /**
  * The sorting engine.
  *
  * The prompt lives here rather than in the browser so it can't be rewritten by
- * whatever is on the client, and so the model is reached with the project's
- * gateway credentials instead of a key shipped to every visitor.
+ * whatever is on the client, and so the API key stays on the server instead of
+ * being shipped to every visitor.
  */
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const MODEL = "anthropic/claude-sonnet-5";
 
 const Sorted = z.object({
   clean: z
