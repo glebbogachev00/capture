@@ -546,6 +546,33 @@ export function Capture() {
     setOpen(null);
   };
 
+  /**
+   * Fold `fromId` into `intoId`.
+   *
+   * The sorter sometimes starts a second thread for something that already had
+   * one, and the two halves are no use apart. Fragments are interleaved by
+   * date rather than appended, so the merged thread reads as one history, and
+   * the summary is rebuilt from the whole of it. The thread you are looking at
+   * keeps its name; the other one goes.
+   */
+  const mergeThreads = async (intoId: string, fromId: string) => {
+    const into = data.threads.find((t) => t.id === intoId);
+    const from = data.threads.find((t) => t.id === fromId);
+    if (!into || !from) return;
+
+    const frags = [...into.frags, ...from.frags].sort((a, b) => a.at - b.at);
+    const next: Board = {
+      ...data,
+      threads: data.threads
+        .filter((t) => t.id !== fromId)
+        .map((t) => (t.id === intoId ? { ...t, frags } : t)),
+    };
+    await persist(next);
+    setLanded(from.name + " folded into " + into.name);
+    setTimeout(() => setLanded(null), 4500);
+    await regenerate(next, intoId);
+  };
+
   const live = data.actions.filter((a) => !a.done && !a.faded);
   const fadedList = data.actions.filter((a) => a.faded && !a.done);
   const done = data.actions.filter((a) => a.done);
@@ -697,6 +724,8 @@ export function Capture() {
             onEditFrag={(fragId, text) => editFrag(thread.id, fragId, text)}
             onDeleteFrag={(fragId) => deleteFrag(thread.id, fragId)}
             onRefresh={() => regenerate(data, thread.id)}
+            others={data.threads.filter((t) => t.id !== thread.id)}
+            onMerge={(fromId) => mergeThreads(thread.id, fromId)}
           />
         ) : (
           <>
@@ -904,12 +933,12 @@ function Row({
           {a.unsorted && <span className="raw">unsorted</span>}
           {!editing && (
             <button className="ghost" onClick={() => setEditing(true)}>
-              edit
+              Edit
             </button>
           )}
           {a.unsorted && !editing && (
             <button className="ghost" onClick={onResort} disabled={busy}>
-              sort it now
+              Sort now
             </button>
           )}
           {faded ? (
@@ -918,13 +947,13 @@ function Row({
                 faded · clears in {left((a.fadedAt || now) + GRACE - now)}
               </span>
               <button className="ghost" onClick={onRestore}>
-                restore
+                Restore
               </button>
             </>
           ) : (
             !editing && (
               <button className="ghost" onClick={onMakeThread}>
-                → make a thread
+                Make a thread
               </button>
             )
           )}
@@ -997,6 +1026,8 @@ function ThreadView({
   onEditFrag,
   onDeleteFrag,
   onRefresh,
+  others,
+  onMerge,
 }: {
   thread: Thread;
   onBack: () => void;
@@ -1005,10 +1036,13 @@ function ThreadView({
   onEditFrag: (fragId: string, text: string) => void;
   onDeleteFrag: (fragId: string) => void;
   onRefresh: () => void;
+  others: Thread[];
+  onMerge: (fromId: string) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(thread.name);
   const [confirming, setConfirming] = useState(false);
+  const [merging, setMerging] = useState(false);
 
   return (
     <div>
@@ -1051,7 +1085,7 @@ function ThreadView({
               setRenaming(false);
             }}
           >
-            cancel
+            Cancel
           </button>
         </div>
       ) : (
@@ -1063,13 +1097,57 @@ function ThreadView({
       {!renaming && (
         <div className="act-meta" style={{ marginBottom: 16 }}>
           <button className="ghost" onClick={() => setRenaming(true)}>
-            rename
+            Rename
           </button>
+          {others.length > 0 && (
+            <button
+              className="ghost"
+              onClick={() => {
+                setMerging((v) => !v);
+                setConfirming(false);
+              }}
+            >
+              Merge in
+            </button>
+          )}
           <button className="ghost" onClick={onRefresh}>
-            refresh summary
+            Refresh summary
           </button>
-          <button className="ghost" onClick={() => setConfirming((v) => !v)}>
-            delete thread
+          <button
+            className="ghost warn"
+            onClick={() => {
+              setConfirming((v) => !v);
+              setMerging(false);
+            }}
+          >
+            Delete thread
+          </button>
+        </div>
+      )}
+
+      {merging && (
+        <div className="picker">
+          <p className="picker-hint">
+            Pick a thread to fold into <b>{thread.name}</b>. Its fragments join
+            this one in date order and the thread itself goes.
+          </p>
+          {others.map((t) => (
+            <button
+              key={t.id}
+              className="picker-row"
+              onClick={() => {
+                onMerge(t.id);
+                setMerging(false);
+              }}
+            >
+              <span className="picker-name">{t.name}</span>
+              <span className="picker-meta">
+                {t.frags.length} fragment{t.frags.length > 1 ? "s" : ""}
+              </span>
+            </button>
+          ))}
+          <button className="ghost" onClick={() => setMerging(false)}>
+            Cancel
           </button>
         </div>
       )}
@@ -1081,9 +1159,9 @@ function ThreadView({
             {thread.frags.length > 1 ? "s" : ""}? This cannot be undone.
           </span>
           <button className="warn" onClick={onDelete}>
-            delete for good
+            Delete for good
           </button>
-          <button onClick={() => setConfirming(false)}>keep it</button>
+          <button onClick={() => setConfirming(false)}>Keep it</button>
         </div>
       )}
 
@@ -1143,10 +1221,10 @@ function FragView({
         {!editing && (
           <>
             <button className="ghost" onClick={() => setEditing(true)}>
-              edit
+              Edit
             </button>
             <button className="ghost" onClick={() => setConfirming((v) => !v)}>
-              delete
+              Delete
             </button>
           </>
         )}
@@ -1178,7 +1256,7 @@ function FragView({
                 setEditing(false);
               }}
             >
-              cancel
+              Cancel
             </button>
           </div>
         </div>
@@ -1189,9 +1267,9 @@ function FragView({
       {confirming && !editing && (
         <div className="shelf">
           <button className="warn" onClick={onDelete}>
-            delete this fragment
+            Delete fragment
           </button>
-          <button onClick={() => setConfirming(false)}>keep it</button>
+          <button onClick={() => setConfirming(false)}>Keep it</button>
         </div>
       )}
 

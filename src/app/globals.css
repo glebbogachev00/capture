@@ -91,6 +91,7 @@ body {
   align-items: center;
   gap: 8px;
   margin-top: 10px;
+  flex-wrap: wrap;
 }
 .cap-hint {
   flex: 1;
@@ -103,14 +104,16 @@ body {
 .icon-btn {
   border: 1px solid var(--rule);
   background: transparent;
-  color: var(--muted);
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
+  color: var(--ink);
+  width: 44px;
+  height: 44px;
+  font-size: 17px;
+  border-radius: 11px;
   cursor: pointer;
   display: grid;
   place-items: center;
   flex: none;
+  touch-action: manipulation;
   transition: 0.15s;
 }
 .icon-btn:hover {
@@ -129,11 +132,16 @@ body {
   color: var(--paper);
   font: inherit;
   font-weight: 600;
-  font-size: 14.5px;
-  padding: 9px 20px;
-  border-radius: 9px;
+  font-size: 15px;
+  padding: 0 22px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
   cursor: pointer;
   flex: none;
+  touch-action: manipulation;
   transition: 0.15s;
 }
 .capture-btn:disabled {
@@ -224,19 +232,31 @@ body {
   padding: 13px 2px;
   border-bottom: 1px solid var(--rule);
 }
+/*
+ * The tick box draws at 22px, but ::before extends the hit area to 42px
+ * without changing the layout — the thing you aim at is bigger than the
+ * thing you see.
+ */
 .box {
-  width: 18px;
-  height: 18px;
-  border: 1.5px solid var(--muted);
-  border-radius: 5px;
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--muted);
+  border-radius: 6px;
   flex: none;
-  margin-top: 2px;
+  margin-top: 1px;
   cursor: pointer;
   background: none;
   padding: 0;
   display: grid;
   place-items: center;
+  touch-action: manipulation;
   transition: 0.15s;
+}
+.box::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
 }
 .box:hover {
   border-color: var(--accent);
@@ -261,41 +281,80 @@ body {
 }
 .act-meta {
   font-family: var(--font-mono), monospace;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--muted);
-  margin-top: 3px;
+  margin-top: 8px;
   letter-spacing: 0.03em;
   display: flex;
   align-items: center;
-  gap: 9px;
+  /* Roomy enough that neighbouring pills can't be hit by mistake. */
+  gap: 8px;
+  row-gap: 8px;
   flex-wrap: wrap;
 }
+/*
+ * Controls are sized for a thumb, not a mouse pointer.
+ *
+ * These were 10.5px monospace with no padding, which is unreadable and close
+ * to untappable on a phone. They are now pills with a 40px minimum height —
+ * above the 44pt guidance once the surrounding gap is counted — and a visible
+ * border, so it is obvious they are buttons rather than captions.
+ */
 .ghost {
-  border: 0;
-  background: none;
-  color: var(--muted);
+  border: 1px solid var(--rule);
+  background: var(--card);
+  color: var(--ink);
   cursor: pointer;
-  font-family: var(--font-mono), monospace;
-  font-size: 10.5px;
-  padding: 2px 0;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0 14px;
+  min-height: 40px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  touch-action: manipulation;
+  transition: 0.15s;
 }
 .ghost:hover {
   color: var(--accent);
+  border-color: var(--accent);
+}
+.ghost:active {
+  background: var(--accent-soft);
+}
+.ghost:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Destructive controls read as such before they are pressed. */
+.ghost.warn {
+  color: #a33b23;
+  border-color: #e2c6bd;
+}
+.ghost.warn:hover {
+  color: #8a3324;
+  border-color: #c4452b;
 }
 
 /* shelf-life chip */
 .chip {
   border: 1px solid var(--rule);
   background: var(--card);
-  color: var(--muted);
+  color: var(--ink);
   font-family: var(--font-mono), monospace;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.04em;
   border-radius: 20px;
-  padding: 2px 8px;
+  padding: 0 14px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
   cursor: pointer;
   flex: none;
-  margin-top: 1px;
+  touch-action: manipulation;
   transition: 0.15s;
 }
 .chip:hover {
@@ -321,13 +380,22 @@ body {
 }
 .shelf button {
   border: 1px solid var(--rule);
-  background: transparent;
-  color: var(--muted);
+  background: var(--paper);
+  color: var(--ink);
   cursor: pointer;
-  font-family: var(--font-mono), monospace;
-  font-size: 10.5px;
-  border-radius: 7px;
-  padding: 4px 9px;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 500;
+  border-radius: 9px;
+  padding: 0 14px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  touch-action: manipulation;
+}
+.shelf button.warn {
+  color: #a33b23;
+  border-color: #e2c6bd;
 }
 .shelf button:hover {
   border-color: var(--accent);
@@ -340,11 +408,11 @@ body {
 
 .section-label {
   font-family: var(--font-mono), monospace;
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 26px 0 6px;
+  margin: 22px 0 4px;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -352,8 +420,10 @@ body {
   border: 0;
   background: none;
   cursor: pointer;
-  padding: 0;
+  padding: 12px 0;
+  min-height: 44px;
   text-align: left;
+  touch-action: manipulation;
 }
 .section-label:after {
   content: "";
@@ -434,14 +504,15 @@ body {
 }
 .frag-date {
   font-family: var(--font-mono), monospace;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--muted);
   letter-spacing: 0.04em;
-  margin-bottom: 5px;
+  margin-bottom: 9px;
   /* Holds the date alongside its edit and delete controls. */
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
+  row-gap: 8px;
   flex-wrap: wrap;
 }
 .frag p {
@@ -462,12 +533,17 @@ body {
   border: 0;
   background: none;
   cursor: pointer;
-  padding: 0 0 12px;
+  padding: 10px 12px 10px 0;
+  margin-bottom: 4px;
   font-family: var(--font-mono), monospace;
-  font-size: 11px;
+  font-size: 12.5px;
   color: var(--muted);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  touch-action: manipulation;
 }
 .back:hover {
   color: var(--accent);
@@ -599,6 +675,59 @@ body {
   border-color: var(--ink);
 }
 
+/* Choosing a thread to fold into this one. */
+.picker {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 13px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.picker-hint {
+  margin: 0 0 4px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.picker-hint b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.picker-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 11px 13px;
+  min-height: 48px;
+  touch-action: manipulation;
+  transition: 0.15s;
+}
+.picker-row:hover {
+  border-color: var(--accent);
+}
+.picker-name {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 16.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.picker-meta {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* Saved verbatim because no model would answer. */
 .raw {
   border: 1px dashed #b08428;
@@ -698,6 +827,24 @@ body {
 }
 .gate input:focus {
   border-color: var(--accent);
+}
+
+/*
+ * Phone layout. Kept at the end so these win over the base rules above
+ * without needing inflated selectors.
+ *
+ * On a narrow screen the dictation hint would squeeze Capture down to three
+ * wrapped lines, so it drops to its own row and the button keeps full size.
+ */
+@media (max-width: 460px) {
+  .cap-hint {
+    order: 10;
+    flex: 1 0 100%;
+    margin-top: 4px;
+  }
+  .cap-bar .capture-btn {
+    margin-left: auto;
+  }
 }
 
 :focus-visible {
