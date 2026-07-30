@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { z } from "zod";
 import { explain } from "@/lib/aiError";
-import { MODEL, THINKING } from "@/lib/model-provider";
+import { withFallback } from "@/lib/providers";
 
 /**
  * Keeps a thread's "Where this stands" block current.
@@ -28,19 +28,22 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { text } = await generateText({
-      model: MODEL,
-      prompt:
+    const { value, via } = await withFallback(async (tier) => {
+      const { text } = await generateText({
+        model: tier.model,
+        prompt:
         'These are dated fragments one person captured over time about "' +
         body.name +
         '", oldest first:\n\n' +
         body.frags
           .map((f) => "[" + new Date(f.at).toDateString() + "] " + f.text)
           .join("\n\n") +
-        '\n\nWrite a "Where this stands" block: 3-5 sentences of plain prose describing what this idea currently is, what\'s been settled, and what\'s still open. Write it back to them in their own register. Invent nothing. Return only the prose.',
-      providerOptions: THINKING,
+          '\n\nWrite a "Where this stands" block: 3-5 sentences of plain prose describing what this idea currently is, what\'s been settled, and what\'s still open. Write it back to them in their own register. Invent nothing. Return only the prose.',
+        providerOptions: tier.providerOptions,
+      });
+      return text;
     });
-    return Response.json({ summary: text.trim() });
+    return Response.json({ summary: value.trim(), via });
   } catch (error) {
     console.error("summarize failed", error);
     const { message, status } = explain(error);

@@ -40,6 +40,8 @@ export type Action = {
   doneAt?: number | null;
   faded?: boolean;
   fadedAt?: number | null;
+  /** Landed here raw because no model would answer. Can be sorted later. */
+  unsorted?: boolean;
 };
 
 export type Frag = {
@@ -47,6 +49,8 @@ export type Frag = {
   at: number;
   text: string;
   imgs?: string[];
+  /** As above: saved verbatim, never cleaned up. */
+  unsorted?: boolean;
 };
 
 export type Thread = {

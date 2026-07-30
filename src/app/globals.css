@@ -599,6 +599,17 @@ body {
   border-color: var(--ink);
 }
 
+/* Saved verbatim because no model would answer. */
+.raw {
+  border: 1px dashed #b08428;
+  color: #8a6516;
+  border-radius: 20px;
+  padding: 1px 7px;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 /* inline editing */
 .act-edit {
   width: 100%;

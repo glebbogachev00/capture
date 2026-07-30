@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { explain } from "@/lib/aiError";
-import { MODEL, THINKING } from "@/lib/model-provider";
+import { withFallback } from "@/lib/providers";
 
 /**
  * The sorting engine.
@@ -78,13 +78,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { object } = await generateObject({
-      model: MODEL,
-      schema: Sorted,
-      prompt: prompt(body.raw, body.threads),
-      providerOptions: THINKING,
+    const { value, via } = await withFallback(async (tier) => {
+      const { object } = await generateObject({
+        model: tier.model,
+        schema: Sorted,
+        prompt: prompt(body.raw, body.threads),
+        providerOptions: tier.providerOptions,
+      });
+      return object;
     });
-    return Response.json(object);
+    return Response.json({ ...value, via });
   } catch (error) {
     console.error("sort failed", error);
     const { message, status } = explain(error);

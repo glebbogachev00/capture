@@ -34,6 +34,14 @@ export function subscribeToClock(onChange: () => void) {
 /** Stable between ticks, so React doesn't see a new value every render. */
 export const clockSnapshot = () => value;
 
+/**
+ * The wall clock, read for the purpose of stamping a new record.
+ *
+ * Distinct from the snapshot above: this is deliberately live, and is only
+ * ever called from event handlers, never while rendering.
+ */
+export const stamp = () => Date.now();
+
 /** Prerender has no meaningful clock; the client re-renders with the real one. */
 export const clockServerSnapshot = () => 0;
 

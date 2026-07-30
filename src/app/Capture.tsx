@@ -23,6 +23,7 @@ import {
   capability,
   clockServerSnapshot,
   clockSnapshot,
+  stamp,
   subscribeToClock,
 } from "@/lib/clock";
 import {
@@ -64,6 +65,22 @@ type RecogniserCtor = new () => Recogniser;
 
 /** Carries the server's explanation so the board can show it verbatim. */
 class SortError extends Error {}
+
+const reasonOf = (error: unknown) =>
+  error instanceof SortError && error.message
+    ? error.message
+    : "The sort didn't go through.";
+
+/** What /api/sort returns. Validated server-side against a schema. */
+type SortResult = {
+  clean: string;
+  kind: "action" | "thread";
+  title: string;
+  actions?: string[];
+  shelfLife?: string;
+  threadId?: string | null;
+  threadName?: string | null;
+};
 
 export function Capture() {
   const [data, setData] = useState<Board>(EMPTY);
@@ -169,6 +186,149 @@ export function Capture() {
     });
   };
 
+  /** Ask the server to sort a capture. Throws SortError with the reason. */
+  const requestSort = async (raw: string) => {
+    const known = data.threads.map((t) => ({
+      id: t.id,
+      name: t.name,
+      about: t.summary?.slice(0, 160) || "",
+    }));
+    const res = await fetch("/api/sort", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ raw, threads: known }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new SortError(body.error);
+    }
+    return res.json();
+  };
+
+  /** Fold a sorted result into a board. Shared by first capture and re-sort. */
+  const applySorted = (
+    out: SortResult,
+    imgIds: string[],
+    at: number,
+    board: Board
+  ): { next: Board; targetId: string | null; landed: string } => {
+    if (out.kind === "action") {
+      const span = SHELF[out.shelfLife as ShelfLife] ?? null;
+      const items: Action[] = (
+        out.actions?.length ? out.actions : [out.title]
+      ).map((t: string) => ({
+        id: uid(),
+        text: t,
+        done: false,
+        at,
+        src: out.clean,
+        imgs: imgIds,
+        shelf: (out.shelfLife || "keep") as ShelfLife,
+        expires: span ? Date.now() + span : null,
+      }));
+      return {
+        next: { ...board, actions: [...items, ...board.actions] },
+        targetId: null,
+        landed:
+          items.length +
+          " action" +
+          (items.length > 1 ? "s" : "") +
+          (span ? " · fades in " + left(span) : " · kept"),
+      };
+    }
+
+    const frag: Frag = { id: uid(), at, text: out.clean, imgs: imgIds };
+    const existing = board.threads.find((x) => x.id === out.threadId);
+    if (existing) {
+      return {
+        next: {
+          ...board,
+          threads: board.threads.map((x) =>
+            x.id === existing.id ? { ...x, frags: [...x.frags, frag] } : x
+          ),
+        },
+        targetId: existing.id,
+        landed: existing.name + " — thread updated",
+      };
+    }
+    const fresh: Thread = {
+      id: uid(),
+      name: out.threadName || out.title,
+      summary: "",
+      frags: [frag],
+    };
+    return {
+      next: { ...board, threads: [fresh, ...board.threads] },
+      targetId: fresh.id,
+      landed: fresh.name + " — thread updated",
+    };
+  };
+
+  /**
+   * Keep a capture that no model would sort.
+   *
+   * Losing what you just said because a free tier ran dry is the worst thing
+   * this app could do, so the text is saved verbatim and flagged for sorting
+   * later. Where it lands follows what you were looking at: an open thread
+   * takes it as a fragment, the Threads tab starts a new one, and otherwise it
+   * becomes an action — the destination you can always fix by hand afterwards.
+   */
+  const saveUnsorted = async (
+    raw: string,
+    imgIds: string[],
+    at: number,
+    reason: string
+  ) => {
+    const body = raw || "(image only)";
+    const openThread = data.threads.find((t) => t.id === open);
+    const frag: Frag = {
+      id: uid(),
+      at,
+      text: body,
+      imgs: imgIds,
+      unsorted: true,
+    };
+
+    let next: Board;
+    if (openThread) {
+      next = {
+        ...data,
+        threads: data.threads.map((t) =>
+          t.id === openThread.id ? { ...t, frags: [...t.frags, frag] } : t
+        ),
+      };
+      setLanded(openThread.name + " — saved unsorted");
+    } else if (tab === "threads") {
+      const fresh: Thread = {
+        id: uid(),
+        name: body.split(/\s+/).slice(0, 5).join(" "),
+        summary: "",
+        frags: [frag],
+      };
+      next = { ...data, threads: [fresh, ...data.threads] };
+      setLanded(fresh.name + " — new thread, unsorted");
+    } else {
+      const action: Action = {
+        id: uid(),
+        text: body,
+        done: false,
+        at,
+        src: body,
+        imgs: imgIds,
+        shelf: "keep",
+        expires: null,
+        unsorted: true,
+      };
+      next = { ...data, actions: [action, ...data.actions] };
+      setLanded("Kept unsorted");
+    }
+
+    setText("");
+    setPics([]);
+    await persist(next);
+    setErr(reason + " Saved as it is, so nothing is lost — sort it later.");
+  };
+
   const submit = async () => {
     const raw = text.trim();
     if (!raw && !pics.length) return;
@@ -176,118 +336,58 @@ export function Capture() {
     setSwept(null);
     setBusy("Sorting");
 
+    const at = stamp();
+    // Stored before the sort so both outcomes keep the pictures.
+    const imgIds: string[] = [];
+    for (const p of pics) {
+      try {
+        await set(IMG(p.id), p.src);
+        imgIds.push(p.id);
+      } catch {
+        /* skip */
+      }
+    }
+
     try {
-      const known = data.threads.map((t) => ({
-        id: t.id,
-        name: t.name,
-        about: t.summary?.slice(0, 160) || "",
-      }));
-      const res = await fetch("/api/sort", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raw: raw || "(image only)", threads: known }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new SortError(body.error);
-      }
-      const out = await res.json();
-
-      const now = Date.now();
-      const imgIds: string[] = [];
-      for (const p of pics) {
-        try {
-          await set(IMG(p.id), p.src);
-          imgIds.push(p.id);
-        } catch {
-          /* skip */
-        }
-      }
-
-      let next: Board;
-      let targetId: string | null = null;
-
-      if (out.kind === "action") {
-        const span = SHELF[out.shelfLife as ShelfLife] ?? null;
-        const items: Action[] = (
-          out.actions?.length ? out.actions : [out.title]
-        ).map((t: string) => ({
-          id: uid(),
-          text: t,
-          done: false,
-          at: now,
-          src: out.clean,
-          imgs: imgIds,
-          shelf: (out.shelfLife || "keep") as ShelfLife,
-          expires: span ? now + span : null,
-        }));
-        next = { ...data, actions: [...items, ...data.actions] };
-        setLanded(
-          items.length +
-            " action" +
-            (items.length > 1 ? "s" : "") +
-            (span ? " · fades in " + left(span) : " · kept")
-        );
-        setTab("actions");
-      } else {
-        const frag: Frag = { id: uid(), at: now, text: out.clean, imgs: imgIds };
-        const existing = data.threads.find((x) => x.id === out.threadId);
-        let threads: Thread[];
-        if (existing) {
-          targetId = existing.id;
-          threads = data.threads.map((x) =>
-            x.id === existing.id ? { ...x, frags: [...x.frags, frag] } : x
-          );
-        } else {
-          const fresh: Thread = {
-            id: uid(),
-            name: out.threadName || out.title,
-            summary: "",
-            frags: [frag],
-          };
-          targetId = fresh.id;
-          threads = [fresh, ...data.threads];
-        }
-        next = { ...data, threads };
-        setLanded(
-          (existing?.name || out.threadName || out.title) + " — thread updated"
-        );
-        setTab("threads");
-      }
-
+      const out = await requestSort(raw || "(image only)");
+      const { next, targetId, landed } = applySorted(out, imgIds, at, data);
+      setLanded(landed);
+      setTab(out.kind === "action" ? "actions" : "threads");
       setText("");
       setPics([]);
       await persist(next);
-
-      if (targetId) {
-        setBusy("Updating what this thread says now");
-        const target = next.threads.find((x) => x.id === targetId)!;
-        const sres = await fetch("/api/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: target.name,
-            frags: target.frags.map((f) => ({ at: f.at, text: f.text })),
-          }),
-        });
-        if (sres.ok) {
-          const { summary } = await sres.json();
-          await persist({
-            ...next,
-            threads: next.threads.map((x) =>
-              x.id === targetId ? { ...x, summary } : x
-            ),
-          });
-        }
-      }
+      if (targetId) await regenerate(next, targetId);
     } catch (error) {
-      const reason =
-        error instanceof SortError && error.message
-          ? error.message
-          : "The sort didn't go through.";
-      setErr(reason + " Your text is still in the box — hit Capture again.");
+      await saveUnsorted(raw, imgIds, at, reasonOf(error));
     }
 
+    setBusy(null);
+    setTimeout(() => setLanded(null), 4500);
+  };
+
+  /** Run a capture that was saved raw back through the sorter. */
+  const resort = async (a: Action) => {
+    setErr("");
+    setBusy("Sorting");
+    try {
+      const out = await requestSort(a.src || a.text);
+      const board = {
+        ...data,
+        actions: data.actions.filter((x) => x.id !== a.id),
+      };
+      const { next, targetId, landed } = applySorted(
+        out,
+        a.imgs || [],
+        a.at,
+        board
+      );
+      setLanded(landed);
+      setTab(out.kind === "action" ? "actions" : "threads");
+      await persist(next);
+      if (targetId) await regenerate(next, targetId);
+    } catch (error) {
+      setErr(reasonOf(error) + " It is still here, untouched.");
+    }
     setBusy(null);
     setTimeout(() => setLanded(null), 4500);
   };
@@ -474,6 +574,8 @@ export function Capture() {
       onRemove={() => removeNow(a)}
       onMakeThread={() => moveToThread(a)}
       onEditText={(text) => editActionText(a.id, text)}
+      onResort={() => resort(a)}
+      busy={!!busy}
     />
   );
 
@@ -748,6 +850,8 @@ function Row({
   onRemove,
   onMakeThread,
   onEditText,
+  onResort,
+  busy,
 }: {
   a: Action;
   faded?: boolean;
@@ -760,6 +864,8 @@ function Row({
   onRemove: () => void;
   onMakeThread: () => void;
   onEditText: (text: string) => void;
+  onResort: () => void;
+  busy: boolean;
 }) {
   const ms = a.expires ? a.expires - now : null;
   const [editing, setEditing] = useState(false);
@@ -795,9 +901,15 @@ function Row({
         )}
         <div className="act-meta">
           <span>{fmt(a.at)}</span>
+          {a.unsorted && <span className="raw">unsorted</span>}
           {!editing && (
             <button className="ghost" onClick={() => setEditing(true)}>
               edit
+            </button>
+          )}
+          {a.unsorted && !editing && (
+            <button className="ghost" onClick={onResort} disabled={busy}>
+              sort it now
             </button>
           )}
           {faded ? (
@@ -1027,6 +1139,7 @@ function FragView({
     <div className="frag">
       <div className="frag-date">
         {fmt(f.at)}
+        {f.unsorted && <span className="raw">unsorted</span>}
         {!editing && (
           <>
             <button className="ghost" onClick={() => setEditing(true)}>
