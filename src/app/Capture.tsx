@@ -1840,21 +1840,23 @@ function ThreadView({
             {/* One tap to the clipboard. The header arrow opens the OS sheet,
                 which is the right thing for sending to a person and the wrong
                 thing when you only want to paste this into a chat. */}
-            <button className="ghost" onClick={onCopyThread}>
-              Copy thread
-            </button>
-            <button
-              className={"more-btn" + (more ? " open" : "")}
-              onClick={() => {
-                setMore((v) => !v);
-                setMerging(false);
-                setConfirming(false);
-              }}
-              aria-expanded={more}
-              aria-label={more ? "Fewer options" : "More options"}
-            >
-              ···
-            </button>
+            <div className="frag-tools">
+              <button className="copy-btn" onClick={onCopyThread} aria-label="Copy thread">
+                ⧉
+              </button>
+              <button
+                className={"more-btn" + (more ? " open" : "")}
+                onClick={() => {
+                  setMore((v) => !v);
+                  setMerging(false);
+                  setConfirming(false);
+                }}
+                aria-expanded={more}
+                aria-label={more ? "Fewer options" : "More options"}
+              >
+                ···
+              </button>
+            </div>
           </div>
 
           {more && (
@@ -2001,9 +2003,9 @@ function FragView({
         {fmt(f.at)}
         {f.unsorted && <span className="raw">unsorted</span>}
         {!editing && (
-          <>
-            <button className="ghost" onClick={onCopy}>
-              Copy
+          <div className="frag-tools">
+            <button className="copy-btn" onClick={onCopy} aria-label="Copy">
+              ⧉
             </button>
             <button
               className={"more-btn" + (more ? " open" : "")}
@@ -2017,7 +2019,7 @@ function FragView({
             >
               ···
             </button>
-          </>
+          </div>
         )}
       </div>
 

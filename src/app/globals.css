@@ -799,6 +799,40 @@ body {
   border-color: var(--ink);
 }
 
+/* Square, quiet copy control. Pushed to the row's right edge so it reads as
+ * a distinct button with clear space from the meta text, not a caption. */
+.copy-btn {
+  border: 1px solid var(--rule);
+  background: var(--card);
+  color: var(--ink);
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  line-height: 1;
+  flex: none;
+  touch-action: manipulation;
+  transition: 0.15s;
+}
+.copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* Wraps the copy + more controls and shoves them to the right edge, leaving
+ * a gap between the date/meta text and the buttons. */
+.frag-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.frag-tools .more-btn {
+  margin-left: 0;
+}
+
 /* The revealed set. Expands in place, like the move and merge pickers. */
 .row-actions {
   display: flex;
