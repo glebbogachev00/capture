@@ -90,18 +90,15 @@ export function IntentionDraft({
   draft,
   busy,
   onChange,
-  onRefine,
   onSave,
   onDiscard,
 }: {
   draft: Draft;
   busy: boolean;
   onChange: (d: Draft) => void;
-  onRefine: (feedback: string) => void;
   onSave: () => void;
   onDiscard: () => void;
 }) {
-  const [feedback, setFeedback] = useState("");
   const [editing, setEditing] = useState(false);
 
   return (
@@ -173,34 +170,6 @@ export function IntentionDraft({
         }
       />
 
-      <div className="int-block">
-        <h4 className="int-label">Refine</h4>
-        <div className="int-add">
-          <input
-            value={feedback}
-            onChange={(e) => setFeedback(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && feedback.trim()) {
-                onRefine(feedback.trim());
-                setFeedback("");
-              }
-            }}
-            placeholder="Say what to change"
-            aria-label="Refinement direction"
-          />
-          <button
-            className="ghost"
-            disabled={busy || !feedback.trim()}
-            onClick={() => {
-              onRefine(feedback.trim());
-              setFeedback("");
-            }}
-          >
-            Rewrite
-          </button>
-        </div>
-      </div>
-
       <div className="int-commit">
         <button className="capture-btn" onClick={onSave} disabled={busy}>
           Save intention
@@ -239,7 +208,6 @@ export function IntentionDetail({
   busy,
   onBack,
   onChange,
-  onRefine,
   onCopy,
   onDelete,
 }: {
@@ -247,13 +215,11 @@ export function IntentionDetail({
   busy: boolean;
   onBack: () => void;
   onChange: (next: Intention) => void;
-  onRefine: (feedback: string) => void;
   onCopy: () => void;
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [feedback, setFeedback] = useState("");
   const [more, setMore] = useState(false);
 
   return (
@@ -366,41 +332,6 @@ export function IntentionDetail({
         }
       />
 
-      <div className="int-block">
-        <h4 className="int-label">Refine</h4>
-        <div className="int-add">
-          <input
-            value={feedback}
-            onChange={(e) => setFeedback(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && feedback.trim()) {
-                onRefine(feedback.trim());
-                setFeedback("");
-              }
-            }}
-            placeholder="Say what to change"
-            aria-label="Refinement direction"
-          />
-          <button
-            className="ghost"
-            disabled={busy || !feedback.trim()}
-            onClick={() => {
-              onRefine(feedback.trim());
-              setFeedback("");
-            }}
-          >
-            Rewrite
-          </button>
-        </div>
-      </div>
-
-      {intention.rawInput &&
-        intention.rawInput !== intention.expandedIntention && (
-          <div className="int-block">
-            <h4 className="int-label">As you said it</h4>
-            <p className="int-raw">{intention.rawInput}</p>
-          </div>
-        )}
     </div>
   );
 }
