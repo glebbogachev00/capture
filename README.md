@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/icon.svg" alt="capture" width="96" height="96" />
+</p>
+
 # capture
 
 One place to say things, three places for them to land.
@@ -113,3 +117,9 @@ Next.js 16 (App Router), React 19, the AI SDK, and no database.
 ## Licence
 
 MIT — see [LICENSE](LICENSE).
+
+## Backlog
+
+Features I want to add to capture, tracked in the open. One for now; the rest is room to grow.
+
+→ [BACKLOG.md](BACKLOG.md)
