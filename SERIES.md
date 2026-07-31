@@ -7,6 +7,17 @@ A seven-post series for X. Each post is a self-contained unit. Posts 1, 4, 5,
 Throughline: one capture surface, three kinds. Show the model absorbing a
 messy thought and filing it. Specific, in his words, no clichés.
 
+## How Gleb captures (source of truth)
+
+As a person, the only way I put things into capture is the microphone built
+into Apple — dictation. I speak the thought, it lands. I don't usually have
+that much coming in unless I'm editing something.
+
+So for me the app isn't a firehose. It's a place I add to deliberately, often
+while refining a thing I'm already working on. The three kinds matter more
+than volume: a few captures, each filed cleanly, beat a big inbox I'd never
+sort.
+
 ---
 
 ## 1 — Hook (final)
@@ -21,7 +32,21 @@ github.com/glebbogachev00/capture — MIT.
 
 ---
 
-## 2 — Actions (final)
+## 2 — How I actually capture (final)
+
+The only way things get into capture for me is the mic built into Apple.
+Dictation. I say the thought, it lands.
+
+I don't run a firehose. I don't have that much coming in unless I'm editing
+something I'm already building. So the app is a place I add to deliberately.
+
+That's why the three kinds matter more than volume to me. A few captures, each
+filed cleanly, beat a big inbox I'd never sort. The model does the sorting so
+the small amount I speak stays useful instead of piling up.
+
+---
+
+## 3 — Actions (final)
 
 I didn't file these. I just said them. Capture turned each into something to
 close and gave it a shelf life.
@@ -39,7 +64,7 @@ honest because what I ignore disappears on its own. No inbox rot.
 
 ---
 
-## 3 — Threads (final)
+## 4 — Threads (final)
 
 Most of capture was built while I was walking or sitting. I'd talk my findings
 into ChatGPT's voice, then paste them in. Each fragment joined one thread, and
@@ -57,7 +82,7 @@ mass.
 
 ---
 
-## 4 — Intentions, the mechanic (final)
+## 5 — Intentions, the mechanic (final)
 
 Most apps treat a goal as a checkbox. capture treats it as a fact.
 
@@ -71,7 +96,7 @@ is, and leaves the becoming to life.
 
 ---
 
-## 5 — Intentions, the lineage (final)
+## 6 — Intentions, the lineage (final)
 
 capture's intentions feature is not a productivity trick. It is three books,
 turned into software.
@@ -92,7 +117,7 @@ be. It holds the version of you that already is.
 
 ---
 
-## 6 — A day in the life (final)
+## 7 — A day in the life (final)
 
 A real morning, three kinds, no filing by hand.
 
@@ -114,7 +139,7 @@ One surface. Action, thread, intention. None of it sorted by me.
 
 ---
 
-## 7 — Wrap + the ask (final)
+## 8 — Wrap + the ask (final)
 
 That is capture. One place to say things, three places for them to land.
 
