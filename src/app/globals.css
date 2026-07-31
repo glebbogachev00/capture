@@ -794,6 +794,194 @@ body {
   white-space: pre-wrap;
 }
 
+/* ---------------------------------------------------------------
+   Intentions. Deliberately typeset unlike actions: no checkbox, no
+   countdown, nothing that suggests finishing. The expanded wording
+   is set large in the serif because it is the thing itself, not a
+   label for something else.
+--------------------------------------------------------------- */
+.int-eyebrow,
+.int-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 8px;
+  font-weight: 500;
+}
+.int-number {
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: #a33b23;
+  margin-bottom: 8px;
+}
+.int-expanded {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 23px;
+  line-height: 1.4;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-variation-settings: "SOFT" 30;
+  color: var(--ink);
+  margin: 0 0 14px;
+  cursor: text;
+}
+.int-expanded-edit {
+  width: 100%;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 22px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+  resize: vertical;
+  min-height: 110px;
+  margin-bottom: 14px;
+}
+.int-card-text {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 17.5px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--ink);
+}
+.int-block {
+  margin: 24px 0;
+}
+.int-note {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+.int-raw {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0;
+  white-space: pre-wrap;
+}
+.int-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.int-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 11px;
+  padding: 12px 13px;
+}
+.int-list li span {
+  flex: 1;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.int-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.int-add input {
+  flex: 1;
+  min-width: 150px;
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 11px 13px;
+  outline: none;
+}
+.int-add input:focus {
+  border-color: var(--accent);
+}
+.int-commit {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 26px 0 8px;
+}
+.int-file {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+/* principles */
+.prin-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.prin-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.prin-list li.off {
+  opacity: 0.5;
+}
+.prin-toggle {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 11px;
+  padding: 12px 13px;
+  min-height: 48px;
+  touch-action: manipulation;
+}
+.prin-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+  flex: none;
+  margin-top: 3px;
+}
+.prin-dot.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.prin-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.prin-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.prin-desc {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 /* the password gate */
 .gate {
   min-height: 100vh;

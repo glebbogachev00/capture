@@ -30,6 +30,7 @@ import {
   type Action,
   type Board,
   type Frag,
+  type Intention,
   type ShelfLife,
   type Thread,
   DAY,
@@ -41,10 +42,20 @@ import {
   SHELF,
   dropImages,
   fmt,
+  hydrate,
   left,
+  nextNumber,
   sweep,
   uid,
 } from "@/lib/model";
+import {
+  type Draft,
+  IntentionCard,
+  IntentionDetail,
+  IntentionDraft,
+  PrinciplesScreen,
+} from "./Intentions";
+import { importIntentBackup } from "@/lib/importIntent";
 
 /* Not in lib.dom yet, and only the handful of members used here matter. */
 type Recogniser = {
@@ -93,8 +104,14 @@ export function Capture() {
   const [swept, setSwept] = useState<{ faded: number; cleared: number } | null>(
     null
   );
-  const [tab, setTab] = useState<"actions" | "threads">("actions");
+  const [tab, setTab] = useState<"actions" | "threads" | "intentions">(
+    "actions"
+  );
   const [open, setOpen] = useState<string | null>(null);
+  const [openIntention, setOpenIntention] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [showPrinciples, setShowPrinciples] = useState(false);
+  const [importNote, setImportNote] = useState("");
   const [editing, setEditing] = useState<{ id: string; src: string } | null>(
     null
   );
@@ -135,7 +152,9 @@ export function Capture() {
       let d: Board = EMPTY;
       try {
         const raw = await get(KEY);
-        if (raw) d = JSON.parse(raw);
+        // hydrate fills in intentions/principles for boards written before
+        // they existed, so an older save still opens.
+        if (raw) d = hydrate(JSON.parse(raw));
       } catch {
         /* first run */
       }
@@ -350,6 +369,18 @@ export function Capture() {
 
     try {
       const out = await requestSort(raw || "(image only)");
+
+      // An intention is declared rather than filed, so it takes a second
+      // pass through its own engine and stops at a review step instead of
+      // landing on the board.
+      if (out.kind === "intention") {
+        setText("");
+        setPics([]);
+        await expandIntention(raw);
+        setTimeout(() => setLanded(null), 4500);
+        return;
+      }
+
       const { next, targetId, landed } = applySorted(out, imgIds, at, data);
       setLanded(landed);
       setTab(out.kind === "action" ? "actions" : "threads");
@@ -436,6 +467,7 @@ export function Capture() {
       ],
     };
     await persist({
+      ...data,
       actions: data.actions.filter((x) => x.id !== a.id),
       threads: [t, ...data.threads],
     });
@@ -573,6 +605,187 @@ export function Capture() {
     await regenerate(next, intoId);
   };
 
+  /* ---------------- intentions ---------------- */
+
+  /** Run raw words through the intention engine and open the review step. */
+  const expandIntention = async (rawInput: string) => {
+    setErr("");
+    setBusy("Finding the intention");
+    try {
+      const res = await fetch("/api/intention", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          op: "expand",
+          rawInput,
+          principles: data.principles,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new SortError(body.error);
+      }
+      const out = await res.json();
+      setDraft({
+        rawInput,
+        expandedIntention: out.expandedIntention,
+        recommendedActions: out.recommendedActions || [],
+        counterIntentions: out.counterIntentions || [],
+      });
+      setTab("intentions");
+      setOpenIntention(null);
+      setBusy(null);
+      return true;
+    } catch (error) {
+      setBusy(null);
+      throw error;
+    }
+  };
+
+  /** Rewrite a draft or a saved intention from a spoken direction. */
+  const refineWith = async (
+    current: {
+      expandedIntention: string;
+      recommendedActions: string[];
+      counterIntentions: string[];
+    },
+    feedback: string,
+    apply: (out: {
+      expandedIntention: string;
+      recommendedActions: string[];
+      counterIntentions: string[];
+    }) => void
+  ) => {
+    setErr("");
+    setBusy("Rewriting");
+    try {
+      const res = await fetch("/api/intention", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          op: "refine",
+          current,
+          feedback,
+          principles: data.principles,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new SortError(body.error);
+      }
+      const out = await res.json();
+      apply({
+        expandedIntention: out.expandedIntention,
+        recommendedActions: out.recommendedActions || current.recommendedActions,
+        counterIntentions: out.counterIntentions || current.counterIntentions,
+      });
+    } catch (error) {
+      setErr(reasonOf(error) + " The wording is unchanged.");
+    }
+    setBusy(null);
+  };
+
+  const saveDraft = async () => {
+    if (!draft) return;
+    const at = stamp();
+    const intention: Intention = {
+      id: uid(),
+      number: nextNumber(data.intentions),
+      rawInput: draft.rawInput,
+      expandedIntention: draft.expandedIntention,
+      recommendedActions: draft.recommendedActions,
+      counterIntentions: draft.counterIntentions,
+      at,
+      updatedAt: at,
+    };
+    await persist({ ...data, intentions: [intention, ...data.intentions] });
+    setDraft(null);
+    setTab("intentions");
+    setLanded("Intention " + intention.number + " set");
+    setTimeout(() => setLanded(null), 4500);
+  };
+
+  const updateIntention = (next: Intention) =>
+    persist({
+      ...data,
+      intentions: data.intentions.map((i) =>
+        i.id === next.id ? { ...next, updatedAt: stamp() } : i
+      ),
+    });
+
+  const deleteIntention = async (id: string) => {
+    await persist({
+      ...data,
+      intentions: data.intentions.filter((i) => i.id !== id),
+    });
+    setOpenIntention(null);
+  };
+
+  /** Turn an action or a thread into an intention when the sort missed it. */
+  const makeIntention = async (rawInput: string, remove: () => Board) => {
+    try {
+      await expandIntention(rawInput);
+      await persist(remove());
+    } catch (error) {
+      setErr(reasonOf(error) + " Nothing was moved.");
+    }
+  };
+
+  /* ---------------- principles ---------------- */
+
+  const togglePrinciple = (id: string) =>
+    persist({
+      ...data,
+      principles: data.principles.map((p) =>
+        p.id === id ? { ...p, enabled: !p.enabled } : p
+      ),
+    });
+
+  const addPrinciple = (name: string, description: string) =>
+    persist({
+      ...data,
+      principles: [
+        ...data.principles,
+        { id: uid(), name, description, enabled: true },
+      ],
+    });
+
+  const deletePrinciple = (id: string) =>
+    persist({
+      ...data,
+      principles: data.principles.filter((p) => p.id !== id),
+    });
+
+  const importBackup = async (file: File) => {
+    setImportNote("");
+    try {
+      const parsed = JSON.parse(await file.text());
+      const result = importIntentBackup(parsed, data);
+      await persist(result.board);
+      const parts = [
+        `Brought in ${result.added} intention${result.added === 1 ? "" : "s"}`,
+      ];
+      if (result.duplicates) {
+        parts.push(`${result.duplicates} already here`);
+      }
+      if (result.malformed) {
+        parts.push(
+          `${result.malformed} could not be read and ${result.malformed === 1 ? "was" : "were"} left out`
+        );
+      }
+      if (result.principlesAdded) {
+        parts.push(
+          `${result.principlesAdded} new principle${result.principlesAdded === 1 ? "" : "s"}`
+        );
+      }
+      setImportNote(parts.join(" · ") + ".");
+    } catch (error) {
+      setImportNote(
+        error instanceof Error ? error.message : "Could not read that file."
+      );
+    }
+  };
+
   const live = data.actions.filter((a) => !a.done && !a.faded);
   const fadedList = data.actions.filter((a) => a.faded && !a.done);
   const done = data.actions.filter((a) => a.done);
@@ -583,6 +796,7 @@ export function Capture() {
     (t) => now - (t.frags.at(-1)?.at || 0) >= DORMANT
   );
   const thread = data.threads.find((t) => t.id === open);
+  const intention = data.intentions.find((i) => i.id === openIntention);
 
   const row = (a: Action, faded?: boolean) => (
     <Row
@@ -602,6 +816,12 @@ export function Capture() {
       onMakeThread={() => moveToThread(a)}
       onEditText={(text) => editActionText(a.id, text)}
       onResort={() => resort(a)}
+      onMakeIntention={() =>
+        makeIntention(a.src || a.text, () => ({
+          ...data,
+          actions: data.actions.filter((x) => x.id !== a.id),
+        }))
+      }
       busy={!!busy}
     />
   );
@@ -715,7 +935,46 @@ export function Capture() {
           </div>
         )}
 
-        {thread ? (
+        {showPrinciples ? (
+          <PrinciplesScreen
+            principles={data.principles}
+            onBack={() => {
+              setShowPrinciples(false);
+              setImportNote("");
+            }}
+            onToggle={togglePrinciple}
+            onAdd={addPrinciple}
+            onDelete={deletePrinciple}
+            onImport={importBackup}
+            importNote={importNote}
+          />
+        ) : draft ? (
+          <IntentionDraft
+            draft={draft}
+            busy={!!busy}
+            onChange={setDraft}
+            onRefine={(feedback) =>
+              refineWith(draft, feedback, (out) =>
+                setDraft({ ...draft, ...out })
+              )
+            }
+            onSave={saveDraft}
+            onDiscard={() => setDraft(null)}
+          />
+        ) : intention ? (
+          <IntentionDetail
+            intention={intention}
+            busy={!!busy}
+            onBack={() => setOpenIntention(null)}
+            onChange={updateIntention}
+            onRefine={(feedback) =>
+              refineWith(intention, feedback, (out) =>
+                updateIntention({ ...intention, ...out })
+              )
+            }
+            onDelete={() => deleteIntention(intention.id)}
+          />
+        ) : thread ? (
           <ThreadView
             thread={thread}
             onBack={() => setOpen(null)}
@@ -741,6 +1000,12 @@ export function Capture() {
                 onClick={() => setTab("threads")}
               >
                 Threads <b>{data.threads.length}</b>
+              </button>
+              <button
+                className={"tab" + (tab === "intentions" ? " on" : "")}
+                onClick={() => setTab("intentions")}
+              >
+                Intentions <b>{data.intentions.length}</b>
               </button>
             </div>
 
@@ -838,6 +1103,34 @@ export function Capture() {
                 )}
               </div>
             )}
+
+            {tab === "intentions" && (
+              <div>
+                {!data.intentions.length && loaded && (
+                  <div className="empty">
+                    <p className="big">No intentions set.</p>
+                    <p>
+                      Say what you are calling into being and it gets written
+                      as already true, with what pulls against it named.
+                    </p>
+                  </div>
+                )}
+                {data.intentions.map((i) => (
+                  <IntentionCard
+                    key={i.id}
+                    intention={i}
+                    onOpen={() => setOpenIntention(i.id)}
+                  />
+                ))}
+                <button
+                  className="section-label"
+                  onClick={() => setShowPrinciples(true)}
+                >
+                  Principles ·{" "}
+                  {data.principles.filter((p) => p.enabled).length} active
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -880,6 +1173,7 @@ function Row({
   onMakeThread,
   onEditText,
   onResort,
+  onMakeIntention,
   busy,
 }: {
   a: Action;
@@ -894,6 +1188,7 @@ function Row({
   onMakeThread: () => void;
   onEditText: (text: string) => void;
   onResort: () => void;
+  onMakeIntention: () => void;
   busy: boolean;
 }) {
   const ms = a.expires ? a.expires - now : null;
@@ -952,9 +1247,18 @@ function Row({
             </>
           ) : (
             !editing && (
-              <button className="ghost" onClick={onMakeThread}>
-                Make a thread
-              </button>
+              <>
+                <button className="ghost" onClick={onMakeThread}>
+                  Make a thread
+                </button>
+                <button
+                  className="ghost"
+                  onClick={onMakeIntention}
+                  disabled={busy}
+                >
+                  Make an intention
+                </button>
+              </>
             )
           )}
         </div>

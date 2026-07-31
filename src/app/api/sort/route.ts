@@ -20,7 +20,7 @@ const Sorted = z.object({
     .describe(
       "the capture rewritten so it is easy to read weeks later. Repair transcription garble, drop filler and false starts, keep their voice and every idea, and never add ideas that aren't there. Break it into short paragraphs separated by a blank line, one per distinct idea. Use '- ' bullets on their own lines wherever they are listing things. Never return one unbroken block."
     ),
-  kind: z.enum(["action", "thread"]),
+  kind: z.enum(["action", "thread", "intention"]),
   title: z.string().describe("max 6 words"),
   actions: z.array(z.string()).describe("imperative one-line items"),
   shelfLife: z.enum(["hours", "days", "weeks", "keep"]),
@@ -56,7 +56,9 @@ function prompt(raw: string, threads: z.infer<typeof Body>["threads"]) {
     '"""\n\n' +
     'kind = "action" when this is a task, errand, reminder, or decision that gets closed out. Fill "actions" with 1-4 items and leave the thread fields null.\n' +
     'kind = "thread" when this is thinking, worldbuilding, an idea being developed, or material that accumulates. Set threadId if one clearly fits, otherwise invent a short threadName. Leave "actions" empty.\n' +
-    'When genuinely torn, choose "thread" — nothing gets lost there.\n\n' +
+    'kind = "intention" only when they are declaring something they are calling into being about themselves or their life — a state they want to be living in, spoken as a wish, a resolve, or an aspiration. "I want to wake at 6 and actually feel rested", "I live somewhere with light", "I stop taking on work I resent". These are about how they want to be, not tasks to close or subjects to think about. Leave "actions" and the thread fields null.\n' +
+    'Do NOT choose "intention" for an ordinary errand phrased as a want ("I want to get milk" is an action), or for thinking about a topic ("been reading about sleep cycles" is a thread).\n' +
+    'When genuinely torn between thread and intention, choose "thread". When genuinely torn between action and thread, choose "thread" — nothing gets lost there.\n\n' +
     "shelfLife is how long this stays worth looking at, and it only applies to actions. Judge it honestly:\n" +
     '- "hours" for something tied to today: a call to return, a thing to grab on the way home.\n' +
     '- "days" for ordinary errands and small follow-ups.\n' +
