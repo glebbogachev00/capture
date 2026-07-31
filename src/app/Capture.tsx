@@ -815,48 +815,6 @@ export function Capture() {
   };
 
   /** Rewrite a draft or a saved intention from a spoken direction. */
-  const refineWith = async (
-    current: {
-      expandedIntention: string;
-      recommendedActions: string[];
-      counterIntentions: string[];
-    },
-    feedback: string,
-    apply: (out: {
-      expandedIntention: string;
-      recommendedActions: string[];
-      counterIntentions: string[];
-    }) => void
-  ) => {
-    setErr("");
-    setBusy("Rewriting");
-    try {
-      const res = await fetch("/api/intention", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          op: "refine",
-          current,
-          feedback,
-          principles: data.principles,
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new SortError(body.error);
-      }
-      const out = await res.json();
-      apply({
-        expandedIntention: out.expandedIntention,
-        recommendedActions: out.recommendedActions || current.recommendedActions,
-        counterIntentions: out.counterIntentions || current.counterIntentions,
-      });
-    } catch (error) {
-      setErr(reasonOf(error) + " The wording is unchanged.");
-    }
-    setBusy(null);
-  };
-
   const saveDraft = async () => {
     if (!draft) return;
     const at = stamp();
@@ -1229,11 +1187,6 @@ export function Capture() {
             draft={draft}
             busy={!!busy}
             onChange={setDraft}
-            onRefine={(feedback) =>
-              refineWith(draft, feedback, (out) =>
-                setDraft({ ...draft, ...out })
-              )
-            }
             onSave={saveDraft}
             onDiscard={() => setDraft(null)}
           />
@@ -1243,11 +1196,6 @@ export function Capture() {
             busy={!!busy}
             onBack={() => setOpenIntention(null)}
             onChange={updateIntention}
-            onRefine={(feedback) =>
-              refineWith(intention, feedback, (out) =>
-                updateIntention({ ...intention, ...out })
-              )
-            }
             onCopy={() => copyWhole(shareIntention(intention))}
             onDelete={() => deleteIntention(intention.id)}
           />
