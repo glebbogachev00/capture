@@ -535,7 +535,7 @@ body {
   font-size: 11.5px;
   color: var(--muted);
   letter-spacing: 0.04em;
-  margin-bottom: 9px;
+  margin-bottom: 14px;
   /* Holds the date alongside its edit and delete controls. */
   display: flex;
   align-items: center;
@@ -769,7 +769,7 @@ body {
  * tap would trade clutter for a secret.
  */
 .more-btn {
-  margin-left: auto;
+  margin-left: 8px;
   border: 1px solid var(--rule);
   background: var(--card);
   color: var(--muted);
@@ -821,16 +821,10 @@ body {
   border-color: var(--accent);
   color: var(--accent);
 }
-/* Wraps the copy + more controls and shoves them to the right edge, leaving
- * a gap between the date/meta text and the buttons. */
-.frag-tools {
+/* Pushed to the right edge of its row so it reads as one distinct square
+ * control, separated from the date text and the ··· button on the left. */
+.copy-btn {
   margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.frag-tools .more-btn {
-  margin-left: 0;
 }
 
 /* The revealed set. Expands in place, like the move and merge pickers. */
