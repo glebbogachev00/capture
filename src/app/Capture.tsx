@@ -1644,16 +1644,6 @@ function Row({
               faded · clears in {left((a.fadedAt || now) + GRACE - now)}
             </span>
           )}
-          {!editing && (
-            <button
-              className={"more-btn" + (more ? " open" : "")}
-              onClick={() => setMore((v) => !v)}
-              aria-expanded={more}
-              aria-label={more ? "Fewer options" : "More options"}
-            >
-              ···
-            </button>
-          )}
         </div>
 
         {more && !editing && (
@@ -1701,13 +1691,25 @@ function Row({
           </div>
         )}
       </div>
-      <button
-        className={"chip" + (!ms ? " kept" : ms < DAY ? " soon" : "")}
-        onClick={onShelfClick}
-        aria-label="Change shelf life"
-      >
-        {ms === null ? "kept" : left(ms)}
-      </button>
+      <div className="act-tools">
+        <button
+          className={"chip" + (!ms ? " kept" : ms < DAY ? " soon" : "")}
+          onClick={onShelfClick}
+          aria-label="Change shelf life"
+        >
+          {ms === null ? "kept" : left(ms)}
+        </button>
+        {!editing && (
+          <button
+            className={"more-btn" + (more ? " open" : "")}
+            onClick={() => setMore((v) => !v)}
+            aria-expanded={more}
+            aria-label={more ? "Fewer options" : "More options"}
+          >
+            ···
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1840,21 +1842,26 @@ function ThreadView({
             {/* One tap to the clipboard. The header arrow opens the OS sheet,
                 which is the right thing for sending to a person and the wrong
                 thing when you only want to paste this into a chat. */}
-            <button
-              className={"more-btn" + (more ? " open" : "")}
-              onClick={() => {
-                setMore((v) => !v);
-                setMerging(false);
-                setConfirming(false);
-              }}
-              aria-expanded={more}
-              aria-label={more ? "Fewer options" : "More options"}
-            >
-              ···
-            </button>
-            <button className="copy-btn" onClick={onCopyThread} aria-label="Copy thread">
-              ◻
-            </button>
+            <div className="frag-tools">
+              <button className="copy-btn" onClick={onCopyThread} aria-label="Copy thread">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <rect x="2.5" y="2.5" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
+                  <rect x="5.5" y="5.5" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
+                </svg>
+              </button>
+              <button
+                className={"more-btn" + (more ? " open" : "")}
+                onClick={() => {
+                  setMore((v) => !v);
+                  setMerging(false);
+                  setConfirming(false);
+                }}
+                aria-expanded={more}
+                aria-label={more ? "Fewer options" : "More options"}
+              >
+                ···
+              </button>
+            </div>
           </div>
 
           {more && (
@@ -2001,7 +2008,13 @@ function FragView({
         {fmt(f.at)}
         {f.unsorted && <span className="raw">unsorted</span>}
         {!editing && (
-          <>
+          <div className="frag-tools">
+            <button className="copy-btn" onClick={onCopy} aria-label="Copy">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <rect x="2.5" y="2.5" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
+                <rect x="5.5" y="5.5" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
+              </svg>
+            </button>
             <button
               className={"more-btn" + (more ? " open" : "")}
               onClick={() => {
@@ -2014,10 +2027,7 @@ function FragView({
             >
               ···
             </button>
-            <button className="copy-btn" onClick={onCopy} aria-label="Copy">
-              ◻
-            </button>
-          </>
+          </div>
         )}
       </div>
 
