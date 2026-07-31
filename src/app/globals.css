@@ -188,6 +188,34 @@ body {
   inset: 2px auto auto 2px;
 }
 
+.searchbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.searchbar input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 11px;
+  padding: 0 14px;
+  min-height: 44px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.searchbar input:focus {
+  border-color: var(--accent);
+}
+.searchbar input::placeholder {
+  color: var(--muted);
+}
+
 .tabs {
   display: flex;
   gap: 22px;
@@ -1072,6 +1100,14 @@ body {
   }
   .cap-bar .capture-btn {
     margin-left: auto;
+  }
+  /*
+   * The count collided with the wordmark once the header carried two buttons,
+   * and it was saying nothing the tabs do not already say — Actions, Threads
+   * and Intentions each carry their own number a few rows further down.
+   */
+  .capture-count {
+    display: none;
   }
 }
 

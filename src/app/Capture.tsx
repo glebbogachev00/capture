@@ -65,7 +65,14 @@ import {
   readJsonFile,
   restoreBackup,
 } from "@/lib/backup";
-import { shareText, shareableFor } from "@/lib/share";
+import {
+  copyToClipboard,
+  shareIntention,
+  shareText,
+  shareThread,
+  shareableFor,
+} from "@/lib/share";
+import { type Hits, search } from "@/lib/search";
 
 /* Not in lib.dom yet, and only the handful of members used here matter. */
 type Recogniser = {
@@ -130,6 +137,7 @@ export function Capture() {
     null
   );
   const [shelfFor, setShelfFor] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [showFaded, setShowFaded] = useState(false);
   const [showResting, setShowResting] = useState(false);
   const [listening, setListening] = useState(false);
@@ -219,8 +227,13 @@ export function Capture() {
     });
   };
 
-  /** Ask the server to sort a capture. Throws SortError with the reason. */
-  const requestSort = async (raw: string) => {
+  /**
+   * Ask the server to sort a capture. Throws SortError with the reason.
+   *
+   * `force` is for when the destination is already decided and only the
+   * wording needs working out — pulling an action out of a fragment, say.
+   */
+  const requestSort = async (raw: string, force?: "action") => {
     const known = data.threads.map((t) => ({
       id: t.id,
       name: t.name,
@@ -229,7 +242,7 @@ export function Capture() {
     const res = await fetch("/api/sort", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ raw, threads: known }),
+      body: JSON.stringify({ raw, threads: known, force }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -631,6 +644,101 @@ export function Capture() {
     if (!emptied) await regenerate(afterTo, fromId);
   };
 
+  /** Split a fragment out into a thread of its own. */
+  const moveFragToNew = async (fromId: string, fragId: string) => {
+    const from = data.threads.find((t) => t.id === fromId);
+    const frag = from?.frags.find((f) => f.id === fragId);
+    if (!from || !frag) return;
+
+    const fresh: Thread = {
+      id: uid(),
+      name: frag.text.split(/\s+/).slice(0, 5).join(" "),
+      summary: "",
+      frags: [frag],
+    };
+    const remaining = from.frags.filter((f) => f.id !== fragId);
+    const emptied = remaining.length === 0;
+
+    const threads = [
+      fresh,
+      ...(emptied
+        ? data.threads.filter((t) => t.id !== fromId)
+        : data.threads.map((t) =>
+            t.id === fromId ? { ...t, frags: remaining } : t
+          )),
+    ];
+    const next = { ...data, threads };
+    await persist(next);
+    setOpen(fresh.id);
+    setNotice(`Split into a new thread. Rename it if the name is wrong.`);
+    setTimeout(() => setNotice(null), 5000);
+
+    const afterNew = await regenerate(next, fresh.id);
+    if (!emptied) await regenerate(afterNew, fromId);
+  };
+
+  const copyFragment = async (threadId: string, fragId: string) => {
+    const frag = data.threads
+      .find((t) => t.id === threadId)
+      ?.frags.find((f) => f.id === fragId);
+    if (!frag) return;
+    const ok = await copyToClipboard(frag.text);
+    setNotice(ok ? "Note copied." : "Couldn't reach the clipboard.");
+    setTimeout(() => setNotice(null), 3000);
+  };
+
+  const copyWhole = async (s: { text: string; summary: string } | null) => {
+    if (!s) return;
+    const ok = await copyToClipboard(s.text);
+    setNotice(ok ? `Copied — ${s.summary}.` : "Couldn't reach the clipboard.");
+    setTimeout(() => setNotice(null), 3000);
+  };
+
+  /**
+   * Pull a doable thing out of a fragment.
+   *
+   * The fragment stays where it is. Everywhere else these moves consume the
+   * source, but a thread is a record of thinking and lifting the sentence out
+   * would leave a hole in it — you thought it, the thread should still say so.
+   * The sort route does the extracting, so what arrives is a clean imperative
+   * with a shelf life rather than a paragraph with a checkbox.
+   */
+  const extractAction = async (threadId: string, fragId: string) => {
+    const frag = data.threads
+      .find((t) => t.id === threadId)
+      ?.frags.find((f) => f.id === fragId);
+    if (!frag) return;
+
+    setErr("");
+    setBusy("Finding the action");
+    try {
+      const out = await requestSort(frag.text, "action");
+      const items: Action[] = (
+        out.actions?.length ? out.actions : [out.title]
+      ).map((t: string) => {
+        const span = SHELF[(out.shelfLife || "keep") as ShelfLife] ?? null;
+        return {
+          id: uid(),
+          text: t,
+          done: false,
+          at: stamp(),
+          src: frag.text,
+          imgs: [],
+          shelf: (out.shelfLife || "keep") as ShelfLife,
+          expires: span ? stamp() + span : null,
+        };
+      });
+      await persist({ ...data, actions: [...items, ...data.actions] });
+      setNotice(
+        `${count(items.length, "action")} taken from this note. The note stays here.`
+      );
+      setTimeout(() => setNotice(null), 5000);
+    } catch (error) {
+      setErr(reasonOf(error) + " Nothing was added.");
+    }
+    setBusy(null);
+  };
+
   const deleteThread = async (id: string) => {
     const target = data.threads.find((t) => t.id === id);
     for (const f of target?.frags || []) await dropImages(f.imgs);
@@ -926,6 +1034,10 @@ export function Capture() {
   );
   const thread = data.threads.find((t) => t.id === open);
   const intention = data.intentions.find((i) => i.id === openIntention);
+  /* A query replaces the tabs entirely — what you want is the thing, not the
+     tab it happens to live on. */
+  const hits = search(data, query);
+  const searching = query.trim().length > 0;
 
   const row = (a: Action, faded?: boolean) => (
     <Row
@@ -1135,6 +1247,7 @@ export function Capture() {
                 updateIntention({ ...intention, ...out })
               )
             }
+            onCopy={() => copyWhole(shareIntention(intention))}
             onDelete={() => deleteIntention(intention.id)}
           />
         ) : thread ? (
@@ -1149,9 +1262,38 @@ export function Capture() {
             others={data.threads.filter((t) => t.id !== thread.id)}
             onMerge={(fromId) => mergeThreads(thread.id, fromId)}
             onMoveFrag={(fragId, toId) => moveFrag(thread.id, fragId, toId)}
+            onMoveFragToNew={(fragId) => moveFragToNew(thread.id, fragId)}
+            onCopyThread={() => copyWhole(shareThread(thread))}
+            onCopyFrag={(fragId) => copyFragment(thread.id, fragId)}
+            onExtractAction={(fragId) => extractAction(thread.id, fragId)}
+            busy={!!busy}
           />
         ) : (
           <>
+            <div className="searchbar">
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search everything"
+                aria-label="Search everything"
+              />
+              {searching && (
+                <button className="ghost" onClick={() => setQuery("")}>
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {searching ? (
+              <SearchResults
+                hits={hits}
+                now={now}
+                onOpenThread={(id) => setOpen(id)}
+                onOpenIntention={(id) => setOpenIntention(id)}
+              />
+            ) : (
+              <>
             <div className="tabs">
               <button
                 className={"tab" + (tab === "actions" ? " on" : "")}
@@ -1299,6 +1441,8 @@ export function Capture() {
                 </button>
               </div>
             )}
+              </>
+            )}
           </>
         )}
       </div>
@@ -1314,6 +1458,107 @@ export function Capture() {
             setEditing(null);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * What a query turned up, across all three kinds at once.
+ *
+ * Grouped rather than interleaved, because an action and a thread are not
+ * comparable enough to rank against each other — and you usually know which
+ * kind of thing you are hunting for.
+ */
+function SearchResults({
+  hits,
+  now,
+  onOpenThread,
+  onOpenIntention,
+}: {
+  hits: Hits;
+  now: number;
+  onOpenThread: (id: string) => void;
+  onOpenIntention: (id: string) => void;
+}) {
+  if (!hits.total) {
+    return (
+      <div className="empty">
+        <p className="big">Nothing matches.</p>
+        <p>Every word has to appear somewhere in the item.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {!!hits.actions.length && (
+        <>
+          <div className="section-label">Actions · {hits.actions.length}</div>
+          {hits.actions.map((a) => {
+            const ms = a.expires ? a.expires - now : null;
+            return (
+              <div className="act" key={a.id}>
+                <div className="act-body">
+                  <div
+                    className={
+                      "act-text" + (a.done ? " is-done" : "")
+                    }
+                  >
+                    {a.text}
+                  </div>
+                  <div className="act-meta">
+                    <span>{fmt(a.at)}</span>
+                    {a.done && <span>done</span>}
+                    {a.faded && <span>faded</span>}
+                  </div>
+                </div>
+                <span className={"chip" + (!ms ? " kept" : "")}>
+                  {ms === null ? "kept" : left(ms)}
+                </span>
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {!!hits.threads.length && (
+        <>
+          <div className="section-label">Threads · {hits.threads.length}</div>
+          {hits.threads.map(({ thread, matchingFrags }) => (
+            <button
+              className="tcard"
+              key={thread.id}
+              onClick={() => onOpenThread(thread.id)}
+            >
+              <div className="tname">{thread.name}</div>
+              <div className="tsum">
+                {thread.summary ||
+                  (thread.frags.at(-1)?.text || "").slice(0, 120)}
+              </div>
+              <div className="act-meta" style={{ marginTop: 9 }}>
+                {matchingFrags
+                  ? `${matchingFrags} matching note${matchingFrags === 1 ? "" : "s"}`
+                  : "matches the thread itself"}
+              </div>
+            </button>
+          ))}
+        </>
+      )}
+
+      {!!hits.intentions.length && (
+        <>
+          <div className="section-label">
+            Intentions · {hits.intentions.length}
+          </div>
+          {hits.intentions.map((i) => (
+            <IntentionCard
+              key={i.id}
+              intention={i}
+              onOpen={() => onOpenIntention(i.id)}
+            />
+          ))}
+        </>
       )}
     </div>
   );
@@ -1501,6 +1746,11 @@ function ThreadView({
   others,
   onMerge,
   onMoveFrag,
+  onMoveFragToNew,
+  onCopyThread,
+  onCopyFrag,
+  onExtractAction,
+  busy,
 }: {
   thread: Thread;
   onBack: () => void;
@@ -1512,6 +1762,11 @@ function ThreadView({
   others: Thread[];
   onMerge: (fromId: string) => void;
   onMoveFrag: (fragId: string, toId: string) => void;
+  onMoveFragToNew: (fragId: string) => void;
+  onCopyThread: () => void;
+  onCopyFrag: (fragId: string) => void;
+  onExtractAction: (fragId: string) => void;
+  busy: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(thread.name);
@@ -1570,6 +1825,12 @@ function ThreadView({
 
       {!renaming && (
         <div className="act-meta" style={{ marginBottom: 16 }}>
+          {/* One tap to the clipboard. The header arrow opens the OS sheet,
+              which is the right thing for sending to a person and the wrong
+              thing when you only want to paste this into a chat. */}
+          <button className="ghost" onClick={onCopyThread}>
+            Copy thread
+          </button>
           <button className="ghost" onClick={() => setRenaming(true)}>
             Rename
           </button>
@@ -1651,9 +1912,13 @@ function ThreadView({
           key={f.id}
           f={f}
           others={others}
+          busy={busy}
           onSave={(text) => onEditFrag(f.id, text)}
           onDelete={() => onDeleteFrag(f.id)}
           onMove={(toId) => onMoveFrag(f.id, toId)}
+          onMoveToNew={() => onMoveFragToNew(f.id)}
+          onCopy={() => onCopyFrag(f.id)}
+          onExtract={() => onExtractAction(f.id)}
         />
       ))}
     </div>
@@ -1666,12 +1931,20 @@ function FragView({
   onSave,
   onDelete,
   onMove,
+  onMoveToNew,
+  onCopy,
+  onExtract,
+  busy,
 }: {
   f: Frag;
   others: Thread[];
   onSave: (text: string) => void;
   onDelete: () => void;
   onMove: (toId: string) => void;
+  onMoveToNew: () => void;
+  onCopy: () => void;
+  onExtract: () => void;
+  busy: boolean;
 }) {
   const [srcs, setSrcs] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
@@ -1704,17 +1977,21 @@ function FragView({
             <button className="ghost" onClick={() => setEditing(true)}>
               Edit
             </button>
-            {others.length > 0 && (
-              <button
-                className="ghost"
-                onClick={() => {
-                  setMoving((v) => !v);
-                  setConfirming(false);
-                }}
-              >
-                Move
-              </button>
-            )}
+            <button className="ghost" onClick={onCopy}>
+              Copy
+            </button>
+            <button className="ghost" onClick={onExtract} disabled={busy}>
+              Make an action
+            </button>
+            <button
+              className="ghost"
+              onClick={() => {
+                setMoving((v) => !v);
+                setConfirming(false);
+              }}
+            >
+              Move
+            </button>
             <button
               className="ghost warn"
               onClick={() => {
@@ -1731,6 +2008,23 @@ function FragView({
       {moving && !editing && (
         <div className="picker">
           <p className="picker-hint">Move this fragment to:</p>
+          {/*
+            Always offered, not just when there is nowhere else to put it —
+            splitting a thread that has drifted into two topics is the common
+            case, and it needs a destination that does not exist yet.
+          */}
+          <button
+            className="picker-row picker-new"
+            onClick={() => {
+              onMoveToNew();
+              setMoving(false);
+            }}
+          >
+            <span className="picker-name">＋ A new thread</span>
+            <span className="picker-meta">
+              named from this fragment, rename it after
+            </span>
+          </button>
           {others.map((t) => (
             <button
               key={t.id}

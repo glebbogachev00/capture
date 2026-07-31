@@ -148,6 +148,23 @@ export function shareableFor(
   return board.intentions.length ? shareIntentionList(board.intentions) : null;
 }
 
+/**
+ * Copy without going near the share sheet.
+ *
+ * Used for a single fragment, where the whole point is speed: getting one
+ * paragraph into a chat window should be one tap, not a tap plus hunting for
+ * Copy inside the OS sheet. The header control still handles sharing a whole
+ * view to a person.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export type ShareOutcome = "shared" | "copied" | "cancelled" | "failed";
 
 /**

@@ -39,9 +39,31 @@ const Body = z.object({
   threads: z.array(
     z.object({ id: z.string(), name: z.string(), about: z.string() })
   ),
+  /** The destination is already decided; only the wording is in question. */
+  force: z.enum(["action"]).optional(),
 });
 
-function prompt(raw: string, threads: z.infer<typeof Body>["threads"]) {
+function prompt(
+  raw: string,
+  threads: z.infer<typeof Body>["threads"],
+  force?: "action"
+) {
+  if (force === "action") {
+    return (
+      "This is an excerpt from someone's running notes, and they have already decided there is something to DO in it. Your only job is to say what.\n\n" +
+      'Excerpt:\n"""' +
+      raw +
+      '"""\n\n' +
+      'Set kind to "action". Leave the thread fields null.\n' +
+      "Fill actions with 1-3 imperative one-line items — the thing to actually do, not a description of the thinking around it. If only one thing is genuinely doable, return one.\n" +
+      "Set clean to the excerpt tidied up, and title to at most six words.\n\n" +
+      "shelfLife is how long this stays worth looking at. Judge it honestly:\n" +
+      '- "hours" for something tied to today.\n' +
+      '- "days" for ordinary errands and small follow-ups.\n' +
+      '- "weeks" for real work that takes a while.\n' +
+      '- "keep" for commitments to other people, money, deadlines, or anything with consequences if it silently vanished. When unsure, choose "keep".'
+    );
+  }
   return (
     "You are the sorting engine inside a personal capture app. Input arrives either dictated by voice — garbled, repetitive, half-finished — or pasted in as a raw unformatted block. Do the thinking so they don't have to.\n\n" +
     "Shaping the text matters as much as sorting it. A long capture that comes back as one dense paragraph is useless to reread, so:\n" +
@@ -84,7 +106,7 @@ export async function POST(request: Request) {
       const { object } = await generateObject({
         model: tier.model,
         schema: Sorted,
-        prompt: prompt(body.raw, body.threads),
+        prompt: prompt(body.raw, body.threads, body.force),
         providerOptions: tier.providerOptions,
       });
       return object;

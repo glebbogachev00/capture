@@ -239,6 +239,7 @@ export function IntentionDetail({
   onBack,
   onChange,
   onRefine,
+  onCopy,
   onDelete,
 }: {
   intention: Intention;
@@ -246,6 +247,7 @@ export function IntentionDetail({
   onBack: () => void;
   onChange: (next: Intention) => void;
   onRefine: (feedback: string) => void;
+  onCopy: () => void;
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -278,6 +280,9 @@ export function IntentionDetail({
       <div className="act-meta" style={{ marginBottom: 18 }}>
         <button className="ghost" onClick={() => setEditing(true)}>
           Edit wording
+        </button>
+        <button className="ghost" onClick={onCopy}>
+          Copy
         </button>
         <button
           className="ghost warn"
