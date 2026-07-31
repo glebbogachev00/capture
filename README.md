@@ -114,6 +114,12 @@ device always wins.
 
 Next.js 16 (App Router), React 19, the AI SDK, and no database.
 
+## Support
+
+capture is free and MIT-licensed. If it earns its keep on your phone, buy it a coffee — no tiers, no account, / no pitch deck.
+
+→ [ko-fi.com/banhmii](https://ko-fi.com/banhmii)
+
 ## Licence
 
 MIT — see [LICENSE](LICENSE).
