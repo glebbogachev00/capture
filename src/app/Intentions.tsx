@@ -381,28 +381,72 @@ export function IntentionDetail({
 }
 
 /**
- * The principles engine.
+ * A file button that works on iOS.
  *
- * These never appear in an intention; they shape how every one is written.
- * Turning one off changes what the engine produces next without touching
- * anything already saved.
+ * A `hidden` (display:none) input is the usual trick, but Safari will not
+ * always open the picker when its label is tapped. Rendering the input and
+ * clipping it to a pixel keeps it a real, hit-testable control.
  */
-export function PrinciplesScreen({
+function FileButton({
+  label,
+  onFile,
+}: {
+  label: string;
+  onFile: (file: File) => void;
+}) {
+  return (
+    <label className="ghost int-file">
+      {label}
+      <input
+        type="file"
+        accept="application/json,.json"
+        className="clipped"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onFile(f);
+          e.target.value = "";
+        }}
+      />
+    </label>
+  );
+}
+
+function Note({ note }: { note: { text: string; ok: boolean } | null }) {
+  if (!note) return null;
+  return <p className={"io-note" + (note.ok ? " ok" : " bad")}>{note.text}</p>;
+}
+
+export type IoNote = { text: string; ok: boolean } | null;
+
+/**
+ * Settings: getting data in and out, and the principles engine.
+ *
+ * Export matters more than any of the rest. Everything this app knows lives
+ * in one browser's IndexedDB, so without a file on disk somewhere, clearing
+ * site data takes all of it.
+ */
+export function SettingsScreen({
   principles,
+  counts,
   onBack,
   onToggle,
   onAdd,
   onDelete,
-  onImport,
-  importNote,
+  onExport,
+  onRestore,
+  onImportIntent,
+  ioNote,
 }: {
   principles: Principle[];
+  counts: { actions: number; threads: number; intentions: number };
   onBack: () => void;
   onToggle: (id: string) => void;
   onAdd: (name: string, description: string) => void;
   onDelete: (id: string) => void;
-  onImport: (file: File) => void;
-  importNote: string;
+  onExport: () => void;
+  onRestore: (file: File) => void;
+  onImportIntent: (file: File) => void;
+  ioNote: IoNote;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -413,35 +457,54 @@ export function PrinciplesScreen({
         ← back
       </button>
 
-      <div className="tname" style={{ fontSize: 26, marginBottom: 6 }}>
-        Principles
+      <div className="tname" style={{ fontSize: 26, marginBottom: 18 }}>
+        Settings
       </div>
-      <p className="int-note" style={{ marginBottom: 18 }}>
-        Applied silently to every intention the engine writes. They never
-        appear in the result — they shape it. {principles.filter((p) => p.enabled).length} of{" "}
-        {principles.length} active.
-      </p>
+
+      <div className="int-block">
+        <h4 className="int-label">Back up everything</h4>
+        <p className="int-note">
+          All of it lives in this browser and nowhere else — {counts.actions}{" "}
+          action{counts.actions === 1 ? "" : "s"}, {counts.threads} thread
+          {counts.threads === 1 ? "" : "s"}, {counts.intentions} intention
+          {counts.intentions === 1 ? "" : "s"}. Clearing site data would take
+          the lot. Pictures are left out to keep the file small.
+        </p>
+        <div className="int-add">
+          <button className="capture-btn" onClick={onExport}>
+            Download backup
+          </button>
+        </div>
+      </div>
+
+      <div className="int-block">
+        <h4 className="int-label">Restore a capture backup</h4>
+        <p className="int-note">
+          Adds anything missing, matched by id. Never overwrites what is
+          already here, so restoring twice is safe.
+        </p>
+        <FileButton label="Choose capture backup" onFile={onRestore} />
+      </div>
 
       <div className="int-block">
         <h4 className="int-label">Bring intentions across</h4>
         <p className="int-note">
-          Load a backup exported from the intent app. Matching by id, so
+          A backup exported from the old intent app. Matched by id, so
           importing twice adds nothing the second time.
         </p>
-        <label className="ghost int-file">
-          Choose backup file
-          <input
-            type="file"
-            accept="application/json,.json"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onImport(f);
-              e.target.value = "";
-            }}
-          />
-        </label>
-        {importNote && <p className="int-note">{importNote}</p>}
+        <FileButton label="Choose intent backup" onFile={onImportIntent} />
+      </div>
+
+      <Note note={ioNote} />
+
+      <div className="int-block">
+        <h4 className="int-label">Principles</h4>
+        <p className="int-note">
+          Applied silently to every intention the engine writes. They never
+          appear in the result — they shape it.{" "}
+          {principles.filter((p) => p.enabled).length} of {principles.length}{" "}
+          active.
+        </p>
       </div>
 
       <ul className="prin-list">

@@ -50,12 +50,20 @@ import {
 } from "@/lib/model";
 import {
   type Draft,
+  type IoNote,
   IntentionCard,
   IntentionDetail,
   IntentionDraft,
-  PrinciplesScreen,
+  SettingsScreen,
 } from "./Intentions";
 import { importIntentBackup } from "@/lib/importIntent";
+import {
+  backupFilename,
+  buildBackup,
+  downloadJSON,
+  readJsonFile,
+  restoreBackup,
+} from "@/lib/backup";
 
 /* Not in lib.dom yet, and only the handful of members used here matter. */
 type Recogniser = {
@@ -76,6 +84,8 @@ type RecogniserCtor = new () => Recogniser;
 
 /** Carries the server's explanation so the board can show it verbatim. */
 class SortError extends Error {}
+
+const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 const reasonOf = (error: unknown) =>
   error instanceof SortError && error.message
@@ -110,8 +120,8 @@ export function Capture() {
   const [open, setOpen] = useState<string | null>(null);
   const [openIntention, setOpenIntention] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [showPrinciples, setShowPrinciples] = useState(false);
-  const [importNote, setImportNote] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+  const [ioNote, setIoNote] = useState<IoNote>(null);
   const [editing, setEditing] = useState<{ id: string; src: string } | null>(
     null
   );
@@ -756,33 +766,66 @@ export function Capture() {
       principles: data.principles.filter((p) => p.id !== id),
     });
 
-  const importBackup = async (file: File) => {
-    setImportNote("");
+  /* ---------------- getting data in and out ---------------- */
+
+  const exportBoard = () => {
     try {
-      const parsed = JSON.parse(await file.text());
-      const result = importIntentBackup(parsed, data);
+      downloadJSON(buildBackup(data), backupFilename());
+      setIoNote({
+        text: `Saved ${count(data.actions.length, "action")}, ${count(data.threads.length, "thread")} and ${count(data.intentions.length, "intention")} to a file. Keep it somewhere that isn't this phone.`,
+        ok: true,
+      });
+    } catch {
+      setIoNote({ text: "The download didn't start.", ok: false });
+    }
+  };
+
+  const restoreFromFile = async (file: File) => {
+    setIoNote(null);
+    try {
+      const result = restoreBackup(await readJsonFile(file), data);
       await persist(result.board);
-      const parts = [
-        `Brought in ${result.added} intention${result.added === 1 ? "" : "s"}`,
-      ];
-      if (result.duplicates) {
-        parts.push(`${result.duplicates} already here`);
-      }
+      const added =
+        result.actions + result.threads + result.intentions + result.principles;
+      setIoNote({
+        text: added
+          ? `Restored ${count(result.actions, "action")}, ${count(result.threads, "thread")}, ${count(result.intentions, "intention")} and ${count(result.principles, "principle")}.`
+          : "Nothing new in that file — everything in it was already here.",
+        ok: true,
+      });
+    } catch (error) {
+      setIoNote({
+        text:
+          error instanceof Error ? error.message : "Could not read that file.",
+        ok: false,
+      });
+    }
+  };
+
+  const importBackup = async (file: File) => {
+    setIoNote(null);
+    try {
+      const result = importIntentBackup(await readJsonFile(file), data);
+      await persist(result.board);
+
+      const parts = [`Brought in ${count(result.added, "intention")}`];
+      if (result.duplicates) parts.push(`${result.duplicates} already here`);
       if (result.malformed) {
         parts.push(
           `${result.malformed} could not be read and ${result.malformed === 1 ? "was" : "were"} left out`
         );
       }
       if (result.principlesAdded) {
-        parts.push(
-          `${result.principlesAdded} new principle${result.principlesAdded === 1 ? "" : "s"}`
-        );
+        parts.push(`${count(result.principlesAdded, "new principle")}`);
       }
-      setImportNote(parts.join(" · ") + ".");
+      // Nothing arriving is a failure worth shouting about, not a tidy result.
+      setIoNote({ text: parts.join(" · ") + ".", ok: result.added > 0 });
     } catch (error) {
-      setImportNote(
-        error instanceof Error ? error.message : "Could not read that file."
-      );
+      setIoNote({
+        text:
+          error instanceof Error ? error.message : "Could not read that file.",
+        ok: false,
+      });
     }
   };
 
@@ -833,8 +876,21 @@ export function Capture() {
           <div className="capture-mark">
             capture<span>.</span>
           </div>
-          <div className="capture-count">
-            {live.length} open · {data.threads.length} threads
+          <div className="capture-head-right">
+            <div className="capture-count">
+              {live.length} open · {data.threads.length} threads
+            </div>
+            <button
+              className="icon-btn"
+              onClick={() => {
+                setShowSettings(true);
+                setIoNote(null);
+              }}
+              aria-label="Settings and backup"
+              title="Settings and backup"
+            >
+              ⚙
+            </button>
           </div>
         </div>
 
@@ -935,18 +991,25 @@ export function Capture() {
           </div>
         )}
 
-        {showPrinciples ? (
-          <PrinciplesScreen
+        {showSettings ? (
+          <SettingsScreen
             principles={data.principles}
+            counts={{
+              actions: data.actions.length,
+              threads: data.threads.length,
+              intentions: data.intentions.length,
+            }}
             onBack={() => {
-              setShowPrinciples(false);
-              setImportNote("");
+              setShowSettings(false);
+              setIoNote(null);
             }}
             onToggle={togglePrinciple}
             onAdd={addPrinciple}
             onDelete={deletePrinciple}
-            onImport={importBackup}
-            importNote={importNote}
+            onExport={exportBoard}
+            onRestore={restoreFromFile}
+            onImportIntent={importBackup}
+            ioNote={ioNote}
           />
         ) : draft ? (
           <IntentionDraft
@@ -1124,10 +1187,14 @@ export function Capture() {
                 ))}
                 <button
                   className="section-label"
-                  onClick={() => setShowPrinciples(true)}
+                  onClick={() => {
+                    setShowSettings(true);
+                    setIoNote(null);
+                  }}
                 >
                   Principles ·{" "}
-                  {data.principles.filter((p) => p.enabled).length} active
+                  {data.principles.filter((p) => p.enabled).length} active ·
+                  backup
                 </button>
               </div>
             )}
