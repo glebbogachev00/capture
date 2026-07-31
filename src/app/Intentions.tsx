@@ -11,6 +11,7 @@
    ============================================================ */
 
 import { useState } from "react";
+import { Copy, X, MoreHorizontal } from "lucide-react";
 import { type Intention, type Principle, fmt, pad } from "@/lib/model";
 
 export type Draft = {
@@ -57,7 +58,7 @@ function EditableList({
               onClick={() => onRemove(i)}
               aria-label={"Remove: " + t}
             >
-              ×
+              <X size={16} strokeWidth={2} />
             </button>
           </li>
         ))}
@@ -281,10 +282,7 @@ export function IntentionDetail({
       <div style={{ marginBottom: 18 }}>
         <div className="act-meta">
           <button className="copy-btn" onClick={onCopy} aria-label="Copy">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <rect x="2.5" y="2.5" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
-              <rect x="5.5" y="5.5" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
-            </svg>
+            <Copy size={16} strokeWidth={1.6} />
           </button>
           <button
             className={"more-btn" + (more ? " open" : "")}
@@ -295,7 +293,7 @@ export function IntentionDetail({
             aria-expanded={more}
             aria-label={more ? "Fewer options" : "More options"}
           >
-            ···
+            <MoreHorizontal size={16} strokeWidth={1.8} />
           </button>
         </div>
 

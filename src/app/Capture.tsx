@@ -17,6 +17,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { Copy, MoreHorizontal } from "lucide-react";
 import { Markup } from "./Markup";
 import { get, set } from "@/lib/storage";
 import {
@@ -1706,7 +1707,7 @@ function Row({
             aria-expanded={more}
             aria-label={more ? "Fewer options" : "More options"}
           >
-            ···
+            <MoreHorizontal size={16} strokeWidth={1.8} />
           </button>
         )}
       </div>
@@ -1859,7 +1860,7 @@ function ThreadView({
                 aria-expanded={more}
                 aria-label={more ? "Fewer options" : "More options"}
               >
-                ···
+                <MoreHorizontal size={16} strokeWidth={1.8} />
               </button>
             </div>
           </div>
@@ -2010,10 +2011,7 @@ function FragView({
         {!editing && (
           <div className="frag-tools">
             <button className="copy-btn" onClick={onCopy} aria-label="Copy">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <rect x="2.5" y="2.5" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
-                <rect x="5.5" y="5.5" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
-              </svg>
+              <Copy size={16} strokeWidth={1.6} />
             </button>
             <button
               className={"more-btn" + (more ? " open" : "")}
@@ -2025,7 +2023,7 @@ function FragView({
               aria-expanded={more}
               aria-label={more ? "Fewer options" : "More options"}
             >
-              ···
+              <MoreHorizontal size={16} strokeWidth={1.8} />
             </button>
           </div>
         )}
