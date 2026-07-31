@@ -1,8 +1,8 @@
 # capture — X series (source of truth)
 
-A seven-post series for X. Each post is a self-contained unit. Posts 1, 4, 5,
-7 are final. Posts 2, 3, 6 await real fragments from Gleb's app (marked
-`[REAL DATA NEEDED]`). No example is invented; concrete beats general.
+A nine-post series for X. Each post is a self-contained unit, all final.
+Real usage drawn from Gleb's app (no invented examples). The product origin
+and intentions lineage live in INTENTIONS.md as the source of truth.
 
 Throughline: one capture surface, three kinds. Show the model absorbing a
 messy thought and filing it. Specific, in his words, no clichés.
@@ -24,15 +24,29 @@ sort.
 
 Built capture because I wanted sift.jsx on my phone, offline, no server. First
 version filed text. The model now cleans it as it files, so captures read like
-something you would actually say. Threads rewrite their own "where this
-stands." Intentions are declarations, not checkboxes. No SaaS, no database, one
+something you'd actually say. Threads rewrite their own "where this stands."
+Intentions are declarations, not checkboxes. No SaaS, no database, one
 password. Your device, your keys, never lost.
 
 github.com/glebbogachev00/capture — MIT.
 
 ---
 
-## 2 — How I actually capture (final)
+## 2 — How it came to be (final)
+
+capture wasn't planned. It grew.
+
+Before it, I had two separate tools: Intent OS (declarations) and Action OS
+(things to close). Both built with Claude Opus on one $20 subscription — no
+team, just a serious model.
+
+capture started with actions and threads. Once I was reaching for Intent OS
+every day too, I folded it in as the third kind. One app, three places,
+nothing to switch between.
+
+---
+
+## 3 — How I actually capture (final)
 
 The only way things get into capture for me is the mic built into Apple.
 Dictation. I say the thought, it lands.
@@ -46,7 +60,7 @@ the small amount I speak stays useful instead of piling up.
 
 ---
 
-## 3 — Actions (final)
+## 4 — Actions (final)
 
 I didn't file these. I just said them. Capture turned each into something to
 close and gave it a shelf life.
@@ -64,7 +78,7 @@ honest because what I ignore disappears on its own. No inbox rot.
 
 ---
 
-## 4 — Threads (final)
+## 5 — Threads (final)
 
 Most of capture was built while I was walking or sitting. I'd talk my findings
 into ChatGPT's voice, then paste them in. Each fragment joined one thread, and
@@ -82,7 +96,7 @@ mass.
 
 ---
 
-## 5 — Intentions, the mechanic (final)
+## 6 — Intentions, the mechanic (final)
 
 Most apps treat a goal as a checkbox. capture treats it as a fact.
 
@@ -96,7 +110,7 @@ is, and leaves the becoming to life.
 
 ---
 
-## 6 — Intentions, the lineage (final)
+## 7 — Intentions, the lineage (final)
 
 capture's intentions feature is not a productivity trick. It is three books,
 turned into software.
@@ -117,7 +131,7 @@ be. It holds the version of you that already is.
 
 ---
 
-## 7 — A day in the life (final)
+## 8 — A day in the life (final)
 
 A real morning, three kinds, no filing by hand.
 
@@ -139,7 +153,7 @@ One surface. Action, thread, intention. None of it sorted by me.
 
 ---
 
-## 8 — Wrap + the ask (final)
+## 9 — Wrap + the ask (final)
 
 That is capture. One place to say things, three places for them to land.
 

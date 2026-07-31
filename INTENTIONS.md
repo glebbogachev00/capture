@@ -22,3 +22,22 @@ state, things you do *because* it is already so, not steps to get there.
 
 The app holds no progress bar and no due date. It is not tracking who you
 will become. It is holding the version of you that already is.
+
+## How capture came to be (source of truth)
+
+capture was not designed up front. It emerged from use.
+
+Before capture there were two separate tools: **Intent OS** and **Action OS**.
+Intent OS held declarations; Action OS held things to close. Both were built
+with Claude Opus on a single $20 subscription — no dev team, one serious model.
+
+capture launched with two of the three kinds: **Actions** and **Threads**.
+(Threads also came out of the early naming as "threats" and "action idea"
+before settling.) It was a place to say things and watch them file themselves.
+
+Gleb kept using Intent OS alongside it. Once he saw he was reaching for both
+tools every day, he folded Intent OS into capture as the third kind —
+**Intentions**. One app, three places, no separate OS to switch between.
+
+So the three kinds are not a feature list someone planned. They are the three
+tools a person actually used, merged once the use was proven.
