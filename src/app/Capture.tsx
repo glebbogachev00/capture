@@ -45,6 +45,7 @@ import {
   hydrate,
   left,
   nextNumber,
+  pad,
   sweep,
   uid,
 } from "@/lib/model";
@@ -64,6 +65,7 @@ import {
   readJsonFile,
   restoreBackup,
 } from "@/lib/backup";
+import { shareText, shareableFor } from "@/lib/share";
 
 /* Not in lib.dom yet, and only the handful of members used here matter. */
 type Recogniser = {
@@ -111,6 +113,8 @@ export function Capture() {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [landed, setLanded] = useState<string | null>(null);
+  /* Reads as a whole sentence, unlike `landed` which is "Landed in <x>". */
+  const [notice, setNotice] = useState<string | null>(null);
   const [swept, setSwept] = useState<{ faded: number; cleared: number } | null>(
     null
   );
@@ -493,10 +497,14 @@ export function Capture() {
    * stale summary is better than none.
    */
   const regenerate = useCallback(
-    async (board: Board, threadId: string) => {
+    async (board: Board, threadId: string): Promise<Board> => {
       const target = board.threads.find((t) => t.id === threadId);
-      if (!target?.frags.length) return;
+      if (!target?.frags.length) return board;
       setBusy("Updating what this thread says now");
+      // Returns the board it persisted so two of these can be chained without
+      // the second undoing the first — moving a fragment re-summarises both
+      // threads, and each needs to build on the other's result.
+      let result = board;
       try {
         const res = await fetch("/api/summarize", {
           method: "POST",
@@ -508,17 +516,19 @@ export function Capture() {
         });
         if (res.ok) {
           const { summary } = await res.json();
-          await persist({
+          result = {
             ...board,
             threads: board.threads.map((t) =>
               t.id === threadId ? { ...t, summary } : t
             ),
-          });
+          };
+          await persist(result);
         }
       } catch {
         /* the fragments are saved; the summary can lag */
       }
       setBusy(null);
+      return result;
     },
     [persist]
   );
@@ -578,6 +588,49 @@ export function Capture() {
     await regenerate(next, threadId);
   };
 
+  /**
+   * Move one fragment to another thread.
+   *
+   * The sorter puts a fragment on the wrong thread often enough that the only
+   * remedy being "delete it and say it again" was a real loss. Both threads
+   * are re-summarised afterwards, because the sentence describing each of them
+   * is now describing a set of fragments that changed.
+   */
+  const moveFrag = async (fromId: string, fragId: string, toId: string) => {
+    const from = data.threads.find((t) => t.id === fromId);
+    const frag = from?.frags.find((f) => f.id === fragId);
+    if (!from || !frag) return;
+
+    const remaining = from.frags.filter((f) => f.id !== fragId);
+    const to = data.threads.find((t) => t.id === toId);
+    if (!to) return;
+
+    let threads = data.threads.map((t) =>
+      t.id === toId
+        ? { ...t, frags: [...t.frags, frag].sort((a, b) => a.at - b.at) }
+        : t
+    );
+
+    // Taking the last fragment out leaves a thread that is only a name.
+    const emptied = remaining.length === 0;
+    threads = emptied
+      ? threads.filter((t) => t.id !== fromId)
+      : threads.map((t) => (t.id === fromId ? { ...t, frags: remaining } : t));
+
+    const next = { ...data, threads };
+    await persist(next);
+    setNotice(
+      emptied
+        ? `Moved to ${to.name}. ${from.name} was left empty and removed.`
+        : `Moved to ${to.name}.`
+    );
+    setTimeout(() => setNotice(null), 4500);
+
+    if (emptied) setOpen(toId);
+    const afterTo = await regenerate(next, toId);
+    if (!emptied) await regenerate(afterTo, fromId);
+  };
+
   const deleteThread = async (id: string) => {
     const target = data.threads.find((t) => t.id === id);
     for (const f of target?.frags || []) await dropImages(f.imgs);
@@ -610,8 +663,8 @@ export function Capture() {
         .map((t) => (t.id === intoId ? { ...t, frags } : t)),
     };
     await persist(next);
-    setLanded(from.name + " folded into " + into.name);
-    setTimeout(() => setLanded(null), 4500);
+    setNotice(from.name + " folded into " + into.name + ".");
+    setTimeout(() => setNotice(null), 4500);
     await regenerate(next, intoId);
   };
 
@@ -711,8 +764,8 @@ export function Capture() {
     await persist({ ...data, intentions: [intention, ...data.intentions] });
     setDraft(null);
     setTab("intentions");
-    setLanded("Intention " + intention.number + " set");
-    setTimeout(() => setLanded(null), 4500);
+    setNotice("Intention " + pad(intention.number) + " set.");
+    setTimeout(() => setNotice(null), 4500);
   };
 
   const updateIntention = (next: Intention) =>
@@ -765,6 +818,39 @@ export function Capture() {
       ...data,
       principles: data.principles.filter((p) => p.id !== id),
     });
+
+  /* ---------------- sharing ---------------- */
+
+  /**
+   * What the share control would send from wherever you are standing.
+   *
+   * Deriving the target from the current view is what keeps this to one
+   * control: there is no need to say what to share when you are already
+   * looking at it, and no row anywhere grows a share button.
+   */
+  const shareable = shareableFor(
+    data,
+    openIntention
+      ? { kind: "intention", id: openIntention }
+      : open
+        ? { kind: "thread", id: open }
+        : { kind: "tab", tab },
+    now
+  );
+
+  const doShare = async () => {
+    if (!shareable) return;
+    const outcome = await shareText(shareable);
+    if (outcome === "cancelled") return;
+    setNotice(
+      outcome === "shared"
+        ? `Shared — ${shareable.summary}.`
+        : outcome === "copied"
+          ? `Copied to the clipboard — ${shareable.summary}.`
+          : "Couldn't share that."
+    );
+    setTimeout(() => setNotice(null), 3500);
+  };
 
   /* ---------------- getting data in and out ---------------- */
 
@@ -880,6 +966,19 @@ export function Capture() {
             <div className="capture-count">
               {live.length} open · {data.threads.length} threads
             </div>
+            {!showSettings && !draft && (
+              <button
+                className="icon-btn"
+                onClick={doShare}
+                disabled={!shareable}
+                aria-label={
+                  shareable ? "Share " + shareable.title : "Nothing to share"
+                }
+                title={shareable ? "Share " + shareable.title : "Nothing to share"}
+              >
+                ↗
+              </button>
+            )}
             <button
               className="icon-btn"
               onClick={() => {
@@ -976,6 +1075,7 @@ export function Capture() {
             Landed in <em>{landed}</em>.
           </div>
         )}
+        {notice && <div className="landed">{notice}</div>}
         {swept && !busy && (
           <div className="sweep">
             Cleanup ran on open.
@@ -1048,6 +1148,7 @@ export function Capture() {
             onRefresh={() => regenerate(data, thread.id)}
             others={data.threads.filter((t) => t.id !== thread.id)}
             onMerge={(fromId) => mergeThreads(thread.id, fromId)}
+            onMoveFrag={(fragId, toId) => moveFrag(thread.id, fragId, toId)}
           />
         ) : (
           <>
@@ -1399,6 +1500,7 @@ function ThreadView({
   onRefresh,
   others,
   onMerge,
+  onMoveFrag,
 }: {
   thread: Thread;
   onBack: () => void;
@@ -1409,6 +1511,7 @@ function ThreadView({
   onRefresh: () => void;
   others: Thread[];
   onMerge: (fromId: string) => void;
+  onMoveFrag: (fragId: string, toId: string) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(thread.name);
@@ -1547,8 +1650,10 @@ function ThreadView({
         <FragView
           key={f.id}
           f={f}
+          others={others}
           onSave={(text) => onEditFrag(f.id, text)}
           onDelete={() => onDeleteFrag(f.id)}
+          onMove={(toId) => onMoveFrag(f.id, toId)}
         />
       ))}
     </div>
@@ -1557,17 +1662,22 @@ function ThreadView({
 
 function FragView({
   f,
+  others,
   onSave,
   onDelete,
+  onMove,
 }: {
   f: Frag;
+  others: Thread[];
   onSave: (text: string) => void;
   onDelete: () => void;
+  onMove: (toId: string) => void;
 }) {
   const [srcs, setSrcs] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(f.text);
   const [confirming, setConfirming] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -1594,12 +1704,53 @@ function FragView({
             <button className="ghost" onClick={() => setEditing(true)}>
               Edit
             </button>
-            <button className="ghost" onClick={() => setConfirming((v) => !v)}>
+            {others.length > 0 && (
+              <button
+                className="ghost"
+                onClick={() => {
+                  setMoving((v) => !v);
+                  setConfirming(false);
+                }}
+              >
+                Move
+              </button>
+            )}
+            <button
+              className="ghost warn"
+              onClick={() => {
+                setConfirming((v) => !v);
+                setMoving(false);
+              }}
+            >
               Delete
             </button>
           </>
         )}
       </div>
+
+      {moving && !editing && (
+        <div className="picker">
+          <p className="picker-hint">Move this fragment to:</p>
+          {others.map((t) => (
+            <button
+              key={t.id}
+              className="picker-row"
+              onClick={() => {
+                onMove(t.id);
+                setMoving(false);
+              }}
+            >
+              <span className="picker-name">{t.name}</span>
+              <span className="picker-meta">
+                {t.frags.length} fragment{t.frags.length === 1 ? "" : "s"}
+              </span>
+            </button>
+          ))}
+          <button className="ghost" onClick={() => setMoving(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
 
       {editing ? (
         <div className="frag-edit">
