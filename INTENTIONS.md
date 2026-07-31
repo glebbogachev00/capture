@@ -51,3 +51,15 @@ tools every day, he folded Intent OS into capture as the third kind —
 So the three kinds are not a feature list someone planned. They are the tools
 a person actually used, merged once the use was proven — and the intelligence
 that App Stream only hinted at.
+
+## How the three kinds map to the apps you already use (source of truth)
+
+- **Actions ≈ Apple Notes, but they auto-delete.** A note in Apple Notes sits
+  forever; an action in capture carries a shelf life and clears itself, so the
+  list stays honest.
+- **Threads are the answer to Google Keep.** Keep is where building ideas live
+  and accumulate, but nothing files them. Threads do: they build themselves,
+  you can move a fragment between threads and merge threads, and the summary
+  stays current. Everything works.
+- **Intentions are personal.** Not a competitor to anything — just a practice
+  that works for Gleb.

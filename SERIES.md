@@ -91,6 +91,10 @@ The model judges the shelf life from what the thing is, not from a date I pick.
 And here is the part I like: if I don't do them, they go. The list stays
 honest because what I ignore disappears on its own. No inbox rot.
 
+Think of it like Apple Notes, but the notes auto-delete. A sticky note in
+Notes sits there forever; an action in capture carries a shelf life and clears
+itself.
+
 ---
 
 ## 6 — Threads (final)
@@ -109,6 +113,11 @@ nothing new for two months just rests, still there, until I come back.
 That is the difference from a to-do list. A list wants closure. A thread wants
 mass.
 
+It's the answer to Google Keep. Keep is where I build ideas and let them
+accumulate, but nothing files them. Threads do — they build themselves, you
+can move a fragment between threads, merge threads, and the summary stays
+current. Everything just works.
+
 ---
 
 ## 7 — Intentions, the mechanic (final)
@@ -122,6 +131,9 @@ so, not steps toward making it so.
 
 No due date. No progress bar. The app holds the version of you that already
 is, and leaves the becoming to life.
+
+It's a personal thing. Not a competitor to anything — just a practice that
+works for me.
 
 ---
 
@@ -179,3 +191,26 @@ If it earns its keep on your phone, buy it a coffee:
 ko-fi.com/banhmii
 
 github.com/glebbogachev00/capture
+
+---
+
+## Cadence (source of truth)
+
+Ten weekday posts, no weekend drops. ~2 weeks, with the last two on a third
+Monday. Pins: post 2 (hook) and post 8 (lineage).
+
+| Day | Post |
+|---|---|
+| Mon (wk1) | 1 — The problem |
+| Tue | 2 — Hook (pin) |
+| Wed | 3 — How it came to be |
+| Thu | 4 — How I capture |
+| Fri | 5 — Actions |
+| Mon (wk2) | 6 — Threads |
+| Tue | 7 — Intentions, mechanic |
+| Wed | 8 — Intentions, lineage (pin) |
+| Thu | 9 — A day in life |
+| Mon (wk3) | 10 — Wrap + ask |
+
+Post when the audience is awake: US morning ET ≈ Vietnam evening. Adjust after
+posts 1–2 if analytics say otherwise.
