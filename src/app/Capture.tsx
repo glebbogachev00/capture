@@ -1258,7 +1258,6 @@ export function Capture() {
             onDelete={() => deleteThread(thread.id)}
             onEditFrag={(fragId, text) => editFrag(thread.id, fragId, text)}
             onDeleteFrag={(fragId) => deleteFrag(thread.id, fragId)}
-            onRefresh={() => regenerate(data, thread.id)}
             others={data.threads.filter((t) => t.id !== thread.id)}
             onMerge={(fromId) => mergeThreads(thread.id, fromId)}
             onMoveFrag={(fragId, toId) => moveFrag(thread.id, fragId, toId)}
@@ -1607,6 +1606,7 @@ function Row({
   const ms = a.expires ? a.expires - now : null;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(a.text);
+  const [more, setMore] = useState(false);
 
   const commit = () => {
     if (draft.trim()) onEditText(draft.trim());
@@ -1639,27 +1639,38 @@ function Row({
         <div className="act-meta">
           <span>{fmt(a.at)}</span>
           {a.unsorted && <span className="raw">unsorted</span>}
+          {faded && (
+            <span>
+              faded · clears in {left((a.fadedAt || now) + GRACE - now)}
+            </span>
+          )}
           {!editing && (
+            <button
+              className={"more-btn" + (more ? " open" : "")}
+              onClick={() => setMore((v) => !v)}
+              aria-expanded={more}
+              aria-label={more ? "Fewer options" : "More options"}
+            >
+              ···
+            </button>
+          )}
+        </div>
+
+        {more && !editing && (
+          <div className="row-actions">
             <button className="ghost" onClick={() => setEditing(true)}>
               Edit
             </button>
-          )}
-          {a.unsorted && !editing && (
-            <button className="ghost" onClick={onResort} disabled={busy}>
-              Sort now
-            </button>
-          )}
-          {faded ? (
-            <>
-              <span>
-                faded · clears in {left((a.fadedAt || now) + GRACE - now)}
-              </span>
+            {a.unsorted && (
+              <button className="ghost" onClick={onResort} disabled={busy}>
+                Sort now
+              </button>
+            )}
+            {faded ? (
               <button className="ghost" onClick={onRestore}>
                 Restore
               </button>
-            </>
-          ) : (
-            !editing && (
+            ) : (
               <>
                 <button className="ghost" onClick={onMakeThread}>
                   Make a thread
@@ -1672,9 +1683,10 @@ function Row({
                   Make an intention
                 </button>
               </>
-            )
-          )}
-        </div>
+            )}
+          </div>
+        )}
+
         {shelfOpen && (
           <div className="shelf">
             <button onClick={() => onSetShelf(DAY, "hours")}>1 day</button>
@@ -1742,7 +1754,6 @@ function ThreadView({
   onDelete,
   onEditFrag,
   onDeleteFrag,
-  onRefresh,
   others,
   onMerge,
   onMoveFrag,
@@ -1758,7 +1769,6 @@ function ThreadView({
   onDelete: () => void;
   onEditFrag: (fragId: string, text: string) => void;
   onDeleteFrag: (fragId: string) => void;
-  onRefresh: () => void;
   others: Thread[];
   onMerge: (fromId: string) => void;
   onMoveFrag: (fragId: string, toId: string) => void;
@@ -1772,6 +1782,7 @@ function ThreadView({
   const [name, setName] = useState(thread.name);
   const [confirming, setConfirming] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [more, setMore] = useState(false);
 
   return (
     <div>
@@ -1824,39 +1835,55 @@ function ThreadView({
       )}
 
       {!renaming && (
-        <div className="act-meta" style={{ marginBottom: 16 }}>
-          {/* One tap to the clipboard. The header arrow opens the OS sheet,
-              which is the right thing for sending to a person and the wrong
-              thing when you only want to paste this into a chat. */}
-          <button className="ghost" onClick={onCopyThread}>
-            Copy thread
-          </button>
-          <button className="ghost" onClick={() => setRenaming(true)}>
-            Rename
-          </button>
-          {others.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div className="act-meta">
+            {/* One tap to the clipboard. The header arrow opens the OS sheet,
+                which is the right thing for sending to a person and the wrong
+                thing when you only want to paste this into a chat. */}
+            <button className="ghost" onClick={onCopyThread}>
+              Copy thread
+            </button>
             <button
-              className="ghost"
+              className={"more-btn" + (more ? " open" : "")}
               onClick={() => {
-                setMerging((v) => !v);
+                setMore((v) => !v);
+                setMerging(false);
                 setConfirming(false);
               }}
+              aria-expanded={more}
+              aria-label={more ? "Fewer options" : "More options"}
             >
-              Merge in
+              ···
             </button>
+          </div>
+
+          {more && (
+            <div className="row-actions">
+              <button className="ghost" onClick={() => setRenaming(true)}>
+                Rename
+              </button>
+              {others.length > 0 && (
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    setMerging((v) => !v);
+                    setConfirming(false);
+                  }}
+                >
+                  Merge in
+                </button>
+              )}
+              <button
+                className="ghost warn"
+                onClick={() => {
+                  setConfirming((v) => !v);
+                  setMerging(false);
+                }}
+              >
+                Delete thread
+              </button>
+            </div>
           )}
-          <button className="ghost" onClick={onRefresh}>
-            Refresh summary
-          </button>
-          <button
-            className="ghost warn"
-            onClick={() => {
-              setConfirming((v) => !v);
-              setMerging(false);
-            }}
-          >
-            Delete thread
-          </button>
         </div>
       )}
 
@@ -1951,6 +1978,7 @@ function FragView({
   const [draft, setDraft] = useState(f.text);
   const [confirming, setConfirming] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [more, setMore] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -1974,36 +2002,53 @@ function FragView({
         {f.unsorted && <span className="raw">unsorted</span>}
         {!editing && (
           <>
-            <button className="ghost" onClick={() => setEditing(true)}>
-              Edit
-            </button>
             <button className="ghost" onClick={onCopy}>
               Copy
             </button>
-            <button className="ghost" onClick={onExtract} disabled={busy}>
-              Make an action
-            </button>
             <button
-              className="ghost"
+              className={"more-btn" + (more ? " open" : "")}
               onClick={() => {
-                setMoving((v) => !v);
+                setMore((v) => !v);
+                setMoving(false);
                 setConfirming(false);
               }}
+              aria-expanded={more}
+              aria-label={more ? "Fewer options" : "More options"}
             >
-              Move
-            </button>
-            <button
-              className="ghost warn"
-              onClick={() => {
-                setConfirming((v) => !v);
-                setMoving(false);
-              }}
-            >
-              Delete
+              ···
             </button>
           </>
         )}
       </div>
+
+      {more && !editing && (
+        <div className="row-actions">
+          <button className="ghost" onClick={() => setEditing(true)}>
+            Edit
+          </button>
+          <button className="ghost" onClick={onExtract} disabled={busy}>
+            Make an action
+          </button>
+          <button
+            className="ghost"
+            onClick={() => {
+              setMoving((v) => !v);
+              setConfirming(false);
+            }}
+          >
+            Move
+          </button>
+          <button
+            className="ghost warn"
+            onClick={() => {
+              setConfirming((v) => !v);
+              setMoving(false);
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
 
       {moving && !editing && (
         <div className="picker">

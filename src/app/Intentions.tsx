@@ -253,6 +253,7 @@ export function IntentionDetail({
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [more, setMore] = useState(false);
 
   return (
     <div>
@@ -277,19 +278,37 @@ export function IntentionDetail({
         <p className="int-expanded">{intention.expandedIntention}</p>
       )}
 
-      <div className="act-meta" style={{ marginBottom: 18 }}>
-        <button className="ghost" onClick={() => setEditing(true)}>
-          Edit wording
-        </button>
-        <button className="ghost" onClick={onCopy}>
-          Copy
-        </button>
-        <button
-          className="ghost warn"
-          onClick={() => setConfirming((v) => !v)}
-        >
-          Delete
-        </button>
+      <div style={{ marginBottom: 18 }}>
+        <div className="act-meta">
+          <button className="ghost" onClick={onCopy}>
+            Copy
+          </button>
+          <button
+            className={"more-btn" + (more ? " open" : "")}
+            onClick={() => {
+              setMore((v) => !v);
+              setConfirming(false);
+            }}
+            aria-expanded={more}
+            aria-label={more ? "Fewer options" : "More options"}
+          >
+            ···
+          </button>
+        </div>
+
+        {more && (
+          <div className="row-actions">
+            <button className="ghost" onClick={() => setEditing(true)}>
+              Edit wording
+            </button>
+            <button
+              className="ghost warn"
+              onClick={() => setConfirming((v) => !v)}
+            >
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       {confirming && (

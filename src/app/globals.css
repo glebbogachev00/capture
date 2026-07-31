@@ -756,6 +756,57 @@ body {
   color: var(--muted);
 }
 
+/*
+ * The overflow mark.
+ *
+ * Everything on a row except the one thing you do often lives behind this.
+ * It is pushed to the right edge so that down a long thread the marks line up
+ * into a single quiet column, which the eye stops registering while reading —
+ * a ragged left-aligned row of labelled pills is what made the view noisy, as
+ * much as the number of them.
+ *
+ * Visible at all times on purpose: hiding the controls behind an undocumented
+ * tap would trade clutter for a secret.
+ */
+.more-btn {
+  margin-left: auto;
+  border: 1px solid var(--rule);
+  background: var(--card);
+  color: var(--muted);
+  font-family: var(--font-mono), monospace;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  min-height: 38px;
+  min-width: 46px;
+  padding: 0 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  touch-action: manipulation;
+  transition: 0.15s;
+}
+.more-btn:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+.more-btn.open {
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+/* The revealed set. Expands in place, like the move and merge pickers. */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 /* Saved verbatim because no model would answer. */
 .raw {
   border: 1px dashed #b08428;
