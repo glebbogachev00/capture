@@ -17,7 +17,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Copy, MoreHorizontal } from "lucide-react";
+import { Copy, MoreHorizontal, Share2, Settings } from "lucide-react";
 import { Markup } from "./Markup";
 import { get, set } from "@/lib/storage";
 import {
@@ -1089,7 +1089,7 @@ export function Capture() {
                 }
                 title={shareable ? "Share " + shareable.title : "Nothing to share"}
               >
-                ↗
+                <Share2 size={18} strokeWidth={1.7} />
               </button>
             )}
             <button
@@ -1101,7 +1101,7 @@ export function Capture() {
               aria-label="Settings and backup"
               title="Settings and backup"
             >
-              ⚙
+              <Settings size={18} strokeWidth={1.7} />
             </button>
           </div>
         </div>
@@ -1845,10 +1845,7 @@ function ThreadView({
                 thing when you only want to paste this into a chat. */}
             <div className="frag-tools">
               <button className="copy-btn" onClick={onCopyThread} aria-label="Copy thread">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <rect x="2.5" y="2.5" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
-                  <rect x="5.5" y="5.5" width="8" height="8" stroke="currentColor" strokeWidth="1.4" />
-                </svg>
+                <Copy size={16} strokeWidth={1.6} />
               </button>
               <button
                 className={"more-btn" + (more ? " open" : "")}
