@@ -17,9 +17,10 @@
    ============================================================ */
 
 import { useEffect, useRef, useState } from "react";
-import { Mic } from "lucide-react";
+import { Mic, Volume2, VolumeX } from "lucide-react";
 import type { DistillResult, DistillSession } from "@/lib/distill";
 import { type ShelfLife, SHELF } from "@/lib/model";
+import { useVoiceConversation } from "@/hooks/useVoiceConversation";
 
 /* A seed beats a blank box: one tap drops a real thought in the box. */
 const STARTERS = [
@@ -38,6 +39,7 @@ export function DistillView({
   listening,
   onToggleMic,
   onSend,
+  onSendText,
   onSettle,
   onBack,
   settled,
@@ -53,6 +55,7 @@ export function DistillView({
   listening: boolean;
   onToggleMic: () => void;
   onSend: () => void;
+  onSendText: (text: string) => void;
   onSettle: () => void;
   onBack: () => void;
   settled: DistillResult | null;
@@ -75,6 +78,30 @@ export function DistillView({
     });
   }, [session.turns.length, lastTurn?.text, busy, settled]);
 
+  /* Spoken replies + the conversation loop. `mode` is how you talk to the
+     engine: Type keeps the text box and the read-aloud toggle; Talk runs the
+     mic as a real conversation — you speak, it answers aloud, the mic comes
+     back on its own, and a tap interrupts mid-word. The voice engine is the
+     same either way, so the speaker toggle and the orb share one stack. */
+  const [mode, setMode] = useState<"type" | "talk">("type");
+  const convo = useVoiceConversation(
+    session.turns,
+    busy,
+    (t) => onSendText(t),
+    !settled && mode === "talk"
+  );
+  const voice = convo.voice;
+  /* `convo` is a fresh object every render; its handlers are stable
+     useCallbacks, so destructure to keep effect deps stable. */
+  const stopTalk = convo.stop;
+
+  /* The review step replaces the chat — nothing keeps listening behind it.
+     The `active` prop gates the auto-rearm; this stops a live recogniser and
+     any half-spoken reply the moment the conversation is over. */
+  useEffect(() => {
+    if (settled) stopTalk();
+  }, [settled, stopTalk]);
+
   if (settled) {
     return (
       <DistillReview
@@ -92,7 +119,88 @@ export function DistillView({
         ← capture
       </button>
 
-      <div className="int-eyebrow">Distill</div>
+      <div className="distill-head">
+        <div className="int-eyebrow">Distill</div>
+        <div
+          className={"distill-mode" + (mode === "talk" ? " talk" : "")}
+          role="tablist"
+          aria-label="How you talk to Distill"
+        >
+          <button
+            className={mode === "type" ? "on" : ""}
+            onClick={() => {
+              setMode("type");
+              convo.stop();
+            }}
+            role="tab"
+            aria-selected={mode === "type"}
+          >
+            Type
+          </button>
+          <button
+            className={mode === "talk" ? "on" : ""}
+            onClick={() => {
+              setMode("talk");
+              convo.start();
+            }}
+            role="tab"
+            aria-selected={mode === "talk"}
+            disabled={!convo.canDictate || !voice.supported}
+            title={
+              convo.canDictate && voice.supported
+                ? "Talk — a spoken conversation"
+                : "Voice isn't supported in this browser"
+            }
+          >
+            Talk
+          </button>
+        </div>
+        {voice.supported && (
+          <div className="distill-voice">
+            {/* Which engine is real: the local Kokoro server, or the
+                browser's built-in voice. Only shown once replies are on. */}
+            {voice.enabled && (
+              <span
+                className={
+                  "distill-engine" +
+                  (voice.engine === "server" ? " kokoro" : "")
+                }
+              >
+                {voice.engine === "server" ? "kokoro" : "browser voice"}
+              </span>
+            )}
+            <button
+              className={
+                "icon-btn speak" +
+                (voice.enabled ? " on" : "") +
+                (voice.speaking ? " live" : "")
+              }
+              onClick={voice.toggle}
+              aria-label={
+                voice.enabled
+                  ? `Mute spoken replies (${
+                      voice.engine === "server" ? "Kokoro" : "browser voice"
+                    })`
+                  : "Speak replies aloud"
+              }
+              aria-pressed={voice.enabled}
+              title={
+                voice.enabled
+                  ? `Mute spoken replies (${
+                      voice.engine === "server" ? "Kokoro" : "browser voice"
+                    })`
+                  : "Speak replies aloud"
+              }
+            >
+              {voice.enabled ? (
+                <Volume2 size={18} strokeWidth={1.7} />
+              ) : (
+                <VolumeX size={18} strokeWidth={1.7} />
+              )}
+            </button>
+          </div>
+        )}
+      </div>
       <p className="int-note">
         A thought that isn&apos;t clear yet. Talk it through — it asks one
         question at a time, then files the whole exchange when you&apos;re
@@ -149,39 +257,43 @@ export function DistillView({
 
       {err && <div className="err">{err}</div>}
 
-      <div className="cap">
-        <textarea
-          value={input}
-          onChange={(e) => onInput(e.target.value)}
-          placeholder="Say it however it comes out."
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSend();
-          }}
-        />
-        <div className="cap-bar">
-          {canDictate && (
+      {mode === "talk" ? (
+        <TalkPad convo={convo} busy={busy} />
+      ) : (
+        <div className="cap">
+          <textarea
+            value={input}
+            onChange={(e) => onInput(e.target.value)}
+            placeholder="Say it however it comes out."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSend();
+            }}
+          />
+          <div className="cap-bar">
+            {canDictate && (
+              <button
+                className={"icon-btn" + (listening ? " live" : "")}
+                onClick={onToggleMic}
+                aria-label="Dictate"
+              >
+                <Mic size={18} strokeWidth={1.7} />
+              </button>
+            )}
+            <div className="cap-hint">
+              {canDictate
+                ? "or tap the mic key on your keyboard"
+                : "tap the mic key on your keyboard to dictate"}
+            </div>
             <button
-              className={"icon-btn" + (listening ? " live" : "")}
-              onClick={onToggleMic}
-              aria-label="Dictate"
+              className="capture-btn"
+              onClick={onSend}
+              disabled={busy || !input.trim()}
             >
-              <Mic size={18} strokeWidth={1.7} />
+              {busy ? "…" : "Send"}
             </button>
-          )}
-          <div className="cap-hint">
-            {canDictate
-              ? "or tap the mic key on your keyboard"
-              : "tap the mic key on your keyboard to dictate"}
           </div>
-          <button
-            className="capture-btn"
-            onClick={onSend}
-            disabled={busy || !input.trim()}
-          >
-            {busy ? "…" : "Send"}
-          </button>
         </div>
-      </div>
+      )}
 
       <button
         className="ghost distill-settle"
@@ -190,6 +302,74 @@ export function DistillView({
       >
         {busy ? "Distilling…" : "Distill &amp; save"}
       </button>
+    </div>
+  );
+}
+
+/**
+ * The spoken half of Distill — the orb that makes it a conversation.
+ *
+ * Tap to talk, pause to send, tap again while it's answering to cut in.
+ * The orb wears the current state so you always know what it's doing:
+ * grey and still when it's waiting, breathing when it listens, lit and
+ * pulsing while it speaks, dots while it thinks.
+ */
+function TalkPad({
+  convo,
+  busy,
+}: {
+  convo: ReturnType<typeof useVoiceConversation>;
+  busy: boolean;
+}) {
+  const speaking = convo.speaking;
+  const thinking = busy && !speaking;
+  const label = speaking
+    ? "Speaking — tap to interrupt"
+    : thinking
+      ? "Thinking…"
+      : convo.listening
+        ? "Listening — speak now"
+        : "Tap to talk";
+  return (
+    <div className="talk">
+      <button
+        className={
+          "orb" +
+          (speaking ? " speaking" : "") +
+          (thinking ? " thinking" : "") +
+          (convo.listening ? " listening" : "")
+        }
+        onClick={convo.tap}
+        aria-label={label}
+        aria-live="polite"
+      >
+        {thinking ? (
+          <span className="distill-dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+        ) : (
+          <Mic size={32} strokeWidth={1.6} />
+        )}
+      </button>
+      <div className="talk-status">{label}</div>
+      <div className="talk-hint">
+        {speaking
+          ? "tap to cut in — it stops the moment you do"
+          : thinking
+            ? "the reply is on its way — it'll speak out loud"
+            : convo.listening
+              ? "speak, pause when you're done — no Send button"
+              : "a spoken conversation. talk, it answers aloud, and the mic comes back on its own."}
+      </div>
+      <span
+        className={
+          "distill-engine" + (convo.engine === "server" ? " kokoro" : "")
+        }
+      >
+        {convo.engine === "server" ? "kokoro" : "browser voice"}
+      </span>
     </div>
   );
 }

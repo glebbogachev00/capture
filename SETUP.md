@@ -67,11 +67,25 @@ PWA and runs full-screen with its own icon.
 build + `npm start -H 0.0.0.0` commands above (or add `-H 0.0.0.0` to the dev
 command) so the server answers on the network.
 
-**Voice note.** Dictation (the mic) is the browser's *built-in* speech
-recognition — no server, key, or setup of its own. But browsers only allow the
-mic in a "secure context": `localhost` counts, `http://192.168.x.x` does not.
-So on the Mac at localhost the mic just works; on the phone over plain HTTP
-the browser blocks it. For voice on the phone you need HTTPS: a tunnel
+**Voice note.** Voice runs in the browser on whatever device you're using —
+the Mac only serves the app. Distill has two ways to talk:
+
+- **Dictation** (the mic in Type mode) is the browser's built-in speech
+  recognition, dropping words into the text box.
+- **Talk mode** (the Type/Talk switch in Distill) is a real spoken
+  conversation: you speak, the reply is spoken aloud sentence by sentence,
+  the mic comes back on its own when it finishes, and tapping the orb while
+  it's talking cuts it off mid-word so you can answer. No Send button —
+  pausing is the turn boundary.
+
+By default the spoken replies use the browser's built-in voice — free,
+instant, no setup, a little robotic. For a human-sounding voice, run the
+optional Kokoro server (§7); the app probes it once and switches
+automatically. Same experience either way.
+
+Voice needs a "secure context": `localhost` counts, `http://192.168.x.x`
+does not. On the Mac at localhost both work; on the phone over plain HTTP
+the browser blocks them. For voice on the phone you need HTTPS: a tunnel
 (`cloudflared tunnel --url http://localhost:3000` or ngrok), or a self-signed
 cert with `mkcert`. Typing works over plain HTTP either way.
 
@@ -126,7 +140,42 @@ The whole app then sits behind a single-password gate. Set it whenever the
 server is reachable from anything other than localhost — an open `/api/sort`
 is an open tab on your model quota.
 
-## 6. Backup
+## 7. Optional: a human-sounding voice (Kokoro)
+
+Spoken replies sound robotic by default (the browser's built-in voice). For
+near-human audio, capture can use **Kokoro** — an open-weight TTS model that
+runs locally, often faster than realtime on Apple Silicon — served through a
+tiny FastAPI server that the app proxies to. The app works without it; the
+speaker toggle shows which engine is actually speaking.
+
+One-time install (uv is the only tool needed — Homebrew users likely have it
+via `brew install uv`):
+
+```bash
+git clone https://github.com/remsky/Kokoro-FastAPI.git
+cd Kokoro-FastAPI
+./start-cpu.sh          # runs on any Mac, no GPU needed
+# on Apple Silicon, the MPS-accelerated script is faster:
+# ./start-gpu_mac.sh
+```
+
+That's it. The server listens on http://localhost:8880 — exactly the app's
+default `TTS_URL`, so no config is required. Start it in its own terminal
+before you want spoken replies. First audio for a short sentence lands in
+well under a second on a modern Mac, and each sentence speaks the moment it
+streams.
+
+To pick a different voice, add to `.env.local` and restart the app:
+
+```
+TTS_VOICE=af_bella     # warm, clear female — the default
+# TTS_VOICE=am_michael # deeper male; browse them all at
+#                      # http://localhost:8880/v1/audio/voices
+```
+
+The proxy means your phone gets the same voice automatically (no CORS to
+fight) once you're on HTTPS. If the Kokoro server isn't running, replies
+just fall back to the browser voice — nothing breaks.
 
 Your board lives in the browser's IndexedDB on each device, not on the server.
 Use **Settings → Download backup** regularly and keep the JSON somewhere safe —

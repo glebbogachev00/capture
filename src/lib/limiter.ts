@@ -26,6 +26,16 @@ export function modelRateLimit(key: string): LimitResult {
   return rateLimit("model:" + key, MODEL_LIMIT, MODEL_WINDOW);
 }
 
+/** TTS spends local CPU, not model quota, so it gets its own generous
+    bucket — but still one, so an open deployment can't be used to hammer
+    the Mac into synthesising audio for strangers. */
+const TTS_LIMIT = 120;
+const TTS_WINDOW = 60_000;
+
+export function ttsRateLimit(key: string): LimitResult {
+  return rateLimit("tts:" + key, TTS_LIMIT, TTS_WINDOW);
+}
+
 export function rateLimit(
   key: string,
   limit = DEFAULT_LIMIT,

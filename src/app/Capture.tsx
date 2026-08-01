@@ -247,6 +247,7 @@ export function Capture() {
             listening={listening}
             onToggleMic={toggleMic}
             onSend={() => sendDistill()}
+            onSendText={(t) => sendDistill(t)}
             onSettle={settleDistill}
             onBack={closeDistill}
             settled={settled}

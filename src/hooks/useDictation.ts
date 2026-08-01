@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { capability } from "@/lib/clock";
 
 /* Not in lib.dom yet, and only the handful of members used here matter. */
-type Recogniser = {
+export type Recogniser = {
   continuous: boolean;
   interimResults: boolean;
   onresult: (e: {
@@ -15,12 +15,14 @@ type Recogniser = {
     };
   }) => void;
   onend: () => void;
+  onerror?: (e: unknown) => void;
+  onspeechstart?: () => void;
   start: () => void;
   stop: () => void;
 };
-type RecogniserCtor = new () => Recogniser;
+export type RecogniserCtor = new () => Recogniser;
 
-function speechRecogniser(): RecogniserCtor | null {
+export function speechRecogniser(): RecogniserCtor | null {
   if (typeof window === "undefined") return null;
   const w = window as unknown as {
     SpeechRecognition?: RecogniserCtor;
