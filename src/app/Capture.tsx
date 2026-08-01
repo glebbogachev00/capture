@@ -17,7 +17,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Copy, MoreHorizontal, Share2, Settings } from "lucide-react";
+import { Copy, Image as ImageIcon, Mic, MoreHorizontal, Share2, Settings } from "lucide-react";
 import { Markup } from "./Markup";
 import { get, set } from "@/lib/storage";
 import {
@@ -1100,7 +1100,7 @@ export function Capture() {
               onClick={() => fileRef.current?.click()}
               aria-label="Add a picture"
             >
-              ▣
+              <ImageIcon size={18} strokeWidth={1.7} />
             </button>
             <input
               ref={fileRef}
@@ -1116,7 +1116,7 @@ export function Capture() {
                 onClick={toggleMic}
                 aria-label="Dictate"
               >
-                ◉
+                <Mic size={18} strokeWidth={1.7} />
               </button>
             )}
             <div className="cap-hint">
