@@ -68,15 +68,16 @@ build + `npm start -H 0.0.0.0` commands above (or add `-H 0.0.0.0` to the dev
 command) so the server answers on the network.
 
 **Voice note.** Voice runs in the browser on whatever device you're using —
-the Mac only serves the app. Distill has two ways to talk:
+the Mac only serves the app. Distill's chat box carries two icon buttons
+next to Send:
 
-- **Dictation** (the mic in Type mode) is the browser's built-in speech
-  recognition, dropping words into the text box.
-- **Talk mode** (the Type/Talk switch in Distill) is a real spoken
-  conversation: you speak, the reply is spoken aloud sentence by sentence,
-  the mic comes back on its own when it finishes, and tapping the orb while
-  it's talking cuts it off mid-word so you can answer. No Send button —
-  pausing is the turn boundary.
+- **Mic** — dictation: the browser's built-in speech recognition, dropping
+  your words into the text box to edit and send.
+- **Voice** — a real spoken conversation: you speak, the reply is spoken
+  aloud sentence by sentence, the mic comes back on its own when it
+  finishes, and tapping the orb while it's talking cuts it off mid-word so
+  you can answer. No Send button — pausing is the turn boundary. The
+  keyboard button underneath the orb returns you to the text box.
 
 By default the spoken replies use the browser's built-in voice — free,
 instant, no setup, a little robotic. For a human-sounding voice, run the
@@ -144,9 +145,9 @@ is an open tab on your model quota.
 
 Spoken replies sound robotic by default (the browser's built-in voice). For
 near-human audio, capture can use **Kokoro** — an open-weight TTS model that
-runs locally, often faster than realtime on Apple Silicon — served through a
-tiny FastAPI server that the app proxies to. The app works without it; the
-speaker toggle shows which engine is actually speaking.
+runs locally, often faster than realtime on Apple Silicon — servedthrough a tiny FastAPI server that the app proxies to. The app works without it —
+spoken replies use whatever voice is available; Kokoro simply makes them
+near-human.
 
 One-time install (uv is the only tool needed — Homebrew users likely have it
 via `brew install uv`):

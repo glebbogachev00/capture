@@ -17,7 +17,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useState } from "react";
-import { Mic, Volume2, VolumeX } from "lucide-react";
+import { AudioLines, Keyboard, Mic } from "lucide-react";
 import type { DistillResult, DistillSession } from "@/lib/distill";
 import { type ShelfLife, SHELF } from "@/lib/model";
 import { useVoiceConversation } from "@/hooks/useVoiceConversation";
@@ -79,10 +79,12 @@ export function DistillView({
   }, [session.turns.length, lastTurn?.text, busy, settled]);
 
   /* Spoken replies + the conversation loop. `mode` is how you talk to the
-     engine: Type keeps the text box and the read-aloud toggle; Talk runs the
+     engine: Type is the quiet text box (mic dictation only); Talk runs the
      mic as a real conversation — you speak, it answers aloud, the mic comes
-     back on its own, and a tap interrupts mid-word. The voice engine is the
-     same either way, so the speaker toggle and the orb share one stack. */
+     back on its own, and a tap interrupts mid-word. Spoken replies belong to
+     Talk mode alone now — there is no separate read-aloud toggle — so the
+     chat box carries just a mic and a Voice button, and the Voice button is
+     what hands the floor to the conversation. */
   const [mode, setMode] = useState<"type" | "talk">("type");
   const convo = useVoiceConversation(
     session.turns,
@@ -94,6 +96,7 @@ export function DistillView({
   /* `convo` is a fresh object every render; its handlers are stable
      useCallbacks, so destructure to keep effect deps stable. */
   const stopTalk = convo.stop;
+  const voiceSetEnabled = voice.setEnabled;
 
   /* The review step replaces the chat — nothing keeps listening behind it.
      The `active` prop gates the auto-rearm; this stops a live recogniser and
@@ -101,6 +104,13 @@ export function DistillView({
   useEffect(() => {
     if (settled) stopTalk();
   }, [settled, stopTalk]);
+
+  /* Read-aloud lives inside Talk mode now. Entering Talk turns it on
+     (convo.start() calls setEnabled(true)); anywhere else it stays off, so
+     Type mode never reads replies aloud with no control to stop it. */
+  useEffect(() => {
+    if (mode !== "talk") voiceSetEnabled(false);
+  }, [mode, voiceSetEnabled]);
 
   if (settled) {
     return (
@@ -121,57 +131,6 @@ export function DistillView({
 
       <div className="distill-head">
         <div className="int-eyebrow">Distill</div>
-        <div className="distill-voice">
-          {/* Voice: a spoken conversation instead of typing. Off is Type —
-              the text box; on hands the floor to the mic, and the reply is
-              spoken aloud, barge-in and all. */}
-          <button
-            className={"distill-mode-btn" + (mode === "talk" ? " on" : "")}
-            onClick={() => {
-              if (mode === "talk") {
-                setMode("type");
-                convo.stop();
-              } else {
-                setMode("talk");
-                convo.start();
-              }
-            }}
-            aria-pressed={mode === "talk"}
-            disabled={!convo.canDictate || !voice.supported}
-            title={
-              convo.canDictate && voice.supported
-                ? "Voice — a spoken conversation"
-                : "Voice isn't supported in this browser"
-            }
-          >
-            <Mic size={15} strokeWidth={1.8} />
-            Voice
-          </button>
-          {voice.supported && (
-            <button
-              className={
-                "distill-mode-btn" +
-                (voice.enabled ? " on" : "") +
-                (voice.speaking ? " live" : "")
-              }
-              onClick={voice.toggle}
-              aria-pressed={voice.enabled}
-              aria-label={
-                voice.enabled ? "Mute spoken replies" : "Speak replies aloud"
-              }
-              title={
-                voice.enabled ? "Mute spoken replies" : "Speak replies aloud"
-              }
-            >
-              {voice.enabled ? (
-                <Volume2 size={15} strokeWidth={1.8} />
-              ) : (
-                <VolumeX size={15} strokeWidth={1.8} />
-              )}
-              Speaker
-            </button>
-          )}
-        </div>
       </div>
       <p className="int-note">
         A thought that isn&apos;t clear yet. Talk it through — it asks one
@@ -230,7 +189,14 @@ export function DistillView({
       {err && <div className="err">{err}</div>}
 
       {mode === "talk" ? (
-        <TalkPad convo={convo} busy={busy} />
+        <TalkPad
+          convo={convo}
+          busy={busy}
+          onType={() => {
+            setMode("type");
+            convo.stop();
+          }}
+        />
       ) : (
         <div className="cap">
           <textarea
@@ -251,6 +217,25 @@ export function DistillView({
                 <Mic size={18} strokeWidth={1.7} />
               </button>
             )}
+            {/* Voice is the mic's sibling, not the same thing — dictation
+                drops words into the box, Voice starts a spoken conversation
+                that answers aloud. The waveform glyph keeps the two apart. */}
+            <button
+              className="icon-btn"
+              onClick={() => {
+                setMode("talk");
+                convo.start();
+              }}
+              disabled={!convo.canDictate || !voice.supported}
+              aria-label="Voice — a spoken conversation"
+              title={
+                convo.canDictate && voice.supported
+                  ? "Voice — speak and it answers aloud"
+                  : "Voice isn't supported in this browser"
+              }
+            >
+              <AudioLines size={18} strokeWidth={1.7} />
+            </button>
             <div className="cap-hint">
               {canDictate
                 ? "or tap the mic key on your keyboard"
@@ -289,9 +274,11 @@ export function DistillView({
 function TalkPad({
   convo,
   busy,
+  onType,
 }: {
   convo: ReturnType<typeof useVoiceConversation>;
   busy: boolean;
+  onType: () => void;
 }) {
   const speaking = convo.speaking;
   const thinking = busy && !speaking;
@@ -335,6 +322,10 @@ function TalkPad({
               ? "speak, pause when you're done — no Send button"
               : "a spoken conversation. talk, it answers aloud, and the mic comes back on its own."}
       </div>
+      <button className="ghost talk-type" onClick={onType} disabled={busy}>
+        <Keyboard size={15} strokeWidth={1.8} />
+        type instead
+      </button>
     </div>
   );
 }

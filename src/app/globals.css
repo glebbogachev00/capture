@@ -1087,7 +1087,8 @@ body {
 .distill-view {
   animation: distill-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
-/* The head row holds the Distill label and the speak-replies toggle. */
+/* The head row holds the Distill label and nothing else — the voice
+   controls live in the chat box, so the head stays clean. */
 .distill-head {
   display: flex;
   align-items: center;
@@ -1096,57 +1097,6 @@ body {
 }
 .distill-head .int-eyebrow {
   margin: 0;
-}
-/* The two voice toggles — Voice (spoken conversation) and Speaker
-   (read-aloud). Same quiet pill language as the old Type/Talk switch, but
-   each is now its own on/off toggle, pushed to the head's right edge. */
-.distill-voice {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-.distill-mode-btn {
-  border: 1px solid var(--rule);
-  background: var(--card);
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 0 13px;
-  min-height: 36px;
-  border-radius: 10px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  touch-action: manipulation;
-  transition: 0.15s;
-}
-.distill-mode-btn:hover {
-  color: var(--ink);
-  border-color: var(--muted);
-}
-.distill-mode-btn.on {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--paper);
-}
-/* While a reply is actually being read aloud the toggle wears the accent,
-   so Type mode still shows that audio is playing. */
-.distill-mode-btn.live {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.distill-mode-btn.live.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.distill-mode-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 .distill-review {
   animation: distill-in 0.34s cubic-bezier(0.22, 1, 0.36, 1);
@@ -1355,6 +1305,13 @@ body {
   text-align: center;
   max-width: 300px;
   line-height: 1.5;
+}
+/* The quiet way out of a spoken conversation: back to the text box. */
+.talk-type {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  min-height: 36px;
 }
 
 /* The Distill & save action sits quiet below the chat until it matters. */

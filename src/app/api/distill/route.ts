@@ -136,6 +136,17 @@ export async function POST(request: Request) {
             emitted = true;
             yield chunk;
           }
+          // A tier that produced no text at all is as dead as one that
+          // errored — spent quota can come back as an empty stream rather
+          // than a thrown error, and treating it as an answer would end the
+          // whole reply instead of falling through to the next provider.
+          if (!emitted) {
+            lastError = new Error(
+              `${tier.name} returned an empty stream`
+            );
+            console.warn(`[capture] distill ${tier.name} empty, trying next`);
+            continue;
+          }
           return;
         } catch (error) {
           if (emitted) throw error;
