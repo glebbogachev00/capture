@@ -14,6 +14,18 @@ const DEFAULT_WINDOW = 15 * 60_000; // 15 minutes
 
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
+/** Per-client ceiling on the model endpoints, so a loop or a scraper can't
+    burn a deployment's quota. Generous enough for a burst of captures that
+    land in threads (each costs a sort + a summarise); a scraper still trips
+    it well before any real damage. */
+const MODEL_LIMIT = 40;
+const MODEL_WINDOW = 60_000;
+
+/** The "model:" prefix keeps this bucket apart from the login one. */
+export function modelRateLimit(key: string): LimitResult {
+  return rateLimit("model:" + key, MODEL_LIMIT, MODEL_WINDOW);
+}
+
 export function rateLimit(
   key: string,
   limit = DEFAULT_LIMIT,

@@ -1,17 +1,9 @@
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE, checkPassword, createSessionValue } from "@/lib/auth";
+import { clientIp } from "@/lib/clientIp";
 import { rateLimit } from "@/lib/limiter";
 
 export const runtime = "nodejs";
-
-/** The caller's address, through a proxy or the edge network. */
-function clientIp(request: Request): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-    request.headers.get("cf-connecting-ip") ||
-    "unknown"
-  );
-}
 
 export async function POST(request: Request) {
   const password = process.env.APP_PASSWORD;
@@ -36,7 +28,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!body.password || !checkPassword(body.password, password)) {
+  if (!body.password || !(await checkPassword(body.password, password))) {
     // A uniform delay makes guessing marginally less pleasant. The failed
     // attempt above nudges the client toward the 429 lockout.
     await new Promise((r) => setTimeout(r, 400));

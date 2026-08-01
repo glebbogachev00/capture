@@ -205,14 +205,12 @@ export function IntentionCard({
 
 export function IntentionDetail({
   intention,
-  busy,
   onBack,
   onChange,
   onCopy,
   onDelete,
 }: {
   intention: Intention;
-  busy: boolean;
   onBack: () => void;
   onChange: (next: Intention) => void;
   onCopy: () => void;
@@ -391,6 +389,7 @@ export function SettingsScreen({
   onExport,
   onRestore,
   onImportIntent,
+  onLogout,
   ioNote,
 }: {
   principles: Principle[];
@@ -402,6 +401,7 @@ export function SettingsScreen({
   onExport: () => void;
   onRestore: (file: File) => void;
   onImportIntent: (file: File) => void;
+  onLogout: () => void;
   ioNote: IoNote;
 }) {
   const [name, setName] = useState("");
@@ -513,6 +513,17 @@ export function SettingsScreen({
             Add principle
           </button>
         </div>
+      </div>
+
+      <div className="int-block">
+        <h4 className="int-label">Session</h4>
+        <p className="int-note">
+          Ends this login on this device. You&apos;ll be asked for the password
+          again next time.
+        </p>
+        <button className="ghost warn" onClick={onLogout}>
+          Log out
+        </button>
       </div>
     </div>
   );

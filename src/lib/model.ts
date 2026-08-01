@@ -17,11 +17,17 @@ export const CORRUPT = "capture:corrupt:v1";
 export const DAY = 864e5;
 export const HOUR = 36e5;
 
-/** How long each species of action stays on the board before fading. */
+/**
+ * How long each species of action stays on the board before fading.
+ *
+ * These are the canonical spans. The manual shelf picker and the model's
+ * `shelfLife` both read from here, so a stored `shelf` label always means the
+ * same duration whoever set it: "days" is a week, "weeks" a month.
+ */
 export const SHELF: Record<ShelfLife, number | null> = {
   hours: DAY,
-  days: 4 * DAY,
-  weeks: 21 * DAY,
+  days: 7 * DAY,
+  weeks: 30 * DAY,
   keep: null,
 };
 /** Faded items sit recoverable this long, then go for good. */

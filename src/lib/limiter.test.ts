@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { rateLimit } from "./limiter";
+import { modelRateLimit, rateLimit } from "./limiter";
 
 describe("rateLimit", () => {
   beforeEach(() => {
@@ -34,5 +34,16 @@ describe("rateLimit", () => {
     for (let i = 0; i < 10; i++) rateLimit("evildoer");
     expect(rateLimit("evildoer").allowed).toBe(false);
     expect(rateLimit("innocent").allowed).toBe(true);
+  });
+
+  it("shares the model bucket across clients only up to the model limit", () => {
+    for (let i = 0; i < 40; i++) {
+      expect(modelRateLimit("bot").allowed).toBe(true);
+    }
+    const blocked = modelRateLimit("bot");
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.retryAfterSec).toBeGreaterThan(0);
+    // A different key is not punished by the bot's bucket.
+    expect(modelRateLimit("another").allowed).toBe(true);
   });
 });

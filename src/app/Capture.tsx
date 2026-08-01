@@ -17,12 +17,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Copy, Image as ImageIcon, Mic, MoreHorizontal, Share2, Settings } from "lucide-react";
 import { Markup } from "./Markup";
+import { DistillView } from "./Distill";
 import {
-  capability,
   clockServerSnapshot,
   clockSnapshot,
   subscribeToClock,
 } from "@/lib/clock";
+import { useDictation } from "@/hooks/useDictation";
 import { get } from "@/lib/storage";
 import {
   type Action,
@@ -46,23 +47,6 @@ import {
 import { shareIntention, shareThread } from "@/lib/share";
 import { useBoard } from "@/hooks/useBoard";
 
-/* Not in lib.dom yet, and only the handful of members used here matter. */
-type Recogniser = {
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: (e: {
-    resultIndex: number;
-    results: {
-      [i: number]: { [j: number]: { transcript: string } };
-      length: number;
-    };
-  }) => void;
-  onend: () => void;
-  start: () => void;
-  stop: () => void;
-};
-type RecogniserCtor = new () => Recogniser;
-
 export function Capture() {
   /* The ticking clock the countdowns and shelf lives derive from. */
   const now = useSyncExternalStore(
@@ -71,17 +55,9 @@ export function Capture() {
     clockServerSnapshot
   );
 
-  /* Input device plumbing that stays here: the hidden file picker, the
-     speech recogniser, and whether the mic is live. */
+  /* Input device plumbing: the hidden file picker, and the speech recogniser
+     (shared with Distill — the mic routes to whichever surface is open). */
   const fileRef = useRef<HTMLInputElement>(null);
-  const recog = useRef<Recogniser | null>(null);
-  const [listening, setListening] = useState(false);
-
-  const canDictate = useSyncExternalStore(
-    capability.subscribe,
-    () => Boolean(speechRecogniser()),
-    () => false
-  );
 
   /* Everything else — the board, every operation on it, and the derived
      views — comes from useBoard. This destructure is the whole logic
@@ -148,41 +124,45 @@ export function Capture() {
     deleteThread,
     mergeThreads,
     saveDraft,
+    discardDraft,
+    refreshSummary,
     updateIntention,
     deleteIntention,
     makeIntention,
+    logout,
     togglePrinciple,
     addPrinciple,
     deletePrinciple,
+    distillOpen,
+    distillSession,
+    distillInput,
+    setDistillInput,
+    distillBusy,
+    distillErr,
+    settled,
+    openDistill,
+    closeDistill,
+    sendDistill,
+    settleDistill,
+    saveSettled,
+    discardSettled,
     exportBoard,
     restoreFromFile,
     importBackup,
     doShare,
   } = useBoard(now);
 
-  const toggleMic = () => {
-    const SR = speechRecogniser();
-    if (!SR) return;
-    if (listening) {
-      recog.current?.stop();
-      setListening(false);
-      return;
+  /* Input device plumbing: the hidden file picker, and the speech recogniser
+     (shared with Distill — the mic routes to whichever surface is open).
+     Read through the ref by useDictation, so the destination is always the
+     one that is current when a result lands. */
+  const { canDictate, listening, toggleMic } = useDictation((t) => {
+    if (distillOpen) {
+      setDistillInput((x) => (x ? x + " " : "") + t.trim());
+    } else {
+      setText((x) => (x ? x + " " : "") + t.trim());
     }
-    const r = new SR();
-    r.continuous = true;
-    r.interimResults = false;
-    r.onresult = (e) => {
-      let s = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        s += e.results[i][0].transcript;
-      }
-      setText((t) => (t ? t + " " : "") + s.trim());
-    };
-    r.onend = () => setListening(false);
-    r.start();
-    recog.current = r;
-    setListening(true);
-  };
+  });
 
   const addFiles = (files: FileList | null) => {
     [...(files || [])].slice(0, 4).forEach((f) => {
@@ -212,10 +192,7 @@ export function Capture() {
       onEditText={(t) => editActionText(a.id, t)}
       onResort={() => resort(a)}
       onMakeIntention={() =>
-        makeIntention(a.src || a.text, () => ({
-          ...data,
-          actions: data.actions.filter((x) => x.id !== a.id),
-        }))
+        makeIntention(a.src || a.text, a.id)
       }
       busy={!!busy}
     />
@@ -259,6 +236,28 @@ export function Capture() {
           </div>
         </div>
 
+        {distillOpen && (
+          <DistillView
+            session={distillSession}
+            input={distillInput}
+            onInput={setDistillInput}
+            busy={distillBusy}
+            err={distillErr}
+            canDictate={canDictate}
+            listening={listening}
+            onToggleMic={toggleMic}
+            onSend={() => sendDistill()}
+            onSettle={settleDistill}
+            onBack={closeDistill}
+            settled={settled}
+            onSave={(clean, actions, shelfLife) =>
+              saveSettled(clean, actions, shelfLife)
+            }
+            onDiscard={discardSettled}
+          />
+        )}
+
+        {!distillOpen && (
         <div className="cap">
           <textarea
             value={text}
@@ -321,6 +320,14 @@ export function Capture() {
                 : "tap the mic key on your keyboard to dictate"}
             </div>
             <button
+              className="ghost"
+              onClick={openDistill}
+              aria-label="Distill instead of capture"
+              title="Distill instead of capture"
+            >
+              Distill
+            </button>
+            <button
               className="capture-btn"
               onClick={submit}
               disabled={!!busy || (!text.trim() && !pics.length)}
@@ -329,6 +336,7 @@ export function Capture() {
             </button>
           </div>
         </div>
+        )}
 
         {busy && (
           <div className="status">
@@ -384,6 +392,7 @@ export function Capture() {
             onExport={exportBoard}
             onRestore={restoreFromFile}
             onImportIntent={importBackup}
+            onLogout={logout}
             ioNote={ioNote}
           />
         ) : draft ? (
@@ -392,12 +401,11 @@ export function Capture() {
             busy={!!busy}
             onChange={setDraft}
             onSave={saveDraft}
-            onDiscard={() => setDraft(null)}
+            onDiscard={discardDraft}
           />
         ) : intention ? (
           <IntentionDetail
             intention={intention}
-            busy={!!busy}
             onBack={() => setOpenIntention(null)}
             onChange={updateIntention}
             onCopy={() => copyWhole(shareIntention(intention))}
@@ -409,6 +417,7 @@ export function Capture() {
             onBack={() => setOpen(null)}
             onRename={(name) => renameThread(thread.id, name)}
             onDelete={() => deleteThread(thread.id)}
+            onRefreshSummary={() => refreshSummary(thread.id)}
             onEditFrag={(fragId, text) => editFrag(thread.id, fragId, text)}
             onDeleteFrag={(fragId) => deleteFrag(thread.id, fragId)}
             others={data.threads.filter((t) => t.id !== thread.id)}
@@ -716,15 +725,6 @@ function SearchResults({
   );
 }
 
-function speechRecogniser(): RecogniserCtor | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as {
-    SpeechRecognition?: RecogniserCtor;
-    webkitSpeechRecognition?: RecogniserCtor;
-  };
-  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
-}
-
 function Row({
   a,
   faded,
@@ -907,6 +907,7 @@ function ThreadView({
   onBack,
   onRename,
   onDelete,
+  onRefreshSummary,
   onEditFrag,
   onDeleteFrag,
   others,
@@ -922,6 +923,7 @@ function ThreadView({
   onBack: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
+  onRefreshSummary: () => void;
   onEditFrag: (fragId: string, text: string) => void;
   onDeleteFrag: (fragId: string) => void;
   others: Thread[];
@@ -1016,6 +1018,9 @@ function ThreadView({
 
           {more && (
             <div className="row-actions">
+              <button className="ghost" onClick={onRefreshSummary} disabled={busy}>
+                Refresh summary
+              </button>
               <button className="ghost" onClick={() => setRenaming(true)}>
                 Rename
               </button>

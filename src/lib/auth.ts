@@ -11,7 +11,16 @@
  * real gateway credits, and an open one is an open tab on your account.
  */
 
-export const AUTH_COOKIE = "capture_auth";
+/**
+ * `__Host-` pins the cookie to this origin in production (Secure, Path=/, no
+ * Domain), so a subdomain can neither read it nor replay it. Dev runs over
+ * plain http, which browsers refuse to pair with `__Host-`, so the prefix is
+ * dropped there.
+ */
+export const AUTH_COOKIE =
+  process.env.NODE_ENV === "production"
+    ? "__Host-capture_auth"
+    : "capture_auth";
 const SESSION_DAYS = 30;
 
 function toHex(buffer: ArrayBuffer): string {
@@ -64,6 +73,25 @@ export async function isValidSession(
   return timingSafeEqual(signature, await sign(payload, password));
 }
 
-export function checkPassword(candidate: string, actual: string): boolean {
-  return timingSafeEqual(candidate, actual);
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value)
+  );
+  return toHex(digest);
+}
+
+/**
+ * Compare a candidate against the stored password.
+ *
+ * Both sides are hashed first so the comparison runs over fixed-length
+ * strings: a wrong-length candidate no longer leaks its length through an
+ * early return in timingSafeEqual.
+ */
+export async function checkPassword(
+  candidate: string,
+  actual: string
+): Promise<boolean> {
+  const [a, b] = await Promise.all([sha256Hex(candidate), sha256Hex(actual)]);
+  return timingSafeEqual(a, b);
 }

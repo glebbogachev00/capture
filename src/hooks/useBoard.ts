@@ -42,6 +42,13 @@ import {
 } from "@/lib/model";
 import { importIntentBackup } from "@/lib/importIntent";
 import {
+  type DistillResult,
+  type DistillSession,
+  DISTILL_KEY,
+  EMPTY_DISTILL,
+  hydrateDistill,
+} from "@/lib/distill";
+import {
   backupFilename,
   buildBackup,
   downloadJSON,
@@ -98,6 +105,24 @@ export function useBoard(now: number) {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [showFaded, setShowFaded] = useState(false);
   const [showResting, setShowResting] = useState(false);
+  /* The action being converted to an intention; removed only once the draft
+     is saved, never when it is discarded. */
+  const [pendingSource, setPendingSource] = useState<string | null>(null);
+
+  /* ---------------------------- distill ---------------------------- */
+  const [distillOpen, setDistillOpen] = useState(false);
+  const [distillSession, setDistillSession] =
+    useState<DistillSession>(EMPTY_DISTILL);
+  const [distillInput, setDistillInput] = useState("");
+  const [distillBusy, setDistillBusy] = useState(false);
+  const [distillErr, setDistillErr] = useState("");
+  const [settled, setSettled] = useState<DistillResult | null>(null);
+  /* Mirrors distillBusy in a ref so two taps in the same tick can't both
+     start a request before React has re-rendered. */
+  const distillBusyRef = useRef(false);
+  /* The saved session is hydrated asynchronously; a turn sent before that
+     resolves must not be clobbered by the stale copy from disk. */
+  const distillLoadedRef = useRef(false);
 
   /* The latest board, read by handlers so async work never builds on stale
      state. `commit` (and the loader) are the only writers. */
@@ -150,9 +175,39 @@ export function useBoard(now: number) {
         }
         setSwept({ faded, cleared });
       }
+      // A half-finished Distill conversation is a capture like any other.
+      // A turn sent before this resolves already adopted the disk copy and
+      // marked the ref; don't clobber that in-flight session.
+      try {
+        const distillRaw = await get(DISTILL_KEY);
+        if (distillRaw && !distillLoadedRef.current) {
+          setDistillSession(hydrateDistill(distillRaw));
+        }
+      } catch {
+        /* first run */
+      }
+      if (!distillLoadedRef.current) distillLoadedRef.current = true;
       setLoaded(true);
     })();
   }, []);
+
+  /* Expiry is continuous, not just at open: sweep on the minute tick too, so
+     stale actions fade and cleared ones drop while the app stays open. The
+     open-time notice is only shown by the loader above; tick sweeps are quiet.
+
+     sweep() awaits image cleanup, so the board is only committed if it has not
+     changed since we read it — a concurrent mutation is never reverted by a
+     stale sweep; the next tick re-runs it over the newer board. */
+  useEffect(() => {
+    if (!loaded) return;
+    (async () => {
+      const before = latest.current;
+      const { next, faded, cleared } = await sweep(before);
+      if ((faded || cleared) && latest.current === before) {
+        await commit(next);
+      }
+    })();
+  }, [now, loaded, commit]);
 
   /* Search is computed on every keystroke; a short settle keeps typing smooth
      and cheap as the board grows, with no visible pause. Clearing goes through
@@ -250,6 +305,23 @@ export function useBoard(now: number) {
     };
   };
 
+  /** Ask the server to rewrite a thread's summary. Throws SortError. */
+  const requestSummary = async (name: string, frags: Frag[]) => {
+    const res = await fetch("/api/summarize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        frags: frags.map((f) => ({ at: f.at, text: f.text })),
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new SortError(body.error);
+    }
+    return res.json();
+  };
+
   /** Rewrite a thread's "Where this stands" from its current fragments. */
   const regenerate = async (board: Board, threadId: string): Promise<Board> => {
     const target = board.threads.find((t) => t.id === threadId);
@@ -257,29 +329,44 @@ export function useBoard(now: number) {
     setBusy("Updating what this thread says now");
     let result = board;
     try {
-      const res = await fetch("/api/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: target.name,
-          frags: target.frags.map((f) => ({ at: f.at, text: f.text })),
-        }),
-      });
-      if (res.ok) {
-        const { summary } = await res.json();
-        result = {
-          ...board,
-          threads: board.threads.map((t) =>
-            t.id === threadId ? { ...t, summary } : t
-          ),
-        };
-        await commit(result);
-      }
+      const { summary } = await requestSummary(target.name, target.frags);
+      result = {
+        ...board,
+        threads: board.threads.map((t) =>
+          t.id === threadId ? { ...t, summary } : t
+        ),
+      };
+      await commit(result);
     } catch {
       /* the fragments are saved; the summary can lag */
     }
     setBusy(null);
     return result;
+  };
+
+  /**
+   * Manual re-run from the thread view. Unlike the automatic path, a failure
+   * is shown rather than swallowed, so a stale summary is never silent.
+   */
+  const refreshSummary = async (threadId: string) => {
+    const target = latest.current.threads.find((t) => t.id === threadId);
+    if (!target?.frags.length) return;
+    setErr("");
+    setBusy("Updating what this thread says now");
+    try {
+      const { summary } = await requestSummary(target.name, target.frags);
+      await commit({
+        ...latest.current,
+        threads: latest.current.threads.map((t) =>
+          t.id === threadId ? { ...t, summary } : t
+        ),
+      });
+      setNotice("Summary refreshed.");
+      setTimeout(() => setNotice(null), 4000);
+    } catch (error) {
+      setErr(reasonOf(error) + " The summary was left as it was.");
+    }
+    setBusy(null);
   };
 
   /**
@@ -759,14 +846,32 @@ export function useBoard(now: number) {
       at,
       updatedAt: at,
     };
-    await commit({
+    let next: Board = {
       ...latest.current,
       intentions: [intention, ...latest.current.intentions],
-    });
+    };
+    // This draft came from converting an action; the action only goes once
+    // the intention is actually saved — discarding the draft keeps it.
+    if (pendingSource) {
+      const src = latest.current.actions.find((a) => a.id === pendingSource);
+      if (src) await dropImages(src.imgs);
+      next = {
+        ...next,
+        actions: latest.current.actions.filter((a) => a.id !== pendingSource),
+      };
+    }
+    await commit(next);
     setDraft(null);
+    setPendingSource(null);
     setTab("intentions");
     setNotice("Intention " + pad(intention.number) + " set.");
     setTimeout(() => setNotice(null), 4500);
+  };
+
+  /** Close the intention draft without saving; the source action stays put. */
+  const discardDraft = () => {
+    setPendingSource(null);
+    setDraft(null);
   };
 
   const updateIntention = (next: Intention) =>
@@ -785,14 +890,29 @@ export function useBoard(now: number) {
     setOpenIntention(null);
   };
 
-  /** Turn an action or a thread into an intention when the sort missed it. */
-  const makeIntention = async (rawInput: string, remove: () => Board) => {
+  /**
+   * Turn an action into an intention when the sort missed it.
+   *
+   * Only opens the draft; the action is removed by saveDraft once the draft
+   * is saved, and stays put if it is discarded.
+   */
+  const makeIntention = async (rawInput: string, sourceId: string) => {
     try {
       await expandIntention(rawInput);
-      await commit(remove());
+      setPendingSource(sourceId);
     } catch (error) {
       setErr(reasonOf(error) + " Nothing was moved.");
     }
+  };
+
+  /** End the session: clear the login cookie and let the gate send us back. */
+  const logout = async () => {
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } catch {
+      /* server unreachable; the reload below still clears the local view */
+    }
+    window.location.href = "/";
   };
 
   /* --------------------------- principles -------------------------- */
@@ -918,6 +1038,235 @@ export function useBoard(now: number) {
     }
   };
 
+  /* ---------------------------- distill ---------------------------- */
+
+  /** A half-finished Distill conversation is persisted after every turn. */
+  const persistDistill = async (session: DistillSession) => {
+    try {
+      await set(DISTILL_KEY, JSON.stringify(session));
+    } catch {
+      /* the session stays on screen; the next turn tries again */
+    }
+  };
+
+  const openDistill = () => {
+    setDistillErr("");
+    setDistillOpen(true);
+  };
+
+  const closeDistill = () => {
+    setDistillOpen(false);
+    setDistillInput("");
+  };
+
+  /** Start a fresh conversation, clearing the saved session. */
+  const resetDistill = async () => {
+    setSettled(null);
+    setDistillErr("");
+    setDistillInput("");
+    const fresh: DistillSession = { id: uid(), at: stamp(), turns: [] };
+    setDistillSession(fresh);
+    await persistDistill(fresh);
+  };
+
+  /**
+   * Send one user turn and stream the assistant's clarifying reply back.
+   *
+   * The user turn is persisted before the request goes out and the completed
+   * assistant turn after it lands, so the transcript is never more than one
+   * half-answer behind the network.
+   */
+  const sendDistill = async (raw?: string) => {
+    const text = (raw ?? distillInput).trim();
+    if (!text || distillBusyRef.current) return;
+    setDistillErr("");
+    setSettled(null);
+    distillBusyRef.current = true;
+
+    // A session from a previous visit may still be hydrating; adopt the disk
+    // copy up front so the new turn joins the real conversation and the saved
+    // transcript is never briefly replaced by an empty one.
+    let base: DistillSession = distillSession;
+    if (!distillLoadedRef.current) {
+      try {
+        const savedRaw = await get(DISTILL_KEY);
+        if (savedRaw) {
+          const saved = hydrateDistill(savedRaw);
+          if (saved.turns.length) base = saved;
+        }
+      } catch {
+        /* keep the in-memory session */
+      }
+      distillLoadedRef.current = true;
+    }
+
+    const userTurn = { role: "user" as const, text, at: stamp() };
+    const withUser: DistillSession = {
+      id: base.id || uid(),
+      at: base.at || stamp(),
+      turns: [...base.turns, userTurn],
+    };
+    setDistillSession(withUser);
+    setDistillInput("");
+    await persistDistill(withUser);
+
+    setDistillBusy(true);
+    const assistantTurn = { role: "assistant" as const, text: "", at: stamp() };
+    setDistillSession({ ...withUser, turns: [...withUser.turns, assistantTurn] });
+
+    try {
+      const res = await fetch("/api/distill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          op: "chat",
+          turns: withUser.turns.map((t) => ({ role: t.role, text: t.text })),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new SortError(body.error);
+      }
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      if (reader) {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          acc += decoder.decode(value, { stream: true });
+          // Update the streaming turn in place.
+          setDistillSession((s) => ({
+            ...s,
+            turns: s.turns.map((t, i) =>
+              i === s.turns.length - 1 ? { ...t, text: acc } : t
+            ),
+          }));
+        }
+      }
+      const doneSession: DistillSession = {
+        ...withUser,
+        turns: [...withUser.turns, { ...assistantTurn, text: acc.trim() }],
+      };
+      setDistillSession(doneSession);
+      await persistDistill(doneSession);
+    } catch (error) {
+      setDistillErr(reasonOf(error) + " Your words are saved; ask again.");
+      // Drop the trailing assistant turn — whether it never produced text or
+      // died mid-answer — so a broken partial reply doesn't stay on the
+      // transcript. The user's own words were already persisted above.
+      setDistillSession((s) => {
+        const turns = s.turns.slice();
+        if (turns.at(-1)?.role === "assistant") turns.pop();
+        return { ...s, turns };
+      });
+    }
+    setDistillBusy(false);
+    distillBusyRef.current = false;
+  };
+
+  /** Run the whole conversation through the settling engine. */
+  const settleDistill = async () => {
+    if (!distillSession.turns.length || distillBusyRef.current) return;
+    setDistillErr("");
+    distillBusyRef.current = true;
+    setDistillBusy(true);
+    try {
+      const res = await fetch("/api/distill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          op: "settle",
+          turns: distillSession.turns.map((t) => ({
+            role: t.role,
+            text: t.text,
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new SortError(body.error);
+      }
+      setSettled(await res.json());
+    } catch (error) {
+      setDistillErr(reasonOf(error));
+    }
+    setDistillBusy(false);
+    distillBusyRef.current = false;
+  };
+
+  /**
+   * File the settled result on the board.
+   *
+   * Action: creates actions with the judged shelf life. Thread: creates a
+   * thread carrying the distilled wording as its first fragment, then
+   * summarises it. Intention: re-runs the distilled wording through the
+   * intention engine and opens the review draft.
+   */
+  const saveSettled = async (
+    clean: string,
+    actions: string[],
+    shelfLife: string
+  ) => {
+    if (!settled || distillBusyRef.current) return;
+    const { kind, title } = settled;
+    setDistillErr("");
+    distillBusyRef.current = true;
+    setDistillBusy(true);
+    try {
+      if (kind === "intention") {
+        setDistillOpen(false);
+        await expandIntention(clean);
+        await resetDistill();
+      } else if (kind === "action") {
+        const span = SHELF[shelfLife as ShelfLife] ?? null;
+        const items: Action[] = (actions.length ? actions : [clean]).map(
+          (t) => ({
+            id: uid(),
+            text: t,
+            done: false,
+            at: stamp(),
+            src: clean,
+            imgs: [],
+            shelf: (shelfLife || "keep") as ShelfLife,
+            expires: span ? stamp() + span : null,
+          })
+        );
+        await commit({
+          ...latest.current,
+          actions: [...items, ...latest.current.actions],
+        });
+        setNotice(`${count(items.length, "action")} distilled from the conversation.`);
+        setTimeout(() => setNotice(null), 5000);
+        await resetDistill();
+        setTab("actions");
+      } else {
+        const thread: Thread = {
+          id: uid(),
+          name: title || clean.split(/\s+/).slice(0, 5).join(" "),
+          summary: "",
+          frags: [{ id: uid(), at: stamp(), text: clean }],
+        };
+        const next = {
+          ...latest.current,
+          threads: [thread, ...latest.current.threads],
+        };
+        await commit(next);
+        setNotice("Distilled into a thread.");
+        setTimeout(() => setNotice(null), 5000);
+        await regenerate(next, thread.id);
+        await resetDistill();
+        setTab("threads");
+      }
+    } catch (error) {
+      setDistillErr(reasonOf(error) + " Nothing was saved.");
+    }
+    setDistillBusy(false);
+    distillBusyRef.current = false;
+  };
+
+  const discardSettled = () => setSettled(null);
+
   /* --------------------------- derivations -------------------------- */
 
   const live = data.actions.filter((a) => !a.done && !a.faded);
@@ -999,12 +1348,29 @@ export function useBoard(now: number) {
     mergeThreads,
     expandIntention,
     saveDraft,
+    discardDraft,
+    refreshSummary,
     updateIntention,
     deleteIntention,
     makeIntention,
+    logout,
     togglePrinciple,
     addPrinciple,
     deletePrinciple,
+    distillOpen,
+    distillSession,
+    distillInput,
+    setDistillInput,
+    distillBusy,
+    distillErr,
+    settled,
+    openDistill,
+    closeDistill,
+    resetDistill,
+    sendDistill,
+    settleDistill,
+    saveSettled,
+    discardSettled,
     exportBoard,
     restoreFromFile,
     importBackup,

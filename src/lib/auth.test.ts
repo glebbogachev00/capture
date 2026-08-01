@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createSessionValue, isValidSession } from "@/lib/auth";
+import {
+  checkPassword,
+  createSessionValue,
+  isValidSession,
+} from "@/lib/auth";
 
 describe("auth", () => {
   it("produces a valid session that passes isValidSession", async () => {
@@ -31,5 +35,15 @@ describe("auth", () => {
     await expect(isValidSession("", "pw")).resolves.toBe(false);
     await expect(isValidSession(undefined, "pw")).resolves.toBe(false);
     await expect(isValidSession("abc.def.ghi", "pw")).resolves.toBe(false);
+  });
+
+  it("checkPassword accepts the right password and rejects wrong ones", async () => {
+    await expect(checkPassword("correct-password", "correct-password")).resolves.toBe(
+      true
+    );
+    await expect(checkPassword("correct-password", "wrong-password")).resolves.toBe(
+      false
+    );
+    await expect(checkPassword("", "pw")).resolves.toBe(false);
   });
 });
