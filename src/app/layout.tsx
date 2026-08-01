@@ -33,7 +33,7 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "capture",
   description:
-    "One capture surface, two destinations, self-clearing. Actions fade. Threads never do.",
+    "One capture surface, three destinations, self-clearing. Actions fade. Threads never do.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -46,7 +46,6 @@ export const viewport: Viewport = {
   themeColor: "#EDEFE8",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
   viewportFit: "cover",
 };
 

@@ -1,79 +1,50 @@
 "use client";
 
 /* ============================================================
-   CAPTURE — one capture surface, two destinations, self-clearing.
-   Everything you say goes in one place. The system decides
-   whether it's something to close (Action) or something that
-   thickens over time (Thread), cleans up the transcription,
-   keeps each Thread's "where this stands" block current, and
-   quietly sweeps away what has gone stale.
-   Threads are never deleted. Only actions fade.
+   CAPTURE — one capture surface, three destinations, self-clearing.
+   Everything you say goes in one place. The system decides whether
+   it's something to close (Action), something that thickens over
+   time (Thread), or something you are declaring about your life
+   (Intention), cleans up the transcription, keeps each Thread's
+   "where this stands" block current, and quietly sweeps away what
+   has gone stale. Threads are never deleted. Only actions fade.
+
+   This file is deliberately the shell. All board state, persistence
+   and operations live in useBoard(); the components below just
+   render what it hands back.
    ============================================================ */
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import { Copy, MoreHorizontal, Share2, Settings } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Copy, Image as ImageIcon, Mic, MoreHorizontal, Share2, Settings } from "lucide-react";
 import { Markup } from "./Markup";
-import { get, set } from "@/lib/storage";
 import {
   capability,
   clockServerSnapshot,
   clockSnapshot,
-  stamp,
   subscribeToClock,
 } from "@/lib/clock";
+import { get } from "@/lib/storage";
 import {
   type Action,
-  type Board,
   type Frag,
-  type Intention,
   type ShelfLife,
   type Thread,
   DAY,
-  DORMANT,
-  EMPTY,
   GRACE,
   IMG,
-  KEY,
-  SHELF,
-  dropImages,
   fmt,
-  hydrate,
   left,
-  nextNumber,
-  pad,
-  sweep,
   uid,
 } from "@/lib/model";
+import { type Hits } from "@/lib/search";
 import {
-  type Draft,
-  type IoNote,
   IntentionCard,
   IntentionDetail,
   IntentionDraft,
   SettingsScreen,
 } from "./Intentions";
-import { importIntentBackup } from "@/lib/importIntent";
-import {
-  backupFilename,
-  buildBackup,
-  downloadJSON,
-  readJsonFile,
-  restoreBackup,
-} from "@/lib/backup";
-import {
-  copyToClipboard,
-  shareIntention,
-  shareText,
-  shareThread,
-  shareableFor,
-} from "@/lib/share";
-import { type Hits, search } from "@/lib/search";
+import { shareIntention, shareThread } from "@/lib/share";
+import { useBoard } from "@/hooks/useBoard";
 
 /* Not in lib.dom yet, and only the handful of members used here matter. */
 type Recogniser = {
@@ -92,65 +63,19 @@ type Recogniser = {
 };
 type RecogniserCtor = new () => Recogniser;
 
-/** Carries the server's explanation so the board can show it verbatim. */
-class SortError extends Error {}
-
-const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
-
-const reasonOf = (error: unknown) =>
-  error instanceof SortError && error.message
-    ? error.message
-    : "The sort didn't go through.";
-
-/** What /api/sort returns. Validated server-side against a schema. */
-type SortResult = {
-  clean: string;
-  kind: "action" | "thread";
-  title: string;
-  actions?: string[];
-  shelfLife?: string;
-  threadId?: string | null;
-  threadName?: string | null;
-};
-
 export function Capture() {
-  const [data, setData] = useState<Board>(EMPTY);
-  const [loaded, setLoaded] = useState(false);
-  const [text, setText] = useState("");
-  const [pics, setPics] = useState<{ id: string; src: string }[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState("");
-  const [landed, setLanded] = useState<string | null>(null);
-  /* Reads as a whole sentence, unlike `landed` which is "Landed in <x>". */
-  const [notice, setNotice] = useState<string | null>(null);
-  const [swept, setSwept] = useState<{ faded: number; cleared: number } | null>(
-    null
-  );
-  const [tab, setTab] = useState<"actions" | "threads" | "intentions">(
-    "actions"
-  );
-  const [open, setOpen] = useState<string | null>(null);
-  const [openIntention, setOpenIntention] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [ioNote, setIoNote] = useState<IoNote>(null);
-  const [editing, setEditing] = useState<{ id: string; src: string } | null>(
-    null
-  );
-  const [shelfFor, setShelfFor] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [showFaded, setShowFaded] = useState(false);
-  const [showResting, setShowResting] = useState(false);
-  const [listening, setListening] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const recog = useRef<Recogniser | null>(null);
-
-  /* Ticks once a minute so the shelf-life countdowns move on their own. */
+  /* The ticking clock the countdowns and shelf lives derive from. */
   const now = useSyncExternalStore(
     subscribeToClock,
     clockSnapshot,
     clockServerSnapshot
   );
+
+  /* Input device plumbing that stays here: the hidden file picker, the
+     speech recogniser, and whether the mic is live. */
+  const fileRef = useRef<HTMLInputElement>(null);
+  const recog = useRef<Recogniser | null>(null);
+  const [listening, setListening] = useState(false);
 
   const canDictate = useSyncExternalStore(
     capability.subscribe,
@@ -158,42 +83,82 @@ export function Capture() {
     () => false
   );
 
-  const persist = useCallback(async (next: Board) => {
-    setData(next);
-    try {
-      await set(KEY, JSON.stringify(next));
-    } catch {
-      setErr(
-        "Couldn't save that. Your last capture is still on screen — try again."
-      );
-    }
-  }, []);
-
-  /* load, then sweep */
-  useEffect(() => {
-    (async () => {
-      let d: Board = EMPTY;
-      try {
-        const raw = await get(KEY);
-        // hydrate fills in intentions/principles for boards written before
-        // they existed, so an older save still opens.
-        if (raw) d = hydrate(JSON.parse(raw));
-      } catch {
-        /* first run */
-      }
-      const { next, faded, cleared } = await sweep(d);
-      setData(next);
-      if (faded || cleared) {
-        try {
-          await set(KEY, JSON.stringify(next));
-        } catch {
-          /* ignore */
-        }
-        setSwept({ faded, cleared });
-      }
-      setLoaded(true);
-    })();
-  }, []);
+  /* Everything else — the board, every operation on it, and the derived
+     views — comes from useBoard. This destructure is the whole logic
+     surface of the screen. */
+  const {
+    data,
+    loaded,
+    corrupt,
+    text,
+    setText,
+    pics,
+    setPics,
+    busy,
+    err,
+    landed,
+    notice,
+    swept,
+    tab,
+    setTab,
+    setOpen,
+    setOpenIntention,
+    draft,
+    setDraft,
+    showSettings,
+    setShowSettings,
+    ioNote,
+    setIoNote,
+    editing,
+    setEditing,
+    shelfFor,
+    setShelfFor,
+    query,
+    setQuery,
+    showFaded,
+    setShowFaded,
+    showResting,
+    setShowResting,
+    live,
+    fadedList,
+    done,
+    active,
+    resting,
+    thread,
+    intention,
+    hits,
+    searching,
+    shareable,
+    submit,
+    resort,
+    toggleAction,
+    setShelf,
+    restore,
+    removeNow,
+    moveToThread,
+    editActionText,
+    renameThread,
+    editFrag,
+    deleteFrag,
+    moveFrag,
+    moveFragToNew,
+    copyFragment,
+    copyWhole,
+    extractAction,
+    deleteThread,
+    mergeThreads,
+    saveDraft,
+    updateIntention,
+    deleteIntention,
+    makeIntention,
+    togglePrinciple,
+    addPrinciple,
+    deletePrinciple,
+    exportBoard,
+    restoreFromFile,
+    importBackup,
+    doShare,
+  } = useBoard(now);
 
   const toggleMic = () => {
     const SR = speechRecogniser();
@@ -228,776 +193,6 @@ export function Capture() {
     });
   };
 
-  /**
-   * Ask the server to sort a capture. Throws SortError with the reason.
-   *
-   * `force` is for when the destination is already decided and only the
-   * wording needs working out — pulling an action out of a fragment, say.
-   */
-  const requestSort = async (raw: string, force?: "action") => {
-    const known = data.threads.map((t) => ({
-      id: t.id,
-      name: t.name,
-      about: t.summary?.slice(0, 160) || "",
-    }));
-    const res = await fetch("/api/sort", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ raw, threads: known, force }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new SortError(body.error);
-    }
-    return res.json();
-  };
-
-  /** Fold a sorted result into a board. Shared by first capture and re-sort. */
-  const applySorted = (
-    out: SortResult,
-    imgIds: string[],
-    at: number,
-    board: Board
-  ): { next: Board; targetId: string | null; landed: string } => {
-    if (out.kind === "action") {
-      const span = SHELF[out.shelfLife as ShelfLife] ?? null;
-      const items: Action[] = (
-        out.actions?.length ? out.actions : [out.title]
-      ).map((t: string) => ({
-        id: uid(),
-        text: t,
-        done: false,
-        at,
-        src: out.clean,
-        imgs: imgIds,
-        shelf: (out.shelfLife || "keep") as ShelfLife,
-        expires: span ? Date.now() + span : null,
-      }));
-      return {
-        next: { ...board, actions: [...items, ...board.actions] },
-        targetId: null,
-        landed:
-          items.length +
-          " action" +
-          (items.length > 1 ? "s" : "") +
-          (span ? " · fades in " + left(span) : " · kept"),
-      };
-    }
-
-    const frag: Frag = { id: uid(), at, text: out.clean, imgs: imgIds };
-    const existing = board.threads.find((x) => x.id === out.threadId);
-    if (existing) {
-      return {
-        next: {
-          ...board,
-          threads: board.threads.map((x) =>
-            x.id === existing.id ? { ...x, frags: [...x.frags, frag] } : x
-          ),
-        },
-        targetId: existing.id,
-        landed: existing.name + " — thread updated",
-      };
-    }
-    const fresh: Thread = {
-      id: uid(),
-      name: out.threadName || out.title,
-      summary: "",
-      frags: [frag],
-    };
-    return {
-      next: { ...board, threads: [fresh, ...board.threads] },
-      targetId: fresh.id,
-      landed: fresh.name + " — thread updated",
-    };
-  };
-
-  /**
-   * Keep a capture that no model would sort.
-   *
-   * Losing what you just said because a free tier ran dry is the worst thing
-   * this app could do, so the text is saved verbatim and flagged for sorting
-   * later. Where it lands follows what you were looking at: an open thread
-   * takes it as a fragment, the Threads tab starts a new one, and otherwise it
-   * becomes an action — the destination you can always fix by hand afterwards.
-   */
-  const saveUnsorted = async (
-    raw: string,
-    imgIds: string[],
-    at: number,
-    reason: string
-  ) => {
-    const body = raw || "(image only)";
-    const openThread = data.threads.find((t) => t.id === open);
-    const frag: Frag = {
-      id: uid(),
-      at,
-      text: body,
-      imgs: imgIds,
-      unsorted: true,
-    };
-
-    let next: Board;
-    if (openThread) {
-      next = {
-        ...data,
-        threads: data.threads.map((t) =>
-          t.id === openThread.id ? { ...t, frags: [...t.frags, frag] } : t
-        ),
-      };
-      setLanded(openThread.name + " — saved unsorted");
-    } else if (tab === "threads") {
-      const fresh: Thread = {
-        id: uid(),
-        name: body.split(/\s+/).slice(0, 5).join(" "),
-        summary: "",
-        frags: [frag],
-      };
-      next = { ...data, threads: [fresh, ...data.threads] };
-      setLanded(fresh.name + " — new thread, unsorted");
-    } else {
-      const action: Action = {
-        id: uid(),
-        text: body,
-        done: false,
-        at,
-        src: body,
-        imgs: imgIds,
-        shelf: "keep",
-        expires: null,
-        unsorted: true,
-      };
-      next = { ...data, actions: [action, ...data.actions] };
-      setLanded("Kept unsorted");
-    }
-
-    setText("");
-    setPics([]);
-    await persist(next);
-    setErr(reason + " Saved as it is, so nothing is lost — sort it later.");
-  };
-
-  const submit = async () => {
-    const raw = text.trim();
-    if (!raw && !pics.length) return;
-    setErr("");
-    setSwept(null);
-    setBusy("Sorting");
-
-    const at = stamp();
-    // Stored before the sort so both outcomes keep the pictures.
-    const imgIds: string[] = [];
-    for (const p of pics) {
-      try {
-        await set(IMG(p.id), p.src);
-        imgIds.push(p.id);
-      } catch {
-        /* skip */
-      }
-    }
-
-    try {
-      const out = await requestSort(raw || "(image only)");
-
-      // An intention is declared rather than filed, so it takes a second
-      // pass through its own engine and stops at a review step instead of
-      // landing on the board.
-      if (out.kind === "intention") {
-        setText("");
-        setPics([]);
-        await expandIntention(raw);
-        setTimeout(() => setLanded(null), 4500);
-        return;
-      }
-
-      const { next, targetId, landed } = applySorted(out, imgIds, at, data);
-      setLanded(landed);
-      setTab(out.kind === "action" ? "actions" : "threads");
-      setText("");
-      setPics([]);
-      await persist(next);
-      if (targetId) await regenerate(next, targetId);
-    } catch (error) {
-      await saveUnsorted(raw, imgIds, at, reasonOf(error));
-    }
-
-    setBusy(null);
-    setTimeout(() => setLanded(null), 4500);
-  };
-
-  /** Run a capture that was saved raw back through the sorter. */
-  const resort = async (a: Action) => {
-    setErr("");
-    setBusy("Sorting");
-    try {
-      const out = await requestSort(a.src || a.text);
-      const board = {
-        ...data,
-        actions: data.actions.filter((x) => x.id !== a.id),
-      };
-      const { next, targetId, landed } = applySorted(
-        out,
-        a.imgs || [],
-        a.at,
-        board
-      );
-      setLanded(landed);
-      setTab(out.kind === "action" ? "actions" : "threads");
-      await persist(next);
-      if (targetId) await regenerate(next, targetId);
-    } catch (error) {
-      setErr(reasonOf(error) + " It is still here, untouched.");
-    }
-    setBusy(null);
-    setTimeout(() => setLanded(null), 4500);
-  };
-
-  const toggleAction = (id: string) =>
-    persist({
-      ...data,
-      actions: data.actions.map((a) =>
-        a.id === id
-          ? { ...a, done: !a.done, doneAt: a.done ? null : Date.now() }
-          : a
-      ),
-    });
-
-  const setShelf = (id: string, span: number | null, label: ShelfLife) =>
-    persist({
-      ...data,
-      actions: data.actions.map((a) =>
-        a.id === id
-          ? {
-              ...a,
-              shelf: label,
-              expires: span ? Date.now() + span : null,
-              faded: false,
-              fadedAt: null,
-            }
-          : a
-      ),
-    });
-
-  const restore = (id: string) => setShelf(id, null, "keep");
-
-  const removeNow = async (a: Action) => {
-    await dropImages(a.imgs);
-    persist({ ...data, actions: data.actions.filter((x) => x.id !== a.id) });
-    setShelfFor(null);
-  };
-
-  const moveToThread = async (a: Action) => {
-    const t: Thread = {
-      id: uid(),
-      name: a.text.split(" ").slice(0, 5).join(" "),
-      summary: "",
-      frags: [
-        { id: uid(), at: a.at, text: a.src || a.text, imgs: a.imgs || [] },
-      ],
-    };
-    await persist({
-      ...data,
-      actions: data.actions.filter((x) => x.id !== a.id),
-      threads: [t, ...data.threads],
-    });
-    setTab("threads");
-  };
-
-  /**
-   * Rewrite a thread's "Where this stands" from its current fragments.
-   *
-   * Called after a fragment is edited or removed: the summary is derived from
-   * them, so leaving it alone would let it describe text that no longer exists.
-   * A failure here is survivable — the fragments are already saved, and the
-   * stale summary is better than none.
-   */
-  const regenerate = useCallback(
-    async (board: Board, threadId: string): Promise<Board> => {
-      const target = board.threads.find((t) => t.id === threadId);
-      if (!target?.frags.length) return board;
-      setBusy("Updating what this thread says now");
-      // Returns the board it persisted so two of these can be chained without
-      // the second undoing the first — moving a fragment re-summarises both
-      // threads, and each needs to build on the other's result.
-      let result = board;
-      try {
-        const res = await fetch("/api/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: target.name,
-            frags: target.frags.map((f) => ({ at: f.at, text: f.text })),
-          }),
-        });
-        if (res.ok) {
-          const { summary } = await res.json();
-          result = {
-            ...board,
-            threads: board.threads.map((t) =>
-              t.id === threadId ? { ...t, summary } : t
-            ),
-          };
-          await persist(result);
-        }
-      } catch {
-        /* the fragments are saved; the summary can lag */
-      }
-      setBusy(null);
-      return result;
-    },
-    [persist]
-  );
-
-  const editActionText = (id: string, text: string) =>
-    persist({
-      ...data,
-      actions: data.actions.map((a) => (a.id === id ? { ...a, text } : a)),
-    });
-
-  const renameThread = (id: string, name: string) =>
-    persist({
-      ...data,
-      threads: data.threads.map((t) => (t.id === id ? { ...t, name } : t)),
-    });
-
-  const editFrag = async (threadId: string, fragId: string, text: string) => {
-    const next = {
-      ...data,
-      threads: data.threads.map((t) =>
-        t.id === threadId
-          ? {
-              ...t,
-              frags: t.frags.map((f) => (f.id === fragId ? { ...f, text } : f)),
-            }
-          : t
-      ),
-    };
-    await persist(next);
-    await regenerate(next, threadId);
-  };
-
-  const deleteFrag = async (threadId: string, fragId: string) => {
-    const target = data.threads.find((t) => t.id === threadId);
-    const frag = target?.frags.find((f) => f.id === fragId);
-    await dropImages(frag?.imgs);
-
-    const remaining = (target?.frags || []).filter((f) => f.id !== fragId);
-
-    // A thread with nothing left in it is just a name; drop it and go back.
-    if (!remaining.length) {
-      await persist({
-        ...data,
-        threads: data.threads.filter((t) => t.id !== threadId),
-      });
-      setOpen(null);
-      return;
-    }
-
-    const next = {
-      ...data,
-      threads: data.threads.map((t) =>
-        t.id === threadId ? { ...t, frags: remaining } : t
-      ),
-    };
-    await persist(next);
-    await regenerate(next, threadId);
-  };
-
-  /**
-   * Move one fragment to another thread.
-   *
-   * The sorter puts a fragment on the wrong thread often enough that the only
-   * remedy being "delete it and say it again" was a real loss. Both threads
-   * are re-summarised afterwards, because the sentence describing each of them
-   * is now describing a set of fragments that changed.
-   */
-  const moveFrag = async (fromId: string, fragId: string, toId: string) => {
-    const from = data.threads.find((t) => t.id === fromId);
-    const frag = from?.frags.find((f) => f.id === fragId);
-    if (!from || !frag) return;
-
-    const remaining = from.frags.filter((f) => f.id !== fragId);
-    const to = data.threads.find((t) => t.id === toId);
-    if (!to) return;
-
-    let threads = data.threads.map((t) =>
-      t.id === toId
-        ? { ...t, frags: [...t.frags, frag].sort((a, b) => a.at - b.at) }
-        : t
-    );
-
-    // Taking the last fragment out leaves a thread that is only a name.
-    const emptied = remaining.length === 0;
-    threads = emptied
-      ? threads.filter((t) => t.id !== fromId)
-      : threads.map((t) => (t.id === fromId ? { ...t, frags: remaining } : t));
-
-    const next = { ...data, threads };
-    await persist(next);
-    setNotice(
-      emptied
-        ? `Moved to ${to.name}. ${from.name} was left empty and removed.`
-        : `Moved to ${to.name}.`
-    );
-    setTimeout(() => setNotice(null), 4500);
-
-    if (emptied) setOpen(toId);
-    const afterTo = await regenerate(next, toId);
-    if (!emptied) await regenerate(afterTo, fromId);
-  };
-
-  /** Split a fragment out into a thread of its own. */
-  const moveFragToNew = async (fromId: string, fragId: string) => {
-    const from = data.threads.find((t) => t.id === fromId);
-    const frag = from?.frags.find((f) => f.id === fragId);
-    if (!from || !frag) return;
-
-    const fresh: Thread = {
-      id: uid(),
-      name: frag.text.split(/\s+/).slice(0, 5).join(" "),
-      summary: "",
-      frags: [frag],
-    };
-    const remaining = from.frags.filter((f) => f.id !== fragId);
-    const emptied = remaining.length === 0;
-
-    const threads = [
-      fresh,
-      ...(emptied
-        ? data.threads.filter((t) => t.id !== fromId)
-        : data.threads.map((t) =>
-            t.id === fromId ? { ...t, frags: remaining } : t
-          )),
-    ];
-    const next = { ...data, threads };
-    await persist(next);
-    setOpen(fresh.id);
-    setNotice(`Split into a new thread. Rename it if the name is wrong.`);
-    setTimeout(() => setNotice(null), 5000);
-
-    const afterNew = await regenerate(next, fresh.id);
-    if (!emptied) await regenerate(afterNew, fromId);
-  };
-
-  const copyFragment = async (threadId: string, fragId: string) => {
-    const frag = data.threads
-      .find((t) => t.id === threadId)
-      ?.frags.find((f) => f.id === fragId);
-    if (!frag) return;
-    const ok = await copyToClipboard(frag.text);
-    setNotice(ok ? "Note copied." : "Couldn't reach the clipboard.");
-    setTimeout(() => setNotice(null), 3000);
-  };
-
-  const copyWhole = async (s: { text: string; summary: string } | null) => {
-    if (!s) return;
-    const ok = await copyToClipboard(s.text);
-    setNotice(ok ? `Copied — ${s.summary}.` : "Couldn't reach the clipboard.");
-    setTimeout(() => setNotice(null), 3000);
-  };
-
-  /**
-   * Pull a doable thing out of a fragment.
-   *
-   * The fragment stays where it is. Everywhere else these moves consume the
-   * source, but a thread is a record of thinking and lifting the sentence out
-   * would leave a hole in it — you thought it, the thread should still say so.
-   * The sort route does the extracting, so what arrives is a clean imperative
-   * with a shelf life rather than a paragraph with a checkbox.
-   */
-  const extractAction = async (threadId: string, fragId: string) => {
-    const frag = data.threads
-      .find((t) => t.id === threadId)
-      ?.frags.find((f) => f.id === fragId);
-    if (!frag) return;
-
-    setErr("");
-    setBusy("Finding the action");
-    try {
-      const out = await requestSort(frag.text, "action");
-      const items: Action[] = (
-        out.actions?.length ? out.actions : [out.title]
-      ).map((t: string) => {
-        const span = SHELF[(out.shelfLife || "keep") as ShelfLife] ?? null;
-        return {
-          id: uid(),
-          text: t,
-          done: false,
-          at: stamp(),
-          src: frag.text,
-          imgs: [],
-          shelf: (out.shelfLife || "keep") as ShelfLife,
-          expires: span ? stamp() + span : null,
-        };
-      });
-      await persist({ ...data, actions: [...items, ...data.actions] });
-      setNotice(
-        `${count(items.length, "action")} taken from this note. The note stays here.`
-      );
-      setTimeout(() => setNotice(null), 5000);
-    } catch (error) {
-      setErr(reasonOf(error) + " Nothing was added.");
-    }
-    setBusy(null);
-  };
-
-  const deleteThread = async (id: string) => {
-    const target = data.threads.find((t) => t.id === id);
-    for (const f of target?.frags || []) await dropImages(f.imgs);
-    await persist({
-      ...data,
-      threads: data.threads.filter((t) => t.id !== id),
-    });
-    setOpen(null);
-  };
-
-  /**
-   * Fold `fromId` into `intoId`.
-   *
-   * The sorter sometimes starts a second thread for something that already had
-   * one, and the two halves are no use apart. Fragments are interleaved by
-   * date rather than appended, so the merged thread reads as one history, and
-   * the summary is rebuilt from the whole of it. The thread you are looking at
-   * keeps its name; the other one goes.
-   */
-  const mergeThreads = async (intoId: string, fromId: string) => {
-    const into = data.threads.find((t) => t.id === intoId);
-    const from = data.threads.find((t) => t.id === fromId);
-    if (!into || !from) return;
-
-    const frags = [...into.frags, ...from.frags].sort((a, b) => a.at - b.at);
-    const next: Board = {
-      ...data,
-      threads: data.threads
-        .filter((t) => t.id !== fromId)
-        .map((t) => (t.id === intoId ? { ...t, frags } : t)),
-    };
-    await persist(next);
-    setNotice(from.name + " folded into " + into.name + ".");
-    setTimeout(() => setNotice(null), 4500);
-    await regenerate(next, intoId);
-  };
-
-  /* ---------------- intentions ---------------- */
-
-  /** Run raw words through the intention engine and open the review step. */
-  const expandIntention = async (rawInput: string) => {
-    setErr("");
-    setBusy("Finding the intention");
-    try {
-      const res = await fetch("/api/intention", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          op: "expand",
-          rawInput,
-          principles: data.principles,
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new SortError(body.error);
-      }
-      const out = await res.json();
-      setDraft({
-        rawInput,
-        expandedIntention: out.expandedIntention,
-        recommendedActions: out.recommendedActions || [],
-        counterIntentions: out.counterIntentions || [],
-      });
-      setTab("intentions");
-      setOpenIntention(null);
-      setBusy(null);
-      return true;
-    } catch (error) {
-      setBusy(null);
-      throw error;
-    }
-  };
-
-  /** Rewrite a draft or a saved intention from a spoken direction. */
-  const saveDraft = async () => {
-    if (!draft) return;
-    const at = stamp();
-    const intention: Intention = {
-      id: uid(),
-      number: nextNumber(data.intentions),
-      rawInput: draft.rawInput,
-      expandedIntention: draft.expandedIntention,
-      recommendedActions: draft.recommendedActions,
-      counterIntentions: draft.counterIntentions,
-      at,
-      updatedAt: at,
-    };
-    await persist({ ...data, intentions: [intention, ...data.intentions] });
-    setDraft(null);
-    setTab("intentions");
-    setNotice("Intention " + pad(intention.number) + " set.");
-    setTimeout(() => setNotice(null), 4500);
-  };
-
-  const updateIntention = (next: Intention) =>
-    persist({
-      ...data,
-      intentions: data.intentions.map((i) =>
-        i.id === next.id ? { ...next, updatedAt: stamp() } : i
-      ),
-    });
-
-  const deleteIntention = async (id: string) => {
-    await persist({
-      ...data,
-      intentions: data.intentions.filter((i) => i.id !== id),
-    });
-    setOpenIntention(null);
-  };
-
-  /** Turn an action or a thread into an intention when the sort missed it. */
-  const makeIntention = async (rawInput: string, remove: () => Board) => {
-    try {
-      await expandIntention(rawInput);
-      await persist(remove());
-    } catch (error) {
-      setErr(reasonOf(error) + " Nothing was moved.");
-    }
-  };
-
-  /* ---------------- principles ---------------- */
-
-  const togglePrinciple = (id: string) =>
-    persist({
-      ...data,
-      principles: data.principles.map((p) =>
-        p.id === id ? { ...p, enabled: !p.enabled } : p
-      ),
-    });
-
-  const addPrinciple = (name: string, description: string) =>
-    persist({
-      ...data,
-      principles: [
-        ...data.principles,
-        { id: uid(), name, description, enabled: true },
-      ],
-    });
-
-  const deletePrinciple = (id: string) =>
-    persist({
-      ...data,
-      principles: data.principles.filter((p) => p.id !== id),
-    });
-
-  /* ---------------- sharing ---------------- */
-
-  /**
-   * What the share control would send from wherever you are standing.
-   *
-   * Deriving the target from the current view is what keeps this to one
-   * control: there is no need to say what to share when you are already
-   * looking at it, and no row anywhere grows a share button.
-   */
-  const shareable = shareableFor(
-    data,
-    openIntention
-      ? { kind: "intention", id: openIntention }
-      : open
-        ? { kind: "thread", id: open }
-        : { kind: "tab", tab },
-    now
-  );
-
-  const doShare = async () => {
-    if (!shareable) return;
-    const outcome = await shareText(shareable);
-    if (outcome === "cancelled") return;
-    setNotice(
-      outcome === "shared"
-        ? `Shared — ${shareable.summary}.`
-        : outcome === "copied"
-          ? `Copied to the clipboard — ${shareable.summary}.`
-          : "Couldn't share that."
-    );
-    setTimeout(() => setNotice(null), 3500);
-  };
-
-  /* ---------------- getting data in and out ---------------- */
-
-  const exportBoard = () => {
-    try {
-      downloadJSON(buildBackup(data), backupFilename());
-      setIoNote({
-        text: `Saved ${count(data.actions.length, "action")}, ${count(data.threads.length, "thread")} and ${count(data.intentions.length, "intention")} to a file. Keep it somewhere that isn't this phone.`,
-        ok: true,
-      });
-    } catch {
-      setIoNote({ text: "The download didn't start.", ok: false });
-    }
-  };
-
-  const restoreFromFile = async (file: File) => {
-    setIoNote(null);
-    try {
-      const result = restoreBackup(await readJsonFile(file), data);
-      await persist(result.board);
-      const added =
-        result.actions + result.threads + result.intentions + result.principles;
-      setIoNote({
-        text: added
-          ? `Restored ${count(result.actions, "action")}, ${count(result.threads, "thread")}, ${count(result.intentions, "intention")} and ${count(result.principles, "principle")}.`
-          : "Nothing new in that file — everything in it was already here.",
-        ok: true,
-      });
-    } catch (error) {
-      setIoNote({
-        text:
-          error instanceof Error ? error.message : "Could not read that file.",
-        ok: false,
-      });
-    }
-  };
-
-  const importBackup = async (file: File) => {
-    setIoNote(null);
-    try {
-      const result = importIntentBackup(await readJsonFile(file), data);
-      await persist(result.board);
-
-      const parts = [`Brought in ${count(result.added, "intention")}`];
-      if (result.duplicates) parts.push(`${result.duplicates} already here`);
-      if (result.malformed) {
-        parts.push(
-          `${result.malformed} could not be read and ${result.malformed === 1 ? "was" : "were"} left out`
-        );
-      }
-      if (result.principlesAdded) {
-        parts.push(`${count(result.principlesAdded, "new principle")}`);
-      }
-      // Nothing arriving is a failure worth shouting about, not a tidy result.
-      setIoNote({ text: parts.join(" · ") + ".", ok: result.added > 0 });
-    } catch (error) {
-      setIoNote({
-        text:
-          error instanceof Error ? error.message : "Could not read that file.",
-        ok: false,
-      });
-    }
-  };
-
-  const live = data.actions.filter((a) => !a.done && !a.faded);
-  const fadedList = data.actions.filter((a) => a.faded && !a.done);
-  const done = data.actions.filter((a) => a.done);
-  const active = data.threads.filter(
-    (t) => now - (t.frags.at(-1)?.at || 0) < DORMANT
-  );
-  const resting = data.threads.filter(
-    (t) => now - (t.frags.at(-1)?.at || 0) >= DORMANT
-  );
-  const thread = data.threads.find((t) => t.id === open);
-  const intention = data.intentions.find((i) => i.id === openIntention);
-  /* A query replaces the tabs entirely — what you want is the thing, not the
-     tab it happens to live on. */
-  const hits = search(data, query);
-  const searching = query.trim().length > 0;
-
   const row = (a: Action, faded?: boolean) => (
     <Row
       key={a.id}
@@ -1014,7 +209,7 @@ export function Capture() {
       onRestore={() => restore(a.id)}
       onRemove={() => removeNow(a)}
       onMakeThread={() => moveToThread(a)}
-      onEditText={(text) => editActionText(a.id, text)}
+      onEditText={(t) => editActionText(a.id, t)}
       onResort={() => resort(a)}
       onMakeIntention={() =>
         makeIntention(a.src || a.text, () => ({
@@ -1099,8 +294,9 @@ export function Capture() {
               className="icon-btn"
               onClick={() => fileRef.current?.click()}
               aria-label="Add a picture"
+              title="Add a picture"
             >
-              ▣
+              <ImageIcon size={18} strokeWidth={1.7} />
             </button>
             <input
               ref={fileRef}
@@ -1116,7 +312,7 @@ export function Capture() {
                 onClick={toggleMic}
                 aria-label="Dictate"
               >
-                ◉
+                <Mic size={18} strokeWidth={1.7} />
               </button>
             )}
             <div className="cap-hint">
@@ -1159,6 +355,14 @@ export function Capture() {
               : ""}
             {swept.cleared ? " " + swept.cleared + " cleared for good." : ""}
             {" Threads were left alone."}
+          </div>
+        )}
+
+        {corrupt && (
+          <div className="sweep">
+            Your saved board couldn&apos;t be read and has been set aside.
+            Capturing now would overwrite the unreadable copy — restore a
+            backup from Settings to bring it back.
           </div>
         )}
 

@@ -8,6 +8,11 @@ import { del } from "./storage";
 
 export const KEY = "capture:data:v1";
 export const IMG = (id: string) => "capture:img:" + id;
+/**
+ * Where a board that failed to parse is parked before the next capture
+ * overwrites the live key, so the unreadable copy is not instantly lost.
+ */
+export const CORRUPT = "capture:corrupt:v1";
 
 export const DAY = 864e5;
 export const HOUR = 36e5;
