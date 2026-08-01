@@ -1097,33 +1097,56 @@ body {
 .distill-head .int-eyebrow {
   margin: 0;
 }
-/* The speaker toggle: quiet until it's on, then it wears the accent. */
-.icon-btn.speak.on {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-/* The speak control groups the engine tag and the toggle on the right. */
+/* The two voice toggles — Voice (spoken conversation) and Speaker
+   (read-aloud). Same quiet pill language as the old Type/Talk switch, but
+   each is now its own on/off toggle, pushed to the head's right edge. */
 .distill-voice {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  margin-left: auto;
 }
-/* The engine tag tells you which voice is real. The human-sounding Kokoro
-   server wears the accent; the browser's fallback stays quiet grey. */
-.distill-engine {
-  font-family: var(--font-mono), monospace;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
+.distill-mode-btn {
   border: 1px solid var(--rule);
-  border-radius: 20px;
-  padding: 3px 9px;
+  background: var(--card);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 13px;
+  min-height: 36px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  touch-action: manipulation;
+  transition: 0.15s;
 }
-.distill-engine.kokoro {
+.distill-mode-btn:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+.distill-mode-btn.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+/* While a reply is actually being read aloud the toggle wears the accent,
+   so Type mode still shows that audio is playing. */
+.distill-mode-btn.live {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+.distill-mode-btn.live.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.distill-mode-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 .distill-review {
   animation: distill-in 0.34s cubic-bezier(0.22, 1, 0.36, 1);
@@ -1249,39 +1272,7 @@ body {
     opacity: 0;
   }
 }
-/* The Type/Talk switch: how you talk to Distill. A quiet segmented control
-   that hands the mic over when Talk is on. */
-.distill-mode {
-  display: flex;
-  gap: 4px;
-  background: var(--card);
-  border: 1px solid var(--rule);
-  border-radius: 10px;
-  padding: 3px;
-  margin-left: auto;
-}
-.distill-mode button {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 0 13px;
-  min-height: 34px;
-  border-radius: 8px;
-  cursor: pointer;
-  touch-action: manipulation;
-  transition: 0.15s;
-}
-.distill-mode button.on {
-  background: var(--ink);
-  color: var(--paper);
-}
-.distill-mode button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
+
 
 /* The orb — the whole input surface of Talk mode. */
 .talk {

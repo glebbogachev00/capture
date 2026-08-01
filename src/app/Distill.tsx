@@ -121,85 +121,57 @@ export function DistillView({
 
       <div className="distill-head">
         <div className="int-eyebrow">Distill</div>
-        <div
-          className={"distill-mode" + (mode === "talk" ? " talk" : "")}
-          role="tablist"
-          aria-label="How you talk to Distill"
-        >
+        <div className="distill-voice">
+          {/* Voice: a spoken conversation instead of typing. Off is Type —
+              the text box; on hands the floor to the mic, and the reply is
+              spoken aloud, barge-in and all. */}
           <button
-            className={mode === "type" ? "on" : ""}
+            className={"distill-mode-btn" + (mode === "talk" ? " on" : "")}
             onClick={() => {
-              setMode("type");
-              convo.stop();
+              if (mode === "talk") {
+                setMode("type");
+                convo.stop();
+              } else {
+                setMode("talk");
+                convo.start();
+              }
             }}
-            role="tab"
-            aria-selected={mode === "type"}
-          >
-            Type
-          </button>
-          <button
-            className={mode === "talk" ? "on" : ""}
-            onClick={() => {
-              setMode("talk");
-              convo.start();
-            }}
-            role="tab"
-            aria-selected={mode === "talk"}
+            aria-pressed={mode === "talk"}
             disabled={!convo.canDictate || !voice.supported}
             title={
               convo.canDictate && voice.supported
-                ? "Talk — a spoken conversation"
+                ? "Voice — a spoken conversation"
                 : "Voice isn't supported in this browser"
             }
           >
-            Talk
+            <Mic size={15} strokeWidth={1.8} />
+            Voice
           </button>
-        </div>
-        {voice.supported && (
-          <div className="distill-voice">
-            {/* Which engine is real: the local Kokoro server, or the
-                browser's built-in voice. Only shown once replies are on. */}
-            {voice.enabled && (
-              <span
-                className={
-                  "distill-engine" +
-                  (voice.engine === "server" ? " kokoro" : "")
-                }
-              >
-                {voice.engine === "server" ? "kokoro" : "browser voice"}
-              </span>
-            )}
+          {voice.supported && (
             <button
               className={
-                "icon-btn speak" +
+                "distill-mode-btn" +
                 (voice.enabled ? " on" : "") +
                 (voice.speaking ? " live" : "")
               }
               onClick={voice.toggle}
-              aria-label={
-                voice.enabled
-                  ? `Mute spoken replies (${
-                      voice.engine === "server" ? "Kokoro" : "browser voice"
-                    })`
-                  : "Speak replies aloud"
-              }
               aria-pressed={voice.enabled}
+              aria-label={
+                voice.enabled ? "Mute spoken replies" : "Speak replies aloud"
+              }
               title={
-                voice.enabled
-                  ? `Mute spoken replies (${
-                      voice.engine === "server" ? "Kokoro" : "browser voice"
-                    })`
-                  : "Speak replies aloud"
+                voice.enabled ? "Mute spoken replies" : "Speak replies aloud"
               }
             >
               {voice.enabled ? (
-                <Volume2 size={18} strokeWidth={1.7} />
+                <Volume2 size={15} strokeWidth={1.8} />
               ) : (
-                <VolumeX size={18} strokeWidth={1.7} />
+                <VolumeX size={15} strokeWidth={1.8} />
               )}
+              Speaker
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       <p className="int-note">
         A thought that isn&apos;t clear yet. Talk it through — it asks one
@@ -363,13 +335,6 @@ function TalkPad({
               ? "speak, pause when you're done — no Send button"
               : "a spoken conversation. talk, it answers aloud, and the mic comes back on its own."}
       </div>
-      <span
-        className={
-          "distill-engine" + (convo.engine === "server" ? " kokoro" : "")
-        }
-      >
-        {convo.engine === "server" ? "kokoro" : "browser voice"}
-      </span>
     </div>
   );
 }
