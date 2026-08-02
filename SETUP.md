@@ -212,7 +212,11 @@ TTS_VOICE=af_bella     # warm, clear female — the default
 
 The proxy means your phone gets the same voice automatically (no CORS to
 fight) once you're on HTTPS. If the Kokoro server isn't running, replies
-just fall back to the browser voice — nothing breaks.
+fall back to the **Microsoft Edge neural voice** — a keyless, server-side
+TTS (via `msedge-tts`) that still sounds human — and only if that is also
+unreachable does the browser's robotic voice step in. Nothing breaks at any
+tier. Pick the Edge voice with `EDGE_TTS_VOICE` (default `en-US-AriaNeural`,
+the classic natural female voice).
 
 ### Using the good voice from a Vercel deployment
 
