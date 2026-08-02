@@ -132,11 +132,6 @@ export function DistillView({
       <div className="distill-head">
         <div className="int-eyebrow">Distill</div>
       </div>
-      <p className="int-note">
-        A thought that isn&apos;t clear yet. Talk it through — it asks one
-        question at a time, then files the whole exchange when you&apos;re
-        ready.
-      </p>
 
       <div className="distill-log">
         {!session.turns.length && (

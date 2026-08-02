@@ -1117,6 +1117,11 @@ body {
   gap: 12px;
   padding: 14px 0 18px;
 }
+/* The opening prompt sits right under the Distill head — the question is
+   the first thing, not a paragraph explaining what the mode does. */
+.distill-log .empty {
+  padding: 6px 0 10px;
+}
 .distill-turn {
   display: flex;
   flex-direction: column;
