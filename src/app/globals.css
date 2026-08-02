@@ -557,6 +557,53 @@ body {
   border: 1px solid var(--rule);
   display: block;
 }
+/* Landed here from a search result: the note you were hunting glows for a
+   moment so you can see exactly where you are. */
+.frag.focus {
+  border-top-color: var(--accent);
+  animation: frag-focus 2.6s ease-out;
+}
+@keyframes frag-focus {
+  0% {
+    background: var(--accent-soft);
+  }
+  100% {
+    background: transparent;
+  }
+}
+/* Search reaches inside a thread: each matching note is its own tappable
+   row under the thread card, and tapping one opens the thread at it. */
+.thread-hit .tcard {
+  margin-bottom: 6px;
+}
+.frag-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  border-radius: 9px;
+  margin-bottom: 6px;
+  padding: 9px 13px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: 0.15s;
+}
+.frag-hit:hover {
+  border-color: var(--accent);
+}
+.frag-hit-date {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 3px;
+}
 
 .back {
   border: 0;

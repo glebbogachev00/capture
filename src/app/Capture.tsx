@@ -78,6 +78,8 @@ export function Capture() {
     tab,
     setTab,
     setOpen,
+    openFrag,
+    setOpenFrag,
     setOpenIntention,
     draft,
     setDraft,
@@ -419,7 +421,11 @@ export function Capture() {
         ) : thread ? (
           <ThreadView
             thread={thread}
-            onBack={() => setOpen(null)}
+            focusFragId={openFrag}
+            onBack={() => {
+              setOpen(null);
+              setOpenFrag(null);
+            }}
             onRename={(name) => renameThread(thread.id, name)}
             onDelete={() => deleteThread(thread.id)}
             onRefreshSummary={() => refreshSummary(thread.id)}
@@ -455,7 +461,10 @@ export function Capture() {
               <SearchResults
                 hits={hits}
                 now={now}
-                onOpenThread={(id) => setOpen(id)}
+                onOpenThread={(id, fragId) => {
+                  setOpen(id);
+                  setOpenFrag(fragId || null);
+                }}
                 onOpenIntention={(id) => setOpenIntention(id)}
               />
             ) : (
@@ -644,7 +653,7 @@ function SearchResults({
 }: {
   hits: Hits;
   now: number;
-  onOpenThread: (id: string) => void;
+  onOpenThread: (id: string, fragId?: string | null) => void;
   onOpenIntention: (id: string) => void;
 }) {
   if (!hits.total) {
@@ -691,23 +700,35 @@ function SearchResults({
       {!!hits.threads.length && (
         <>
           <div className="section-label">Threads · {hits.threads.length}</div>
-          {hits.threads.map(({ thread, matchingFrags }) => (
-            <button
-              className="tcard"
-              key={thread.id}
-              onClick={() => onOpenThread(thread.id)}
-            >
-              <div className="tname">{thread.name}</div>
-              <div className="tsum">
-                {thread.summary ||
-                  (thread.frags.at(-1)?.text || "").slice(0, 120)}
-              </div>
-              <div className="act-meta" style={{ marginTop: 9 }}>
-                {matchingFrags
-                  ? `${matchingFrags} matching note${matchingFrags === 1 ? "" : "s"}`
-                  : "matches the thread itself"}
-              </div>
-            </button>
+          {hits.threads.map(({ thread, frags }) => (
+            <div className="thread-hit" key={thread.id}>
+              <button
+                className="tcard"
+                onClick={() => onOpenThread(thread.id, frags[0]?.id)}
+              >
+                <div className="tname">{thread.name}</div>
+                <div className="tsum">
+                  {thread.summary ||
+                    (thread.frags.at(-1)?.text || "").slice(0, 120)}
+                </div>
+                <div className="act-meta" style={{ marginTop: 9 }}>
+                  {frags.length
+                    ? `${frags.length} matching note${frags.length === 1 ? "" : "s"}`
+                    : "matches the thread itself"}
+                </div>
+              </button>
+              {frags.map((f) => (
+                <button
+                  className="frag-hit"
+                  key={f.id}
+                  onClick={() => onOpenThread(thread.id, f.id)}
+                  title="Jump to this note"
+                >
+                  <span className="frag-hit-date">{fmt(f.at)}</span>
+                  {f.text}
+                </button>
+              ))}
+            </div>
           ))}
         </>
       )}
@@ -909,6 +930,7 @@ function TCard({
 
 function ThreadView({
   thread,
+  focusFragId,
   onBack,
   onRename,
   onDelete,
@@ -925,6 +947,7 @@ function ThreadView({
   busy,
 }: {
   thread: Thread;
+  focusFragId?: string | null;
   onBack: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
@@ -1105,6 +1128,7 @@ function ThreadView({
         <FragView
           key={f.id}
           f={f}
+          focus={f.id === focusFragId}
           others={others}
           busy={busy}
           onSave={(text) => onEditFrag(f.id, text)}
@@ -1122,6 +1146,7 @@ function ThreadView({
 function FragView({
   f,
   others,
+  focus,
   onSave,
   onDelete,
   onMove,
@@ -1132,6 +1157,7 @@ function FragView({
 }: {
   f: Frag;
   others: Thread[];
+  focus?: boolean;
   onSave: (text: string) => void;
   onDelete: () => void;
   onMove: (toId: string) => void;
@@ -1146,6 +1172,26 @@ function FragView({
   const [confirming, setConfirming] = useState(false);
   const [moving, setMoving] = useState(false);
   const [more, setMore] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  /* The image-correction scroll must fire once per focus, not on every edit
+     save (which hands FragView a fresh `f` and would yank the view). */
+  const corrected = useRef(false);
+
+  /* Landed here from a search result: bring the note into view. Respects
+     the reduced-motion preference instead of forcing a smooth glide. */
+  useEffect(() => {
+    if (focus) {
+      const reduce = window.matchMedia(
+        "(prefers-reduced-motion: reduce)"
+      ).matches;
+      root.current?.scrollIntoView({
+        behavior: reduce ? "auto" : "smooth",
+        block: "center",
+      });
+    } else {
+      corrected.current = false;
+    }
+  }, [focus]);
 
   useEffect(() => {
     (async () => {
@@ -1159,11 +1205,22 @@ function FragView({
         }
       }
       setSrcs(out);
+      /* An image above the focused note can land after the first scroll and
+         nudge the layout; bring the note back into view once images settle.
+         Once per focus only — edits after that must not re-scroll. */
+      if (focus && out.length && !corrected.current) {
+        corrected.current = true;
+        root.current?.scrollIntoView({ behavior: "auto", block: "center" });
+      }
     })();
-  }, [f]);
+  }, [f, focus]);
 
   return (
-    <div className="frag">
+    <div
+      className={"frag" + (focus ? " focus" : "")}
+      ref={root}
+      aria-current={focus ? "true" : undefined}
+    >
       <div className="frag-date">
         {fmt(f.at)}
         {f.unsorted && <span className="raw">unsorted</span>}

@@ -81,7 +81,7 @@ describe("search", () => {
     expect(search(b, "Clinic")).toMatchObject({ total: 0 });
   });
 
-  it("matches threads on name, summary, and counts matching fragments", () => {
+  it("matches threads on name, summary, and returns the matching fragments", () => {
     const b = board({
       threads: [
         thread({
@@ -96,24 +96,23 @@ describe("search", () => {
       ],
     });
 
-    // Match on name only.
+    // Match on name only; no fragments matched.
     let r = search(b, "garden");
     expect(r.threads).toHaveLength(1);
-    expect(r.threads[0].matchingFrags).toBe(0);
+    expect(r.threads[0].frags).toHaveLength(0);
     expect(r.total).toBe(1);
 
     // Match on summary only.
     r = search(b, "planting");
     expect(r.threads.map((t) => t.thread.id)).toEqual(["t"]);
-    void r;
 
-    // Match on a fragment; matchingFrags counts only frag hits, not meta.
+    // Match on a fragment; frags carries the actual matching notes.
     r = search(b, "tomatoes");
     expect(r.threads).toHaveLength(2);
     const garden = r.threads.find((t) => t.thread.name === "Garden plan");
-    expect(garden?.matchingFrags).toBe(1);
+    expect(garden?.frags.map((f) => f.text)).toEqual(["tomatoes need sun"]);
     const books = r.threads.find((t) => t.thread.name === "Books");
-    expect(books?.matchingFrags).toBe(1);
+    expect(books?.frags.map((f) => f.text)).toEqual(["tomatoes"]);
   });
 
   it("matches intentions across expandedIntention, rawInput, recommendedActions, counterIntentions", () => {

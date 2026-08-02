@@ -95,6 +95,9 @@ export function useBoard(now: number) {
   const [swept, setSwept] = useState<{ faded: number; cleared: number } | null>(null);
   const [tab, setTab] = useState<"actions" | "threads" | "intentions">("actions");
   const [open, setOpen] = useState<string | null>(null);
+  /* When a search result opens a thread, this names the exact fragment it
+     came from, so the thread can open scrolled to it rather than at the top. */
+  const [openFrag, setOpenFrag] = useState<string | null>(null);
   const [openIntention, setOpenIntention] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -1373,6 +1376,8 @@ export function useBoard(now: number) {
     setTab,
     open,
     setOpen,
+    openFrag,
+    setOpenFrag,
     openIntention,
     setOpenIntention,
     draft,
