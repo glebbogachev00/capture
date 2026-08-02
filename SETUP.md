@@ -214,6 +214,33 @@ The proxy means your phone gets the same voice automatically (no CORS to
 fight) once you're on HTTPS. If the Kokoro server isn't running, replies
 just fall back to the browser voice — nothing breaks.
 
+### Using the good voice from a Vercel deployment
+
+A Vercel deployment is a different machine, so its `TTS_URL` can't point at
+your Mac's `localhost`. The browser voice is the fallback there — until you
+expose Kokoro to the internet with Tailscale Funnel:
+
+```bash
+# One-time: make Kokoro (port 8880) publicly reachable on your own ts.net
+# hostname, on port 8443 — separate from any `tailscale serve` on 443.
+tailscale funnel --bg --https=8443 8880
+# Disable later with:  tailscale funnel --https=8443 off
+```
+
+Then on Vercel, add the public URL **with the `/v1` suffix** (the app appends
+`/models` and `/audio/speech`):
+
+```bash
+vercel env add TTS_URL production    # https://<your-mac>.ts.net:8443/v1
+vercel env add TTS_VOICE production  # af_bella, or any Kokoro voice
+vercel --prod
+```
+
+The funnel stays up while your Mac is on and connected to Tailscale; keep
+Kokoro running and the Mac awake (the `caffeinate` launcher helps) or the
+probe simply falls back to the browser voice. The deployment's own `/api/tts`
+stays behind the login gate, so only signed-in users can trigger synthesis.
+
 Your board lives in the browser's IndexedDB on each device, not on the server.
 Use **Settings → Download backup** regularly and keep the JSON somewhere safe —
 clearing site data deletes everything. Restores merge by id, so restoring
