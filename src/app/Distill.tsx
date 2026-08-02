@@ -281,7 +281,7 @@ export function DistillView({
           {busy ? "Distilling…" : "Distill"}
         </button>
         <button
-          className="ghost warn"
+          className="ghost warn distill-discard"
           onClick={confirm}
           disabled={busy || session.turns.length === 0}
         >

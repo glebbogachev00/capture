@@ -1331,14 +1331,15 @@ body {
 }
 
 /* The settle + discard pair share one row, so the choice of what to do with
-   the conversation is always in the same place. Distill takes the width;
-   Discard stays a compact sibling, warn-styled and confirm-gated. */
+   the conversation is always in the same place. Equal flex-basis makes the
+   two buttons the same width — one glance, no hierarchy to decode. */
 .distill-actions {
   display: flex;
   gap: 10px;
   margin: 2px 0 10px;
 }
-.distill-settle {
+.distill-settle,
+.distill-discard {
   flex: 1;
   justify-content: center;
 }
