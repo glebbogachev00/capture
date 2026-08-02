@@ -53,19 +53,49 @@ Open http://localhost:3000 on the Mac.
 
 ## 3. Reach it from your phone
 
-The Mac and phone must be on the same Wi-Fi. Find the Mac's IP:
+The phone only ever needs one URL — the Mac's. Voice (mic, recognition,
+replies) runs in the phone's browser; Kokoro TTS runs on the Mac and is
+proxied through the app, so nothing else needs to be reachable.
+
+**The smooth way: Tailscale (recommended).** Works from any network, not
+just home Wi-Fi, and gives you real HTTPS — which voice *requires* (the
+browser blocks the mic on plain HTTP). One-time setup:
+
+1. Install Tailscale on the Mac and the phone
+   (https://tailscale.com/download), sign both into the same account.
+2. In the Tailscale admin console (login.tailscale.com → DNS), turn on
+   **MagicDNS** and **HTTPS Certificates** — both free for personal use.
+3. Run the app and expose it:
+
+   ```bash
+   npm run phone
+   ```
+
+   That one command builds, starts the server bound to the network under
+   `caffeinate` (so the Mac doesn't sleep), and runs
+   `tailscale serve --bg 3000` to give you
+   `https://<yourmac>.<your-tailnet>.ts.net` with a valid Let's Encrypt cert.
+4. On the phone (Tailscale app on, same account), open that `https://…ts.net`
+   URL in Safari (iPhone) or Chrome (Android). Allow the mic the first time.
+
+**Or the quick way: same Wi-Fi.** Find the Mac's IP:
 
 ```bash
 ipconfig getifaddr en0
 ```
 
-Open `http://<that-ip>:3000` on the phone and Add to Home Screen — it is a
-PWA and runs full-screen with its own icon.
+Open `http://<that-ip>:3000` on the phone. Typing works immediately; voice
+needs HTTPS, so for voice add a tunnel (`cloudflared tunnel --url
+http://localhost:3000` or ngrok) or a self-signed cert with `mkcert`.
 
 **Use the production command for phone access.** The dev server
 (`npm run dev`) binds to localhost only — your phone can't reach it. Use the
 build + `npm start -H 0.0.0.0` commands above (or add `-H 0.0.0.0` to the dev
 command) so the server answers on the network.
+
+**Set a password whenever the server is reachable from anything other than
+localhost** — see §5 (`APP_PASSWORD`); an open `/api/sort` is an open tab on
+your model quota.
 
 **Voice note.** Voice runs in the browser on whatever device you're using —
 the Mac only serves the app. Distill's chat box carries two icon buttons
@@ -86,9 +116,12 @@ automatically. Same experience either way.
 
 Voice needs a "secure context": `localhost` counts, `http://192.168.x.x`
 does not. On the Mac at localhost both work; on the phone over plain HTTP
-the browser blocks them. For voice on the phone you need HTTPS: a tunnel
-(`cloudflared tunnel --url http://localhost:3000` or ngrok), or a self-signed
-cert with `mkcert`. Typing works over plain HTTP either way.
+the browser blocks them — HTTPS (Tailscale or a tunnel) fixes that.
+
+**iPhone note.** Apple disables speech recognition when the app runs as an
+installed standalone PWA ("Add to Home Screen" launches it full-screen
+without the APIs). On iPhone, use the Voice feature from **Safari directly**;
+on Android the installed PWA works fine.
 
 ## 4. Keep the Mac awake
 
