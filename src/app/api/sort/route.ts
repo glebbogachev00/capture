@@ -116,6 +116,10 @@ export async function POST(request: Request) {
     const { value, via } = await withFallback(async (tier) => {
       const { object } = await generateObject({
         model: tier.model,
+        // A spent free tier reports "retry in 26s"; fail fast so the chain
+        // can fall through to the next provider instead of making the user
+        // wait out the backoff.
+        maxRetries: 0,
         schema: Sorted,
         prompt: prompt(body.raw, body.threads, body.force),
         providerOptions: tier.providerOptions,

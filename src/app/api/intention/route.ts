@@ -181,6 +181,7 @@ export async function POST(request: Request) {
     const { value, via } = await withFallback(async (tier) => {
       const { object } = await generateObject({
         model: tier.model,
+        maxRetries: 0,
         schema: Expanded,
         system: systemPrompt(body.principles),
         prompt: message,

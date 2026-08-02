@@ -125,6 +125,10 @@ export async function POST(request: Request) {
         try {
           const { textStream } = await streamText({
             model: tier.model,
+            // A spent free tier reports "retry in 26s"; don't make the user
+            // wait on backoff for a provider that can't answer — fail fast
+            // and let the next tier in the chain take the call.
+            maxRetries: 0,
             providerOptions: tier.providerOptions,
             system: CLARIFIER,
             messages: body.turns.map((t) => ({
@@ -208,6 +212,7 @@ export async function POST(request: Request) {
     const { value, via } = await withFallback(async (tier) => {
       const { object } = await generateObject({
         model: tier.model,
+        maxRetries: 0,
         schema: Settled,
         system: SETTLER,
         prompt: transcript(body.turns),

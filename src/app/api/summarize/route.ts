@@ -42,6 +42,7 @@ export async function POST(request: Request) {
     const { value, via } = await withFallback(async (tier) => {
       const { text } = await generateText({
         model: tier.model,
+        maxRetries: 0,
         prompt:
         'These are dated fragments one person captured over time about "' +
         body.name +
