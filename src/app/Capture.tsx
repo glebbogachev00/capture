@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Copy, Image as ImageIcon, MessageCircleQuestion, Mic, MoreHorizontal, Share2, Settings } from "lucide-react";
+import { Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, Share2, Settings } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
 import {
@@ -326,7 +326,7 @@ export function Capture() {
               aria-label="Distill instead of capture"
               title="Distill instead of capture"
             >
-              <MessageCircleQuestion size={18} strokeWidth={1.7} />
+              <MessagesSquare size={18} strokeWidth={1.7} />
             </button>
             <button
               className="capture-btn"
