@@ -81,8 +81,8 @@ I didn't file these. I just said them. Capture turned each into something to
 close and gave it a shelf life.
 
 - "Create a project or database for collecting talks and info from people I
-  admire" — fades in 21 days
-- "Add entries for Jim Jannard, Jack Dorsey, Steve Jobs, and others" — 21 days
+  admire" — fades in 30 days
+- "Add entries for Jim Jannard, Jack Dorsey, Steve Jobs, and others" — 30 days
 - "Resume Neuromancer audiobook at 30:29" — fades in 7 days
 
 A call to return shouldn't outlive a week. A commitment to myself gets longer.

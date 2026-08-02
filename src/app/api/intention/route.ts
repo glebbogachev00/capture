@@ -1,6 +1,8 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { explain } from "@/lib/aiError";
+import { clientIp } from "@/lib/clientIp";
+import { modelRateLimit } from "@/lib/limiter";
 import { withFallback } from "@/lib/providers";
 
 /**
@@ -150,6 +152,15 @@ Apply the same rules: present tense, faithful to the user's words, no filler. Pr
 }
 
 export async function POST(request: Request) {
+  // The intention engine spends real model quota; a single client can't loop it.
+  const gate = modelRateLimit(clientIp(request));
+  if (!gate.allowed) {
+    return Response.json(
+      { error: `Too many requests. Try again in ${gate.retryAfterSec}s.` },
+      { status: 429, headers: { "Retry-After": String(gate.retryAfterSec) } }
+    );
+  }
+
   let body: z.infer<typeof Body>;
   try {
     body = Body.parse(await request.json());

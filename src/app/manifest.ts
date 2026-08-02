@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "capture",
     short_name: "capture",
     description:
-      "One capture surface, two destinations, self-clearing. Actions fade. Threads never do.",
+      "One capture surface, three destinations, self-clearing. Actions fade. Threads never do.",
     start_url: "/",
     display: "standalone",
     background_color: "#EDEFE8",

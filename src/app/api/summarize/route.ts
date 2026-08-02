@@ -1,6 +1,8 @@
 import { generateText } from "ai";
 import { z } from "zod";
 import { explain } from "@/lib/aiError";
+import { clientIp } from "@/lib/clientIp";
+import { modelRateLimit } from "@/lib/limiter";
 import { withFallback } from "@/lib/providers";
 
 /**
@@ -20,6 +22,15 @@ const Body = z.object({
 });
 
 export async function POST(request: Request) {
+  // Summarising spends real model quota; a single client can't run it in a loop.
+  const gate = modelRateLimit(clientIp(request));
+  if (!gate.allowed) {
+    return Response.json(
+      { error: `Too many requests. Try again in ${gate.retryAfterSec}s.` },
+      { status: 429, headers: { "Retry-After": String(gate.retryAfterSec) } }
+    );
+  }
+
   let body: z.infer<typeof Body>;
   try {
     body = Body.parse(await request.json());

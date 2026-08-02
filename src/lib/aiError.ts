@@ -1,3 +1,5 @@
+import { NoProvidersError } from "./providers";
+
 /**
  * Turn a model failure into something worth reading.
  *
@@ -6,8 +8,9 @@
  * unrecognised stays vague on purpose, since provider errors sometimes quote
  * the request back.
  *
- * Providers wrap their underlying call error in their own class, so the
- * message and body are read through the cause chain rather than off the top.
+ * The messages name the provider that actually failed. `withFallback` stamps
+ * the failing tier onto the error before rethrowing, so a spent Groq key tells
+ * you about Groq rather than blaming Google.
  */
 
 type MaybeProviderError = {
@@ -16,6 +19,29 @@ type MaybeProviderError = {
   responseBody?: unknown;
   cause?: unknown;
 };
+
+const PROVIDER_NAMES: Record<string, string> = {
+  gemini: "Google AI Studio",
+  groq: "Groq",
+  openrouter: "OpenRouter",
+};
+
+/** The env var each provider's key lives in, so the message can say what to fix. */
+const PROVIDER_ENV: Record<string, string> = {
+  gemini: "GOOGLE_GENERATIVE_AI_API_KEY",
+  groq: "GROQ_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+};
+
+function providerOf(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 5; depth++) {
+    const via = (current as { provider?: unknown })?.provider;
+    if (typeof via === "string") return via;
+    current = (current as { cause?: unknown })?.cause;
+  }
+  return undefined;
+}
 
 function unwrap(error: unknown) {
   const texts: string[] = [];
@@ -36,6 +62,18 @@ function unwrap(error: unknown) {
 }
 
 export function explain(error: unknown): { message: string; status: number } {
+  if (error instanceof NoProvidersError) {
+    return {
+      message:
+        "No model provider is configured on the server. Add an API key and redeploy.",
+      status: 503,
+    };
+  }
+
+  const via = providerOf(error);
+  const name = (via && PROVIDER_NAMES[via]) || "your model provider";
+  const env = via ? PROVIDER_ENV[via] : null;
+
   const { text, status } = unwrap(error);
 
   if (
@@ -45,7 +83,10 @@ export function explain(error: unknown): { message: string; status: number } {
   ) {
     return {
       message:
-        "No usable Google AI Studio key on the server. Set GOOGLE_GENERATIVE_AI_API_KEY and redeploy.",
+        "No usable " +
+        name +
+        " key on the server." +
+        (env ? " Set " + env + " and redeploy." : ""),
       status: 503,
     };
   }
@@ -53,7 +94,8 @@ export function explain(error: unknown): { message: string; status: number } {
   if (status === 429 || text.includes("quota") || text.includes("rate limit")) {
     return {
       message:
-        "Google AI Studio is rate-limiting or the daily free quota is spent. Try again shortly.",
+        name +
+        " is rate-limiting or the daily free quota is spent. Try again shortly.",
       status: 429,
     };
   }
@@ -69,7 +111,9 @@ export function explain(error: unknown): { message: string; status: number } {
   if (status === 401 || status === 403) {
     return {
       message:
-        "Google AI Studio rejected the key. Check it is valid and that the Generative Language API is enabled.",
+        name +
+        " rejected the key." +
+        (env ? " Check " + env + " is valid and the API is enabled." : ""),
       status: 503,
     };
   }

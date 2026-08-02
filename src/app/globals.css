@@ -1077,6 +1077,322 @@ body {
   color: #8a3324;
 }
 
+/* ---------------------------------------------------------------
+   Distill — the clarifying conversation. Two voices, no chrome:
+   the transcript reads like a chat, then settles into a review.
+   Every element moves a little, so the conversation reads as
+   alive: turns rise in, the assistant thinks in dots, the live
+   stream trails a caret, and the log keeps its tail in view.
+--------------------------------------------------------------- */
+.distill-view {
+  animation: distill-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* The head row holds the Distill label and nothing else — the voice
+   controls live in the chat box, so the head stays clean. */
+.distill-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.distill-head .int-eyebrow {
+  margin: 0;
+}
+.distill-review {
+  animation: distill-in 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes distill-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.distill-log {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 0 18px;
+}
+.distill-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 88%;
+  /* Each new turn rises into place; the user's from the right edge. */
+  animation: turn-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.distill-turn.user {
+  align-self: flex-end;
+  align-items: flex-end;
+  animation-name: turn-in-user;
+}
+.distill-turn.assistant {
+  align-self: flex-start;
+}
+@keyframes turn-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes turn-in-user {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.distill-who {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.distill-turn p {
+  margin: 0;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 10px 13px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.distill-turn.user p {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+/* The assistant thinking: three dots that rise in turn. */
+.distill-dots {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  padding: 4px 2px;
+}
+.distill-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: dot-bounce 1.15s ease-in-out infinite;
+}
+.distill-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.distill-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes dot-bounce {
+  0%,
+  100% {
+    transform: none;
+    opacity: 0.45;
+  }
+  35% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+/* The live stream: a thin caret that blinks at the tail while text lands. */
+.distill-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: caret-blink 0.85s steps(2, start) infinite;
+}
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+
+/* The orb — the whole input surface of Talk mode. */
+.talk {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 0 22px;
+}
+.orb {
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  border: 2px solid var(--rule);
+  background: var(--card);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  position: relative;
+  touch-action: manipulation;
+  transition: 0.2s;
+}
+.orb:hover {
+  border-color: var(--muted);
+}
+/* Listening: a soft ring breathes outward — it can hear you. */
+.orb.listening {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.orb.listening::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  animation: orb-listen 1.6s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes orb-listen {
+  0% {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scale(1.22);
+    opacity: 0;
+  }
+}
+/* Speaking: lit up and breathing fast — tap to cut in. */
+.orb.speaking {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  animation: orb-speak 1.1s ease-in-out infinite;
+}
+@keyframes orb-speak {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+/* Thinking: quiet and dim — the reply is on its way. */
+.orb.thinking {
+  border-color: var(--rule);
+  color: var(--muted);
+}
+.talk-status {
+  font-size: 15px;
+  font-weight: 600;
+}
+.talk-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+  max-width: 300px;
+  line-height: 1.5;
+}
+/* The quiet way out of a spoken conversation: back to the text box. */
+.talk-type {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  min-height: 36px;
+}
+
+/* The Distill & save action sits quiet below the chat until it matters. */
+.distill-settle {
+  width: 100%;
+  justify-content: center;
+  margin: 2px 0 10px;
+  transition: 0.2s;
+}
+/* Once a conversation exists it becomes the accent — the reason you're here. */
+.distill-settle:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.distill-settle:not(:disabled):hover {
+  background: var(--accent);
+  color: var(--paper);
+}
+/* Quick starts on an empty log: a seed beats a blank box. */
+.distill-starters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  align-items: stretch;
+}
+.distill-starters .ghost {
+  text-align: left;
+  justify-content: flex-start;
+}
+/* The distilled wording, editable before it lands anywhere. */
+.review-clean {
+  width: 100%;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 11px;
+  padding: 12px 14px;
+  outline: none;
+  resize: vertical;
+  min-height: 140px;
+  margin-bottom: 6px;
+  transition: border-color 0.15s;
+}
+.review-clean:focus {
+  border-color: var(--accent);
+}
+/* The live mic breathes: a soft ring pulses outward while it listens. */
+.icon-btn.live {
+  position: relative;
+}
+.icon-btn.live::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--accent);
+  border-radius: 13px;
+  animation: mic-pulse 1.5s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes mic-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.07);
+    opacity: 0;
+  }
+}
+/* A tap on any primary action lands with a tiny press. */
+.capture-btn:not(:disabled):active {
+  transform: scale(0.96);
+}
+.ghost:not(:disabled):active {
+  transform: scale(0.97);
+}
+
 .capture-head-right {
   display: flex;
   align-items: center;

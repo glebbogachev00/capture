@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# the Freebuff desktop app's local database
+.freebuff/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

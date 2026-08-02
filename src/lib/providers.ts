@@ -82,6 +82,13 @@ export async function withFallback<T>(
     } catch (error) {
       last = error;
       console.warn(`[capture] ${tier.name} failed, trying next`, error);
+      // Remember which tier this error came from so the message shown to the
+      // operator names the provider that actually failed.
+      try {
+        (error as { provider?: string }).provider = tier.name;
+      } catch {
+        /* frozen error object; message stays generic */
+      }
     }
   }
   throw last;
