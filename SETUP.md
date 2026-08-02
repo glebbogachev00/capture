@@ -46,7 +46,7 @@ Production (faster, steadier for always-on hosting):
 
 ```bash
 npm run build
-npm start -H 0.0.0.0 -p 3000
+npm start -- -H 0.0.0.0 -p 3000
 ```
 
 Open http://localhost:3000 on the Mac.
@@ -90,12 +90,14 @@ http://localhost:3000` or ngrok) or a self-signed cert with `mkcert`.
 
 **Use the production command for phone access.** The dev server
 (`npm run dev`) binds to localhost only — your phone can't reach it. Use the
-build + `npm start -H 0.0.0.0` commands above (or add `-H 0.0.0.0` to the dev
+build + `npm start -- -H 0.0.0.0` commands above (or add `-H 0.0.0.0` to the dev
 command) so the server answers on the network.
 
-**Set a password whenever the server is reachable from anything other than
-localhost** — see §5 (`APP_PASSWORD`); an open `/api/sort` is an open tab on
-your model quota.
+**Set a password whenever the server is reachable beyond your own devices** —
+see §5 (`APP_PASSWORD`); an open `/api/sort` is an open tab on your model
+quota. With `npm run phone` the serve is tailnet-only (only devices on your
+Tailnet can reach it), so it's optional there — but required if you ever make
+the serve public (`tailscale serve --https=443`).
 
 **Voice note.** Voice runs in the browser on whatever device you're using —
 the Mac only serves the app. Distill's chat box carries two icon buttons
@@ -131,13 +133,13 @@ If the Mac sleeps, the server goes down with it. Two ways to stop that:
 prevent idle sleep (works on AC and battery):
 
 ```bash
-caffeinate -i npm start -H 0.0.0.0 -p 3000
+caffeinate -i npm start -- -H 0.0.0.0 -p 3000
 ```
 
 When the Mac is plugged in you can add `-s` (prevents system sleep on AC):
 
 ```bash
-caffeinate -i -s npm start -H 0.0.0.0 -p 3000
+caffeinate -i -s npm start -- -H 0.0.0.0 -p 3000
 ```
 
 `caffeinate` is built into macOS (`/usr/bin/caffeinate`) — no install.

@@ -22,10 +22,13 @@ if ! command -v tailscale >/dev/null 2>&1; then
   exit 1
 fi
 
+# `tailscale serve` is tailnet-only by default, so only your own devices can
+# reach the app — a password is optional but recommended if you ever make the
+# serve public (tailscale serve --https=443). Warn instead of blocking.
 if ! grep -q '^APP_PASSWORD=' .env.local 2>/dev/null; then
-  echo "⚠  No APP_PASSWORD in .env.local — anyone who reaches your URL can use" >&2
-  echo "   your model quota. Add APP_PASSWORD=something-secret, then re-run." >&2
-  exit 1
+  echo "⚠  No APP_PASSWORD in .env.local — add APP_PASSWORD=something-secret to" >&2
+  echo "   .env.local for a login gate. Continuing anyway: this serve is" >&2
+  echo "   tailnet-only, so only devices on your Tailnet can reach it." >&2
 fi
 
 echo "→ Exposing port 3000 over HTTPS (tailscale serve)…"
@@ -49,4 +52,6 @@ echo "→ Open ${HOSTNAME:-the https://…ts.net URL from 'tailscale serve statu
 echo "  (Safari on iPhone — not the installed home-screen app; Chrome on Android is fine)."
 echo "  Allow the mic the first time. Ctrl-C here stops the server."
 echo
-exec caffeinate -i -s npm start -H 0.0.0.0 -p 3000
+# `npm start -- -H …` so the flags reach `next start`; npm would otherwise
+# swallow them and exit with a usage error (that's how the first run died).
+exec caffeinate -i -s npm start -- -H 0.0.0.0 -p 3000
