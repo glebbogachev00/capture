@@ -3,12 +3,15 @@
 /* ============================================================
    DISTILL — the second input mode. For thoughts that aren't
    clear yet. You talk it through; the engine asks one question
-   at a time until it's clear; then "Distill & save" turns the
+   at a time until it's clear; then "Distill" turns the
    whole exchange into an action, a thread, or an intention.
 
    Same input, two buttons: Capture files it as-is, Distill
    interrogates it first. The transcript lives in IndexedDB via
    useBoard, so a half-finished conversation survives a reload.
+   "Distill" hands the conversation to the engine; the review step
+   that follows has its own Save, so the settle button only says
+   what it does.
 
    The movement matters as much as the words: turns enter with a
    small rise, the assistant's thinking shows as settling dots,
@@ -244,11 +247,11 @@ export function DistillView({
       )}
 
       <button
-        className="ghost distill-settle"
+        className="capture-btn distill-settle"
         onClick={onSettle}
         disabled={busy || session.turns.length === 0}
       >
-        {busy ? "Distilling…" : "Distill &amp; save"}
+        {busy ? "Distilling…" : "Distill"}
       </button>
     </div>
   );

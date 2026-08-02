@@ -1310,21 +1310,13 @@ body {
   min-height: 36px;
 }
 
-/* The Distill & save action sits quiet below the chat until it matters. */
+/* The settle button spans the width of the log, so the conversation's
+   payoff is always in the same place. Filled (capture-btn) once there is
+   something to settle; the following review step carries its own Save. */
 .distill-settle {
   width: 100%;
   justify-content: center;
   margin: 2px 0 10px;
-  transition: 0.2s;
-}
-/* Once a conversation exists it becomes the accent — the reason you're here. */
-.distill-settle:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.distill-settle:not(:disabled):hover {
-  background: var(--accent);
-  color: var(--paper);
 }
 /* Quick starts on an empty log: a seed beats a blank box. */
 .distill-starters {
