@@ -93,6 +93,9 @@ export function DistillView({
      chat box carries just a mic and a Voice button, and the Voice button is
      what hands the floor to the conversation. */
   const [mode, setMode] = useState<"type" | "talk">("type");
+  /* The destructive way out is always one confirm away: tapping Discard
+     asks before the transcript is erased for good. */
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const convo = useVoiceConversation(
     session.turns,
     busy,
@@ -119,16 +122,33 @@ export function DistillView({
     if (mode !== "talk") voiceSetEnabled(false);
   }, [mode, voiceSetEnabled]);
 
+  /* The conversation and the review both open the same confirm, so the
+     transcript can never be erased without an explicit yes. */
+  const confirm = () => setConfirmingDiscard(true);
+  const cancelDiscard = () => setConfirmingDiscard(false);
+  const confirmDiscard = () => {
+    setConfirmingDiscard(false);
+    onDiscardConversation();
+  };
+
   if (settled) {
     return (
-      <DistillReview
-        settled={settled}
-        busy={busy}
-        onSave={onSave}
-        onDiscard={onDiscard}
-        onExit={onExit}
-        onDiscardConversation={onDiscardConversation}
-      />
+      <>
+        <DistillReview
+          settled={settled}
+          busy={busy}
+          onSave={onSave}
+          onDiscard={onDiscard}
+          onExit={onExit}
+          onRequestDiscard={confirm}
+        />
+        {confirmingDiscard && (
+          <DiscardConfirm
+            onCancel={cancelDiscard}
+            onConfirm={confirmDiscard}
+          />
+        )}
+      </>
     );
   }
 
@@ -252,13 +272,26 @@ export function DistillView({
         </div>
       )}
 
-      <button
-        className="capture-btn distill-settle"
-        onClick={onSettle}
-        disabled={busy || session.turns.length === 0}
-      >
-        {busy ? "Distilling…" : "Distill"}
-      </button>
+      <div className="distill-actions">
+        <button
+          className="capture-btn distill-settle"
+          onClick={onSettle}
+          disabled={busy || session.turns.length === 0}
+        >
+          {busy ? "Distilling…" : "Distill"}
+        </button>
+        <button
+          className="ghost warn"
+          onClick={confirm}
+          disabled={busy || session.turns.length === 0}
+        >
+          Discard
+        </button>
+      </div>
+
+      {confirmingDiscard && (
+        <DiscardConfirm onCancel={cancelDiscard} onConfirm={confirmDiscard} />
+      )}
     </div>
   );
 }
@@ -343,14 +376,14 @@ function DistillReview({
   onSave,
   onDiscard,
   onExit,
-  onDiscardConversation,
+  onRequestDiscard,
 }: {
   settled: DistillResult;
   busy: boolean;
   onSave: (clean: string, actions: string[], shelfLife: string) => void;
   onDiscard: () => void;
   onExit: () => void;
-  onDiscardConversation: () => void;
+  onRequestDiscard: () => void;
 }) {
   const [clean, setClean] = useState(settled.clean);
   const [actions, setActions] = useState<string[]>(settled.actions || []);
@@ -477,12 +510,11 @@ function DistillReview({
           {busy ? "Polishing…" : "Save"}
         </button>
         {/* The hard way out sits beside Save so the two decisions are one
-            glance: file it, or forget it entirely. Warn-styled so the
-            destructive weight reads before it is pressed — the transcript
-            is gone for good. */}
+            glance: file it, or forget it entirely. Opens the shared confirm
+            so the transcript is never erased without an explicit yes. */}
         <button
           className="ghost warn"
-          onClick={onDiscardConversation}
+          onClick={onRequestDiscard}
           disabled={busy}
         >
           Discard
@@ -490,6 +522,42 @@ function DistillReview({
         <button className="ghost" onClick={onDiscard} disabled={busy}>
           Keep talking
         </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The confirm gate in front of Discard — the one action that erases the
+ * transcript for good. A tap outside the card dismisses it too, so the
+ * destructive choice is always explicit and never trapped.
+ */
+function DiscardConfirm({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="modal" onClick={onCancel}>
+      <div
+        className="modal-in discard-confirm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="discard-title">Discard this conversation?</p>
+        <p className="discard-hint">
+          The whole transcript will be erased for good — nothing will be
+          saved, and it can&apos;t be brought back.
+        </p>
+        <div className="tools">
+          <button className="ghost warn" onClick={onConfirm}>
+            Discard for good
+          </button>
+          <button className="ghost" onClick={onCancel}>
+            Keep it
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1330,13 +1330,35 @@ body {
   min-height: 36px;
 }
 
-/* The settle button spans the width of the log, so the conversation's
-   payoff is always in the same place. Filled (capture-btn) once there is
-   something to settle; the following review step carries its own Save. */
-.distill-settle {
-  width: 100%;
-  justify-content: center;
+/* The settle + discard pair share one row, so the choice of what to do with
+   the conversation is always in the same place. Distill takes the width;
+   Discard stays a compact sibling, warn-styled and confirm-gated. */
+.distill-actions {
+  display: flex;
+  gap: 10px;
   margin: 2px 0 10px;
+}
+.distill-settle {
+  flex: 1;
+  justify-content: center;
+}
+
+/* The confirm gate in front of Discard — the transcript is erased for good,
+   so the ask is a small card rather than a bare button. */
+.discard-confirm p {
+  margin: 0 0 6px;
+}
+.discard-title {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-variation-settings: "SOFT" 30;
+}
+.discard-hint {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 /* Quick starts on an empty log: a seed beats a blank box. */
 .distill-starters {
