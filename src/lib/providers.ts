@@ -24,14 +24,17 @@ export type Tier = {
 export function chain(): Tier[] {
   const tiers: Tier[] = [];
 
-  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+  // OpenRouter first: a paid/keyed tier with broadly current models, then
+  // Groq, and Gemini last — its free tier is the most likely to be spent.
+  if (process.env.OPENROUTER_API_KEY) {
+    const openrouter = createOpenRouter({
+      apiKey: process.env.OPENROUTER_API_KEY,
+    });
     tiers.push({
-      name: "gemini",
-      model: google(process.env.GEMINI_MODEL || "gemini-3.6-flash"),
-      // Gemini 3 reasons at length by default; a two-way sort does not need it.
-      providerOptions: {
-        google: { thinkingConfig: { thinkingLevel: "low" } },
-      },
+      name: "openrouter",
+      model: openrouter.chat(
+        process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash"
+      ),
     });
   }
 
@@ -42,15 +45,14 @@ export function chain(): Tier[] {
     });
   }
 
-  if (process.env.OPENROUTER_API_KEY) {
-    const openrouter = createOpenRouter({
-      apiKey: process.env.OPENROUTER_API_KEY,
-    });
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     tiers.push({
-      name: "openrouter",
-      model: openrouter.chat(
-        process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash"
-      ),
+      name: "gemini",
+      model: google(process.env.GEMINI_MODEL || "gemini-3.6-flash"),
+      // Gemini 3 reasons at length by default; a two-way sort does not need it.
+      providerOptions: {
+        google: { thinkingConfig: { thinkingLevel: "low" } },
+      },
     });
   }
 

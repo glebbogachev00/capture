@@ -25,12 +25,13 @@ Edit `.env.local` and add at least one key:
 
 | Provider | Get a key | Env var |
 |---|---|---|
-| Google AI Studio | https://aistudio.google.com/apikey | `GOOGLE_GENERATIVE_AI_API_KEY` |
-| Groq | https://console.groq.com/keys | `GROQ_API_KEY` |
 | OpenRouter | https://openrouter.ai/keys | `OPENROUTER_API_KEY` |
+| Groq | https://console.groq.com/keys | `GROQ_API_KEY` |
+| Google AI Studio | https://aistudio.google.com/apikey | `GOOGLE_GENERATIVE_AI_API_KEY` |
 
-Tiers are tried top to bottom; a missing key just skips that tier, so one key
-is a complete setup. If every provider fails, captures are still saved
+Tiers are tried in that order (OpenRouter → Groq → Gemini last, since a free
+Gemini tier is the most likely to be spent); a missing key just skips that
+tier, so one key is a complete setup. If every provider fails, captures are still saved
 verbatim and flagged unsorted — nothing is ever lost, it just waits to be
 sorted.
 

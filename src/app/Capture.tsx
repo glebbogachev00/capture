@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Copy, Image as ImageIcon, Mic, MoreHorizontal, Share2, Settings } from "lucide-react";
+import { Copy, Image as ImageIcon, MessageCircleQuestion, Mic, MoreHorizontal, Share2, Settings } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
 import {
@@ -321,12 +321,12 @@ export function Capture() {
                 : "tap the mic key on your keyboard to dictate"}
             </div>
             <button
-              className="ghost"
+              className="icon-btn"
               onClick={openDistill}
               aria-label="Distill instead of capture"
               title="Distill instead of capture"
             >
-              Distill
+              <MessageCircleQuestion size={18} strokeWidth={1.7} />
             </button>
             <button
               className="capture-btn"
