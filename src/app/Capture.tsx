@@ -146,6 +146,7 @@ export function Capture() {
     settleDistill,
     saveSettled,
     discardSettled,
+    exitDistill,
     exportBoard,
     restoreFromFile,
     importBackup,
@@ -255,6 +256,7 @@ export function Capture() {
               saveSettled(clean, actions, shelfLife)
             }
             onDiscard={discardSettled}
+            onExit={exitDistill}
           />
         )}
 

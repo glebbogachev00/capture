@@ -577,6 +577,11 @@ body {
 .back:hover {
   color: var(--accent);
 }
+.back:disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
 
 .empty {
   padding: 44px 0;
@@ -1091,6 +1096,21 @@ body {
    controls live in the chat box, so the head stays clean. */
 .distill-review {
   animation: distill-in 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* The review's head row holds the back link and the exit on one line — flex
+   gives the exit's auto-margin a real context (block layout would ignore it),
+   and wrapping keeps the two labels apart on narrow screens. Scoped to the
+   head only so the stacked review content below stays untouched. */
+.distill-review-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+/* The quiet way out of a settled review: pushed to the right edge so it sits
+   opposite the back link and the two never collide. */
+.review-exit {
+  margin-left: auto;
+  color: var(--muted);
 }
 @keyframes distill-in {
   from {

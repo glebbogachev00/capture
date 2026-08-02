@@ -48,6 +48,7 @@ export function DistillView({
   settled,
   onSave,
   onDiscard,
+  onExit,
 }: {
   session: DistillSession;
   input: string;
@@ -64,6 +65,7 @@ export function DistillView({
   settled: DistillResult | null;
   onSave: (clean: string, actions: string[], shelfLife: string) => void;
   onDiscard: () => void;
+  onExit: () => void;
 }) {
   /* The log follows its own tail: a new turn glides the view down, while the
      live stream snaps it down so the growing bubble stays in sight. Only when
@@ -122,6 +124,7 @@ export function DistillView({
         busy={busy}
         onSave={onSave}
         onDiscard={onDiscard}
+        onExit={onExit}
       />
     );
   }
@@ -336,11 +339,13 @@ function DistillReview({
   busy,
   onSave,
   onDiscard,
+  onExit,
 }: {
   settled: DistillResult;
   busy: boolean;
   onSave: (clean: string, actions: string[], shelfLife: string) => void;
   onDiscard: () => void;
+  onExit: () => void;
 }) {
   const [clean, setClean] = useState(settled.clean);
   const [actions, setActions] = useState<string[]>(settled.actions || []);
@@ -358,9 +363,21 @@ function DistillReview({
 
   return (
     <div className="distill-review">
-      <button className="back" onClick={onDiscard}>
-        ← keep talking
-      </button>
+      <div className="distill-review-head">
+        <button className="back" onClick={onDiscard}>
+          ← keep talking
+        </button>
+        {/* The quiet way out: leave without filing anything. Pushed to the
+            right edge of the head row, so the review never feels like a
+            dead end. */}
+        <button
+          className="back review-exit"
+          onClick={onExit}
+          disabled={busy}
+        >
+          exit without saving →
+        </button>
+      </div>
 
       <div className="int-eyebrow">Distilled · {settled.kind}</div>
       <p className="int-note">

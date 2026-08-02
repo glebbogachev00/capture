@@ -1317,6 +1317,18 @@ export function useBoard(now: number) {
 
   const discardSettled = () => setSettled(null);
 
+  /** Leave Distill entirely without filing anything.
+
+      The settled review is cleared and the view closes — same effect as the
+      "← capture" back on the conversation. The transcript itself stays saved
+      (a half-finished conversation survives a reload by design), so reopening
+      Distill picks it back up rather than losing it. */
+  const exitDistill = () => {
+    setSettled(null);
+    setDistillErr("");
+    closeDistill();
+  };
+
   /* --------------------------- derivations -------------------------- */
 
   const live = data.actions.filter((a) => !a.done && !a.faded);
@@ -1421,6 +1433,7 @@ export function useBoard(now: number) {
     settleDistill,
     saveSettled,
     discardSettled,
+    exitDistill,
     exportBoard,
     restoreFromFile,
     importBackup,
