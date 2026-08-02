@@ -1329,6 +1329,17 @@ export function useBoard(now: number) {
     closeDistill();
   };
 
+  /** A true clean slate: wipe the transcript along with the review.
+
+      Unlike exitDistill — which keeps the half-finished conversation for a
+      later session — this forgets it entirely. resetDistill persists a fresh
+      empty session, so reopening Distill starts completely clean; nothing is
+      filed and nothing is kept. */
+  const discardDistill = async () => {
+    await resetDistill();
+    closeDistill();
+  };
+
   /* --------------------------- derivations -------------------------- */
 
   const live = data.actions.filter((a) => !a.done && !a.faded);
@@ -1434,6 +1445,7 @@ export function useBoard(now: number) {
     saveSettled,
     discardSettled,
     exitDistill,
+    discardDistill,
     exportBoard,
     restoreFromFile,
     importBackup,

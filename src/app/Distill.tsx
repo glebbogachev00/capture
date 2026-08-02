@@ -49,6 +49,7 @@ export function DistillView({
   onSave,
   onDiscard,
   onExit,
+  onDiscardConversation,
 }: {
   session: DistillSession;
   input: string;
@@ -66,6 +67,7 @@ export function DistillView({
   onSave: (clean: string, actions: string[], shelfLife: string) => void;
   onDiscard: () => void;
   onExit: () => void;
+  onDiscardConversation: () => void;
 }) {
   /* The log follows its own tail: a new turn glides the view down, while the
      live stream snaps it down so the growing bubble stays in sight. Only when
@@ -125,6 +127,7 @@ export function DistillView({
         onSave={onSave}
         onDiscard={onDiscard}
         onExit={onExit}
+        onDiscardConversation={onDiscardConversation}
       />
     );
   }
@@ -340,12 +343,14 @@ function DistillReview({
   onSave,
   onDiscard,
   onExit,
+  onDiscardConversation,
 }: {
   settled: DistillResult;
   busy: boolean;
   onSave: (clean: string, actions: string[], shelfLife: string) => void;
   onDiscard: () => void;
   onExit: () => void;
+  onDiscardConversation: () => void;
 }) {
   const [clean, setClean] = useState(settled.clean);
   const [actions, setActions] = useState<string[]>(settled.actions || []);
@@ -470,6 +475,17 @@ function DistillReview({
           disabled={busy || !clean.trim()}
         >
           {busy ? "Polishing…" : "Save"}
+        </button>
+        {/* The hard way out sits beside Save so the two decisions are one
+            glance: file it, or forget it entirely. Warn-styled so the
+            destructive weight reads before it is pressed — the transcript
+            is gone for good. */}
+        <button
+          className="ghost warn"
+          onClick={onDiscardConversation}
+          disabled={busy}
+        >
+          Discard
         </button>
         <button className="ghost" onClick={onDiscard} disabled={busy}>
           Keep talking

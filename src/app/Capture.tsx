@@ -147,6 +147,7 @@ export function Capture() {
     saveSettled,
     discardSettled,
     exitDistill,
+    discardDistill,
     exportBoard,
     restoreFromFile,
     importBackup,
@@ -257,6 +258,7 @@ export function Capture() {
             }
             onDiscard={discardSettled}
             onExit={exitDistill}
+            onDiscardConversation={discardDistill}
           />
         )}
 
