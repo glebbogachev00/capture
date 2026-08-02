@@ -4,15 +4,34 @@
 
 # capture
 
-One place to say things, three places for them to land.
+**One place to say things, three places for them to land.**
 
 You speak or paste a half-formed thought. A model decides whether it is
 something to close, something that accumulates, or something you are declaring
 about your life — cleans up the wording, and files it. Nothing to categorise by
 hand, no folders, no tags.
 
-Built for one person's phone. Self-hosted, so the data and the API keys are
-yours.
+**Your data. Your keys. Your server.** capture is local-first and self-hosted:
+your board lives in your browser's IndexedDB, your model keys stay on your own
+machine, and there is no account, no cloud sync, and no subscription. Built for
+one person's phone — yours.
+
+<!--
+  DEMO GIF — drop a screen recording here once you have one. Replace this
+  comment with:
+  <p align="center"><img src="docs/demo.gif" width="720" alt="capture in action" /></p>
+-->
+
+## The one-screen pitch
+
+Open **Distill** and talk to it like a person. It asks one question at a time
+until the shape of your thought emerges, answers aloud as you go, and turns
+the mic back on when it finishes — a conversation, not a form. Stop when
+you're clear, and one tap files the whole exchange as an **action**, a
+**thread**, or an **intention** — proofread on the way out, so speech-to-text
+slips never reach your notes. Unclear thought in, three tidy places to land.
+That's the whole product; the rest of this page is how it works and how to run
+it.
 
 ## The three kinds
 
@@ -39,23 +58,41 @@ aren't clear yet: it asks one question at a time until the shape of it emerges,
 then files the whole exchange the same three ways.
 
 Both accept your voice. Dictation drops spoken words into the box; in Distill
-there is also a full spoken conversation — you talk, it answers aloud, and the
-mic comes back on its own. See SETUP.md for the voice + phone setup.
+there is also the full spoken conversation described above — you talk, it
+answers aloud, and the mic comes back on its own. The complete voice + phone
+setup lives in [SETUP.md](SETUP.md).
 
-## Running it
+## Quickstart
 
-Needs Node 20 or newer.
+Needs Node 20 or newer. Two minutes, one key:
 
 ```bash
 git clone https://github.com/glebbogachev00/capture.git
 cd capture
 npm install
 cp .env.example .env.local
+# add at least one model key to .env.local, then:
 npm run dev
 ```
 
-Then open http://localhost:3000. Nothing sorts until you add at least one model
-key to `.env.local`.
+Then open http://localhost:3000. Nothing sorts until you add at least one
+model key.
+
+## The full setup
+
+Quickstart gets you typing on one machine. For the whole thing —
+human-sounding voice, your phone, always-on hosting — [SETUP.md](SETUP.md)
+walks through it step by step:
+
+- **Voice.** From browser dictation up to the near-human **Kokoro** voice
+  running locally on your Mac, with the Microsoft Edge neural voice as the
+  keyless middle tier and the browser voice as the last resort. Nothing breaks
+  if a tier is missing.
+- **Phone.** One command — `npm run phone` — builds, serves on the network
+  under `caffeinate`, and exposes it over Tailscale with real HTTPS, so you get
+  the same app (and the same voice) on your phone from any network.
+- **Always-on.** Keep the Mac from sleeping, or deploy to any Node host —
+  Vercel included — in a few commands.
 
 ## Model providers
 
@@ -69,8 +106,8 @@ setup.
 | 2 | Groq | [console.groq.com/keys](https://console.groq.com/keys) | Very fast, generous free tier |
 | 3 | Google AI Studio | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Good quality, but the free tier is the most likely to be spent — kept last |
 
-Model ids are overridable (`GEMINI_MODEL`, `GROQ_MODEL`, `OPENROUTER_MODEL`), so
-a retired model can be swapped without editing source.
+Model ids are overridable (`OPENROUTER_MODEL`, `GROQ_MODEL`, `GEMINI_MODEL`),
+so a retired model can be swapped without editing source.
 
 If every provider fails, a capture is **never lost**. It is saved verbatim,
 flagged unsorted, and routed by whatever you were looking at — an open thread
@@ -97,7 +134,7 @@ Any Node host works. On Vercel:
 ```bash
 npm i -g vercel
 vercel link
-vercel env add GOOGLE_GENERATIVE_AI_API_KEY production
+vercel env add OPENROUTER_API_KEY production
 vercel env add APP_PASSWORD production
 vercel deploy --prod
 ```
@@ -126,7 +163,7 @@ Next.js 16 (App Router), React 19, the AI SDK, and no database.
 
 ## Support
 
-capture is free and MIT-licensed. If it earns its keep on your phone, buy it a coffee — no tiers, no account, / no pitch deck.
+capture is free and MIT-licensed. If it earns its keep on your phone, buy it a coffee — no tiers, no account, no pitch deck.
 
 → [ko-fi.com/banhmii](https://ko-fi.com/banhmii)
 
