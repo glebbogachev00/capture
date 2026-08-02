@@ -10,7 +10,7 @@
    action is finished, an intention is inhabited.
    ============================================================ */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Copy, X, MoreHorizontal } from "lucide-react";
 import { type Intention, type Principle, fmt, pad } from "@/lib/model";
 
@@ -335,11 +335,13 @@ export function IntentionDetail({
 }
 
 /**
- * A file button that works on iOS.
+ * A file button that opens the picker on iOS.
  *
- * A `hidden` (display:none) input is the usual trick, but Safari will not
- * always open the picker when its label is tapped. Rendering the input and
- * clipping it to a pixel keeps it a real, hit-testable control.
+ * Safari will not reliably open a picker from a label-tap, however the input
+ * is rendered — the tap just lands on the label and dies. The pattern that
+ * works everywhere (including a PWA on an iPhone) is a real button that calls
+ * `input.click()` directly. The input itself stays in the DOM, clipped rather
+ * than display:none, because that keeps it a genuine, focusable control.
  */
 function FileButton({
   label,
@@ -348,10 +350,18 @@ function FileButton({
   label: string;
   onFile: (file: File) => void;
 }) {
+  const ref = useRef<HTMLInputElement>(null);
   return (
-    <label className="ghost int-file">
-      {label}
+    <>
+      <button
+        type="button"
+        className="ghost"
+        onClick={() => ref.current?.click()}
+      >
+        {label}
+      </button>
       <input
+        ref={ref}
         type="file"
         accept="application/json,.json"
         className="clipped"
@@ -361,7 +371,7 @@ function FileButton({
           e.target.value = "";
         }}
       />
-    </label>
+    </>
   );
 }
 
@@ -439,7 +449,7 @@ export function SettingsScreen({
           Adds anything missing, matched by id. Never overwrites what is
           already here, so restoring twice is safe.
         </p>
-        <FileButton label="Choose capture backup" onFile={onRestore} />
+        <FileButton label="Upload a capture backup" onFile={onRestore} />
       </div>
 
       <div className="int-block">
@@ -448,7 +458,7 @@ export function SettingsScreen({
           A backup exported from the old intent app. Matched by id, so
           importing twice adds nothing the second time.
         </p>
-        <FileButton label="Choose intent backup" onFile={onImportIntent} />
+        <FileButton label="Upload an intent backup" onFile={onImportIntent} />
       </div>
 
       <Note note={ioNote} />

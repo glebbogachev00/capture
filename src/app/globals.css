@@ -1100,15 +1100,10 @@ body {
   min-height: 44px;
   justify-content: center;
 }
-.int-file {
-  display: inline-flex;
-  cursor: pointer;
-  position: relative;
-}
 /*
- * Clipped rather than display:none. Safari will not reliably open the picker
- * for a label whose input is not rendered, which is why the first attempt at
- * importing did nothing at all on the phone.
+ * Clipped rather than display:none. The input behind an Upload button needs
+ * to stay a real, focusable control for Safari to honour the click; the
+ * button itself calls input.click() directly.
  */
 .clipped {
   position: absolute;
