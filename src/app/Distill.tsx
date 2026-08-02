@@ -452,7 +452,7 @@ function DistillReview({
           onClick={() => onSave(clean.trim(), actions, shelfLife)}
           disabled={busy || !clean.trim()}
         >
-          Save
+          {busy ? "Polishing…" : "Save"}
         </button>
         <button className="ghost" onClick={onDiscard} disabled={busy}>
           Keep talking

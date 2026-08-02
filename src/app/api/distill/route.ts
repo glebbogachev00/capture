@@ -8,12 +8,16 @@ import { NoProvidersError, chain, withFallback } from "@/lib/providers";
 /**
  * Distill — the clarifying engine.
  *
- * Two ops on one route:
+ * Three ops on one route:
  *   - "chat": stream back the next clarifying turn, given the transcript so
  *     far. Quiet, one question at a time.
  *   - "settle": run the finished transcript through the sort schema so the
  *     conversation becomes an action, thread, or intention — the same shape
  *     /api/sort returns, so the client files it with the exact same code.
+ *   - "polish": proofread the wording about to be filed. Spoken conversation
+ *     carries speech-to-text artifacts (misheard words, run-on words, dropped
+ *     punctuation), so the settle output gets one final correction pass at
+ *     save time — fix the artifacts, never invent or drop content.
  *
  * The prompt lives here rather than in the browser for the same reason the
  * sort prompt does: it can't be rewritten by whatever is on the client.
@@ -30,6 +34,12 @@ const Turn = z.object({
 const Body = z.discriminatedUnion("op", [
   z.object({ op: z.literal("chat"), turns: z.array(Turn) }),
   z.object({ op: z.literal("settle"), turns: z.array(Turn) }),
+  z.object({
+    op: z.literal("polish"),
+    clean: z.string(),
+    actions: z.array(z.string()),
+    turns: z.array(Turn),
+  }),
 ]);
 
 const Settled = z.object({
@@ -40,6 +50,15 @@ const Settled = z.object({
   title: z.string().describe("max 6 words"),
   actions: z.array(z.string()).describe("imperative one-line items when kind is action"),
   shelfLife: z.enum(["hours", "days", "weeks", "keep"]),
+});
+
+const Polished = z.object({
+  clean: z.string().describe(
+    "the same wording, corrected: transcription artifacts fixed, nothing invented, nothing dropped"
+  ),
+  actions: z.array(z.string()).describe(
+    "the same one-line action items, corrected the same way"
+  ),
 });
 
 const CLARIFIER = `You are the clarifying engine inside capture, a personal thinking app. The user has a half-formed thought. Your job is to help them get to the bottom of it by asking — not by sorting, and not by writing it for them.
@@ -66,6 +85,18 @@ shelfLife is how long this stays worth looking at, and it only applies to action
 - "days" for ordinary errands and small follow-ups.
 - "weeks" for real work that takes a while.
 - "keep" for commitments to other people, money, deadlines, or anything with consequences if it silently vanished. When unsure, choose "keep".`;
+
+const POLISHER = `You are the proofreading pass inside capture, a personal thinking app. A person had a spoken conversation that speech-to-text transcribed, and the engine distilled it to the wording below.
+
+Speech-to-text leaves artifacts in that wording: words it misheard, dropped or doubled words, filler like "um" and "like" and "you know", missing or wrong punctuation, and run-on words ("whatdoyoumean").
+
+Your job is to fix those artifacts and nothing else:
+- Correct clear transcription errors and restore normal punctuation and casing.
+- Keep every idea, every number, every name, every specific detail.
+- Do not add new content, do not reorder ideas, do not change the speaker's voice.
+- Keep roughly the same length and structure. If the wording is already clean, return it unchanged.
+
+Fix the distilled wording and, if present, the one-line action items the same way.`;
 
 function transcript(turns: { role: string; text: string }[]) {
   return turns
@@ -204,6 +235,36 @@ export async function POST(request: Request) {
     return new Response(stream, {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
+  }
+
+  /* ----------------------------- polish ----------------------------- */
+
+  if (body.op === "polish") {
+    try {
+      const { value, via } = await withFallback(async (tier) => {
+        const { object } = await generateObject({
+          model: tier.model,
+          maxRetries: 0,
+          schema: Polished,
+          system: POLISHER,
+          prompt:
+            transcript(body.turns) +
+            "\n\nDistilled wording to proofread:\n" +
+            body.clean +
+            (body.actions.length
+              ? "\n\nAction items:\n" +
+                body.actions.map((a, i) => `${i + 1}. ${a}`).join("\n")
+              : ""),
+          providerOptions: tier.providerOptions,
+        });
+        return object;
+      });
+      return Response.json({ ...value, via });
+    } catch (error) {
+      console.error("polish failed", error);
+      const { message, status } = explain(error);
+      return Response.json({ error: message }, { status });
+    }
   }
 
   /* ----------------------------- settle ----------------------------- */

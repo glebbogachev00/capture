@@ -1165,6 +1165,30 @@ export function useBoard(now: number) {
     distillBusyRef.current = false;
   };
 
+  /**
+   * The save-time proofread: speech-to-text artifacts ride into the settled
+   * wording, so before anything is filed the engine gets one final pass over
+   * exactly what the user reviewed. A failure never blocks the save — the
+   * reviewed text goes in untouched rather than the conversation being lost.
+   */
+  const polishDistill = async (clean: string, actions: string[]) => {
+    const res = await fetch("/api/distill", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        op: "polish",
+        clean,
+        actions,
+        turns: distillSession.turns.map((t) => ({ role: t.role, text: t.text })),
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new SortError(body.error);
+    }
+    return res.json();
+  };
+
   /** Run the whole conversation through the settling engine. */
   const settleDistill = async () => {
     if (!distillSession.turns.length || distillBusyRef.current) return;
@@ -1214,45 +1238,71 @@ export function useBoard(now: number) {
     distillBusyRef.current = true;
     setDistillBusy(true);
     try {
+      // A conversation came in through a microphone; the wording the engine
+      // settled on can carry speech-to-text artifacts. Fix them before filing
+      // — but only when the pass succeeds. The save must never be held hostage
+      // by a quota error, so the reviewed text stands in if it fails.
+      let finalClean = clean;
+      let finalActions = actions;
+      let proofreadSkipped = false;
+      try {
+        const polished = await polishDistill(clean, actions);
+        finalClean = polished.clean || clean;
+        finalActions = polished.actions?.length
+          ? polished.actions
+          : actions;
+      } catch {
+        // Keep the reviewed wording, and say so — a silent skip would look
+        // like the proofread never happened. The skip note is folded into the
+        // success notice below so it can't be overwritten by it.
+        proofreadSkipped = true;
+      }
+      // Computed after the try/catch so it reads the final flag value.
+      const skipNote = proofreadSkipped
+        ? " The proofread pass couldn't run — saved as reviewed."
+        : "";
       if (kind === "intention") {
         setDistillOpen(false);
-        await expandIntention(clean);
+        await expandIntention(finalClean);
         await resetDistill();
       } else if (kind === "action") {
         const span = SHELF[shelfLife as ShelfLife] ?? null;
-        const items: Action[] = (actions.length ? actions : [clean]).map(
-          (t) => ({
-            id: uid(),
-            text: t,
-            done: false,
-            at: stamp(),
-            src: clean,
-            imgs: [],
-            shelf: (shelfLife || "keep") as ShelfLife,
-            expires: span ? stamp() + span : null,
-          })
-        );
+        const items: Action[] = (
+          finalActions.length ? finalActions : [finalClean]
+        ).map((t) => ({
+          id: uid(),
+          text: t,
+          done: false,
+          at: stamp(),
+          src: finalClean,
+          imgs: [],
+          shelf: (shelfLife || "keep") as ShelfLife,
+          expires: span ? stamp() + span : null,
+        }));
         await commit({
           ...latest.current,
           actions: [...items, ...latest.current.actions],
         });
-        setNotice(`${count(items.length, "action")} distilled from the conversation.`);
+        setNotice(
+          `${count(items.length, "action")} distilled from the conversation.` +
+            skipNote
+        );
         setTimeout(() => setNotice(null), 5000);
         await resetDistill();
         setTab("actions");
       } else {
         const thread: Thread = {
           id: uid(),
-          name: title || clean.split(/\s+/).slice(0, 5).join(" "),
+          name: title || finalClean.split(/\s+/).slice(0, 5).join(" "),
           summary: "",
-          frags: [{ id: uid(), at: stamp(), text: clean }],
+          frags: [{ id: uid(), at: stamp(), text: finalClean }],
         };
         const next = {
           ...latest.current,
           threads: [thread, ...latest.current.threads],
         };
         await commit(next);
-        setNotice("Distilled into a thread.");
+        setNotice("Distilled into a thread." + skipNote);
         setTimeout(() => setNotice(null), 5000);
         await regenerate(next, thread.id);
         await resetDistill();
