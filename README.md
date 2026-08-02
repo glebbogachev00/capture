@@ -32,6 +32,16 @@ and three actions taken from the fulfilled state — things you do *because* it 
 already so, not steps toward making it so. They have no checkbox and no shelf
 life on purpose.
 
+## Two ways in
+
+**Capture** files a thought as it comes out. **Distill** is for thoughts that
+aren't clear yet: it asks one question at a time until the shape of it emerges,
+then files the whole exchange the same three ways.
+
+Both accept your voice. Dictation drops spoken words into the box; in Distill
+there is also a full spoken conversation — you talk, it answers aloud, and the
+mic comes back on its own. See SETUP.md for the voice + phone setup.
+
 ## Running it
 
 Needs Node 20 or newer.
@@ -55,9 +65,9 @@ setup.
 
 | Order | Provider | Get a key | Notes |
 |---|---|---|---|
-| 1 | Google AI Studio | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Good quality, tight request rate on the free tier |
+| 1 | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | One key reaching many models — the most reliable free quota |
 | 2 | Groq | [console.groq.com/keys](https://console.groq.com/keys) | Very fast, generous free tier |
-| 3 | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | One key reaching many models — a useful last resort |
+| 3 | Google AI Studio | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Good quality, but the free tier is the most likely to be spent — kept last |
 
 Model ids are overridable (`GEMINI_MODEL`, `GROQ_MODEL`, `OPENROUTER_MODEL`), so
 a retired model can be swapped without editing source.
@@ -126,6 +136,6 @@ MIT — see [LICENSE](LICENSE).
 
 ## Backlog
 
-Features I want to add to capture, tracked in the open. One for now; the rest is room to grow.
+Ideas I want to add to capture next, tracked in the open.
 
 → [BACKLOG.md](BACKLOG.md)

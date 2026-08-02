@@ -129,10 +129,6 @@ export function DistillView({
         ← capture
       </button>
 
-      <div className="distill-head">
-        <div className="int-eyebrow">Distill</div>
-      </div>
-
       <div className="distill-log">
         {!session.turns.length && (
           <div className="empty">

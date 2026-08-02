@@ -1089,15 +1089,6 @@ body {
 }
 /* The head row holds the Distill label and nothing else — the voice
    controls live in the chat box, so the head stays clean. */
-.distill-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.distill-head .int-eyebrow {
-  margin: 0;
-}
 .distill-review {
   animation: distill-in 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
