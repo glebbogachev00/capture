@@ -1,3 +1,4 @@
+import { cerebras } from "@ai-sdk/cerebras";
 import { google } from "@ai-sdk/google";
 import { groq } from "@ai-sdk/groq";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -24,24 +25,28 @@ export type Tier = {
 export function chain(): Tier[] {
   const tiers: Tier[] = [];
 
-  // OpenRouter first: a paid/keyed tier with broadly current models, then
-  // Groq, and Gemini last — its free tier is the most likely to be spent.
-  if (process.env.OPENROUTER_API_KEY) {
-    const openrouter = createOpenRouter({
-      apiKey: process.env.OPENROUTER_API_KEY,
-    });
-    tiers.push({
-      name: "openrouter",
-      model: openrouter.chat(
-        process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash"
-      ),
-    });
-  }
-
+  // Most capture calls are small, frequent, and latency-sensitive — every
+  // capture sorts, every thread update re-summarises, every edit is
+  // proofread — so the fastest free tiers lead: Groq, then Cerebras. Gemini
+  // is the reliable quality fallback. OpenRouter is last: its free models
+  // share tight rate limits and are the least dependable, and a paid account
+  // should be an explicit choice, not the default path.
   if (process.env.GROQ_API_KEY) {
     tiers.push({
       name: "groq",
       model: groq(process.env.GROQ_MODEL || "openai/gpt-oss-120b"),
+    });
+  }
+
+  if (process.env.CEREBRAS_API_KEY) {
+    tiers.push({
+      name: "cerebras",
+      model: cerebras(process.env.CEREBRAS_MODEL || "gpt-oss-120b"),
+      // gpt-oss-120b reasons by default; a two-way sort does not need it.
+      // Same call as the Gemini tier, so the free tier lasts longer.
+      providerOptions: {
+        cerebras: { reasoningEffort: "low" },
+      },
     });
   }
 
@@ -53,6 +58,22 @@ export function chain(): Tier[] {
       providerOptions: {
         google: { thinkingConfig: { thinkingLevel: "low" } },
       },
+    });
+  }
+
+  // Last resort. The previous default (google/gemini-2.5-flash) is a paid
+  // slug that 402s on a creditless account — it made the last-resort tier
+  // dead. A :free model keeps it usable without credits; a funded account
+  // can set OPENROUTER_MODEL to any paid slug it lists.
+  if (process.env.OPENROUTER_API_KEY) {
+    const openrouter = createOpenRouter({
+      apiKey: process.env.OPENROUTER_API_KEY,
+    });
+    tiers.push({
+      name: "openrouter",
+      model: openrouter.chat(
+        process.env.OPENROUTER_MODEL || "openai/gpt-oss-20b:free"
+      ),
     });
   }
 

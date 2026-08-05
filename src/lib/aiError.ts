@@ -21,6 +21,7 @@ type MaybeProviderError = {
 };
 
 const PROVIDER_NAMES: Record<string, string> = {
+  cerebras: "Cerebras",
   gemini: "Google AI Studio",
   groq: "Groq",
   openrouter: "OpenRouter",
@@ -28,6 +29,7 @@ const PROVIDER_NAMES: Record<string, string> = {
 
 /** The env var each provider's key lives in, so the message can say what to fix. */
 const PROVIDER_ENV: Record<string, string> = {
+  cerebras: "CEREBRAS_API_KEY",
   gemini: "GOOGLE_GENERATIVE_AI_API_KEY",
   groq: "GROQ_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
@@ -97,6 +99,17 @@ export function explain(error: unknown): { message: string; status: number } {
         name +
         " is rate-limiting or the daily free quota is spent. Try again shortly.",
       status: 429,
+    };
+  }
+
+  // A fresh provider account with no payment method answers 402 "payment
+  // required" — a state the operator has to fix, not a transient failure.
+  if (status === 402 || text.includes("payment") || text.includes("billing")) {
+    return {
+      message:
+        name +
+        " needs billing set up on the account before it will answer. Visit its dashboard.",
+      status: 503,
     };
   }
 

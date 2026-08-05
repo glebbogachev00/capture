@@ -96,18 +96,20 @@ walks through it step by step:
 
 ## Model providers
 
-Capture tries providers in order and uses the first that answers. A tier is
-skipped entirely when its key is absent, so one key on its own is a complete
-setup.
+Capture makes many small model calls — every capture sorts, every thread update
+re-summarises, every edit is proofread — so it tries the fastest free tiers
+first. A tier is skipped entirely when its key is absent, so one key on its
+own is a complete setup.
 
 | Order | Provider | Get a key | Notes |
 |---|---|---|---|
-| 1 | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | One key reaching many models — the most reliable free quota |
-| 2 | Groq | [console.groq.com/keys](https://console.groq.com/keys) | Very fast, generous free tier |
-| 3 | Google AI Studio | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Good quality, but the free tier is the most likely to be spent — kept last |
+| 1 | Groq | [console.groq.com/keys](https://console.groq.com/keys) | Very fast, generous free tier |
+| 2 | Cerebras | [cloud.cerebras.ai](https://cloud.cerebras.ai) | Wafer-scale speed; needs a payment method on the account even for free usage |
+| 3 | Google AI Studio | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Reliable free tier — the quality fallback |
+| 4 | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | Last resort — defaults to a `:free` model; paid models need a funded account |
 
-Model ids are overridable (`OPENROUTER_MODEL`, `GROQ_MODEL`, `GEMINI_MODEL`),
-so a retired model can be swapped without editing source.
+Model ids are overridable (`GROQ_MODEL`, `CEREBRAS_MODEL`, `GEMINI_MODEL`,
+`OPENROUTER_MODEL`), so a retired model can be swapped without editing source.
 
 If every provider fails, a capture is **never lost**. It is saved verbatim,
 flagged unsorted, and routed by whatever you were looking at — an open thread
