@@ -698,10 +698,40 @@ body {
   margin-bottom: 14px;
   font-size: 14px;
   animation: rise 0.32s ease-out;
+  /* The Undo control sits at the banner's right edge, clear of the text. */
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 .landed em {
   font-style: normal;
   font-weight: 600;
+}
+/* Undo on the landed banner: a quiet white pill that reads as a control but
+   never as loud as the message itself. The banner auto-clears, so this is
+   the only window to catch a mis-landing — it needs to be findable. */
+.landed .undo-btn {
+  margin-left: auto;
+  flex: none;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: 0.15s;
+}
+.landed .undo-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: #fff;
+}
+.landed .undo-btn:active {
+  transform: scale(0.96);
 }
 @keyframes rise {
   from {

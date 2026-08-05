@@ -154,6 +154,18 @@ export function useBoard(now: number) {
   const syncing = useRef(false);
   const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /* ------------------------------ undo ------------------------------ */
+
+  /* The board and tombstones as they were just before the last capture
+     landed, so "Undo" can put it back exactly. Only the capture flows
+     (submit/resort) take the snapshot — summary refreshes and fades never
+     do, so Undo always reverts something the user watched land, never a
+     background change. */
+  const captureSnapshot = useRef<{ board: Board; tombstones: Tombstone[] } | null>(
+    null
+  );
+  const [canUndo, setCanUndo] = useState(false);
+
   /** Send our state to the hub and adopt its merged answer. */
   const pushNow = useCallback(async () => {
     if (syncing.current) return;
@@ -255,6 +267,81 @@ export function useBoard(now: number) {
     }
     await pushNow();
   }, [pullNow, pushNow]);
+
+  /**
+   * Undo the last capture: put the board and this device's tombstones back
+   * to exactly how they were before it landed.
+   *
+   * Only captures take a snapshot, so this reverts precisely what the user
+   * watched land — never a summary refresh or a fade that happened in the
+   * background. The hub merges rather than replaces, so undoing on one
+   * device and pushing leaves the other device's edits intact.
+   */
+  const undo = useCallback(async () => {
+    const snap = captureSnapshot.current;
+    if (!snap) return;
+    captureSnapshot.current = null;
+    setCanUndo(false);
+
+    /* The capture's own push landed on the hub before the undo window
+       opened, so restoring the board alone would let the next pull merge it
+       straight back. Two things make the hub agree with the restore:
+       - everything the capture ADDED gets a tombstone, so the hub removes it;
+       - everything the capture REMOVED (a re-sort replaces the raw action)
+         comes back with a fresh updatedAt, so it out-ages the tombstone the
+         capture itself pushed for it. */
+    const now = Date.now();
+    const added = stampChanges(latest.current, snap.board, now).tombstones;
+    const bump = <T extends { updatedAt?: number }>(x: T): T => ({
+      ...x,
+      updatedAt: now,
+    });
+    const had = (list: { id: string }[], id: string) =>
+      list.some((x) => x.id === id);
+    const board: Board = {
+      actions: snap.board.actions.map((a) =>
+        had(latest.current.actions, a.id) ? a : bump(a)
+      ),
+      threads: snap.board.threads.map((t) => {
+        const live = latest.current.threads.find((x) => x.id === t.id);
+        if (!live) return { ...bump(t), frags: t.frags.map(bump) };
+        return {
+          ...t,
+          frags: t.frags.map((f) =>
+            had(live.frags, f.id) ? f : bump(f)
+          ),
+        };
+      }),
+      intentions: snap.board.intentions.map((i) =>
+        had(latest.current.intentions, i.id) ? i : bump(i)
+      ),
+      principles: snap.board.principles.map((p) =>
+        had(latest.current.principles, p.id) ? p : bump(p)
+      ),
+    };
+    const nextTombstones = mergeTombstones(snap.tombstones, added);
+
+    latest.current = board;
+    setData(board);
+    tombstones.current = nextTombstones;
+    try {
+      await set(KEY, JSON.stringify(board));
+      await set(TOMBSTONE_KEY, JSON.stringify(nextTombstones));
+    } catch {
+      /* disk hiccup; next commit retries */
+    }
+    setLanded(null);
+    setNotice("Undone — back to how it was.");
+    setTimeout(() => setNotice(null), 4000);
+    /* Push now, not on the debounce: a pull landing in the debounce window
+       would re-merge the hub's copy (which still holds the capture) before
+       our tombstones go out. */
+    if (pushTimer.current !== null) {
+      clearTimeout(pushTimer.current);
+      pushTimer.current = null;
+    }
+    await pushNow();
+  }, [pushNow]);
 
   const commit = useCallback(
     async (next: Board) => {
@@ -608,6 +695,12 @@ export function useBoard(now: number) {
 
     setText("");
     setPics([]);
+    // The fallback still lands something — Undo can take it back.
+    captureSnapshot.current = {
+      board: latest.current,
+      tombstones: tombstones.current,
+    };
+    setCanUndo(true);
     await commit(next);
     setErr(reason + " Saved as it is, so nothing is lost — sort it later.");
   };
@@ -625,13 +718,20 @@ export function useBoard(now: number) {
       const { next, targetId, landed } = applySorted(out, a.imgs || [], a.at, board);
       setLanded(landed);
       setTab(out.kind === "action" ? "actions" : "threads");
+      // Snapshot right before the re-sort lands — Undo reverts exactly this.
+      captureSnapshot.current = {
+        board: latest.current,
+        tombstones: tombstones.current,
+      };
+      setCanUndo(true);
       await commit(next);
       if (targetId) await regenerate(next, targetId);
     } catch (error) {
       setErr(reasonOf(error) + " It is still here, untouched.");
     }
     setBusy(null);
-    setTimeout(() => setLanded(null), 4500);
+    /* Same widened window as the main capture — Undo lives here too. */
+    setTimeout(() => setLanded(null), 9000);
   };
 
   /** Praise be. The main capture, sorted and filed. */
@@ -659,8 +759,11 @@ export function useBoard(now: number) {
 
       // An intention is declared rather than filed, so it takes a second
       // pass through its own engine and stops at a review step instead of
-      // landing on the board.
+      // landing on the board. Nothing has committed yet, so there is
+      // nothing to undo — the draft is the undo.
       if (out.kind === "intention") {
+        captureSnapshot.current = null;
+        setCanUndo(false);
         setText("");
         setPics([]);
         await expandIntention(raw);
@@ -678,6 +781,13 @@ export function useBoard(now: number) {
       setTab(out.kind === "action" ? "actions" : "threads");
       setText("");
       setPics([]);
+      // Snapshot right before it lands — edits made while the sort ran
+      // survive; only the capture itself is reverted by Undo.
+      captureSnapshot.current = {
+        board: latest.current,
+        tombstones: tombstones.current,
+      };
+      setCanUndo(true);
       await commit(next);
       if (targetId) await regenerate(next, targetId);
     } catch (error) {
@@ -685,7 +795,8 @@ export function useBoard(now: number) {
     }
 
     setBusy(null);
-    setTimeout(() => setLanded(null), 4500);
+    /* Same widened window as the main capture — Undo lives here too. */
+    setTimeout(() => setLanded(null), 9000);
   };
 
   /* ---------------------------- actions ----------------------------- */
@@ -1631,5 +1742,7 @@ export function useBoard(now: number) {
     doShare,
     sync,
     syncNow,
+    canUndo,
+    undo,
   };
 }

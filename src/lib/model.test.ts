@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  AFTER_DONE,
   DAY,
   GRACE,
   HOUR,
@@ -95,22 +94,22 @@ describe("sweep", () => {
     expect(kept?.faded).toBeUndefined();
   });
 
-  it("clears done actions past grace and counts them", async () => {
+  it("keeps done actions no matter how old — ticking is the record", async () => {
     const now = Date.parse("2026-01-10T00:00:00.000Z");
     vi.setSystemTime(now);
 
-    const staleDone = action({
+    const ancientDone = action({
       id: "d",
       done: true,
-      doneAt: now - AFTER_DONE - 1,
+      doneAt: now - 400 * DAY,
       imgs: ["img1"],
     });
     const recentDone = action({ id: "r", done: true, doneAt: now - 1 });
 
-    const { next, faded, cleared } = await sweep(board([staleDone, recentDone]));
-    expect(cleared).toBe(1);
+    const { next, faded, cleared } = await sweep(board([ancientDone, recentDone]));
+    expect(cleared).toBe(0);
     expect(faded).toBe(0);
-    expect(next.actions.map((a) => a.id)).toEqual(["r"]);
+    expect(next.actions.map((a) => a.id)).toEqual(["d", "r"]);
   });
 
   it("clears faded actions past grace and counts them", async () => {

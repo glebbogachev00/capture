@@ -156,6 +156,8 @@ export function Capture() {
     doShare,
     sync,
     syncNow,
+    canUndo,
+    undo,
   } = useBoard(now);
 
   /* Input device plumbing: the hidden file picker, and the speech recogniser
@@ -373,7 +375,16 @@ export function Capture() {
         {err && <div className="err">{err}</div>}
         {landed && (
           <div className="landed">
-            Landed in <em>{landed}</em>.
+            {/* Wrapped in a span so the flex row keeps the sentence whole
+                and only the button sits on its own. */}
+            <span>
+              Landed in <em>{landed}</em>.
+            </span>
+            {canUndo && (
+              <button className="undo-btn" onClick={() => void undo()}>
+                Undo
+              </button>
+            )}
           </div>
         )}
         {notice && <div className="landed">{notice}</div>}
@@ -539,7 +550,7 @@ export function Capture() {
                 {!!done.length && (
                   <>
                     <div className="section-label">
-                      Closed · clears itself in a week
+                      Closed · kept until you delete them
                     </div>
                     {done.map((a) => (
                       <div className="act is-done" key={a.id}>
@@ -561,6 +572,14 @@ export function Capture() {
                         <div className="act-body">
                           <div className="act-text">{a.text}</div>
                         </div>
+                        <button
+                          className="ghost"
+                          onClick={() => removeNow(a)}
+                          aria-label="Delete for good"
+                          title="Delete for good"
+                        >
+                          delete
+                        </button>
                       </div>
                     ))}
                   </>
