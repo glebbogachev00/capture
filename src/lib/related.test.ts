@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Action, Board, Intention, Thread } from "./model";
-import { bestThreadHome, relatedTo, relatedToText } from "./related";
+import {
+  bestActionDuplicate,
+  bestThreadHome,
+  relatedTo,
+  relatedToText,
+} from "./related";
 
 function action(id: string, text: string, src?: string): Action {
   return { id, text, done: false, at: 0, shelf: "keep", expires: null, src };
@@ -286,12 +291,73 @@ describe("bestThreadHome", () => {
     expect(hit?.id).toBe("t1");
   });
 
-  it("returns the thread whose own content the text matches — the caller excludes the source", () => {
+  it("excludes the source id when handed one", () => {
     const b = board({
-      threads: [thread("t1", "Coffee Setup", ["espresso machine notes"])],
+      threads: [
+        thread("t1", "Coffee Setup", ["espresso machine notes"]),
+        thread("t2", "Renew insurance", ["Nothing in common here"]),
+      ],
     });
-    // bestThreadHome cannot know the text already lives in t1; the caller
-    // (computeSuggestion) drops a hit that equals the thread it landed in.
-    expect(bestThreadHome(b, "espresso machine notes")?.id).toBe("t1");
+    // The capture always phrase-matches the item it landed in; handing its
+    // id keeps the engine from reporting that item as its own home.
+    expect(bestThreadHome(b, "espresso machine notes", "t1")).toBeNull();
+    expect(bestThreadHome(b, "espresso machine notes", "t9")?.id).toBe("t1");
+  });
+});
+
+describe("bestActionDuplicate", () => {
+  it("names the action a phrase clearly repeats", () => {
+    const b = board({
+      actions: [
+        action("a1", "Buy espresso beans for the machine"),
+        action("a2", "Call the dentist about the appointment"),
+      ],
+    });
+    const hit = bestActionDuplicate(b, "buy espresso beans");
+    expect(hit?.id).toBe("a1");
+    expect(hit?.reason).toMatch(/espresso beans/);
+  });
+
+  it("is stricter than the Related line: a lone shared word is no duplicate", () => {
+    const b = board({
+      actions: [
+        action("a1", "Buy espresso beans for the machine"),
+        action("a2", "Review the espresso options"),
+      ],
+    });
+    // "espresso" is shared but no phrase is — a connection, not a duplicate.
+    expect(bestActionDuplicate(b, "pick up the espresso grind")).toBeNull();
+  });
+
+  it("returns nothing when nothing repeats a phrase", () => {
+    const b = board({
+      actions: [action("a1", "Buy milk and eggs")],
+    });
+    expect(bestActionDuplicate(b, "renew the car insurance")).toBeNull();
+  });
+
+  it("takes the strongest action even when a thread phrase-matches too", () => {
+    const b = board({
+      actions: [action("a1", "Buy espresso beans for the machine")],
+      threads: [thread("t1", "Coffee Setup", ["espresso beans on the counter"])],
+    });
+    const hit = bestActionDuplicate(b, "buy espresso beans");
+    // Only an action can be a duplicate; the thread's match is ignored.
+    expect(hit?.id).toBe("a1");
+  });
+
+  it("skips the excluded action even when it sits at the front and matches first", () => {
+    // The capture lands at the front of the list and always matches its own
+    // text — without the exclusion it would be reported as its own
+    // duplicate. The older, real counterpart must be the one found.
+    const b = board({
+      actions: [
+        action("a-new", "Buy espresso beans"),
+        action("a-old", "Buy espresso beans for the machine"),
+      ],
+    });
+    expect(bestActionDuplicate(b, "buy espresso beans", "a-new")?.id).toBe("a-old");
+    // Without an exclusion the self-match at the front wins.
+    expect(bestActionDuplicate(b, "buy espresso beans")?.id).toBe("a-new");
   });
 });

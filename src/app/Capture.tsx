@@ -394,20 +394,27 @@ export function Capture() {
         {suggestion && (
           <div className="suggest">
             <span className="suggest-text">
-              Belongs with <em>{suggestion.targetName}</em>?
+              {suggestion.kind === "duplicate" ? (
+                <>
+                  This duplicates <em>{suggestion.targetName}</em>?
+                </>
+              ) : (
+                <>
+                  Belongs with <em>{suggestion.targetName}</em>?
+                </>
+              )}
             </span>
             <span className="suggest-actions">
               <button
                 className="suggest-btn suggest-ok"
                 onClick={() => void acceptSuggestion()}
               >
-                {suggestion.verb}
+                {suggestion.kind === "duplicate"
+                  ? "Remove duplicate"
+                  : suggestion.verb}
               </button>
-              <button
-                className="suggest-btn"
-                onClick={dismissSuggestion}
-              >
-                Keep separate
+              <button className="suggest-btn" onClick={dismissSuggestion}>
+                {suggestion.kind === "duplicate" ? "Keep both" : "Keep separate"}
               </button>
             </span>
             <span className="suggest-why">{suggestion.reason}</span>

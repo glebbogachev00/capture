@@ -57,7 +57,7 @@ import {
 } from "@/lib/backup";
 import { copyToClipboard, shareText, shareableFor } from "@/lib/share";
 import { search } from "@/lib/search";
-import { bestThreadHome } from "@/lib/related";
+import { bestActionDuplicate, bestThreadHome } from "@/lib/related";
 import { parseCommandPrefix } from "@/lib/command";
 import {
   TOMBSTONE_KEY,
@@ -101,18 +101,33 @@ type LandedSource = {
 };
 
 /**
- * A quiet post-capture proposal: "this looks like it belongs with X".
- * Never applied — the user confirms or dismisses it. One tap either way.
+ * A quiet post-capture proposal — never applied; the user confirms or
+ * dismisses it. One tap either way.
+ *
+ * "home": the capture clearly belongs with an existing thread. Merge when
+ *   a fresh thread folds in, Move when a fragment or a captured action
+ *   moves over.
+ * "duplicate": a captured action is the same task as an existing action.
+ *   The one that just landed is removed; the original stays.
  */
-type Suggestion = {
-  targetId: string;
-  targetName: string;
-  reason: string;
-  sourceKind: "action" | "thread";
-  sourceId: string;
-  fragId?: string;
-  verb: "Merge" | "Move";
-};
+type Suggestion =
+  | {
+      kind: "home";
+      targetId: string;
+      targetName: string;
+      reason: string;
+      sourceKind: "action" | "thread";
+      sourceId: string;
+      fragId?: string;
+      verb: "Merge" | "Move";
+    }
+  | {
+      kind: "duplicate";
+      targetId: string;
+      targetName: string;
+      reason: string;
+      sourceId: string;
+    };
 
 export function useBoard(now: number) {
   /* ------------------------------ state ------------------------------ */
@@ -891,13 +906,16 @@ export function useBoard(now: number) {
   /* ----------------------- capture suggestion ----------------------- */
 
   /**
-   * Whether a just-landed capture clearly belongs with an existing thread.
+   * Whether a just-landed capture is worth proposing something about.
    *
-   * Deliberately strict — only a shared phrase (never a lone shared word,
-   * however rare) earns a proposal, and the thread it landed in is never
-   * offered as its own home. The user's explicit destination (a /action,
-   * /thread or /intention command) is respected: only the model's choice
-   * is ever second-guessed.
+   * Two claims, both deliberately strict — only a shared phrase (never a
+   * lone shared word, however rare) earns a proposal:
+   *   - a captured action that duplicates an existing action — the same
+   *     task twice — the strongest, most actionable claim, checked first;
+   *   - a capture that clearly belongs with an existing thread, in which
+   *     case the thread it landed in is never offered as its own home.
+   * The user's explicit destination (a /action, /thread or /intention
+   * command) is respected: only the model's choice is ever second-guessed.
    */
   const computeSuggestion = (
     board: Board,
@@ -905,10 +923,30 @@ export function useBoard(now: number) {
     source: LandedSource | null
   ): Suggestion | null => {
     if (!source || !text.trim()) return null;
-    const hit = bestThreadHome(board, text);
-    if (!hit || hit.id === source.id) return null;
+    if (source.kind === "action") {
+      /* The engine is handed the source id so the capture's own text — which
+         it always phrase-matches, and which sits at the front of the list —
+         is never reported as its own duplicate. The counterpart must also be
+         live: re-capturing a task that is already fading away is a refresh,
+         not a duplicate. */
+      const dup = bestActionDuplicate(board, text, source.id);
+      const dupLive =
+        dup && !board.actions.find((a) => a.id === dup.id)?.faded;
+      if (dup && dupLive) {
+        return {
+          kind: "duplicate",
+          targetId: dup.id,
+          targetName: dup.name,
+          reason: dup.reason,
+          sourceId: source.id,
+        };
+      }
+    }
+    const hit = bestThreadHome(board, text, source.id);
+    if (!hit) return null;
     if (source.kind === "action") {
       return {
+        kind: "home",
         targetId: hit.id,
         targetName: hit.name,
         reason: hit.reason,
@@ -919,6 +957,7 @@ export function useBoard(now: number) {
     }
     return source.fragId
       ? {
+          kind: "home",
           targetId: hit.id,
           targetName: hit.name,
           reason: hit.reason,
@@ -928,6 +967,7 @@ export function useBoard(now: number) {
           verb: "Move",
         }
       : {
+          kind: "home",
           targetId: hit.id,
           targetName: hit.name,
           reason: hit.reason,
@@ -937,15 +977,30 @@ export function useBoard(now: number) {
         };
   };
 
-  /** The accepted suggestion: move or merge the capture where it belongs.
-
-      The landed banner is kept, not cleared: its Undo button is the only
-      way back from a merge that deletes an emptied thread, and the
-      handler's own notice reads as the outcome underneath it. */
+  /**
+   * The accepted suggestion.
+   *   - duplicate: the copy that just landed is removed; the original
+   *     stays with its shelf life and notes.
+   *   - home: move or merge the capture where it belongs.
+   * The landed banner is kept, not cleared: its Undo button is the only
+   * way back from a merge that deletes an emptied thread, and the
+   * handler's own notice reads as the outcome underneath it.
+   */
   const acceptSuggestion = async () => {
     const s = suggestion;
     if (!s) return;
     setSuggestion(null);
+    if (s.kind === "duplicate") {
+      const dup = latest.current.actions.find((x) => x.id === s.sourceId);
+      await dropImages(dup?.imgs);
+      await commit({
+        ...latest.current,
+        actions: latest.current.actions.filter((x) => x.id !== s.sourceId),
+      });
+      setNotice("Removed the duplicate.");
+      setTimeout(() => setNotice(null), 4000);
+      return;
+    }
     if (s.sourceKind === "action") {
       await foldActionIntoThread(s.sourceId, s.targetId);
     } else if (s.fragId) {

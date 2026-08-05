@@ -343,9 +343,36 @@ export function relatedToText(board: Board, text: string): Related {
  */
 export function bestThreadHome(
   board: Board,
-  text: string
+  text: string,
+  excludeId?: string
 ): RelatedItem | null {
-  const hit = hitsFor(board, text).find((h) => h.kind === "thread" && h.phrase);
+  const hit = hitsFor(board, text, excludeId).find(
+    (h) => h.kind === "thread" && h.phrase
+  );
   if (!hit) return null;
   return { kind: "thread", id: hit.id, name: hit.name, reason: hit.reason };
+}  /**
+   * The existing action a piece of text clearly duplicates, or none.
+   *
+   * Same strict bar as bestThreadHome: only a shared phrase — never a lone
+   * shared word — is enough to claim two actions say the same thing. A
+   * thread is a home, but an action is a to-do: the claim here is not
+   * "belongs with" but "is the same task twice", and acting on it deletes
+   * one of the pair, so it must be concrete. The strongest action hit is
+   * returned, if there is one. excludeId drops the capture itself — a
+   * fresh action always phrase-matches its own text, and it sits at the
+   * front of the list, so without the exclusion the self-match would be
+   * reported as the duplicate. With several true duplicates the newest one
+   (the board lists newest first) is named — a stable, deterministic pick.
+   */
+export function bestActionDuplicate(
+  board: Board,
+  text: string,
+  excludeId?: string
+): RelatedItem | null {
+  const hit = hitsFor(board, text, excludeId).find(
+    (h) => h.kind === "action" && h.phrase
+  );
+  if (!hit) return null;
+  return { kind: "action", id: hit.id, name: hit.name, reason: hit.reason };
 }
