@@ -57,7 +57,11 @@ import {
 } from "@/lib/backup";
 import { copyToClipboard, shareText, shareableFor } from "@/lib/share";
 import { search } from "@/lib/search";
-import { bestActionDuplicate, bestThreadHome } from "@/lib/related";
+import {
+  bestActionDuplicate,
+  bestFragmentDuplicate,
+  bestThreadHome,
+} from "@/lib/related";
 import { parseCommandPrefix } from "@/lib/command";
 import {
   TOMBSTONE_KEY,
@@ -107,8 +111,9 @@ type LandedSource = {
  * "home": the capture clearly belongs with an existing thread. Merge when
  *   a fresh thread folds in, Move when a fragment or a captured action
  *   moves over.
- * "duplicate": a captured action is the same task as an existing action.
- *   The one that just landed is removed; the original stays.
+ * "duplicate": a captured action or note is the same task/note as an
+ *   existing one. The copy that just landed is removed; the original
+ *   stays. For a note, sourceFragId names the fragment to drop.
  */
 type Suggestion =
   | {
@@ -127,6 +132,8 @@ type Suggestion =
       targetName: string;
       reason: string;
       sourceId: string;
+      sourceKind: "action" | "thread";
+      sourceFragId?: string;
     };
 
 export function useBoard(now: number) {
@@ -626,7 +633,7 @@ export function useBoard(now: number) {
     return {
       next: { ...board, threads: [fresh, ...board.threads] },
       targetId: fresh.id,
-      source: { kind: "thread", id: fresh.id },
+      source: { kind: "thread", id: fresh.id, fragId: frag.id },
       landed: fresh.name + " — thread updated",
     };
   };
@@ -939,6 +946,30 @@ export function useBoard(now: number) {
           targetName: dup.name,
           reason: dup.reason,
           sourceId: source.id,
+          sourceKind: "action",
+        };
+      }
+    }
+    /* A capture that landed as a note can still duplicate a note already on
+       the board — the same thing pasted twice lands as two fragments. The
+       fragment duplicate beats the thread home: if it is the same note
+       again, offer to drop the copy instead of merging it in silently. The
+       engine excludes the just-landed fragment itself, which always
+       phrase-matches its own text. */
+    if (source.kind === "thread") {
+      const fragDup = bestFragmentDuplicate(board, text, source.fragId);
+      if (fragDup) {
+        const crossThread = source.fragId && fragDup.threadId !== source.id;
+        return {
+          kind: "duplicate",
+          targetId: fragDup.threadId,
+          targetName:
+            fragDup.name +
+            (crossThread ? ` (in "${fragDup.threadName}")` : ""),
+          reason: fragDup.reason,
+          sourceKind: "thread",
+          sourceId: source.id,
+          sourceFragId: source.fragId,
         };
       }
     }
@@ -991,12 +1022,22 @@ export function useBoard(now: number) {
     if (!s) return;
     setSuggestion(null);
     if (s.kind === "duplicate") {
-      const dup = latest.current.actions.find((x) => x.id === s.sourceId);
-      await dropImages(dup?.imgs);
-      await commit({
-        ...latest.current,
-        actions: latest.current.actions.filter((x) => x.id !== s.sourceId),
-      });
+      if (s.sourceKind === "thread") {
+        /* The copy is a note; drop that fragment (or its whole fresh thread
+           when it was the only note) and re-summarise. The original stays
+           where it was. The notice goes out before the refresh — the model
+           call can take a second, and the outcome is the same either way. */
+        setNotice("Removed the duplicate.");
+        setTimeout(() => setNotice(null), 4000);
+        await deleteFrag(s.sourceId, s.sourceFragId!);
+      } else {
+        const dup = latest.current.actions.find((x) => x.id === s.sourceId);
+        await dropImages(dup?.imgs);
+        await commit({
+          ...latest.current,
+          actions: latest.current.actions.filter((x) => x.id !== s.sourceId),
+        });
+      }
       setNotice("Removed the duplicate.");
       setTimeout(() => setNotice(null), 4000);
       return;
@@ -1218,6 +1259,10 @@ export function useBoard(now: number) {
   const deleteFrag = async (threadId: string, fragId: string) => {
     const target = latest.current.threads.find((t) => t.id === threadId);
     const frag = target?.frags.find((f) => f.id === fragId);
+    /* Idempotency: a fast double-tap on a delete already consumed the frag;
+       a second run would otherwise re-commit and re-summarise a board that
+       did not change. */
+    if (!frag) return;
     await dropImages(frag?.imgs);
 
     const remaining = (target?.frags || []).filter((f) => f.id !== fragId);

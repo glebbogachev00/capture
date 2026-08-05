@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Action, Board, Intention, Thread } from "./model";
 import {
   bestActionDuplicate,
+  bestFragmentDuplicate,
   bestThreadHome,
   relatedTo,
   relatedToText,
@@ -359,5 +360,122 @@ describe("bestActionDuplicate", () => {
     expect(bestActionDuplicate(b, "buy espresso beans", "a-new")?.id).toBe("a-old");
     // Without an exclusion the self-match at the front wins.
     expect(bestActionDuplicate(b, "buy espresso beans")?.id).toBe("a-new");
+  });
+});
+
+describe("bestFragmentDuplicate", () => {
+  it("names the fragment the same note pasted twice clearly repeats", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Cross-device copy and sharing app", [
+          "An app idea focused on easily capturing/copying any content and " +
+            "sharing it seamlessly — both syncing across personal devices " +
+            "and sending text/media to other people.",
+        ]),
+      ],
+    });
+    // The sorter reworded the second paste, but the content words survive.
+    const hit = bestFragmentDuplicate(
+      b,
+      "An app idea focused on easily capturing and copying any content, " +
+        "then sharing it seamlessly. It would sync across personal devices " +
+        "and allow sending text or media to other people."
+    );
+    expect(hit?.fragId).toBe("t1-f0");
+    expect(hit?.threadId).toBe("t1");
+    // The longest shared content-word phrase (weighted by word length).
+    expect(hit?.reason).toMatch(/copying seamlessly personal/);
+  });
+
+  it("catches the same short note filed twice into one thread", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Rocket Maintenance", [
+          "Rocket maintenance checklist — checking the rocket before launch day.",
+        ]),
+      ],
+    });
+    const hit = bestFragmentDuplicate(
+      b,
+      "Rocket maintenance checklist — checking the rocket before launch day."
+    );
+    expect(hit?.fragId).toBe("t1-f0");
+  });
+
+  it("is stricter than the Related line: a two-word overlap is no duplicate", () => {
+    // Two genuinely different notes on the same subject share "espresso
+    // machine" — a connection, not a duplicate. Only a 3-word phrase earns
+    // the claim, so long-running threads stay quiet.
+    const b = board({
+      threads: [
+        thread("t1", "Espresso", [
+          "The espresso machine pulls great crema.",
+        ]),
+      ],
+    });
+    expect(
+      bestFragmentDuplicate(b, "the espresso machine needs new gaskets")
+    ).toBeNull();
+  });
+
+  it("returns nothing when notes share only generic words", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Ideas", [
+          "An app for capturing content across devices.",
+        ]),
+      ],
+    });
+    expect(bestFragmentDuplicate(b, "another idea about sharing an app")).toBeNull();
+  });
+
+  it("finds a duplicate in another thread", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Cross-device copy and sharing app", [
+          "An app idea focused on easily capturing/copying any content and " +
+            "sharing it seamlessly — both syncing across personal devices " +
+            "and sending text/media to other people.",
+        ]),
+        thread("t2", "Rocket Maintenance", [
+          "Rocket maintenance checklist before launch day.",
+        ]),
+      ],
+    });
+    const hit = bestFragmentDuplicate(
+      b,
+      "An app idea focused on easily capturing and copying any content, " +
+        "then sharing it seamlessly. It would sync across personal devices."
+    );
+    expect(hit?.fragId).toBe("t1-f0");
+    expect(hit?.threadName).toBe("Cross-device copy and sharing app");
+  });
+
+  it("skips the just-landed fragment, which always phrase-matches its own text", () => {
+    // The capture is already committed to the board when the check runs;
+    // without the exclusion it would be reported as its own duplicate.
+    // The older, real counterpart must be the one found.
+    const b = board({
+      threads: [
+        thread("t1", "Rocket Maintenance", [
+          "Rocket maintenance checklist — checking the rocket before launch day.",
+          "Rocket maintenance checklist — checking the rocket before launch day.",
+        ]),
+      ],
+    });
+    expect(
+      bestFragmentDuplicate(
+        b,
+        "Rocket maintenance checklist — checking the rocket before launch day.",
+        "t1-f1"
+      )?.fragId
+    ).toBe("t1-f0");
+    // Without an exclusion the self-match would win.
+    expect(
+      bestFragmentDuplicate(
+        b,
+        "Rocket maintenance checklist — checking the rocket before launch day."
+      )?.fragId
+    ).toBe("t1-f0");
   });
 });

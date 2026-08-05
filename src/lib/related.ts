@@ -376,3 +376,55 @@ export function bestActionDuplicate(
   if (!hit) return null;
   return { kind: "action", id: hit.id, name: hit.name, reason: hit.reason };
 }
+
+/** A fragment that a piece of text clearly duplicates. */
+export type FragDuplicate = {
+  threadId: string;
+  fragId: string;
+  threadName: string;
+  name: string;
+  reason: string;
+};
+
+/**
+ * The existing fragment a piece of text clearly duplicates, or none.
+ *
+ * Fragments are long-form notes, so the bar is one notch higher than the
+ * action duplicate: a shared phrase of THREE content words — never a lone
+ * word, and never a two-word overlap that any two notes on the same subject
+ * would share ("espresso machine" is a connection, not a duplicate).
+ * Pasting the same note twice survives the sorter's rewording with long
+ * runs intact, so the strong cases are caught while incidental overlap in
+ * a long-running thread stays quiet. The newest capture is always the one
+ * proposed for removal — the original, with its images, is never at risk.
+ * excludeFragId drops the just-landed fragment, which always phrase-matches
+ * its own text.
+ */
+export function bestFragmentDuplicate(
+  board: Board,
+  text: string,
+  excludeFragId?: string
+): FragDuplicate | null {
+  const target = contentWords(text);
+  if (!target.length) return null;
+  let best: FragDuplicate | null = null;
+  let bestLen = -1;
+  for (const t of board.threads) {
+    for (const f of t.frags || []) {
+      if (f.id === excludeFragId) continue;
+      const phrase = longestSharedRun(target, contentWords(f.text));
+      if (!phrase || phrase.split(" ").length < 3) continue;
+      /* The longest phrase wins; among equals the first found stays. */
+      if (best && phrase.length <= bestLen) continue;
+      best = {
+        threadId: t.id,
+        fragId: f.id,
+        threadName: t.name,
+        name: NAME(f.text),
+        reason: `both mention "${phrase}"`,
+      };
+      bestLen = phrase.length;
+    }
+  }
+  return best;
+}
