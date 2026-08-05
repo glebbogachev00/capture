@@ -1381,6 +1381,7 @@ export function useBoard(now: number) {
     setSettled(null);
     setDistillErr("");
     setDistillInput("");
+    setDistillReady(false);
     const fresh: DistillSession = { id: uid(), at: stamp(), turns: [] };
     setDistillSession(fresh);
     await persistDistill(fresh);
@@ -1452,22 +1453,33 @@ export function useBoard(now: number) {
       /* The [ready] marker is stripped as it streams so it never reaches the
          transcript — and therefore never appears on screen or gets spoken
          aloud by the voice layer, which chunks the live text as it lands.
-         A few trailing bytes are carried over so a marker split across chunk
-         boundaries is still caught. */
+         Only characters that could begin the marker are held back across
+         chunks, so a marker split at a chunk boundary is still caught while
+         ordinary text streams with no lag. */
+      const MARKER = "[ready]";
       let carry = "";
       if (reader) {
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
           const raw = carry + decoder.decode(value, { stream: true });
-          const marker = raw.indexOf("[ready]");
+          const marker = raw.indexOf(MARKER);
           if (marker !== -1) {
             setDistillReady(true);
-            carry = raw.slice(marker + 7);
+            carry = raw.slice(marker + MARKER.length);
             acc += raw.slice(0, marker);
           } else {
-            carry = raw.slice(Math.max(0, raw.length - 7));
-            acc += raw.slice(0, Math.max(0, raw.length - 7));
+            /* Longest suffix that could start the marker; hold it for the
+               next chunk, stream everything before it. */
+            let hold = 0;
+            for (let n = Math.min(raw.length, MARKER.length - 1); n >= 1; n--) {
+              if (MARKER.startsWith(raw.slice(-n))) {
+                hold = n;
+                break;
+              }
+            }
+            carry = hold ? raw.slice(-hold) : "";
+            acc += raw.slice(0, raw.length - hold);
           }
           // Update the streaming turn in place.
           setDistillSession((s) => ({
@@ -1478,8 +1490,10 @@ export function useBoard(now: number) {
           }));
         }
       }
-      /* Trailing bytes that never found a marker (end of a normal reply). */
-      acc += carry;
+      /* Trailing bytes that never completed a marker (end of a normal reply).
+         A marker left over here is a model misfire, not a boundary — strip
+         it so a stray [ready] can never reach the screen or the voice. */
+      acc += carry.split(MARKER).join("");
       const doneSession: DistillSession = {
         ...withUser,
         turns: [...withUser.turns, { ...assistantTurn, text: acc.trim() }],
@@ -1487,6 +1501,9 @@ export function useBoard(now: number) {
       setDistillSession(doneSession);
       await persistDistill(doneSession);
     } catch (error) {
+      // A reply that died mid-stream may have set the flag already; without
+      // this the button would glow over a transcript with no assistant turn.
+      setDistillReady(false);
       setDistillErr(reasonOf(error) + " Your words are saved; ask again.");
       // Drop the trailing assistant turn — whether it never produced text or
       // died mid-answer — so a broken partial reply doesn't stay on the
