@@ -77,6 +77,9 @@ export function Capture() {
     busy,
     err,
     landed,
+    suggestion,
+    acceptSuggestion,
+    dismissSuggestion,
     notice,
     swept,
     tab,
@@ -399,6 +402,28 @@ export function Capture() {
                 Undo
               </button>
             )}
+          </div>
+        )}
+        {suggestion && (
+          <div className="suggest">
+            <span className="suggest-text">
+              Belongs with <em>{suggestion.targetName}</em>?
+            </span>
+            <span className="suggest-actions">
+              <button
+                className="suggest-btn suggest-ok"
+                onClick={() => void acceptSuggestion()}
+              >
+                {suggestion.verb}
+              </button>
+              <button
+                className="suggest-btn"
+                onClick={dismissSuggestion}
+              >
+                Keep separate
+              </button>
+            </span>
+            <span className="suggest-why">{suggestion.reason}</span>
           </div>
         )}
         {notice && <div className="landed">{notice}</div>}

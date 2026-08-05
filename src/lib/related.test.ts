@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Action, Board, Intention, Thread } from "./model";
-import { relatedTo } from "./related";
+import { bestThreadHome, relatedTo, relatedToText } from "./related";
 
 function action(id: string, text: string, src?: string): Action {
   return { id, text, done: false, at: 0, shelf: "keep", expires: null, src };
@@ -222,5 +222,76 @@ describe("relatedTo", () => {
     const hit = items.find((i) => i.id === "t2");
     // The shared word is only in the thread names, so no fragment carries it.
     expect(hit?.fragId).toBeUndefined();
+  });
+});
+
+describe("bestThreadHome", () => {
+  it("names the thread a phrase clearly belongs with", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Coffee Setup", ["Bought an espresso machine for the kitchen"]),
+        thread("t2", "Renew car insurance", ["The renewal is due this month"]),
+      ],
+    });
+    const hit = bestThreadHome(b, "buy an espresso machine and a grinder");
+    expect(hit).not.toBeNull();
+    expect(hit?.id).toBe("t1");
+    expect(hit?.name).toBe("Coffee Setup");
+    expect(hit?.reason).toMatch(/espresso machine/);
+  });
+
+  it("is stricter than the Related line: a lone shared word is no home", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Perfectionism", ["Delaying releases because of perfectionism"]),
+        thread("t2", "Buy groceries", ["Milk and eggs"]),
+      ],
+    });
+    // "perfectionism" is rare and distinctive, so the Related line would
+    // connect — but a single word is not concrete enough to move something.
+    expect(
+      relatedToText(b, "my perfectionism is ruining the release").items.some(
+        (i) => i.id === "t1"
+      )
+    ).toBe(true);
+    expect(bestThreadHome(b, "my perfectionism is ruining the release")).toBeNull();
+  });
+
+  it("returns nothing when nothing on the board shares a phrase", () => {
+    const b = board({
+      threads: [thread("t1", "Cold brew ratios", ["Brewing coffee darker"])],
+    });
+    expect(bestThreadHome(b, "renew the car insurance today")).toBeNull();
+  });
+
+  it("takes the strongest thread even when an action phrase-matches too", () => {
+    const b = board({
+      threads: [thread("t1", "Coffee Setup", ["espresso machine on the counter"])],
+      actions: [action("a1", "espresso machine maintenance")],
+    });
+    const hit = bestThreadHome(b, "buy an espresso machine");
+    // Only a thread can be a home, so the action's match is ignored.
+    expect(hit?.id).toBe("t1");
+  });
+
+  it("returns the best of several matching threads", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Coffee Setup", ["The espresso machine arrived"]),
+        thread("t2", "Grinder research", ["The grinder is still on the list"]),
+      ],
+    });
+    const hit = bestThreadHome(b, "espresso machine and a burr grinder");
+    // Both share a phrase; "espresso machine" outranks "grinder" alone.
+    expect(hit?.id).toBe("t1");
+  });
+
+  it("returns the thread whose own content the text matches — the caller excludes the source", () => {
+    const b = board({
+      threads: [thread("t1", "Coffee Setup", ["espresso machine notes"])],
+    });
+    // bestThreadHome cannot know the text already lives in t1; the caller
+    // (computeSuggestion) drops a hit that equals the thread it landed in.
+    expect(bestThreadHome(b, "espresso machine notes")?.id).toBe("t1");
   });
 });

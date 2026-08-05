@@ -225,10 +225,10 @@ type Hit = {
   reason: string;
   score: number;
   fragId?: string;
+  phrase?: string;
 };
 
-export function relatedTo(board: Board, target: RelatedTarget): Related {
-  const text = textOf(board, target.kind, target.id);
+function hitsFor(board: Board, text: string, excludeId?: string): Hit[] {
   const targetWords = contentWords(text);
   const counts = rarity(board);
 
@@ -266,12 +266,12 @@ export function relatedTo(board: Board, target: RelatedTarget): Related {
 
   const hits: Hit[] = [];
   for (const a of board.actions) {
-    if (a.id === target.id) continue;
+    if (a.id === excludeId) continue;
     const sig = consider(itemText(a));
     if (sig) hits.push({ kind: "action", id: a.id, name: NAME(a.text), ...sig });
   }
   for (const t of board.threads) {
-    if (t.id === target.id) continue;
+    if (t.id === excludeId) continue;
     const sig = consider(threadText(t));
     if (!sig) continue;
     /* Find the fragment that carries the match, so the row can offer
@@ -293,7 +293,7 @@ export function relatedTo(board: Board, target: RelatedTarget): Related {
     hits.push({ kind: "thread", id: t.id, name: NAME(t.name), fragId, ...sig });
   }
   for (const i of board.intentions) {
-    if (i.id === target.id) continue;
+    if (i.id === excludeId) continue;
     const sig = consider(intentionText(i));
     if (sig)
       hits.push({
@@ -307,10 +307,45 @@ export function relatedTo(board: Board, target: RelatedTarget): Related {
   /* Strongest signal first; among equals, threads before actions before
      intentions (thread reasons are the most concrete). Cap keeps it a line. */
   const order = { thread: 0, action: 1, intention: 2 } as const;
+  return hits.sort(
+    (x, y) => y.score - x.score || order[x.kind] - order[y.kind]
+  );
+}
+
+export function relatedTo(board: Board, target: RelatedTarget): Related {
   return {
-    items: hits
-      .sort((x, y) => y.score - x.score || order[x.kind] - order[y.kind])
+    items: hitsFor(board, textOf(board, target.kind, target.id), target.id)
       .slice(0, 3)
       .map(({ kind, id, name, reason, fragId }) => ({ kind, id, name, reason, fragId })),
   };
+}
+
+/** Same engine as relatedTo, but the target is a piece of raw text rather
+    than an item already on the board. Used for a capture that has just
+    landed and is not yet the thing it may belong with. */
+export function relatedToText(board: Board, text: string): Related {
+  return {
+    items: hitsFor(board, text)
+      .slice(0, 3)
+      .map(({ kind, id, name, reason, fragId }) => ({ kind, id, name, reason, fragId })),
+  };
+}
+
+/**
+ * The thread a piece of text clearly belongs with, or none.
+ *
+ * Deliberately stricter than the Related line: only a shared phrase — never
+ * a lone shared word, however rare — is strong enough to say "this belongs
+ * with X". The Related line's job is discovery and may suggest loosely; a
+ * proposed merge must be concrete and verifiable, because acting on it
+ * moves something. Only threads are homes (an action is a to-do, not a
+ * place); the strongest thread hit is returned, if there is one.
+ */
+export function bestThreadHome(
+  board: Board,
+  text: string
+): RelatedItem | null {
+  const hit = hitsFor(board, text).find((h) => h.kind === "thread" && h.phrase);
+  if (!hit) return null;
+  return { kind: "thread", id: hit.id, name: hit.name, reason: hit.reason };
 }

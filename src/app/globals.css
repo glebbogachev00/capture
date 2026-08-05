@@ -826,6 +826,69 @@ body {
 .landed .undo-btn:active {
   transform: scale(0.96);
 }
+/* The "this also belongs with X?" proposal — quieter than the landed
+   banner it sits under: a card that reads as a suggestion, not a headline,
+   the reason muted beneath, and the two pills on the row. Never applied;
+   one tap either way, and it clears with the landed window. */
+.suggest {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  font-size: 13px;
+  animation: rise 0.32s ease-out;
+}
+.suggest-text em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--accent);
+}
+.suggest-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.suggest-btn {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 6px 11px;
+  border-radius: 7px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--muted);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: 0.15s;
+}
+.suggest-btn:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+.suggest-ok {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.suggest-ok:hover {
+  filter: brightness(1.08);
+  color: #fff;
+}
+.suggest-btn:active {
+  transform: scale(0.96);
+}
+.suggest-why {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
 @keyframes rise {
   from {
     opacity: 0;

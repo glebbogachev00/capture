@@ -57,6 +57,7 @@ import {
 } from "@/lib/backup";
 import { copyToClipboard, shareText, shareableFor } from "@/lib/share";
 import { search } from "@/lib/search";
+import { bestThreadHome } from "@/lib/related";
 import { parseCommandPrefix } from "@/lib/command";
 import {
   TOMBSTONE_KEY,
@@ -90,6 +91,29 @@ type SortResult = {
   threadName?: string | null;
 };
 
+/* What a capture just landed as — the thing a suggestion would act on. */
+type LandedSource = {
+  kind: "action" | "thread";
+  id: string;
+  /* The landed fragment inside the thread (a thread that already existed);
+     absent when the thread was just created, so the whole thread folds. */
+  fragId?: string;
+};
+
+/**
+ * A quiet post-capture proposal: "this looks like it belongs with X".
+ * Never applied — the user confirms or dismisses it. One tap either way.
+ */
+type Suggestion = {
+  targetId: string;
+  targetName: string;
+  reason: string;
+  sourceKind: "action" | "thread";
+  sourceId: string;
+  fragId?: string;
+  verb: "Merge" | "Move";
+};
+
 export function useBoard(now: number) {
   /* ------------------------------ state ------------------------------ */
   const [data, setData] = useState<Board>(EMPTY);
@@ -100,6 +124,9 @@ export function useBoard(now: number) {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [landed, setLanded] = useState<string | null>(null);
+  /* The "this also belongs with X" proposal, shown under the landed line
+     until it is acted on, dismissed, or the landed window closes. */
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   /* Reads as a whole sentence, unlike `landed` which is "Landed in <x>". */
   const [notice, setNotice] = useState<string | null>(null);
   const [swept, setSwept] = useState<{ faded: number; cleared: number } | null>(null);
@@ -336,6 +363,7 @@ export function useBoard(now: number) {
       /* disk hiccup; next commit retries */
     }
     setLanded(null);
+    setSuggestion(null);
     setNotice("Undone — back to how it was.");
     setTimeout(() => setNotice(null), 4000);
     /* Push now, not on the debounce: a pull landing in the debounce window
@@ -525,7 +553,12 @@ export function useBoard(now: number) {
     imgIds: string[],
     at: number,
     board: Board
-  ): { next: Board; targetId: string | null; landed: string } => {
+  ): {
+    next: Board;
+    targetId: string | null;
+    landed: string;
+    source: LandedSource | null;
+  } => {
     if (out.kind === "action") {
       const span = SHELF[out.shelfLife as ShelfLife] ?? null;
       const items: Action[] = (out.actions?.length ? out.actions : [out.title]).map(
@@ -543,6 +576,9 @@ export function useBoard(now: number) {
       return {
         next: { ...board, actions: [...items, ...board.actions] },
         targetId: null,
+        /* A single action can fold into a thread; several cannot, so only a
+           lone action is ever offered a home. */
+        source: items.length === 1 ? { kind: "action", id: items[0].id } : null,
         landed:
           items.length +
           " action" +
@@ -562,6 +598,7 @@ export function useBoard(now: number) {
           ),
         },
         targetId: existing.id,
+        source: { kind: "thread", id: existing.id, fragId: frag.id },
         landed: existing.name + " — thread updated",
       };
     }
@@ -574,6 +611,7 @@ export function useBoard(now: number) {
     return {
       next: { ...board, threads: [fresh, ...board.threads] },
       targetId: fresh.id,
+      source: { kind: "thread", id: fresh.id },
       landed: fresh.name + " — thread updated",
     };
   };
@@ -724,7 +762,12 @@ export function useBoard(now: number) {
         ...latest.current,
         actions: latest.current.actions.filter((x) => x.id !== a.id),
       };
-      const { next, targetId, landed } = applySorted(out, a.imgs || [], a.at, board);
+      const { next, targetId, landed, source } = applySorted(
+        out,
+        a.imgs || [],
+        a.at,
+        board
+      );
       setLanded(landed);
       setTab(out.kind === "action" ? "actions" : "threads");
       // Snapshot right before the re-sort lands — Undo reverts exactly this.
@@ -734,13 +777,17 @@ export function useBoard(now: number) {
       };
       setCanUndo(true);
       await commit(next);
+      setSuggestion(computeSuggestion(next, out.clean, source));
       if (targetId) await regenerate(next, targetId);
     } catch (error) {
       setErr(reasonOf(error) + " It is still here, untouched.");
     }
     setBusy(null);
     /* Same widened window as the main capture — Undo lives here too. */
-    setTimeout(() => setLanded(null), 9000);
+    setTimeout(() => {
+      setLanded(null);
+      setSuggestion(null);
+    }, 9000);
   };
 
   /** Praise be. The main capture, sorted and filed. */
@@ -755,6 +802,8 @@ export function useBoard(now: number) {
     if (!payload && !pics.length) return;
     setErr("");
     setSwept(null);
+    // A new capture takes over the banner: no stale proposal survives.
+    setSuggestion(null);
     setBusy("Sorting");
 
     const at = stamp();
@@ -800,7 +849,7 @@ export function useBoard(now: number) {
         return;
       }
 
-      const { next, targetId, landed } = applySorted(
+      const { next, targetId, landed, source } = applySorted(
         out,
         imgIds,
         at,
@@ -818,6 +867,14 @@ export function useBoard(now: number) {
       };
       setCanUndo(true);
       await commit(next);
+      /* A quiet proposal, never applied: if this capture clearly belongs
+         with an existing thread, offer the fold. An explicit /action,
+         /thread or /intention command is respected — only the model's
+         choice is ever second-guessed. Computed before the summary refresh
+         so it lands with the banner, never a model round-trip later. */
+      setSuggestion(
+        force ? null : computeSuggestion(next, out.clean, source)
+      );
       if (targetId) await regenerate(next, targetId);
     } catch (error) {
       await saveUnsorted(raw, imgIds, at, reasonOf(error));
@@ -825,8 +882,81 @@ export function useBoard(now: number) {
 
     setBusy(null);
     /* Same widened window as the main capture — Undo lives here too. */
-    setTimeout(() => setLanded(null), 9000);
+    setTimeout(() => {
+      setLanded(null);
+      setSuggestion(null);
+    }, 9000);
   };
+
+  /* ----------------------- capture suggestion ----------------------- */
+
+  /**
+   * Whether a just-landed capture clearly belongs with an existing thread.
+   *
+   * Deliberately strict — only a shared phrase (never a lone shared word,
+   * however rare) earns a proposal, and the thread it landed in is never
+   * offered as its own home. The user's explicit destination (a /action,
+   * /thread or /intention command) is respected: only the model's choice
+   * is ever second-guessed.
+   */
+  const computeSuggestion = (
+    board: Board,
+    text: string,
+    source: LandedSource | null
+  ): Suggestion | null => {
+    if (!source || !text.trim()) return null;
+    const hit = bestThreadHome(board, text);
+    if (!hit || hit.id === source.id) return null;
+    if (source.kind === "action") {
+      return {
+        targetId: hit.id,
+        targetName: hit.name,
+        reason: hit.reason,
+        sourceKind: "action",
+        sourceId: source.id,
+        verb: "Move",
+      };
+    }
+    return source.fragId
+      ? {
+          targetId: hit.id,
+          targetName: hit.name,
+          reason: hit.reason,
+          sourceKind: "thread",
+          sourceId: source.id,
+          fragId: source.fragId,
+          verb: "Move",
+        }
+      : {
+          targetId: hit.id,
+          targetName: hit.name,
+          reason: hit.reason,
+          sourceKind: "thread",
+          sourceId: source.id,
+          verb: "Merge",
+        };
+  };
+
+  /** The accepted suggestion: move or merge the capture where it belongs.
+
+      The landed banner is kept, not cleared: its Undo button is the only
+      way back from a merge that deletes an emptied thread, and the
+      handler's own notice reads as the outcome underneath it. */
+  const acceptSuggestion = async () => {
+    const s = suggestion;
+    if (!s) return;
+    setSuggestion(null);
+    if (s.sourceKind === "action") {
+      await foldActionIntoThread(s.sourceId, s.targetId);
+    } else if (s.fragId) {
+      await moveFrag(s.sourceId, s.fragId, s.targetId);
+    } else {
+      await mergeThreads(s.targetId, s.sourceId);
+    }
+  };
+
+  /** Keep it where it landed. */
+  const dismissSuggestion = () => setSuggestion(null);
 
   /* ---------------------------- actions ----------------------------- */
 
@@ -884,6 +1014,40 @@ export function useBoard(now: number) {
       threads: [t, ...latest.current.threads],
     });
     setTab("threads");
+  };
+
+  /**
+   * Fold a captured action into an existing thread — the accepted "this
+   * belongs with X" suggestion. The action becomes a fragment of the thread
+   * (interleaved by date, images carried over) and the thread is re-summarised.
+   */
+  const foldActionIntoThread = async (actionId: string, threadId: string) => {
+    const a = latest.current.actions.find((x) => x.id === actionId);
+    const t = latest.current.threads.find((x) => x.id === threadId);
+    if (!a || !t) return;
+    await commit({
+      ...latest.current,
+      actions: latest.current.actions.filter((x) => x.id !== actionId),
+      threads: latest.current.threads.map((x) =>
+        x.id === threadId
+          ? {
+              ...x,
+              frags: [
+                ...x.frags,
+                {
+                  id: uid(),
+                  at: a.at,
+                  text: a.src || a.text,
+                  imgs: a.imgs || [],
+                },
+              ].sort((p, q) => p.at - q.at),
+            }
+          : x
+      ),
+    });
+    setNotice(`Moved into ${t.name}.`);
+    setTimeout(() => setNotice(null), 4500);
+    await regenerate(latest.current, threadId);
   };
 
   /* ---------------------------- threads ----------------------------- */
@@ -1721,6 +1885,9 @@ export function useBoard(now: number) {
     busy,
     err,
     landed,
+    suggestion,
+    acceptSuggestion,
+    dismissSuggestion,
     notice,
     swept,
     tab,
