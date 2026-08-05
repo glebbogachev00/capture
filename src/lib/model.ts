@@ -32,6 +32,9 @@ export const SHELF: Record<ShelfLife, number | null> = {
 };
 /** Faded items sit recoverable this long, then go for good. */
 export const GRACE = 14 * DAY;
+/** Legacy done actions (ticked before ticking deleted outright) clear this
+    long after they were completed. New ticks remove the action at once. */
+export const AFTER_DONE = 7 * DAY;
 /** A thread with no new fragments for this long moves to Resting. */
 export const DORMANT = 60 * DAY;
 
@@ -222,9 +225,15 @@ export async function sweep(data: Board) {
   const kept: Action[] = [];
 
   for (const a of data.actions) {
-    /* Done actions are kept for good — ticking something off is the record
-       that it happened, and the user can delete it by hand if they want it
-       gone. Only faded items ever clear themselves. */
+    /* Legacy done actions clear themselves after a week — ticking is the
+       finish line, not the start of a new chore. New ticks never reach
+       here: toggleAction removes the action the moment it is completed. */
+    if (a.done && a.doneAt && now - a.doneAt > AFTER_DONE) {
+      await dropImages(a.imgs);
+      cleared++;
+      clearedIds.push(a.id);
+      continue;
+    }
     if (a.faded && a.fadedAt && now - a.fadedAt > GRACE) {
       await dropImages(a.imgs);
       cleared++;

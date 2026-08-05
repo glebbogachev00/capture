@@ -830,15 +830,17 @@ export function useBoard(now: number) {
 
   /* ---------------------------- actions ----------------------------- */
 
-  const toggleAction = (id: string) =>
-    commit({
+  /** Ticking an action completes it — and completion removes it. The
+      app's promise is that a finished task stops existing; keeping a
+      done list would make ticking the start of a new chore. */
+  const toggleAction = async (id: string) => {
+    const a = latest.current.actions.find((x) => x.id === id);
+    await dropImages(a?.imgs);
+    await commit({
       ...latest.current,
-      actions: latest.current.actions.map((a) =>
-        a.id === id
-          ? { ...a, done: !a.done, doneAt: a.done ? null : stamp() }
-          : a
-      ),
+      actions: latest.current.actions.filter((x) => x.id !== id),
     });
+  };
 
   const setShelf = (id: string, span: number | null, label: ShelfLife) =>
     commit({
@@ -1697,7 +1699,6 @@ export function useBoard(now: number) {
 
   const live = data.actions.filter((a) => !a.done && !a.faded);
   const fadedList = data.actions.filter((a) => a.faded && !a.done);
-  const done = data.actions.filter((a) => a.done);
   const active = data.threads.filter(
     (t) => now - (t.frags.at(-1)?.at || 0) < DORMANT
   );
@@ -1748,7 +1749,6 @@ export function useBoard(now: number) {
     setShowResting,
     live,
     fadedList,
-    done,
     active,
     resting,
     thread,

@@ -99,7 +99,6 @@ export function Capture() {
     setShowResting,
     live,
     fadedList,
-    done,
     active,
     resting,
     thread,
@@ -546,44 +545,6 @@ export function Capture() {
                       {showFaded ? "▾" : "▸"} Faded · {fadedList.length}
                     </button>
                     {showFaded && fadedList.map((a) => row(a, true))}
-                  </>
-                )}
-
-                {!!done.length && (
-                  <>
-                    <div className="section-label">
-                      Closed · kept until you delete them
-                    </div>
-                    {done.map((a) => (
-                      <div className="act is-done" key={a.id}>
-                        <button
-                          className="box done"
-                          onClick={() => toggleAction(a.id)}
-                          aria-label="Mark not done"
-                        >
-                          <span
-                            style={{
-                              color: "#fff",
-                              fontSize: 11,
-                              lineHeight: 1,
-                            }}
-                          >
-                            ✓
-                          </span>
-                        </button>
-                        <div className="act-body">
-                          <div className="act-text">{a.text}</div>
-                        </div>
-                        <button
-                          className="ghost"
-                          onClick={() => removeNow(a)}
-                          aria-label="Delete for good"
-                          title="Delete for good"
-                        >
-                          delete
-                        </button>
-                      </div>
-                    ))}
                   </>
                 )}
               </div>
