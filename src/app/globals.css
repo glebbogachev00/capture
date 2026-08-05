@@ -526,6 +526,78 @@ body {
   font-size: 15px;
   line-height: 1.6;
 }
+
+/* Related — the quiet, expandable connections line under a thread's
+   "Where this stands". Collapsed to a small affordance; only expands
+   when asked; renders nothing when there are no matches. */
+.related {
+  margin: -6px 0 22px;
+}
+.related-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+.related-head:hover {
+  color: var(--accent);
+}
+.related-caret {
+  font-size: 9px;
+}
+.related-list {
+  margin-top: 8px;
+  border-top: 1px solid var(--rule);
+}
+.related-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  padding: 9px 0;
+  font: inherit;
+  color: inherit;
+}
+button.related-row {
+  cursor: pointer;
+}
+button.related-row:hover .related-name {
+  color: var(--accent);
+}
+.related-kind {
+  flex: none;
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.related-name {
+  flex: none;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.related-reason {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .frag {
   padding: 15px 0;
   border-top: 1px solid var(--rule);

@@ -14,7 +14,7 @@
    render what it hands back.
    ============================================================ */
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Share2, Settings } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
@@ -38,6 +38,7 @@ import {
   uid,
 } from "@/lib/model";
 import { type Hits } from "@/lib/search";
+import { relatedTo, type RelatedItem } from "@/lib/related";
 import {
   IntentionCard,
   IntentionDetail,
@@ -180,6 +181,13 @@ export function Capture() {
       rd.readAsDataURL(f);
     });
   };
+
+  /* The open thread's connections, derived from the existing search index.
+     Cheap enough to compute on every render of the one open thread. */
+  const related = useMemo(
+    () => (thread ? relatedTo(data, { kind: "thread", id: thread.id }) : { items: [] }),
+    [data, thread]
+  );
 
   const row = (a: Action, faded?: boolean) => (
     <Row
@@ -471,6 +479,8 @@ export function Capture() {
             onCopyThread={() => copyWhole(shareThread(thread))}
             onCopyFrag={(fragId) => copyFragment(thread.id, fragId)}
             onExtractAction={(fragId) => extractAction(thread.id, fragId)}
+            related={related}
+            onOpenThread={(id) => setOpen(id)}
             busy={!!busy}
           />
         ) : (
@@ -947,11 +957,15 @@ function ThreadView({
   onCopyThread,
   onCopyFrag,
   onExtractAction,
+  related,
+  onOpenThread,
   busy,
 }: {
   thread: Thread;
   focusFragId?: string | null;
   onBack: () => void;
+  related: { items: RelatedItem[] };
+  onOpenThread: (id: string) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
   onRefreshSummary: () => void;
@@ -971,6 +985,9 @@ function ThreadView({
   const [confirming, setConfirming] = useState(false);
   const [merging, setMerging] = useState(false);
   const [more, setMore] = useState(false);
+  /* The Related line stays collapsed until asked — a quiet affordance,
+     never a list sitting in the thread. */
+  const [showRelated, setShowRelated] = useState(false);
 
   return (
     <div>
@@ -1124,6 +1141,45 @@ function ThreadView({
         <div className="state">
           <h4>Where this stands</h4>
           <p>{thread.summary}</p>
+        </div>
+      )}
+
+      {/* Phase 1 of Related: what else in here connects to this thread.
+          Read-only, search-derived, always optional. Tap a related thread
+          to open it. */}
+      {related.items.length > 0 && (
+        <div className="related">
+          <button
+            className="related-head"
+            onClick={() => setShowRelated((v) => !v)}
+            aria-expanded={showRelated}
+          >
+            Related · {related.items.length}
+            <span className="related-caret">{showRelated ? "▾" : "▸"}</span>
+          </button>
+          {showRelated && (
+            <div className="related-list">
+              {related.items.map((r) =>
+                r.kind === "thread" ? (
+                  <button
+                    key={r.kind + r.id}
+                    className="related-row"
+                    onClick={() => onOpenThread(r.id)}
+                  >
+                    <span className="related-kind">{r.kind}</span>
+                    <span className="related-name">{r.name}</span>
+                    <span className="related-reason">{r.reason}</span>
+                  </button>
+                ) : (
+                  <div key={r.kind + r.id} className="related-row">
+                    <span className="related-kind">{r.kind}</span>
+                    <span className="related-name">{r.name}</span>
+                    <span className="related-reason">{r.reason}</span>
+                  </div>
+                )
+              )}
+            </div>
+          )}
         </div>
       )}
 
