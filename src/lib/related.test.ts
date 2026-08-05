@@ -173,4 +173,54 @@ describe("relatedTo", () => {
     });
     expect(relatedTo(b, { kind: "thread", id: "t1" }).items).toEqual([]);
   });
+
+  it("carries the matched fragment id on thread hits", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Cold Brew Experiments", [
+          "Experimenting with cold brew ratios this week.",
+        ]),
+        thread("t2", "Cold brew equipment", [
+          "Unrelated intro.",
+          "The cold brew pitcher arrived today.",
+        ]),
+      ],
+    });
+    const { items } = relatedTo(b, { kind: "thread", id: "t1" });
+    const hit = items.find((i) => i.id === "t2");
+    expect(hit).toBeDefined();
+    // The match lives in the second fragment of t2.
+    expect(hit?.fragId).toBe("t2-f1");
+  });
+
+  it("finds the fragment when the shared phrase is broken by stop words", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Cold Brew Experiments", [
+          "Experimenting with cold brew ratios this week.",
+        ]),
+        thread("t2", "Equipment for brewing", [
+          "The cold strong brew pitcher arrived today.",
+        ]),
+      ],
+    });
+    const { items } = relatedTo(b, { kind: "thread", id: "t1" });
+    const hit = items.find((i) => i.id === "t2");
+    // "cold strong brew" still shares "cold brew" — the fragment that
+    // carries the words in order is the one Move/Extract should target.
+    expect(hit?.fragId).toBe("t2-f0");
+  });
+
+  it("omits fragId when the thread matched on its name only", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Cold brew", ["Something about the weather."]),
+        thread("t2", "Cold brew ratio", ["Something about the weather too."]),
+      ],
+    });
+    const { items } = relatedTo(b, { kind: "thread", id: "t1" });
+    const hit = items.find((i) => i.id === "t2");
+    // The shared word is only in the thread names, so no fragment carries it.
+    expect(hit?.fragId).toBeUndefined();
+  });
 });

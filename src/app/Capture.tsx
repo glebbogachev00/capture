@@ -116,6 +116,7 @@ export function Capture() {
     moveToThread,
     editActionText,
     renameThread,
+    foldActionIntoThread,
     editFrag,
     deleteFrag,
     moveFrag,
@@ -481,6 +482,10 @@ export function Capture() {
             onExtractAction={(fragId) => extractAction(thread.id, fragId)}
             related={related}
             onOpenThread={(id) => setOpen(id)}
+            onMergeRelated={(fromId) => mergeThreads(thread.id, fromId)}
+            onPullFrag={(fromId, fragId) => moveFrag(fromId, fragId, thread.id)}
+            onExtractRelated={(fromId, fragId) => extractAction(fromId, fragId)}
+            onFoldAction={(actionId) => foldActionIntoThread(actionId, thread.id)}
             busy={!!busy}
           />
         ) : (
@@ -959,6 +964,10 @@ function ThreadView({
   onExtractAction,
   related,
   onOpenThread,
+  onMergeRelated,
+  onPullFrag,
+  onExtractRelated,
+  onFoldAction,
   busy,
 }: {
   thread: Thread;
@@ -978,6 +987,10 @@ function ThreadView({
   onCopyThread: () => void;
   onCopyFrag: (fragId: string) => void;
   onExtractAction: (fragId: string) => void;
+  onMergeRelated: (fromId: string) => void;
+  onPullFrag: (fromId: string, fragId: string) => void;
+  onExtractRelated: (fromId: string, fragId: string) => void;
+  onFoldAction: (actionId: string) => void;
   busy: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
@@ -1144,9 +1157,10 @@ function ThreadView({
         </div>
       )}
 
-      {/* Phase 1 of Related: what else in here connects to this thread.
-          Read-only, search-derived, always optional. Tap a related thread
-          to open it. */}
+      {/* Related: what else in here connects to this thread, with one-tap
+          actions. Search-derived, always optional. Thread rows can be
+          merged wholesale or have their matched fragment pulled here or
+          extracted as an action; action rows fold into this thread. */}
       {related.items.length > 0 && (
         <div className="related">
           <button
@@ -1159,25 +1173,54 @@ function ThreadView({
           </button>
           {showRelated && (
             <div className="related-list">
-              {related.items.map((r) =>
-                r.kind === "thread" ? (
+              {related.items.map((r) => (
+                <div key={r.kind + r.id} className="related-row">
                   <button
-                    key={r.kind + r.id}
-                    className="related-row"
-                    onClick={() => onOpenThread(r.id)}
+                    className="related-main"
+                    onClick={() => r.kind === "thread" && onOpenThread(r.id)}
+                    disabled={r.kind !== "thread"}
                   >
                     <span className="related-kind">{r.kind}</span>
                     <span className="related-name">{r.name}</span>
                     <span className="related-reason">{r.reason}</span>
                   </button>
-                ) : (
-                  <div key={r.kind + r.id} className="related-row">
-                    <span className="related-kind">{r.kind}</span>
-                    <span className="related-name">{r.name}</span>
-                    <span className="related-reason">{r.reason}</span>
+                  <div className="related-actions">
+                    {r.kind === "thread" ? (
+                      <>
+                        <button
+                          className="mini"
+                          onClick={() => onMergeRelated(r.id)}
+                        >
+                          Merge
+                        </button>
+                        {r.fragId && (
+                          <>
+                            <button
+                              className="mini"
+                              onClick={() => onPullFrag(r.id, r.fragId!)}
+                            >
+                              Move frag
+                            </button>
+                            <button
+                              className="mini"
+                              onClick={() => onExtractRelated(r.id, r.fragId!)}
+                            >
+                              Extract
+                            </button>
+                          </>
+                        )}
+                      </>
+                    ) : r.kind === "action" ? (
+                      <button
+                        className="mini"
+                        onClick={() => onFoldAction(r.id)}
+                      >
+                        Fold in
+                      </button>
+                    ) : null}
                   </div>
-                )
-              )}
+                </div>
+              ))}
             </div>
           )}
         </div>

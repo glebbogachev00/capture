@@ -30,6 +30,9 @@ export type RelatedItem = {
   name: string;
   /** Why: a shared phrase, or a short quoted window around a shared word. */
   reason: string;
+  /** For thread hits: the id of the fragment that carries the match, so the
+      UI can offer one-tap Move/Extract on that exact fragment. */
+  fragId?: string;
 };
 
 export type Related = {
@@ -221,6 +224,7 @@ type Hit = {
   name: string;
   reason: string;
   score: number;
+  fragId?: string;
 };
 
 export function relatedTo(board: Board, target: RelatedTarget): Related {
@@ -234,10 +238,21 @@ export function relatedTo(board: Board, target: RelatedTarget): Related {
     board.actions.length + board.threads.length + board.intentions.length;
   const maxShare = Math.max(2, Math.floor(itemCount / 4));
 
-  const consider = (otherText: string) => {
+  type Signal = {
+    score: number;
+    reason: string;
+    phrase?: string;
+    word?: string;
+  };
+  const consider = (otherText: string): Signal | null => {
     const otherWords = contentWords(otherText);
     const phrase = longestSharedRun(targetWords, otherWords);
-    if (phrase) return { score: 100 + phrase.split(" ").length, reason: `both mention "${phrase}"` };
+    if (phrase)
+      return {
+        score: 100 + phrase.split(" ").length,
+        reason: `both mention "${phrase}"`,
+        phrase,
+      };
     /* Single-word signals: exact matches, distinctive, non-generic. */
     const shared = [...new Set(targetWords)].filter(
       (w) => (counts.get(w) || 0) <= maxShare && otherWords.includes(w)
@@ -246,7 +261,7 @@ export function relatedTo(board: Board, target: RelatedTarget): Related {
     const best = shared.sort(
       (x, y) => (counts.get(x) || 99) - (counts.get(y) || 99) || y.length - x.length
     )[0];
-    return { score: shared.length, reason: quoteAround(best, tokens(otherText)) };
+    return { score: shared.length, reason: quoteAround(best, tokens(otherText)), word: best };
   };
 
   const hits: Hit[] = [];
@@ -258,7 +273,24 @@ export function relatedTo(board: Board, target: RelatedTarget): Related {
   for (const t of board.threads) {
     if (t.id === target.id) continue;
     const sig = consider(threadText(t));
-    if (sig) hits.push({ kind: "thread", id: t.id, name: NAME(t.name), ...sig });
+    if (!sig) continue;
+    /* Find the fragment that carries the match, so the row can offer
+       one-tap Move/Extract on that exact fragment. */
+    const probe = (sig.phrase || sig.word || "") as string;
+    const probeWords = probe.split(" ");
+    const fragId = (t.frags || []).find((f) => {
+      const toks: string[] = tokens(f.text);
+      /* The thread connected on these words; the fragment that carries them
+         (in order, stop words between allowed — "cold strong brew" still
+         shares "cold brew") is the one Move/Extract should target. */
+      let i = 0;
+      for (const tk of toks) {
+        if (tk === probeWords[i]) i++;
+        if (i === probeWords.length) return true;
+      }
+      return false;
+    })?.id;
+    hits.push({ kind: "thread", id: t.id, name: NAME(t.name), fragId, ...sig });
   }
   for (const i of board.intentions) {
     if (i.id === target.id) continue;
@@ -279,6 +311,6 @@ export function relatedTo(board: Board, target: RelatedTarget): Related {
     items: hits
       .sort((x, y) => y.score - x.score || order[x.kind] - order[y.kind])
       .slice(0, 3)
-      .map(({ kind, id, name, reason }) => ({ kind, id, name, reason })),
+      .map(({ kind, id, name, reason, fragId }) => ({ kind, id, name, reason, fragId })),
   };
 }

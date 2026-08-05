@@ -559,21 +559,28 @@ body {
 }
 .related-row {
   display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--rule);
+  padding: 7px 0;
+}
+.related-main {
+  display: flex;
   align-items: baseline;
   gap: 8px;
-  width: 100%;
+  min-width: 0;
+  flex: 1;
   text-align: left;
   background: none;
   border: 0;
-  border-bottom: 1px solid var(--rule);
-  padding: 9px 0;
+  padding: 2px 0;
   font: inherit;
   color: inherit;
 }
-button.related-row {
+button.related-main {
   cursor: pointer;
 }
-button.related-row:hover .related-name {
+button.related-main:hover .related-name {
   color: var(--accent);
 }
 .related-kind {
@@ -596,6 +603,27 @@ button.related-row:hover .related-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.related-actions {
+  flex: none;
+  display: flex;
+  gap: 4px;
+}
+.related-actions .mini {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+.related-actions .mini:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .frag {
