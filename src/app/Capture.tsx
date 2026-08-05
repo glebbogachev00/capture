@@ -14,7 +14,7 @@
    render what it hands back.
    ============================================================ */
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Share2, Settings } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
@@ -38,7 +38,6 @@ import {
   uid,
 } from "@/lib/model";
 import { type Hits } from "@/lib/search";
-import { relatedTo, type RelatedItem } from "@/lib/related";
 import {
   IntentionCard,
   IntentionDetail,
@@ -59,9 +58,6 @@ export function Capture() {
   /* Input device plumbing: the hidden file picker, and the speech recogniser
      (shared with Distill — the mic routes to whichever surface is open). */
   const fileRef = useRef<HTMLInputElement>(null);
-  /* When a related action row is tapped, the Actions tab opens scrolled to
-     that action and it glows briefly — "goes to the action" is literal. */
-  const [focusAction, setFocusAction] = useState<string | null>(null);
 
   /* Everything else — the board, every operation on it, and the derived
      views — comes from useBoard. This destructure is the whole logic
@@ -188,21 +184,12 @@ export function Capture() {
     });
   };
 
-  /* The open thread's connections, derived from the existing search index.
-     Cheap enough to compute on every render of the one open thread. */
-  const related = useMemo(
-    () => (thread ? relatedTo(data, { kind: "thread", id: thread.id }) : { items: [] }),
-    [data, thread]
-  );
-
   const row = (a: Action, faded?: boolean) => (
     <Row
       key={a.id}
       a={a}
       faded={faded}
       now={now}
-      focus={focusAction === a.id}
-      onFocused={() => setFocusAction(null)}
       shelfOpen={shelfFor === a.id}
       onToggle={() => toggleAction(a.id)}
       onShelfClick={() => setShelfFor(shelfFor === a.id ? null : a.id)}
@@ -509,27 +496,6 @@ export function Capture() {
             onCopyThread={() => copyWhole(shareThread(thread))}
             onCopyFrag={(fragId) => copyFragment(thread.id, fragId)}
             onExtractAction={(fragId) => extractAction(thread.id, fragId)}
-            related={related}
-            onOpenRelated={(r) => {
-              /* A related row navigates to the exact thing it names: a thread
-                 opens at the matched fragment (if one is known), an action
-                 jumps to the Actions tab with the row lit, an intention
-                 opens its detail. */
-              if (r.kind === "thread") {
-                setOpen(r.id);
-                setOpenFrag(r.fragId || null);
-              } else if (r.kind === "action") {
-                setOpen(null);
-                setOpenFrag(null);
-                setOpenIntention(null);
-                setTab("actions");
-                setFocusAction(r.id);
-              } else {
-                setOpen(null);
-                setOpenFrag(null);
-                setOpenIntention(r.id);
-              }
-            }}
             busy={!!busy}
           />
         ) : (
@@ -818,8 +784,6 @@ function Row({
   faded,
   now,
   shelfOpen,
-  focus,
-  onFocused,
   onToggle,
   onShelfClick,
   onSetShelf,
@@ -835,10 +799,6 @@ function Row({
   faded?: boolean;
   now: number;
   shelfOpen: boolean;
-  /* Landed here from a Related action row: bring the action into view and
-     let it glow for a moment, then clear so it doesn't re-trigger. */
-  focus?: boolean;
-  onFocused: () => void;
   onToggle: () => void;
   onShelfClick: () => void;
   onSetShelf: (span: number | null, label: ShelfLife) => void;
@@ -854,27 +814,6 @@ function Row({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(a.text);
   const [more, setMore] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-
-  /* Same glow as a thread fragment landed on from search: scroll to it and
-     fade a highlight over it. Clears itself so a later re-render that keeps
-     `focus` true doesn't re-run the animation. onFocused lives in a ref so
-     the effect only depends on `focus` — an inline arrow recreated on every
-     parent render would otherwise reset the 2.6s timer on every tick. */
-  const onFocusedRef = useRef(onFocused);
-  useEffect(() => {
-    onFocusedRef.current = onFocused;
-  });
-  useEffect(() => {
-    if (!focus) return;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    root.current?.scrollIntoView({
-      behavior: reduce ? "auto" : "smooth",
-      block: "center",
-    });
-    const t = setTimeout(() => onFocusedRef.current(), 2600);
-    return () => clearTimeout(t);
-  }, [focus]);
 
   const commit = () => {
     if (draft.trim()) onEditText(draft.trim());
@@ -882,10 +821,8 @@ function Row({
   };
 
   return (
-    <div
-      className={"act" + (faded ? " is-faded" : "") + (focus ? " focus" : "")}
-      ref={root}
-    >
+    <div className={"act" + (faded ? " is-faded" : "")}>
+
       <button className="box" onClick={onToggle} aria-label="Mark done" />
       <div className="act-body">
         {editing ? (
@@ -1036,15 +973,11 @@ function ThreadView({
   onCopyThread,
   onCopyFrag,
   onExtractAction,
-  related,
-  onOpenRelated,
   busy,
 }: {
   thread: Thread;
   focusFragId?: string | null;
   onBack: () => void;
-  related: { items: RelatedItem[] };
-  onOpenRelated: (r: RelatedItem) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
   onRefreshSummary: () => void;
@@ -1066,7 +999,6 @@ function ThreadView({
   const [more, setMore] = useState(false);
   /* The Related line stays collapsed until asked — a quiet affordance,
      never a list sitting in the thread. */
-  const [showRelated, setShowRelated] = useState(false);
 
   return (
     <div>
@@ -1220,42 +1152,6 @@ function ThreadView({
         <div className="state">
           <h4>Where this stands</h4>
           <p>{thread.summary}</p>
-        </div>
-      )}
-
-      {/* Related: what else in here connects to this thread, and where.
-          Pure navigation — tap a row to jump to the exact thing it names
-          (the matched fragment, the action, the intention). Managing that
-          item happens in its own menu, not here: this line is for seeing
-          connections, not for making editorial decisions about them. */}
-      {related.items.length > 0 && (
-        <div className="related">
-          <button
-            className="related-head"
-            onClick={() => setShowRelated((v) => !v)}
-            aria-expanded={showRelated}
-          >
-            Related · {related.items.length}
-            <span className="related-caret">{showRelated ? "▾" : "▸"}</span>
-          </button>
-          {showRelated && (
-            <div className="related-list">
-              {related.items.map((r) => (
-                <button
-                  key={r.kind + r.id}
-                  className="related-row"
-                  onClick={() => onOpenRelated(r)}
-                  aria-label={`${r.kind}: ${r.name}`}
-                >
-                  <span className="related-top">
-                    <span className="related-kind">{r.kind}</span>
-                    <span className="related-name">{r.name}</span>
-                  </span>
-                  <span className="related-reason">{r.reason}</span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
