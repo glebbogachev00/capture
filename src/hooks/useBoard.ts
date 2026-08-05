@@ -1052,11 +1052,56 @@ export function useBoard(now: number) {
 
   /* ---------------------------- threads ----------------------------- */
 
-  const editActionText = (id: string, text: string) =>
-    commit({
+  /**
+   * A quiet proofread pass over a typed edit. Never blocks or fails the
+   * save: the user's text lands first, and if the pass finds slips the
+   * corrected wording replaces it with a notice saying so. A failure or a
+   * rate-limit simply leaves the edit as typed — nothing is ever lost.
+   */
+  const proofreadEdit = async (text: string): Promise<string> => {
+    if (!text.trim() || text.length > 4000) return text;
+    try {
+      const res = await fetch("/api/distill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op: "proofread", text }),
+      });
+      if (!res.ok) return text;
+      const out = (await res.json()) as { text?: string };
+      const fixed = out.text?.trim();
+      return fixed && fixed !== text ? fixed : text;
+    } catch {
+      return text;
+    }
+  };
+
+  const editActionText = async (id: string, text: string) => {
+    // A save that changed nothing spends no model call and no push.
+    if (latest.current.actions.find((a) => a.id === id)?.text === text) return;
+    // The edit lands immediately — saving never waits on a model call.
+    await commit({
       ...latest.current,
       actions: latest.current.actions.map((a) => (a.id === id ? { ...a, text } : a)),
     });
+    // Then the proofread pass catches typos before they stick. Only applied
+    // if the action still reads as the text we checked — a newer edit is
+    // never clobbered by a stale correction.
+    const fixed = await proofreadEdit(text);
+    if (fixed !== text) {
+      const current = latest.current;
+      const a = current.actions.find((x) => x.id === id);
+      if (a && a.text === text) {
+        await commit({
+          ...current,
+          actions: current.actions.map((x) =>
+            x.id === id ? { ...x, text: fixed } : x
+          ),
+        });
+        setNotice("Fixed a couple of typos.");
+        setTimeout(() => setNotice(null), 4000);
+      }
+    }
+  };
 
   const renameThread = (id: string, name: string) =>
     commit({
@@ -1065,6 +1110,14 @@ export function useBoard(now: number) {
     });
 
   const editFrag = async (threadId: string, fragId: string, text: string) => {
+    // A save that changed nothing spends no model call and no push.
+    if (
+      latest.current.threads
+        .find((t) => t.id === threadId)
+        ?.frags.find((f) => f.id === fragId)?.text === text
+    )
+      return;
+    // The edit lands immediately — saving never waits on a model call.
     const next = {
       ...latest.current,
       threads: latest.current.threads.map((t) =>
@@ -1077,7 +1130,34 @@ export function useBoard(now: number) {
       ),
     };
     await commit(next);
-    await regenerate(next, threadId);
+    // Then the proofread pass catches typos before they stick. Only applied
+    // if the note still reads as the text we checked — a newer edit is
+    // never clobbered by a stale correction.
+    const fixed = await proofreadEdit(text);
+    if (fixed !== text) {
+      const current = latest.current;
+      const frag = current.threads
+        .find((t) => t.id === threadId)
+        ?.frags.find((f) => f.id === fragId);
+      if (frag && frag.text === text) {
+        await commit({
+          ...current,
+          threads: current.threads.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  frags: t.frags.map((f) =>
+                    f.id === fragId ? { ...f, text: fixed } : f
+                  ),
+                }
+              : t
+          ),
+        });
+        setNotice("Fixed a couple of typos.");
+        setTimeout(() => setNotice(null), 4000);
+      }
+    }
+    await regenerate(latest.current, threadId);
   };
 
   const deleteFrag = async (threadId: string, fragId: string) => {

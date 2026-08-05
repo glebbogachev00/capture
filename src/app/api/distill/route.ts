@@ -8,7 +8,7 @@ import { NoProvidersError, chain, withFallback } from "@/lib/providers";
 /**
  * Distill — the clarifying engine.
  *
- * Three ops on one route:
+ * Four ops on one route:
  *   - "chat": stream back the next clarifying turn, given the transcript so
  *     far. Quiet, one question at a time.
  *   - "settle": run the finished transcript through the sort schema so the
@@ -18,6 +18,8 @@ import { NoProvidersError, chain, withFallback } from "@/lib/providers";
  *     carries speech-to-text artifacts (misheard words, run-on words, dropped
  *     punctuation), so the settle output gets one final correction pass at
  *     save time — fix the artifacts, never invent or drop content.
+ *   - "proofread": the same light check for a typed edit (a fragment or
+ *     action the user just rewrote). Fixes typos and slips; never rewrites.
  *
  * The prompt lives here rather than in the browser for the same reason the
  * sort prompt does: it can't be rewritten by whatever is on the client.
@@ -40,6 +42,7 @@ const Body = z.discriminatedUnion("op", [
     actions: z.array(z.string()),
     turns: z.array(Turn),
   }),
+  z.object({ op: z.literal("proofread"), text: z.string().max(4000) }),
 ]);
 
 const Settled = z.object({
@@ -58,6 +61,12 @@ const Polished = z.object({
   ),
   actions: z.array(z.string()).describe(
     "the same one-line action items, corrected the same way"
+  ),
+});
+
+const Proofread = z.object({
+  text: z.string().describe(
+    "the same text, corrected: only clear typos and slips fixed, nothing invented, nothing dropped, nothing reworded"
   ),
 });
 
@@ -114,6 +123,20 @@ Your job is to fix those artifacts and nothing else:
 
 Fix the distilled wording and, if present, the one-line action items the same way.`;
 
+const PROOFREADER = `You are a light proofreading pass inside capture, a personal thinking app. The user typed the text below into a note (or edited an existing note), and it is about to be saved.
+
+Your job is to fix clear slips and nothing else:
+- Misspelled words ("fragmnet" → "fragment", "recieve" → "receive").
+- Doubled words ("the the"), run-on words ("whatdoyoumean"), and words run together without a space.
+- Obvious grammar slips that hurt readability.
+
+Never do anything else:
+- Do not rewrite, restructure, reorder, or reword. Do not add or remove content.
+- Never "fix" a word just because it is unfamiliar. In this app, unusual words are almost always names, brands, jargon, or deliberate spelling ("Mlue", "GurrenGrow", "Hermes", "Kokoro", "Jim", "Distill", "Capture") — leave every such word exactly as written, including its casing.
+- Only correct a word when the intended word is unmistakable from the misspelling alone ("recieve" → "receive", "kitchin" → "kitchen", "expresso" → "espresso"). When in doubt, leave the word alone.
+- Preserve the user's capitalization and punctuation style — a lowercase note stays lowercase, a note with no periods stays without them. Only fix words that are clearly misspelled.
+- Keep roughly the same length. If the text is already clean, return it exactly unchanged.`;
+
 function transcript(turns: { role: string; text: string }[]) {
   return turns
     .map((t, i) => (t.role === "user" ? "You said" : "The assistant said") + ` [${i}]: ${t.text}`)
@@ -137,17 +160,20 @@ export async function POST(request: Request) {
     return Response.json({ error: "bad request" }, { status: 400 });
   }
 
-  if (!body.turns.length) {
-    return Response.json({ error: "nothing to say yet" }, { status: 400 });
-  }
-  // The settle op feeds the whole transcript to the model in one call; cap
-  // its size so a runaway client can't burn quota in a single request.
-  const totalChars = body.turns.reduce((n, t) => n + t.text.length, 0);
-  if (body.turns.length > 100 || totalChars > 40_000) {
-    return Response.json(
-      { error: "That conversation is too long to distil in one go." },
-      { status: 400 }
-    );
+  // Only the turn-based ops need a transcript; proofread takes a bare text.
+  if (body.op !== "proofread") {
+    if (!body.turns.length) {
+      return Response.json({ error: "nothing to say yet" }, { status: 400 });
+    }
+    // The settle op feeds the whole transcript to the model in one call; cap
+    // its size so a runaway client can't burn quota in a single request.
+    const totalChars = body.turns.reduce((n, t) => n + t.text.length, 0);
+    if (body.turns.length > 100 || totalChars > 40_000) {
+      return Response.json(
+        { error: "That conversation is too long to distil in one go." },
+        { status: 400 }
+      );
+    }
   }
 
   /* ------------------------------ chat ------------------------------ */
@@ -157,6 +183,9 @@ export async function POST(request: Request) {
     if (last.role !== "user") {
       return Response.json({ error: "bad request" }, { status: 400 });
     }
+    // Captured before the generator: a closure does not keep the narrowed
+    // union member, and the turn ops are the only ones with `turns`.
+    const turns = body.turns;
 
     // Stream the reply through the provider chain. A tier that fails before
     // producing a single chunk is replaced by the next one; a tier that dies
@@ -178,7 +207,7 @@ export async function POST(request: Request) {
             maxRetries: 0,
             providerOptions: tier.providerOptions,
             system: CLARIFIER,
-            messages: body.turns.map((t) => ({
+            messages: turns.map((t) => ({
               role: t.role,
               content: t.text,
             })),
@@ -278,6 +307,29 @@ export async function POST(request: Request) {
       return Response.json({ ...value, via });
     } catch (error) {
       console.error("polish failed", error);
+      const { message, status } = explain(error);
+      return Response.json({ error: message }, { status });
+    }
+  }
+
+  /* ---------------------------- proofread --------------------------- */
+
+  if (body.op === "proofread") {
+    try {
+      const { value, via } = await withFallback(async (tier) => {
+        const { object } = await generateObject({
+          model: tier.model,
+          maxRetries: 0,
+          schema: Proofread,
+          system: PROOFREADER,
+          prompt: body.text,
+          providerOptions: tier.providerOptions,
+        });
+        return object;
+      });
+      return Response.json({ ...value, via });
+    } catch (error) {
+      console.error("proofread failed", error);
       const { message, status } = explain(error);
       return Response.json({ error: message }, { status });
     }
