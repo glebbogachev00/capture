@@ -114,7 +114,7 @@ function threadText(t: Thread): string {
   return [
     t.name,
     t.summary,
-    ...t.frags.map((f) => f.text),
+    ...(t.frags || []).map((f) => f.text),
   ]
     .filter(Boolean)
     .join(" ");
