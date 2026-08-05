@@ -290,7 +290,7 @@ export function Capture() {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Say it however it comes out. Start with /action, /thread or /intention to choose where it lands."
+            placeholder="Say it however it comes out. Say “action:”, “thread:” or “intention:” to choose where it lands."
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
             }}

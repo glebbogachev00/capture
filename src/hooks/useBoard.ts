@@ -57,6 +57,7 @@ import {
 } from "@/lib/backup";
 import { copyToClipboard, shareText, shareableFor } from "@/lib/share";
 import { search } from "@/lib/search";
+import { parseCommandPrefix } from "@/lib/command";
 import {
   TOMBSTONE_KEY,
   mergeSync,
@@ -741,14 +742,12 @@ export function useBoard(now: number) {
   /** Praise be. The main capture, sorted and filed. */
   const submit = async () => {
     const raw = text.trim();
-    /* A leading /action, /thread or /intention pins the destination: the
-       command word is stripped and the rest goes through the sorter with
-       the destination already decided. */
-    const forced = raw.match(/^\/(action|thread|intention)\b/i);
-    const force = forced
-      ? (forced[1].toLowerCase() as "action" | "thread" | "intention")
-      : undefined;
-    const payload = forced ? raw.slice(forced[0].length).trim() : raw;
+    /* A leading command pins the destination: the command word is
+       stripped and the rest goes through the sorter with the destination
+       already decided. Works typed (/action …) or spoken ("slash action …"
+       or "action. …") — the parser accepts all the forms dictation and
+       keyboards actually produce. */
+    const { force, payload } = parseCommandPrefix(raw);
     if (!payload && !pics.length) return;
     setErr("");
     setSwept(null);
