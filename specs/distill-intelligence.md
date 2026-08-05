@@ -1,8 +1,21 @@
 # Distill intelligence — act on intent, stop over-asking
 
-Status: **spec — v1 agreed, not yet built.**
+Status: **v1 built + verified** (probe passes on the real chain, twice in a row; 10 unit tests; live UI pass done). v2 spec'd, not built.
 Owner: capture / Gleb.
 Open actions it closes: "Refine the capture feature to decide actions based on user prompt", "Improve the Distill Engine to reduce endless questioning and increase conversational intelligence".
+
+**Implemented:** `src/app/api/distill/route.ts` (reworked CLARIFIER + budget injection in the chat branch), `src/lib/distill.ts` (`countAssistantQuestions`), `src/lib/distill.test.ts` (10 tests), `scripts/probe-distill.mjs` (pass criteria, requires the dev server).
+
+## Verification result (2026-08-06)
+
+All five probe scenarios PASS twice in a row:
+- every conversation states a draft first, never echoes the user's words;
+- at most 1 question per conversation, never 2+ (budget held);
+- a confirmation closes with `[ready]` on the next turn;
+- the concrete case closes on turn 1 with 0 questions;
+- the vague case reaches `[ready]` within 3 turns.
+
+Two prompt iterations were needed during verification: (1) the draft must never lift the user's wording into it (a 5+ word echo in one scenario); (2) a draft must not end by appending the user's own sentence as a trailing explanation. Both are now explicit rules.
 
 ## The problem
 

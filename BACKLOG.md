@@ -16,14 +16,21 @@ The three-kinds model does not care how the words arrived. Voice is just another
 
 ---
 
-## Distill intelligence — act on intent, stop over-asking (NEXT)
+## ~~Distill intelligence — act on intent, stop over-asking~~ v1 built
 
-The clarifying engine still interrogates: it asks questions instead of proposing a record, so a user can be drawn into an endless back-and-forth that the settle step could have skipped.
+The clarifying engine interrogated: it asked questions instead of proposing a record, drawing users into an endless back-and-forth.
 
-- **v1 — "propose, don't interrogate"** (prompt-only, no architecture change): the engine's default move becomes drafting the record and asking for confirmation, not asking an open question. Zero questions when the first message is already concrete — respond with the draft and `[ready]` immediately. Question budget cut from two to one per conversation, and only when there is genuinely no shape to draft. Every question must be proposal-grounded ("does *this* match?") rather than abstract ("what exactly do you mean?"). Spec: `specs/distill-intelligence.md`.
-- **v1 verification is mandatory** — this is model-behavior work, so the pass criteria are a probe script against the real clarifier (the STARTERS + a concrete message + a genuinely vague one) counting questions per run, plus a live pass.
-- **v2 — board-aware clarifier**: pass thread names + active action texts so the engine can say "this connects to your thread X" or "you already have this as an action". The "acts on intent" layer.
-- **v2 — settle reuses the conversation's draft**: the clarifier returns its draft as data (structured `chat` response, killing the `[ready]` marker-splitting in `useBoard`), and settle confirms/refines that draft instead of cold-processing the transcript.
+### v1 — "propose, don't interrogate" — **built + verified**
+
+- The CLARIFIER's default move is now **stating the record** ("I'd file this as a thread about whether to leave the job — right?"), and the only question it may ask is a confirmation question about that draft.
+- The **question budget is code-computed**: `countAssistantQuestions` counts assistant turns ending in `?` from the transcript, and the chat route injects "you've asked N questions, ask no more" into the prompt. Prose the model can drift past is gone.
+- **Verified by `scripts/probe-distill.mjs`** against the real chain (login + the three STARTERS + concrete + vague): all five scenarios state a draft first, ask at most one question, never restate the user's words, and close with `[ready]` in 1–2 turns. Passed twice in a row on free tiers. Unit tests: 10 (`distill.test.ts`). Live UI pass: propose → confirm → the Distill button lights "it's ready".
+- Spec: `specs/distill-intelligence.md`.
+
+### v2 (unbuilt)
+
+- **Board-aware clarifier**: pass thread names + active action texts so the engine can say "this connects to your thread X" or "you already have this as an action". The "acts on intent" layer.
+- **Settle reuses the conversation's draft**: the clarifier returns its draft as data (structured `chat` response), and settle confirms/refines that draft instead of cold-processing the transcript.
 
 ## Tidy — on-demand board review (agreed, unbuilt)
 

@@ -4,6 +4,7 @@ import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { NoProvidersError, chain, withFallback } from "@/lib/providers";
+import { countAssistantQuestions } from "@/lib/distill";
 
 /**
  * Distill — the clarifying engine.
@@ -70,23 +71,29 @@ const Proofread = z.object({
   ),
 });
 
-const CLARIFIER = `You are the clarifying engine inside capture, a personal thinking app. The user has a half-formed thought. Your job is to help them get to the bottom of it — by understanding, not by interrogating.
+const CLARIFIER = `You are the clarifying engine inside capture, a personal thinking app. The user has a half-formed thought. Your job is to get to the bottom of it — by proposing what it is, not by interrogating.
 
-Respond like a person, not a mirror. The user can see what they just said; repeating it back to them ("So you're saying…", "You're asking whether…") is noise, not understanding. Answer what they asked, and only dig when a gap is real.
+After every user turn, your first move is to state the record you would file: name the kind and the shape of it, in one or two plain sentences. For example: "I'd file this as a thread about whether to leave the job — it says you're burned out, but the money's good. Right?" The draft is how you show understanding; the user reads it, corrects it, or confirms it.
+
+The only question you may ask is a confirmation question about that draft — "is it X or Y?", "does that match?", "right?". Never ask an open-ended probe ("what do you mean?", "tell me more") — a half-formed thought gets a draft, not a questionnaire.
 
 After every user turn:
-1. Respond directly to what they said, in plain language.
-2. Only if something is genuinely missing, ask the ONE question that matters most. Never more than one.
-3. If you have enough — which is most of the time — do not ask anything. Close with one short line that moves things forward, then end your reply with the marker [ready] on its own line, so the app knows the conversation can be filed. Say nothing after it.
+1. State the record you would file.
+2. If a real ambiguity remains about the draft, ask the ONE confirmation question that resolves it. Never more than one.
+3. When you are confident, or the user confirms the draft, ask nothing. Close with one short line — always write it, even when the user just confirmed — then end your reply with the marker [ready] on its own line, so the app knows the conversation can be filed. Say nothing after it.
 
 Rules you never break:
-- Never restate, summarize, or re-read the user's words back at them. Ever. It wastes their attention.
-- Never ask a question the transcript already answers, and never make the user repeat themselves.
+- Never restate, summarize, or re-read the user's words back at them. Ever. The draft is a new framing, not an echo.
+- The draft is yours, not theirs: never lift the user's wording into it. Say the record in your own words, even when theirs were short and self-contained.
+- Redundancy is restating: never append the user's own sentence after a dash, comma, or colon as an explanation of the draft. If the record is already stated, close — a trailing echo adds nothing.
+- A confirmation word from the user — "yes", "right", "that's it", "correct", "exactly", "sounds good" — must produce [ready] on your next reply, never a new question. Confirming the draft ends the conversation.
 - Never ask more than two questions across the whole conversation. A third question means you are not listening; close instead, however rough.
 - One question at a time, short replies of one to three sentences.
 - The marker is a hard either/or: a reply that asks a question must NOT contain [ready] — the app lights up "Distill" when it sees [ready], so pairing it with a question would tell the user the conversation is finished and then ask them to keep going. A question gets no marker; only a reply with nothing left to ask gets [ready].
 - It is better to close on an approximate record the user can correct in review than to keep asking. The review step exists exactly for that — a rough record beats a long interrogation.
-- Plain language. No lists, no bullets, no labels, no "great question".`;
+- Plain language. No lists, no bullets, no labels, no "great question".
+
+A note on question-counting: the app counts your questions mechanically and tells you how many you have already asked. That number is a hard budget, not a suggestion — when the budget is spent, you have no questions left, and you close with [ready] however rough the record is.`;
 
 const SETTLER = `You are the settling engine inside capture. A person has just had a clarifying conversation, and it is your job to turn the whole exchange into exactly one record of one of three kinds.
 
@@ -187,6 +194,19 @@ export async function POST(request: Request) {
     // union member, and the turn ops are the only ones with `turns`.
     const turns = body.turns;
 
+    /* The question budget, computed not imagined: count how many questions
+       the assistant has already asked in the transcript, and turn the number
+       into a hard instruction. The 2-question cap used to be prose the model
+       could drift past; now the code counts and the model only obeys. */
+    const asked = countAssistantQuestions(turns);
+    let system = CLARIFIER;
+    if (asked >= 1) {
+      system += `\n\nYou have already asked ${asked} question${asked === 1 ? "" : "s"} across this conversation. Ask no more.`;
+    }
+    if (asked >= 2) {
+      system += `\n\nReply [ready] — the user has answered enough.`;
+    }
+
     // Stream the reply through the provider chain. A tier that fails before
     // producing a single chunk is replaced by the next one; a tier that dies
     // mid-answer ends the reply instead — retrying would interleave a second
@@ -206,7 +226,7 @@ export async function POST(request: Request) {
             // and let the next tier in the chain take the call.
             maxRetries: 0,
             providerOptions: tier.providerOptions,
-            system: CLARIFIER,
+            system,
             messages: turns.map((t) => ({
               role: t.role,
               content: t.text,

@@ -34,6 +34,27 @@ export type DistillResult = {
   threadName?: string | null;
 };
 
+/**
+ * How many questions the assistant has already asked so far in a transcript.
+ *
+ * A turn counts as a question when its trimmed text ends with "?". This is
+ * the number the chat route turns into a hard budget in the prompt — the
+ * cap stops being prose the model can drift past, because the code counts
+ * and the model only obeys. Purely structural on purpose: no sentiment,
+ * no parsing, so it is deterministic and unit-testable.
+ */
+export function countAssistantQuestions(
+  turns: { role: string; text: string }[]
+): number {
+  let n = 0;
+  for (const t of turns) {
+    if (t.role !== "assistant") continue;
+    const text = t.text?.trim();
+    if (text && text.endsWith("?")) n++;
+  }
+  return n;
+}
+
 /** Fill in anything a saved session is missing, dropping malformed turns. */
 export function hydrateDistill(raw: string | null | undefined): DistillSession {
   if (!raw) return EMPTY_DISTILL;
