@@ -42,13 +42,13 @@ const Body = z.object({
     z.object({ id: z.string(), name: z.string(), about: z.string() })
   ),
   /** The destination is already decided; only the wording is in question. */
-  force: z.enum(["action"]).optional(),
+  force: z.enum(["action", "thread", "intention"]).optional(),
 });
 
 function prompt(
   raw: string,
   threads: z.infer<typeof Body>["threads"],
-  force?: "action"
+  force?: "action" | "thread" | "intention"
 ) {
   if (force === "action") {
     return (
@@ -64,6 +64,29 @@ function prompt(
       '- "days" for ordinary errands and small follow-ups.\n' +
       '- "weeks" for real work that takes a while.\n' +
       '- "keep" for commitments to other people, money, deadlines, or anything with consequences if it silently vanished. When unsure, choose "keep".'
+    );
+  }
+  if (force === "thread") {
+    return (
+      "This is an excerpt from someone's running notes, and they have already decided this is THINKING — a subject to keep adding to, not a task to close out. Your only job is to file it.\n\n" +
+      'Excerpt:\n"""' +
+      raw +
+      '"""\n\n' +
+      'Set kind to "thread". Leave "actions" empty.\n' +
+      "Pick the best existing thread below if one clearly fits and set threadId to its id; otherwise set threadId to null and invent a short threadName.\n" +
+      "Their existing threads:\n" +
+      (threads.length ? JSON.stringify(threads) : "(none yet)") +
+      "\nSet clean to the excerpt tidied up, and title to at most six words."
+    );
+  }
+  if (force === "intention") {
+    return (
+      "This is an excerpt from someone's running notes, and they have already declared an intention — a state they are calling into being about themselves or their life, spoken as a wish, a resolve, or an aspiration. Not a task to close out, not a subject to think about.\n\n" +
+      'Excerpt:\n"""' +
+      raw +
+      '"""\n\n' +
+      'Set kind to "intention". Leave "actions" and both thread fields null.\n' +
+      "Set clean to the intention rewritten so it reads as something they are already living into, keeping their voice and every idea, and title to at most six words."
     );
   }
   return (
@@ -134,7 +157,25 @@ export async function POST(request: Request) {
       });
       return object;
     });
-    return Response.json({ ...value, via });
+    /* The user's command outranks the model: when a destination was forced,
+       the answer must obey it even if the model drifted. For a thread, the
+       model still picks the best existing thread; only the kind and the
+       actions are pinned. */
+    let { kind, actions, threadId, threadName } = value;
+    if (body.force === "thread") {
+      kind = "thread";
+      actions = [];
+    } else if (body.force === "intention") {
+      kind = "intention";
+      actions = [];
+      threadId = null;
+      threadName = null;
+    } else if (body.force === "action") {
+      kind = "action";
+      threadId = null;
+      threadName = null;
+    }
+    return Response.json({ ...value, kind, actions, threadId, threadName, via });
   } catch (error) {
     console.error("sort failed", error);
     const { message, status } = explain(error);

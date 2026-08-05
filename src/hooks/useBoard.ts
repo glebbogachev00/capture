@@ -490,9 +490,13 @@ export function useBoard(now: number) {
    * Ask the server to sort a capture. Throws SortError with the reason.
    *
    * `force` is for when the destination is already decided and only the
-   * wording needs working out — pulling an action out of a fragment, say.
+   * wording needs working out — pulling an action out of a fragment, or a
+   * capture that started with /action, /thread or /intention.
    */
-  const requestSort = async (raw: string, force?: "action") => {
+  const requestSort = async (
+    raw: string,
+    force?: "action" | "thread" | "intention"
+  ) => {
     const known = latest.current.threads.map((t) => ({
       id: t.id,
       name: t.name,
@@ -737,7 +741,15 @@ export function useBoard(now: number) {
   /** Praise be. The main capture, sorted and filed. */
   const submit = async () => {
     const raw = text.trim();
-    if (!raw && !pics.length) return;
+    /* A leading /action, /thread or /intention pins the destination: the
+       command word is stripped and the rest goes through the sorter with
+       the destination already decided. */
+    const forced = raw.match(/^\/(action|thread|intention)\b/i);
+    const force = forced
+      ? (forced[1].toLowerCase() as "action" | "thread" | "intention")
+      : undefined;
+    const payload = forced ? raw.slice(forced[0].length).trim() : raw;
+    if (!payload && !pics.length) return;
     setErr("");
     setSwept(null);
     setBusy("Sorting");
@@ -755,7 +767,21 @@ export function useBoard(now: number) {
     }
 
     try {
-      const out = await requestSort(raw || "(image only)");
+      // A forced intention is declared rather than filed, and the intention
+      // engine rewrites the words from scratch — the sorter's output would
+      // be thrown away, so it is never asked. A destination the model chose
+      // on its own still goes through the sorter to learn the kind first.
+      if (force === "intention") {
+        captureSnapshot.current = null;
+        setCanUndo(false);
+        setText("");
+        setPics([]);
+        await expandIntention(payload);
+        setTimeout(() => setLanded(null), 4500);
+        return;
+      }
+
+      const out = await requestSort(payload || "(image only)", force);
 
       // An intention is declared rather than filed, so it takes a second
       // pass through its own engine and stops at a review step instead of
@@ -766,7 +792,7 @@ export function useBoard(now: number) {
         setCanUndo(false);
         setText("");
         setPics([]);
-        await expandIntention(raw);
+        await expandIntention(payload);
         setTimeout(() => setLanded(null), 4500);
         return;
       }
