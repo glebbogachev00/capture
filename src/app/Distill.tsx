@@ -45,6 +45,7 @@ export function DistillView({
   onSendText,
   onSettle,
   onBack,
+  ready,
   settled,
   onSave,
   onDiscard,
@@ -63,6 +64,10 @@ export function DistillView({
   onSendText: (text: string) => void;
   onSettle: () => void;
   onBack: () => void;
+  /* The engine ended its reply with [ready] — it has enough to distil.
+     Lights up the Distill button so the user knows the conversation
+     is done being interrogated. */
+  ready: boolean;
   settled: DistillResult | null;
   onSave: (clean: string, actions: string[], shelfLife: string) => void;
   onDiscard: () => void;
@@ -274,11 +279,13 @@ export function DistillView({
 
       <div className="distill-actions">
         <button
-          className="capture-btn distill-settle"
+          className={
+            "capture-btn distill-settle" + (ready ? " ready" : "")
+          }
           onClick={onSettle}
           disabled={busy || session.turns.length === 0}
         >
-          {busy ? "Distilling…" : "Distill"}
+          {busy ? "Distilling…" : ready ? "Distill — it's ready" : "Distill"}
         </button>
         <button
           className="ghost warn distill-discard"

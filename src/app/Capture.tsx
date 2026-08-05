@@ -141,6 +141,7 @@ export function Capture() {
     setDistillInput,
     distillBusy,
     distillErr,
+    distillReady,
     settled,
     openDistill,
     closeDistill,
@@ -275,6 +276,7 @@ export function Capture() {
             onSendText={(t) => sendDistill(t)}
             onSettle={settleDistill}
             onBack={closeDistill}
+            ready={distillReady}
             settled={settled}
             onSave={(clean, actions, shelfLife) =>
               saveSettled(clean, actions, shelfLife)

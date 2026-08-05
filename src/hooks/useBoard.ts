@@ -129,6 +129,10 @@ export function useBoard(now: number) {
   const [distillInput, setDistillInput] = useState("");
   const [distillBusy, setDistillBusy] = useState(false);
   const [distillErr, setDistillErr] = useState("");
+  /* Whether the engine said the conversation is ready to be filed — the
+     clarifier ends its reply with [ready] when it has enough. Lights up
+     the Distill button so the user knows the interrogation is over. */
+  const [distillReady, setDistillReady] = useState(false);
   const [settled, setSettled] = useState<DistillResult | null>(null);
   /* Mirrors distillBusy in a ref so two taps in the same tick can't both
      start a request before React has re-rendered. */
@@ -1394,6 +1398,8 @@ export function useBoard(now: number) {
     if (!text || distillBusyRef.current) return;
     setDistillErr("");
     setSettled(null);
+    // A fresh reply re-judges readiness from scratch.
+    setDistillReady(false);
     distillBusyRef.current = true;
 
     // A session from a previous visit may still be hydrating; adopt the disk
@@ -1443,11 +1449,26 @@ export function useBoard(now: number) {
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let acc = "";
+      /* The [ready] marker is stripped as it streams so it never reaches the
+         transcript — and therefore never appears on screen or gets spoken
+         aloud by the voice layer, which chunks the live text as it lands.
+         A few trailing bytes are carried over so a marker split across chunk
+         boundaries is still caught. */
+      let carry = "";
       if (reader) {
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
-          acc += decoder.decode(value, { stream: true });
+          const raw = carry + decoder.decode(value, { stream: true });
+          const marker = raw.indexOf("[ready]");
+          if (marker !== -1) {
+            setDistillReady(true);
+            carry = raw.slice(marker + 7);
+            acc += raw.slice(0, marker);
+          } else {
+            carry = raw.slice(Math.max(0, raw.length - 7));
+            acc += raw.slice(0, Math.max(0, raw.length - 7));
+          }
           // Update the streaming turn in place.
           setDistillSession((s) => ({
             ...s,
@@ -1457,6 +1478,8 @@ export function useBoard(now: number) {
           }));
         }
       }
+      /* Trailing bytes that never found a marker (end of a normal reply). */
+      acc += carry;
       const doneSession: DistillSession = {
         ...withUser,
         turns: [...withUser.turns, { ...assistantTurn, text: acc.trim() }],
@@ -1751,6 +1774,7 @@ export function useBoard(now: number) {
     setDistillInput,
     distillBusy,
     distillErr,
+    distillReady,
     settled,
     openDistill,
     closeDistill,

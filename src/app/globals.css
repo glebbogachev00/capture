@@ -1464,6 +1464,25 @@ body {
   justify-content: center;
 }
 
+/* The clarifier said it has enough — the button glows so the user knows
+   the conversation is done being interrogated. A soft pulse, nothing that
+   fights for attention. */
+.distill-settle.ready {
+  border-color: var(--accent);
+  color: var(--accent);
+  animation: distill-ready 2.4s ease-in-out infinite;
+}
+
+@keyframes distill-ready {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
+
 /* The confirm gate in front of Discard — the transcript is erased for good,
    so the ask is a small card rather than a bare button. */
 .discard-confirm p {
