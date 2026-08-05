@@ -41,6 +41,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# the sync hub's on-disk store (self-hosted on the Mac)
+.data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

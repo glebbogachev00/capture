@@ -53,6 +53,8 @@ export type Action = {
   fadedAt?: number | null;
   /** Landed here raw because no model would answer. Can be sorted later. */
   unsorted?: boolean;
+  /** When this item last changed — the sync merge compares these. */
+  updatedAt?: number;
 };
 
 export type Frag = {
@@ -62,6 +64,7 @@ export type Frag = {
   imgs?: string[];
   /** As above: saved verbatim, never cleaned up. */
   unsorted?: boolean;
+  updatedAt?: number;
 };
 
 export type Thread = {
@@ -69,6 +72,7 @@ export type Thread = {
   name: string;
   summary: string;
   frags: Frag[];
+  updatedAt?: number;
 };
 
 /**
@@ -109,6 +113,7 @@ export type Principle = {
   enabled: boolean;
   /** Shipped with the app rather than written by hand; cannot be deleted. */
   builtin?: boolean;
+  updatedAt?: number;
 };
 
 export type Board = {
@@ -141,6 +146,7 @@ export const SEED_PRINCIPLES: Principle[] = [
   description,
   enabled: true,
   builtin: true,
+  updatedAt: 0,
 }));
 
 export const EMPTY: Board = {
@@ -157,11 +163,23 @@ export const EMPTY: Board = {
  * `principles` key, and reading them would otherwise crash on first render.
  */
 export function hydrate(raw: Partial<Board> | null | undefined): Board {
+  /* Items written before sync existed carry no updatedAt; fall back to their
+     creation time so the first merge has something sane to compare. */
+  const stamped = <T extends { updatedAt?: number; at?: number }>(x: T): T => ({
+    ...x,
+    updatedAt: x.updatedAt ?? x.at ?? 0,
+  });
   return {
-    actions: raw?.actions ?? [],
-    threads: raw?.threads ?? [],
-    intentions: raw?.intentions ?? [],
-    principles: raw?.principles?.length ? raw.principles : SEED_PRINCIPLES,
+    actions: (raw?.actions ?? []).map(stamped),
+    threads: (raw?.threads ?? []).map((t) => ({
+      ...t,
+      updatedAt: t.updatedAt ?? t.frags?.at(-1)?.at ?? 0,
+      frags: (t.frags ?? []).map(stamped),
+    })),
+    intentions: (raw?.intentions ?? []).map(stamped),
+    principles: (raw?.principles?.length ? raw.principles : SEED_PRINCIPLES).map(
+      (p) => ({ ...p, updatedAt: p.updatedAt ?? 0 })
+    ),
   };
 }
 
@@ -202,26 +220,30 @@ export async function sweep(data: Board) {
   const now = Date.now();
   let faded = 0;
   let cleared = 0;
+  const clearedIds: string[] = [];
   const kept: Action[] = [];
 
   for (const a of data.actions) {
     if (a.done && a.doneAt && now - a.doneAt > AFTER_DONE) {
       await dropImages(a.imgs);
       cleared++;
+      clearedIds.push(a.id);
       continue;
     }
     if (a.faded && a.fadedAt && now - a.fadedAt > GRACE) {
       await dropImages(a.imgs);
       cleared++;
+      clearedIds.push(a.id);
       continue;
     }
     if (!a.done && !a.faded && a.expires && now > a.expires) {
-      kept.push({ ...a, faded: true, fadedAt: now });
+      // Fading is a change like any other — the other device must see it.
+      kept.push({ ...a, faded: true, fadedAt: now, updatedAt: now });
       faded++;
       continue;
     }
     kept.push(a);
   }
 
-  return { next: { ...data, actions: kept }, faded, cleared };
+  return { next: { ...data, actions: kept }, faded, cleared, clearedIds };
 }

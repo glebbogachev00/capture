@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, Share2, Settings } from "lucide-react";
+import { Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Share2, Settings } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
 import {
@@ -154,6 +154,8 @@ export function Capture() {
     restoreFromFile,
     importBackup,
     doShare,
+    sync,
+    syncNow,
   } = useBoard(now);
 
   /* Input device plumbing: the hidden file picker, and the speech recogniser
@@ -213,6 +215,23 @@ export function Capture() {
             <div className="capture-count">
               {live.length} open · {data.threads.length} threads
             </div>
+            <button
+              className={
+                "icon-btn sync-btn" +
+                (sync ? (sync.ok ? " synced" : " sync-bad") : "")
+              }
+              onClick={() => void syncNow()}
+              aria-label="Sync now"
+              title={
+                sync
+                  ? sync.ok
+                    ? "Synced " + fmt(sync.at) + " — tap to sync now"
+                    : (sync.note || "Hub unreachable") + " — tap to retry"
+                  : "Sync this device with the hub"
+              }
+            >
+              <RefreshCw size={18} strokeWidth={1.7} />
+            </button>
             {!showSettings && !draft && (
               <button
                 className="icon-btn"
@@ -401,6 +420,8 @@ export function Capture() {
             onImportIntent={importBackup}
             onLogout={logout}
             ioNote={ioNote}
+            sync={sync}
+            onSyncNow={syncNow}
           />
         ) : draft ? (
           <IntentionDraft

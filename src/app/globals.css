@@ -1117,6 +1117,42 @@ body {
   border: 0;
 }
 
+/* The sync status marker in Settings — a quiet dot that turns green once
+   this device has talked to the hub. */
+.sync-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--rule);
+  flex: none;
+}
+.sync-dot.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.sync-dot.bad {
+  background: #c4452b;
+  border-color: #c4452b;
+}
+
+/* The header sync control — a refresh button that tells the story in its
+   border: green once this device has reached the hub, red when the last
+   attempt failed, neutral before the first sync. Tap to pull + push now. */
+.icon-btn.sync-btn {
+  transition: color 0.2s, border-color 0.2s;
+}
+.icon-btn.sync-btn.synced {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.icon-btn.sync-btn.sync-bad {
+  color: #c4452b;
+  border-color: #c4452b;
+}
+.icon-btn.sync-btn:active {
+  transform: scale(0.92);
+}
+
 /* Loud enough to notice that an import did or did not do anything. */
 .io-note {
   font-size: 13.5px;
@@ -1579,6 +1615,149 @@ body {
   border-color: var(--accent);
 }
 
+/* funding page */
+.funding-page {
+  padding-bottom: 56px;
+}
+.funding-wrap {
+  padding-bottom: 24px;
+}
+.funding-head {
+  align-items: center;
+}
+.funding-mark {
+  color: inherit;
+  text-decoration: none;
+}
+.funding-hero {
+  padding: 40px 0 28px;
+}
+.funding-kicker,
+.funding-card-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+.funding-hero h1 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(44px, 12vw, 88px);
+  font-weight: 500;
+  line-height: 0.9;
+  letter-spacing: -0.055em;
+  font-variation-settings: "SOFT" 45, "WONK" 1;
+  max-width: 560px;
+  margin: 0;
+}
+.funding-lede {
+  max-width: 500px;
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 19px;
+  line-height: 1.45;
+}
+.funding-card {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 12px;
+}
+.funding-rule-card {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.funding-rule-text {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 25px;
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+  font-variation-settings: "SOFT" 35;
+  margin: 0;
+}
+.funding-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.funding-grid .funding-card {
+  margin-bottom: 0;
+}
+.funding-card p:not(.funding-card-label) {
+  margin: 0;
+  color: var(--muted);
+}
+.funding-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.funding-list.compact {
+  margin-top: 14px;
+}
+.funding-list li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 15px;
+}
+.funding-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.68em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.pricing-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.pricing-card {
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  border-radius: 12px;
+  padding: 14px;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+}
+.pricing-card p {
+  font-weight: 600;
+  color: var(--ink) !important;
+}
+.pricing-card strong {
+  display: block;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 42px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin: auto 0 12px;
+}
+.pricing-card span {
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+.supporter-card h2 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  font-variation-settings: "SOFT" 35;
+  margin: 0 0 12px;
+}
+
 /*
  * Phone layout. Kept at the end so these win over the base rules above
  * without needing inflated selectors.
@@ -1602,6 +1781,19 @@ body {
    */
   .capture-count {
     display: none;
+  }
+  .funding-head .capture-count {
+    display: block;
+  }
+  .funding-hero {
+    padding-top: 28px;
+  }
+  .funding-grid,
+  .pricing-row {
+    grid-template-columns: 1fr;
+  }
+  .pricing-card {
+    min-height: 118px;
   }
 }
 

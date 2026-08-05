@@ -57,6 +57,15 @@ import {
 } from "@/lib/backup";
 import { copyToClipboard, shareText, shareableFor } from "@/lib/share";
 import { search } from "@/lib/search";
+import {
+  TOMBSTONE_KEY,
+  mergeSync,
+  mergeTombstones,
+  stampChanges,
+  type SyncState,
+  type Tombstone,
+} from "@/lib/sync";
+import type { SyncStore } from "@/lib/syncStore";
 import type { Draft, IoNote } from "@/app/Intentions";
 
 /* Carries the server's explanation so the board can show it verbatim. */
@@ -131,15 +140,146 @@ export function useBoard(now: number) {
      state. `commit` (and the loader) are the only writers. */
   const latest = useRef<Board>(data);
 
-  const commit = useCallback(async (next: Board) => {
-    setData(next);
-    latest.current = next;
+  /* ------------------------------ sync ------------------------------ */
+
+  /* This device's deletions, remembered locally so an offline delete is
+     still pushed once the hub is reachable again. Persisted under its own
+     key, next to the board. */
+  const tombstones = useRef<Tombstone[]>([]);
+  /* When the last exchange with the hub happened, and whether it worked. */
+  const [sync, setSync] = useState<
+    | { ok: boolean; at: number; note?: string }
+    | null
+  >(null);
+  const syncing = useRef(false);
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Send our state to the hub and adopt its merged answer. */
+  const pushNow = useCallback(async () => {
+    if (syncing.current) return;
+    syncing.current = true;
     try {
-      await set(KEY, JSON.stringify(next));
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          board: latest.current,
+          tombstones: tombstones.current,
+        } as SyncState),
+      });
+      if (!res.ok) throw new Error("sync failed");
+      const stored = (await res.json()) as SyncStore;
+      /* The hub merged OUR push with whatever else it holds — a superset of
+         what we sent. Adopt it, but merge against anything that changed
+         locally while the request was in flight so that newer edits win. */
+      const merged = mergeSync(
+        { board: latest.current, tombstones: tombstones.current },
+        { board: stored.board, tombstones: stored.tombstones }
+      );
+      latest.current = merged.board;
+      setData(merged.board);
+      tombstones.current = merged.tombstones;
+      try {
+        await set(KEY, JSON.stringify(merged.board));
+        await set(TOMBSTONE_KEY, JSON.stringify(merged.tombstones));
+      } catch {
+        /* disk hiccup; next commit retries */
+      }
+      setSync({ ok: true, at: stamp() });
     } catch {
-      setErr("Couldn't save that. Your last capture is still on screen — try again.");
+      /* hub unreachable — keep everything local, retry on the next change */
+      setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
     }
+    syncing.current = false;
   }, []);
+
+  /** Coalesce bursts of edits into one push a beat after the last one. */
+  const schedulePush = useCallback(() => {
+    if (pushTimer.current !== null) return;
+    pushTimer.current = setTimeout(() => {
+      pushTimer.current = null;
+      void pushNow();
+    }, 1200);
+  }, [pushNow]);
+
+  /**
+   * Pull the hub's copy, merge it with ours, and adopt the result. Returns
+   * whether anything changed locally. Success/failure is recorded in `sync`
+   * either way, so the header dot shows a live hub even when nothing moved.
+   */
+  const pullNow = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/sync");
+      if (!res.ok) return false;
+      const remote = (await res.json()) as SyncStore;
+      const merged = mergeSync(
+        { board: latest.current, tombstones: tombstones.current },
+        { board: remote.board, tombstones: remote.tombstones }
+      );
+      const changed =
+        JSON.stringify(merged.board) !== JSON.stringify(latest.current) ||
+        merged.tombstones.length !== tombstones.current.length;
+      if (changed) {
+        latest.current = merged.board;
+        setData(merged.board);
+        tombstones.current = merged.tombstones;
+        try {
+          await set(KEY, JSON.stringify(merged.board));
+          await set(TOMBSTONE_KEY, JSON.stringify(merged.tombstones));
+        } catch {
+          /* next commit retries */
+        }
+      }
+      setSync({ ok: true, at: stamp() });
+      // Our local additions ride up on the next debounced push.
+      schedulePush();
+      return changed;
+    } catch {
+      /* hub unreachable; local state stands */
+      setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
+      return false;
+    }
+  }, [schedulePush]);
+
+  /** Manual "sync now": bring the other device's changes in, then push ours up. */
+  const syncNow = useCallback(async () => {
+    if (pushTimer.current !== null) {
+      clearTimeout(pushTimer.current);
+      pushTimer.current = null;
+    }
+    await pullNow();
+    // pullNow schedules a debounced push; a manual sync should push now.
+    if (pushTimer.current !== null) {
+      clearTimeout(pushTimer.current);
+      pushTimer.current = null;
+    }
+    await pushNow();
+  }, [pullNow, pushNow]);
+
+  const commit = useCallback(
+    async (next: Board) => {
+      /* Every mutation funnels through here, so the sync bookkeeping lives in
+         one place: diff what changed, stamp the changed items, tombstone the
+         deletions, then push. */
+      const stamped = stampChanges(latest.current, next);
+      setData(stamped.board);
+      latest.current = stamped.board;
+      if (stamped.tombstones.length) {
+        tombstones.current = mergeTombstones(
+          tombstones.current,
+          stamped.tombstones
+        );
+      }
+      try {
+        await set(KEY, JSON.stringify(stamped.board));
+        await set(TOMBSTONE_KEY, JSON.stringify(tombstones.current));
+      } catch {
+        setErr("Couldn't save that. Your last capture is still on screen — try again.");
+      }
+      schedulePush();
+    },
+    [schedulePush]
+  );
 
   /* load, then sweep. A board already on the device that fails to parse is
      set aside rather than silently treated as a fresh start: the unreadable
@@ -190,9 +330,43 @@ export function useBoard(now: number) {
         /* first run */
       }
       if (!distillLoadedRef.current) distillLoadedRef.current = true;
+      // This device's deletions survive a reload, so an offline delete is
+      // still pushed to the hub once the connection is back.
+      try {
+        const tbRaw = await get(TOMBSTONE_KEY);
+        if (tbRaw) tombstones.current = JSON.parse(tbRaw);
+      } catch {
+        /* first run */
+      }
       setLoaded(true);
     })();
   }, []);
+
+  /* --------------------------- sync loop ---------------------------- */
+
+  /* Pull on load and whenever the tab comes back into focus, then merge the
+     hub's copy with ours and adopt the result. The hub merges rather than
+     replaces, so two devices editing at once converge instead of clobbering.
+     Offline is fine — the next commit just keeps everything local. */
+  useEffect(() => {
+    if (!loaded) return;
+    void pullNow();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pullNow();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    /* A pull used to fire only on load and tab-focus, so a desktop tab left
+       open and focused never saw the other device's changes. Poll gently so
+       the phone's updates land within a few seconds without any interaction.
+       Browsers throttle background tabs, which suits us — idle tabs poll less. */
+    const poll = setInterval(() => void pullNow(), 10_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      clearInterval(poll);
+    };
+  }, [loaded, pullNow]);
 
   /* Expiry is continuous, not just at open: sweep on the minute tick too, so
      stale actions fade and cleared ones drop while the app stays open. The
@@ -1455,5 +1629,7 @@ export function useBoard(now: number) {
     restoreFromFile,
     importBackup,
     doShare,
+    sync,
+    syncNow,
   };
 }

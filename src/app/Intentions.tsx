@@ -401,6 +401,8 @@ export function SettingsScreen({
   onImportIntent,
   onLogout,
   ioNote,
+  sync,
+  onSyncNow,
 }: {
   principles: Principle[];
   counts: { actions: number; threads: number; intentions: number };
@@ -413,6 +415,8 @@ export function SettingsScreen({
   onImportIntent: (file: File) => void;
   onLogout: () => void;
   ioNote: IoNote;
+  sync: { ok: boolean; at: number; note?: string } | null;
+  onSyncNow: () => void;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -439,6 +443,34 @@ export function SettingsScreen({
         <div className="int-add">
           <button className="capture-btn" onClick={onExport}>
             Download backup
+          </button>
+        </div>
+      </div>
+
+      <div className="int-block">
+        <h4 className="int-label">Keep devices in step</h4>
+        <p className="int-note">
+          Edits, deletes and moves flow between this device and the sync hub
+          automatically — every change is pushed a moment after you make it,
+          and fresh state is pulled every few seconds while this tab is open.
+          If two devices change the same thing, the newer edit wins and
+          nothing is silently lost. Tap Sync now to force a pull + push.
+        </p>
+        <div className="int-add">
+          <span
+            className={
+              "sync-dot" + (sync ? (sync.ok ? " on" : " bad") : "")
+            }
+          />
+          <span className="cap-hint" style={{ flex: 1 }}>
+            {sync
+              ? sync.ok
+                ? "Synced " + fmt(sync.at) + "."
+                : sync.note + "."
+              : "This device hasn't reached the hub yet."}
+          </span>
+          <button className="ghost" onClick={onSyncNow}>
+            Sync now
           </button>
         </div>
       </div>
