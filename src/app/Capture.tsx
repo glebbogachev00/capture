@@ -59,6 +59,9 @@ export function Capture() {
   /* Input device plumbing: the hidden file picker, and the speech recogniser
      (shared with Distill — the mic routes to whichever surface is open). */
   const fileRef = useRef<HTMLInputElement>(null);
+  /* When a related action row is tapped, the Actions tab opens scrolled to
+     that action and it glows briefly — "goes to the action" is literal. */
+  const [focusAction, setFocusAction] = useState<string | null>(null);
 
   /* Everything else — the board, every operation on it, and the derived
      views — comes from useBoard. This destructure is the whole logic
@@ -196,6 +199,8 @@ export function Capture() {
       a={a}
       faded={faded}
       now={now}
+      focus={focusAction === a.id}
+      onFocused={() => setFocusAction(null)}
       shelfOpen={shelfFor === a.id}
       onToggle={() => toggleAction(a.id)}
       onShelfClick={() => setShelfFor(shelfFor === a.id ? null : a.id)}
@@ -481,7 +486,26 @@ export function Capture() {
             onCopyFrag={(fragId) => copyFragment(thread.id, fragId)}
             onExtractAction={(fragId) => extractAction(thread.id, fragId)}
             related={related}
-            onOpenThread={(id) => setOpen(id)}
+            onOpenRelated={(r) => {
+              /* A related row navigates to the exact thing it names: a thread
+                 opens at the matched fragment (if one is known), an action
+                 jumps to the Actions tab with the row lit, an intention
+                 opens its detail. */
+              if (r.kind === "thread") {
+                setOpen(r.id);
+                setOpenFrag(r.fragId || null);
+              } else if (r.kind === "action") {
+                setOpen(null);
+                setOpenFrag(null);
+                setOpenIntention(null);
+                setTab("actions");
+                setFocusAction(r.id);
+              } else {
+                setOpen(null);
+                setOpenFrag(null);
+                setOpenIntention(r.id);
+              }
+            }}
             onMergeRelated={(fromId) => mergeThreads(thread.id, fromId)}
             onPullFrag={(fromId, fragId) => moveFrag(fromId, fragId, thread.id)}
             onExtractRelated={(fromId, fragId) => extractAction(fromId, fragId)}
@@ -774,6 +798,8 @@ function Row({
   faded,
   now,
   shelfOpen,
+  focus,
+  onFocused,
   onToggle,
   onShelfClick,
   onSetShelf,
@@ -789,6 +815,10 @@ function Row({
   faded?: boolean;
   now: number;
   shelfOpen: boolean;
+  /* Landed here from a Related action row: bring the action into view and
+     let it glow for a moment, then clear so it doesn't re-trigger. */
+  focus?: boolean;
+  onFocused: () => void;
   onToggle: () => void;
   onShelfClick: () => void;
   onSetShelf: (span: number | null, label: ShelfLife) => void;
@@ -804,6 +834,27 @@ function Row({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(a.text);
   const [more, setMore] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+
+  /* Same glow as a thread fragment landed on from search: scroll to it and
+     fade a highlight over it. Clears itself so a later re-render that keeps
+     `focus` true doesn't re-run the animation. onFocused lives in a ref so
+     the effect only depends on `focus` — an inline arrow recreated on every
+     parent render would otherwise reset the 2.6s timer on every tick. */
+  const onFocusedRef = useRef(onFocused);
+  useEffect(() => {
+    onFocusedRef.current = onFocused;
+  });
+  useEffect(() => {
+    if (!focus) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    root.current?.scrollIntoView({
+      behavior: reduce ? "auto" : "smooth",
+      block: "center",
+    });
+    const t = setTimeout(() => onFocusedRef.current(), 2600);
+    return () => clearTimeout(t);
+  }, [focus]);
 
   const commit = () => {
     if (draft.trim()) onEditText(draft.trim());
@@ -811,7 +862,10 @@ function Row({
   };
 
   return (
-    <div className={"act" + (faded ? " is-faded" : "")}>
+    <div
+      className={"act" + (faded ? " is-faded" : "") + (focus ? " focus" : "")}
+      ref={root}
+    >
       <button className="box" onClick={onToggle} aria-label="Mark done" />
       <div className="act-body">
         {editing ? (
@@ -963,7 +1017,7 @@ function ThreadView({
   onCopyFrag,
   onExtractAction,
   related,
-  onOpenThread,
+  onOpenRelated,
   onMergeRelated,
   onPullFrag,
   onExtractRelated,
@@ -974,7 +1028,7 @@ function ThreadView({
   focusFragId?: string | null;
   onBack: () => void;
   related: { items: RelatedItem[] };
-  onOpenThread: (id: string) => void;
+  onOpenRelated: (r: RelatedItem) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
   onRefreshSummary: () => void;
@@ -1173,54 +1227,58 @@ function ThreadView({
           </button>
           {showRelated && (
             <div className="related-list">
-              {related.items.map((r) => (
-                <div key={r.kind + r.id} className="related-row">
-                  <button
-                    className="related-main"
-                    onClick={() => r.kind === "thread" && onOpenThread(r.id)}
-                    disabled={r.kind !== "thread"}
-                  >
-                    <span className="related-kind">{r.kind}</span>
-                    <span className="related-name">{r.name}</span>
-                    <span className="related-reason">{r.reason}</span>
-                  </button>
-                  <div className="related-actions">
-                    {r.kind === "thread" ? (
-                      <>
+              {related.items.map((r) => {
+                const fragId = r.fragId;
+                return (
+                  <div key={r.kind + r.id} className="related-row">
+                    <button
+                      className="related-main"
+                      onClick={() => onOpenRelated(r)}
+                    >
+                      <span className="related-top">
+                        <span className="related-kind">{r.kind}</span>
+                        <span className="related-name">{r.name}</span>
+                      </span>
+                      <span className="related-reason">{r.reason}</span>
+                    </button>
+                    <div className="related-actions">
+                      {r.kind === "thread" ? (
+                        <>
+                          <button
+                            className="mini"
+                            onClick={() => onMergeRelated(r.id)}
+                          >
+                            Merge
+                          </button>
+                          {fragId && (
+                            <>
+                              <button
+                                className="mini"
+                                onClick={() => onPullFrag(r.id, fragId)}
+                              >
+                                Move frag
+                              </button>
+                              <button
+                                className="mini"
+                                onClick={() => onExtractRelated(r.id, fragId)}
+                              >
+                                Extract
+                              </button>
+                            </>
+                          )}
+                        </>
+                      ) : r.kind === "action" ? (
                         <button
                           className="mini"
-                          onClick={() => onMergeRelated(r.id)}
+                          onClick={() => onFoldAction(r.id)}
                         >
-                          Merge
+                          Fold in
                         </button>
-                        {r.fragId && (
-                          <>
-                            <button
-                              className="mini"
-                              onClick={() => onPullFrag(r.id, r.fragId!)}
-                            >
-                              Move frag
-                            </button>
-                            <button
-                              className="mini"
-                              onClick={() => onExtractRelated(r.id, r.fragId!)}
-                            >
-                              Extract
-                            </button>
-                          </>
-                        )}
-                      </>
-                    ) : r.kind === "action" ? (
-                      <button
-                        className="mini"
-                        onClick={() => onFoldAction(r.id)}
-                      >
-                        Fold in
-                      </button>
-                    ) : null}
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
