@@ -78,11 +78,19 @@ function prompt(
     '\n\nRaw capture:\n"""' +
     (raw || "(image only)") +
     '"""\n\n' +
-    'kind = "action" when this is a task, errand, reminder, or decision that gets closed out. Fill "actions" with 1-4 items and leave the thread fields null.\n' +
-    'kind = "thread" when this is thinking, worldbuilding, an idea being developed, or material that accumulates. Set threadId if one clearly fits, otherwise invent a short threadName. Leave "actions" empty.\n' +
+    'There are three kinds. The reference examples below are your guide for telling them apart.\n' +
+    'kind = "action" when this is a task, errand, reminder, or decision that gets closed out — there is a concrete thing to do. Fill "actions" with the one to three items actually being asked for, and leave the thread fields null. Never pad the list: if only one thing is genuinely doable, return one.\n' +
+    'kind = "thread" when this is thinking, worldbuilding, an idea being developed, or material that accumulates — a subject to keep adding to, with no single thing to do. Set threadId if one clearly fits, otherwise invent a short threadName. Leave "actions" empty.\n' +
     'kind = "intention" only when they are declaring something they are calling into being about themselves or their life — a state they want to be living in, spoken as a wish, a resolve, or an aspiration. "I want to wake at 6 and actually feel rested", "I live somewhere with light", "I stop taking on work I resent". These are about how they want to be, not tasks to close or subjects to think about. Leave "actions" and the thread fields null.\n' +
     'Do NOT choose "intention" for an ordinary errand phrased as a want ("I want to get milk" is an action), or for thinking about a topic ("been reading about sleep cycles" is a thread).\n' +
-    'When genuinely torn between thread and intention, choose "thread". When genuinely torn between action and thread, choose "thread" — nothing gets lost there.\n\n' +
+    'Be conservative, not eager. Only make an action when the capture actually asks for something to be done; never invent a task that is not there. When genuinely torn between thread and intention, choose "thread". When genuinely torn between action and thread, choose "thread" — nothing gets lost there, and a task buried in a thread can be lifted out later.\n\n' +
+    'Reference examples:\n' +
+    '- "gotta call the dentist tomorrow and remember to buy milk on the way home" → kind "action", actions: ["Call the dentist tomorrow", "Buy milk on the way home"]\n' +
+    '- "booked the flights, remember to sort out travel insurance" → kind "action", actions: ["Sort out travel insurance"]\n' +
+    '- "was thinking about whether this project is worth continuing, weighing pros and cons" → kind "thread", threadName: "Is this project worth continuing"\n' +
+    '- "been reading about sleep cycles and how they affect productivity" → kind "thread", threadName: "Sleep cycles and productivity"\n' +
+    '- "I want to wake up at 6 and actually feel rested" → kind "intention"\n' +
+    '- "I live somewhere with light" → kind "intention"\n\n' +
     "shelfLife is how long this stays worth looking at, and it only applies to actions. Judge it honestly:\n" +
     '- "hours" for something tied to today: a call to return, a thing to grab on the way home.\n' +
     '- "days" for ordinary errands and small follow-ups.\n' +
