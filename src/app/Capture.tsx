@@ -119,7 +119,6 @@ export function Capture() {
     moveToThread,
     editActionText,
     renameThread,
-    foldActionIntoThread,
     editFrag,
     deleteFrag,
     moveFrag,
@@ -506,10 +505,6 @@ export function Capture() {
                 setOpenIntention(r.id);
               }
             }}
-            onMergeRelated={(fromId) => mergeThreads(thread.id, fromId)}
-            onPullFrag={(fromId, fragId) => moveFrag(fromId, fragId, thread.id)}
-            onExtractRelated={(fromId, fragId) => extractAction(fromId, fragId)}
-            onFoldAction={(actionId) => foldActionIntoThread(actionId, thread.id)}
             busy={!!busy}
           />
         ) : (
@@ -1018,10 +1013,6 @@ function ThreadView({
   onExtractAction,
   related,
   onOpenRelated,
-  onMergeRelated,
-  onPullFrag,
-  onExtractRelated,
-  onFoldAction,
   busy,
 }: {
   thread: Thread;
@@ -1041,10 +1032,6 @@ function ThreadView({
   onCopyThread: () => void;
   onCopyFrag: (fragId: string) => void;
   onExtractAction: (fragId: string) => void;
-  onMergeRelated: (fromId: string) => void;
-  onPullFrag: (fromId: string, fragId: string) => void;
-  onExtractRelated: (fromId: string, fragId: string) => void;
-  onFoldAction: (actionId: string) => void;
   busy: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
@@ -1211,10 +1198,11 @@ function ThreadView({
         </div>
       )}
 
-      {/* Related: what else in here connects to this thread, with one-tap
-          actions. Search-derived, always optional. Thread rows can be
-          merged wholesale or have their matched fragment pulled here or
-          extracted as an action; action rows fold into this thread. */}
+      {/* Related: what else in here connects to this thread, and where.
+          Pure navigation — tap a row to jump to the exact thing it names
+          (the matched fragment, the action, the intention). Managing that
+          item happens in its own menu, not here: this line is for seeing
+          connections, not for making editorial decisions about them. */}
       {related.items.length > 0 && (
         <div className="related">
           <button
@@ -1227,58 +1215,20 @@ function ThreadView({
           </button>
           {showRelated && (
             <div className="related-list">
-              {related.items.map((r) => {
-                const fragId = r.fragId;
-                return (
-                  <div key={r.kind + r.id} className="related-row">
-                    <button
-                      className="related-main"
-                      onClick={() => onOpenRelated(r)}
-                    >
-                      <span className="related-top">
-                        <span className="related-kind">{r.kind}</span>
-                        <span className="related-name">{r.name}</span>
-                      </span>
-                      <span className="related-reason">{r.reason}</span>
-                    </button>
-                    <div className="related-actions">
-                      {r.kind === "thread" ? (
-                        <>
-                          <button
-                            className="mini"
-                            onClick={() => onMergeRelated(r.id)}
-                          >
-                            Merge
-                          </button>
-                          {fragId && (
-                            <>
-                              <button
-                                className="mini"
-                                onClick={() => onPullFrag(r.id, fragId)}
-                              >
-                                Move frag
-                              </button>
-                              <button
-                                className="mini"
-                                onClick={() => onExtractRelated(r.id, fragId)}
-                              >
-                                Extract
-                              </button>
-                            </>
-                          )}
-                        </>
-                      ) : r.kind === "action" ? (
-                        <button
-                          className="mini"
-                          onClick={() => onFoldAction(r.id)}
-                        >
-                          Fold in
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
+              {related.items.map((r) => (
+                <button
+                  key={r.kind + r.id}
+                  className="related-row"
+                  onClick={() => onOpenRelated(r)}
+                  aria-label={`${r.kind}: ${r.name}`}
+                >
+                  <span className="related-top">
+                    <span className="related-kind">{r.kind}</span>
+                    <span className="related-name">{r.name}</span>
+                  </span>
+                  <span className="related-reason">{r.reason}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>

@@ -535,7 +535,10 @@ body {
 
 /* Related — the quiet, expandable connections line under a thread's
    "Where this stands". Collapsed to a small affordance; only expands
-   when asked; renders nothing when there are no matches. */
+   when asked; renders nothing when there are no matches. Pure navigation:
+   each row jumps to the exact thing it names — the matched fragment, the
+   action, the intention. Managing that item happens in its own menu, not
+   here. */
 .related {
   margin: -6px 0 22px;
 }
@@ -563,34 +566,25 @@ body {
   margin-top: 8px;
   border-top: 1px solid var(--rule);
 }
+/* Each row is one button: the name on its own line, the reason quietly
+   under it — the reason is context, not a second headline. */
 .related-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid var(--rule);
-  padding: 11px 0;
-}
-/* The row's tappable body: name on its own line, the reason quietly under
-   it — the reason is context, not a second headline, so it never shares a
-   line with the name. */
-.related-main {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
-  min-width: 0;
-  flex: 1;
+  width: 100%;
   text-align: left;
   background: none;
   border: 0;
-  padding: 0;
+  border-bottom: 1px solid var(--rule);
+  padding: 11px 0;
   font: inherit;
   color: inherit;
-}
-button.related-main {
   cursor: pointer;
+  touch-action: manipulation;
 }
-button.related-main:hover .related-name {
+.related-row:hover .related-name {
   color: var(--accent);
 }
 .related-top {
@@ -622,33 +616,7 @@ button.related-main:hover .related-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
-}
-.related-actions {
-  flex: none;
-  display: flex;
-  gap: 5px;
-}
-/* One-tap actions as small pills, matching the app's other quiet buttons.
-   Slightly roomier than before — readable and tappable without shouting. */
-.related-actions .mini {
-  font-family: var(--font-mono), monospace;
-  font-size: 10px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: var(--card);
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  padding: 3px 9px;
-  min-height: 26px;
-  cursor: pointer;
-  touch-action: manipulation;
-  transition: 0.15s;
-}
-.related-actions .mini:hover {
-  color: var(--accent);
-  border-color: var(--accent);
+  width: 100%;
 }
 
 .frag {

@@ -886,33 +886,6 @@ export function useBoard(now: number) {
     setTab("threads");
   };
 
-  /** Fold a related action into an existing thread as a fragment (one-tap
-      from the Related line): the action is gone, its content lives on as
-      a note inside the thread. */
-  const foldActionIntoThread = async (actionId: string, threadId: string) => {
-    const a = latest.current.actions.find((x) => x.id === actionId);
-    const t = latest.current.threads.find((x) => x.id === threadId);
-    if (!a || !t) return;
-    const frag: Frag = {
-      id: uid(),
-      at: a.at,
-      text: a.src || a.text,
-      imgs: a.imgs || [],
-    };
-    await commit({
-      ...latest.current,
-      actions: latest.current.actions.filter((x) => x.id !== actionId),
-      threads: latest.current.threads.map((x) =>
-        x.id === threadId
-          ? { ...x, frags: [...x.frags, frag].sort((p, q) => p.at - q.at) }
-          : x
-      ),
-    });
-    setNotice(`"${a.text.slice(0, 50)}" folded into ${t.name}.`);
-    setTimeout(() => setNotice(null), 4500);
-    await regenerate(latest.current, threadId);
-  };
-
   /* ---------------------------- threads ----------------------------- */
 
   const editActionText = (id: string, text: string) =>
@@ -1792,7 +1765,6 @@ export function useBoard(now: number) {
     moveToThread,
     editActionText,
     renameThread,
-    foldActionIntoThread,
     editFrag,
     deleteFrag,
     moveFrag,
