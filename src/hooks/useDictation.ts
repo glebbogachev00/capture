@@ -10,7 +10,7 @@ export type Recogniser = {
   onresult: (e: {
     resultIndex: number;
     results: {
-      [i: number]: { [j: number]: { transcript: string } };
+      [i: number]: { [j: number]: { transcript: string }; isFinal?: boolean };
       length: number;
     };
   }) => void;

@@ -329,6 +329,10 @@ function TalkPad({
       : convo.listening
         ? "Listening — speak now"
         : "Tap to talk";
+  /* What the mic has heard so far this turn, shown live so the user can
+     follow along — and catch a misheard word as it happens instead of
+     only after the turn is sent. */
+  const hearing = convo.listening ? convo.hearing : "";
   return (
     <div className="talk">
       <button
@@ -353,13 +357,18 @@ function TalkPad({
         )}
       </button>
       <div className="talk-status">{label}</div>
+      {hearing && (
+        <div className="talk-hearing" aria-live="polite">
+          {hearing}
+        </div>
+      )}
       <div className="talk-hint">
         {speaking
           ? "tap to cut in — it stops the moment you do"
           : thinking
             ? "the reply is on its way — it'll speak out loud"
             : convo.listening
-              ? "speak, pause when you're done — no Send button"
+              ? "speak — pause for a moment to send, or tap to send now"
               : "a spoken conversation. talk, it answers aloud, and the mic comes back on its own."}
       </div>
       <button className="ghost talk-type" onClick={onType} disabled={busy}>

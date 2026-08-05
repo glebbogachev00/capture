@@ -1432,6 +1432,18 @@ body {
   font-size: 15px;
   font-weight: 600;
 }
+/* The words the mic has heard so far, live under the orb — proof it is
+   following, and a misheard word shows up the moment it happens. */
+.talk-hearing {
+  margin: 14px 0 0;
+  max-width: 340px;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--fg);
+  text-align: center;
+  line-height: 1.55;
+}
+
 .talk-hint {
   margin: 0;
   font-size: 12.5px;
