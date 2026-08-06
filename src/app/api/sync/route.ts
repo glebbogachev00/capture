@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { clientIp } from "@/lib/clientIp";
-import { rateLimit } from "@/lib/limiter";
+import { limitFromEnv, rateLimit } from "@/lib/limiter";
 import { hydrate } from "@/lib/model";
 import { getSync, pushSync } from "@/lib/syncStore";
 import { type SyncState, type Tombstone } from "@/lib/sync";
@@ -21,7 +21,7 @@ import { type SyncState, type Tombstone } from "@/lib/sync";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SYNC_LIMIT = 60;
+const SYNC_LIMIT = limitFromEnv("CAPTURE_SYNC_LIMIT", 60);
 const SYNC_WINDOW = 60_000;
 
 /** Keep a client pushing junk or a giant board from filling the disk. */

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { modelRateLimit, rateLimit } from "./limiter";
+import { limitFromEnv, modelRateLimit, rateLimit } from "./limiter";
 
 describe("rateLimit", () => {
   beforeEach(() => {
@@ -45,5 +45,39 @@ describe("rateLimit", () => {
     expect(blocked.retryAfterSec).toBeGreaterThan(0);
     // A different key is not punished by the bot's bucket.
     expect(modelRateLimit("another").allowed).toBe(true);
+  });
+
+  it("a limit of 0 disables the gate entirely — the local single-user case", () => {
+    for (let i = 0; i < 500; i++) {
+      expect(rateLimit("unlimited", 0)).toMatchObject({ allowed: true });
+    }
+  });
+});
+
+describe("limitFromEnv", () => {
+  afterEach(() => {
+    delete process.env.CAPTURE_TEST_LIMIT;
+  });
+
+  it("falls back when the var is unset", () => {
+    delete process.env.CAPTURE_TEST_LIMIT;
+    expect(limitFromEnv("CAPTURE_TEST_LIMIT", 40)).toBe(40);
+  });
+
+  it("reads a valid number", () => {
+    process.env.CAPTURE_TEST_LIMIT = "7";
+    expect(limitFromEnv("CAPTURE_TEST_LIMIT", 40)).toBe(7);
+  });
+
+  it("treats 0 as off, not a fallback", () => {
+    process.env.CAPTURE_TEST_LIMIT = "0";
+    expect(limitFromEnv("CAPTURE_TEST_LIMIT", 40)).toBe(0);
+  });
+
+  it("falls back on junk or negatives", () => {
+    process.env.CAPTURE_TEST_LIMIT = "banana";
+    expect(limitFromEnv("CAPTURE_TEST_LIMIT", 40)).toBe(40);
+    process.env.CAPTURE_TEST_LIMIT = "-3";
+    expect(limitFromEnv("CAPTURE_TEST_LIMIT", 40)).toBe(40);
   });
 });
