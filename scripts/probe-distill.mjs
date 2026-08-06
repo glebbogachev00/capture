@@ -13,11 +13,12 @@
  *   (npm run dev) and .env.local must hold the provider keys.
  *
  * Pass criteria (from the spec):
- *   - ≤ 1 question per conversation, never 2+
- *   - a concrete draft stated by turn 2 (concrete scenario)
- *   - a confirmation ("yes") closes with [ready] on the next turn
+ *   - the engine never talks about filing — no "I'd file this as…", no
+ *     kinds, no "nothing to capture" (that was the v1 mistake)
+ *   - ≤ 2 questions per conversation (a ceiling, not a target)
+ *   - a greeting is answered warmly and NEVER closes the conversation
+ *   - a real thought closes with [ready] within a few turns
  *   - no restating of the user's words
- *   - the vague case still reaches [ready] within 3 turns
  */
 
 import fs from "node:fs";
@@ -26,6 +27,10 @@ import { fileURLToPath } from "node:url";
 /* .env.local lives next to the script (project root), not in the caller's
    cwd — resolve it from the script itself so the probe runs from anywhere. */
 const ENV_LOCAL = fileURLToPath(new URL("../.env.local", import.meta.url));
+
+/* A session cookie is cached to disk so repeated probe runs never trip the
+   login rate limiter (several 429s in a row lock you out for minutes). */
+const COOKIE_CACHE = fileURLToPath(new URL("../.freebuff/probe-cookie.txt", import.meta.url));
 
 const BASE = process.argv[2] || "http://localhost:3000";
 const SLEEP_MS = 600; // be gentle with the free tiers
@@ -66,6 +71,11 @@ function appPassword() {
 async function sessionCookie() {
   const pw = appPassword();
   if (!pw) return null;
+  let cached = "";
+  try {
+    cached = fs.readFileSync(COOKIE_CACHE, "utf8").trim();
+  } catch {}
+  if (cached) return cached;
   const res = await fetch(`${BASE}/api/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -78,11 +88,14 @@ async function sessionCookie() {
   const setCookie = res.headers.get("set-cookie");
   if (!setCookie) throw new Error("login succeeded but no session cookie returned");
   const cookie = setCookie.split(";")[0]; // name=value
+  fs.mkdirSync(fileURLToPath(new URL("../.freebuff", import.meta.url)), { recursive: true });
+  fs.writeFileSync(COOKIE_CACHE, cookie);
   return cookie;
 }
 
 let cookie = null;
 let retries = 0;
+let relogged = false;
 
 async function chat(turns) {
   const headers = { "Content-Type": "application/json" };
@@ -93,6 +106,16 @@ async function chat(turns) {
     body: JSON.stringify({ op: "chat", turns }),
   });
   if (res.status === 401) {
+    /* Stale cached session (server restarted with a different password, or
+       the 30-day expiry passed) — drop it and log in fresh, once. */
+    if (!relogged) {
+      relogged = true;
+      try {
+        fs.rmSync(COOKIE_CACHE);
+      } catch {}
+      cookie = await sessionCookie();
+      if (cookie) return chat(turns);
+    }
     throw new Error("unauthorized — could not log in. Is APP_PASSWORD set on the server?");
   }
   if (res.status === 429) {
@@ -135,37 +158,44 @@ function restates(reply, userText) {
   return false;
 }
 
-/* The draft is stated when the reply frames what it would file — a record
-   kind or a "I'd file this as…" construction — rather than just a bare
-   question. */
-function statesDraft(reply) {
-  return /(i'd|i would|i'll|we'd)\b|file this|this as|a thread (about|on)|an? (action|thread|intention)[:.]|sounds like (a|an)/i.test(
+/* Filing talk — the v1 mistake the engine must never make during a chat:
+   naming what it would file, saying where something will go, or waving a
+   greeting off as "nothing to capture". */
+function filingTalk(reply) {
+  return /i'?d file|i would file|file this (as|in)|file that|friendly greeting|nothing to capture|this as a (thread|record|note)|as an? (action|thread|intention)/i.test(
     reply
   );
 }
 
 function facts(reply, lastUser) {
   const trimmed = reply.trim();
+  const ready = /\[ready\]/.test(trimmed);
+  const nothing = /\[nothing\]/.test(trimmed);
   return {
-    ready: /\[ready\]/.test(trimmed),
-    nothing: /\[nothing\]/.test(trimmed),
+    ready,
+    nothing,
+    /* "ask" is a question left hanging. A reply that ends in [ready] (even
+       a forced one) is a close, not an ask — the budget enforcement appends
+       [ready] to a question the model tried to sneak past its limit, so the
+       count must not treat that enforcement as interrogation. */
+    ask: trimmed.includes("?") && !ready && !nothing,
     question: trimmed.includes("?"),
     restate: restates(trimmed, lastUser),
-    draft: statesDraft(trimmed),
+    filing: filingTalk(trimmed),
     text: trimmed,
   };
 }
 
-/* Run one scenario. `userTurns` are the fixed things the user says; the
-   conversation stops as soon as the assistant closes with [ready] or
-   [nothing], or the turn cap is reached. */
-async function runScenario(name, userTurns, cap = 3) {
+/* Run one scenario. `mode` says what a good outcome looks like:
+   - "close": the conversation should settle — [ready] within `cap` turns
+   - "smalltalk": the conversation must NOT close on greetings — no marker
+     at all, just warm replies that keep the door open */
+async function runScenario(name, userTurns, cap = 3, mode = "close") {
   const turns = [];
   const replyLog = [];
   let questions = 0;
   let readyAt = null;
   let nothingAt = null;
-  let draftByTurn2 = null;
 
   const closed = () => readyAt ?? nothingAt;
   for (let i = 0; i < userTurns.length && closed() === null; i++) {
@@ -174,10 +204,7 @@ async function runScenario(name, userTurns, cap = 3) {
     const f = facts(reply, userTurns[i]);
     turns.push({ role: "assistant", text: reply.trim() });
     replyLog.push(f);
-    if (f.question) questions++;
-    /* "By turn 2" covers the first two assistant replies, so a draft that
-       appears on the confirmation reply (turn 2) still counts. */
-    if (f.draft && i <= 1) draftByTurn2 = true;
+    if (f.ask) questions++;
     if (f.ready) readyAt = i + 1; // 1-based assistant-turn count
     if (f.nothing) nothingAt = i + 1;
     await sleep(SLEEP_MS);
@@ -185,29 +212,40 @@ async function runScenario(name, userTurns, cap = 3) {
 
   const results = {
     scenario: name,
-    readyAt, // null = never closed
-    nothingAt, // null = never dismissed as small talk
+    mode,
+    readyAt,
+    nothingAt,
     questions,
     restated: replyLog.some((f) => f.restate),
-    draftByTurn2: draftByTurn2 === true,
-    /* Small talk must be waved off without inventing a record: no [ready]
-       and no "I'd file this as…" draft in the dismissal. */
-    nothingDraftFree: nothingAt !== null && !replyLog.some((f) => f.draft),
+    filing: replyLog.some((f) => f.filing),
+    wavedOff: replyLog.some((f) => /nothing to capture/i.test(f.text)),
     closedInTurn: closed(),
     replies: replyLog.map((f) => ({
       ready: f.ready,
       nothing: f.nothing,
       q: f.question,
-      draft: f.draft,
+      filing: f.filing,
       text: f.text.length > 160 ? f.text.slice(0, 157) + "…" : f.text,
     })),
   };
 
-  results.passes = [
-    closed() !== null && closed() <= cap, // closes in time
-    questions <= 1, // the question budget held
-    !results.restated, // never echoes the user back
-  ];
+  if (mode === "smalltalk") {
+    /* A greeting is answered, never filed and never closed. */
+    results.passes = [
+      closed() === null, // never ended the conversation
+      !results.filing, // never talked about filing
+      !results.wavedOff, // never said "nothing to capture"
+      questions <= 2,
+      !results.restated,
+    ];
+  } else {
+    results.passes = [
+      readyAt !== null && readyAt <= cap, // closes on [ready] in time
+      !results.filing, // never talked about filing along the way
+      questions <= 2,
+      !results.restated,
+    ];
+  }
 
   return results;
 }
@@ -219,6 +257,7 @@ const scenarios = [
     userTurns: [
       "I'm stuck on whether to leave my job.",
       "Right — the money's good, but I'm burned out.",
+      "Yes, that's exactly it.",
     ],
   },
   {
@@ -227,6 +266,7 @@ const scenarios = [
     userTurns: [
       "I have an idea for an app but it's fuzzy.",
       "It's for myself, mostly.",
+      "Right, it's something I'd use every day.",
     ],
   },
   {
@@ -235,33 +275,60 @@ const scenarios = [
     userTurns: [
       "I keep putting off one thing — I don't know why.",
       "That's it exactly.",
+      "Yes.",
     ],
   },
   {
     name: "CONCRETE · newsletter about brewing",
-    cap: 2,
-    /* The draft may close immediately, or ask a confirmation — either way
-       the user confirms, and the next reply must carry [ready]. */
+    cap: 3,
+    /* The engine may close as soon as the thought is clear, or ask one
+       question — either way the user confirms, and a later reply must carry
+       [ready] within the cap. */
     userTurns: [
       "I want to start a newsletter about brewing coffee.",
       "Yes, that's right.",
+      "It's for people getting into pour-over.",
     ],
   },
   {
+    /* The budget is a ceiling, not a target: two questions max across the
+       whole conversation, then a forced close. The fourth turn exists to
+       prove the enforcement — after two questions, the engine must close
+       with [ready] however rough the record is. */
     name: "VAGUE · idea but fuzzy",
-    cap: 3,
+    cap: 4,
     userTurns: [
       "I have an idea but it's fuzzy.",
       "I don't know, it's fuzzy.",
+      "It's for something I'd use every day.",
+      "That's a fair way to put it.",
     ],
   },
   {
-    name: "SMALL TALK · greeting",
-    cap: 1,
-    /* A pure greeting must be waved off, not filed: the engine replies
-       warmly and ends with [nothing], never [ready], and never invents
-       "I'd file this as a friendly greeting". */
-    userTurns: ["Hey, how are you doing today?"],
+    /* The user drives: they ask the assistant a direct question. The engine
+       answers — no new ask — and once the budget is spent (or the exchange
+       has settled), the conversation closes with [ready]. A forced close is
+       a documented budget behavior, corrected in the settle preview. */
+    name: "USER DRIVES · asks for a take",
+    cap: 4,
+    userTurns: [
+      "I keep going back and forth on leaving my job.",
+      "What do you think I should do?",
+      "You're right, staying for now makes sense.",
+      "Yeah, let's leave it there.",
+    ],
+  },
+  {
+    name: "SMALL TALK · greeting then nothing",
+    cap: 3,
+    mode: "smalltalk",
+    /* A greeting is answered warmly and the conversation stays open — no
+       [ready], no [nothing], no filing talk. If the user only says hi, the
+       exchange simply continues until they bring something real or leave. */
+    userTurns: [
+      "Hey, how are you doing today?",
+      "I'm good, thanks. Just saying hi, really.",
+    ],
   },
 ];
 
@@ -272,7 +339,7 @@ async function main() {
   const rows = [];
   for (const s of scenarios) {
     console.log(`—— ${s.name} ——`);
-    const r = await runScenario(s.name, s.userTurns, s.cap);
+    const r = await runScenario(s.name, s.userTurns, s.cap, s.mode || "close");
     rows.push(r);
     if (r.readyAt) {
       console.log(`  closed with [ready] on turn ${r.readyAt} · ${r.questions} question(s)`);
@@ -290,36 +357,34 @@ async function main() {
 
   /* The concrete scenario's draft-by-turn-2 is judged on its own, since the
      other scenarios may legitimately close before a draft sentence. */
-  const concrete = rows.find((r) => r.scenario.includes("CONCRETE"));
-  const draftOk = concrete ? concrete.draftByTurn2 : false;
-
   console.log("════════════════════════════════════");
   console.log("PASS CRITERIA");
   let all = true;
   for (const r of rows) {
     const ok = r.passes.every(Boolean);
     if (!ok) all = false;
+    const outcome =
+      r.mode === "smalltalk"
+        ? r.closedInTurn
+          ? "closed ✗"
+          : "stayed open ✓"
+        : `[ready] on ${r.closedInTurn ? "turn " + r.closedInTurn : "never ✗"}`;
     console.log(
-      `  ${ok ? "PASS" : "FAIL"}  ${r.scenario}: ` +
-        `closes ≤${r.closedInTurn ? r.closedInTurn : "never"} · ` +
+      `  ${ok ? "PASS" : "FAIL"}  ${r.scenario}: ${outcome} · ` +
         `${r.questions} question(s) · ${r.restated ? "restated ✗" : "no restate"} · ` +
-        `${r.readyAt ? "[ready]" : r.nothingAt ? "[nothing]" : "no marker"}`
+        `${r.filing ? "filing talk ✗" : "no filing talk"}`
     );
   }
+
+  const allFilingFree = rows.every((r) => !r.filing && !r.wavedOff);
   console.log(
-    `  ${draftOk ? "PASS" : "FAIL"}  CONCRETE draft stated by turn 2 (record kind + framing)`
+    `  ${allFilingFree ? "PASS" : "FAIL"}  no filing talk in any conversation — the chat stays natural`
   );
-  if (!draftOk) all = false;
-  const smallTalk = rows.find((r) => r.scenario.includes("SMALL TALK"));
-  const nothingOk = smallTalk ? smallTalk.nothingDraftFree : false;
-  console.log(
-    `  ${nothingOk ? "PASS" : "FAIL"}  SMALL TALK waved off with [nothing], no invented record`
-  );
-  if (!nothingOk) all = false;
+  if (!allFilingFree) all = false;
 
   console.log(
     all
-      ? "\nOverall: PASS — the clarifier acts on intent."
+      ? "\nOverall: PASS — the clarifier converses naturally and settles quietly."
       : "\nOverall: FAIL — see the failing rows above."
   );
   process.exit(all ? 0 : 1);

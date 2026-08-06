@@ -1,10 +1,26 @@
 # Distill intelligence — act on intent, stop over-asking
 
-Status: **v1 built + verified** (probe passes on the real chain, twice in a row; 10 unit tests; live UI pass done). v2 spec'd, not built.
+Status: **v2 built + verified** (conversational CLARIFIER; probe passes on the real chain; 22 unit tests).
 Owner: capture / Gleb.
 Open actions it closes: "Refine the capture feature to decide actions based on user prompt", "Improve the Distill Engine to reduce endless questioning and increase conversational intelligence".
 
-**Implemented:** `src/app/api/distill/route.ts` (reworked CLARIFIER + budget injection in the chat branch), `src/lib/distill.ts` (`countAssistantQuestions`), `src/lib/distill.test.ts` (10 tests), `scripts/probe-distill.mjs` (pass criteria, requires the dev server).
+**Implemented:** `src/app/api/distill/route.ts` (CLARIFIER + code-computed question budget in the chat branch), `src/lib/distill.ts` (`countAssistantQuestions`, marker helpers), `src/lib/distill.test.ts` (22 tests), `scripts/probe-distill.mjs` (pass criteria, requires the dev server).
+
+## 2026-08-06 revision — the conversational CLARIFIER (v2, replaces v1)
+
+v1's core move — *state the record you would file after every turn* — was rejected in use. Two problems it caused:
+
+- **Filing talk leaked into the chat.** The engine said "I'd file this as a thread about…" mid-conversation, telling the user where things would go. The user is here to think; where a thought lands is decided invisibly at the end (the settle review already shows it).
+- **Greetings were killed, not answered.** The v1 `[nothing]` marker waved "hello" off as "nothing to capture" and wiped the session — the user wanted a conversation, not a filing gate.
+
+v2's rules (in `CLARIFIER`):
+
+- **Never mention filing** — no kinds, no records, no "where this goes", no saving. Ever.
+- **Meet the user in their own frame.** Greetings are answered warmly and the conversation stays open — a greeting never closes and never ends the session. The `[nothing]` marker is gone from the prompt; the client strips a stray one and simply continues.
+- **Engage with real thoughts** in the user's own words (never parrot theirs), one question at a time, only when genuinely needed. Question budget is still code-computed, now a 3-question ceiling (a greeting's "what do you want to work on?" counts, so the cap has room for conversation).
+- **Close only with `[ready]`** when something real has taken shape; the settle review then shows where it goes. Small talk never produces `[ready]`.
+
+Probe scenarios now assert: no filing language in any chat reply, ≤2 questions, a greeting never closes, real thoughts close with `[ready]` within a few turns.
 
 ## Verification result (2026-08-06)
 
@@ -27,9 +43,11 @@ The clarifying engine has exactly two verbs: **ask** (a question) or **ready** (
 
 ## Design principle
 
+> Superseded by the v2 revision above: the default move is now **conversing naturally**, and the record is decided invisibly at settle time. The v1 text below is kept for history.
+
 The engine's default move becomes **proposing a record, not asking a question**. The only question it may ask is *about the proposal* ("is it X or Y?"), never open-ended ("tell me more"). Confirmation closes the conversation. Understanding becomes visible in the reply, not after.
 
-## v1 scope (build this)
+## v1 scope (build this) — superseded, kept for history
 
 ### 1. Rework the CLARIFIER prompt (`src/app/api/distill/route.ts`)
 
@@ -70,7 +88,7 @@ Both the proposal and the close still end in `[ready]` — the existing marker s
 - No change to settle/polish/proofread ops.
 - No board context yet (v2).
 
-## v2 (spec'd, not built)
+## v2 (superseded by the 2026-08-06 revision — now built as the conversational CLARIFIER)
 
 - **Board-aware clarifier**: pass thread names + active action texts so the engine can say "this connects to your thread X" or "you already have this as an action" — the true "acts on intent" layer. Cost: more tokens per turn; gate behind a low-cardinality summary.
 - **Settle reuses the conversation's draft**: the clarifier returns its proposal as structured data (`{ kind, title, clean }`) at `[ready]` time; settle confirms/refines it instead of cold-processing the transcript. Kills the draft-mismatch failure mode. Requires a protocol change (structured tail block or a second call).

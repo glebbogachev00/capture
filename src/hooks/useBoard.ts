@@ -2134,12 +2134,11 @@ export function useBoard(now: number) {
       /* The end-markers are stripped as they stream so they never reach the
          transcript — and therefore never appear on screen or get spoken
          aloud by the voice layer, which chunks the live text as it lands.
-         [ready] lights the Distill button; [nothing] says the turn was
-         small talk with nothing to file (handled after the stream closes).
-         Only characters that could begin either marker are held back across
-         chunks, so a marker split at a chunk boundary is still caught while
-         ordinary text streams with no lag. */
-      let nothingSeen = false;
+         [ready] lights the Distill button; a stray [nothing] is a model
+         misfire — stripped and ignored, never allowed to end or clear the
+         conversation. Only characters that could begin either marker are
+         held back across chunks, so a marker split at a chunk boundary is
+         still caught while ordinary text streams with no lag. */
       let carry = "";
       if (reader) {
         for (;;) {
@@ -2148,11 +2147,9 @@ export function useBoard(now: number) {
           const raw = carry + decoder.decode(value, { stream: true });
           const marker = findMarker(raw);
           if (marker) {
-            if (marker.kind === "ready") {
-              setDistillReady(true);
-            } else {
-              nothingSeen = true;
-            }
+            // Only [ready] means anything; [nothing] is stripped like any
+            // other marker and the conversation simply continues.
+            if (marker.kind === "ready") setDistillReady(true);
             const markerText =
               marker.kind === "ready" ? READY_MARKER : NOTHING_MARKER;
             carry = raw.slice(marker.at + markerText.length);
@@ -2187,19 +2184,6 @@ export function useBoard(now: number) {
       };
       setDistillSession(doneSession);
       await persistDistill(doneSession);
-      // A [nothing] reply said the turn was pure small talk — nothing to
-      // file. The friendly line stays on screen (and in the speaker) for a
-      // beat, then the session is wiped and the view closes: a greeting is
-      // not a capture, so it is neither filed nor kept. resetDistill
-      // persists a fresh session, so the next Distill opens clean.
-      if (nothingSeen) {
-        setTimeout(() => {
-          void resetDistill();
-          closeDistill();
-          setNotice("Nothing worth capturing — I didn't file it.");
-          setTimeout(() => setNotice(null), 4000);
-        }, 2200);
-      }
     } catch (error) {
       // A reply that died mid-stream may have set the flag already; without
       // this the button would glow over a transcript with no assistant turn.
