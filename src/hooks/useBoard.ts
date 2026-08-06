@@ -2079,7 +2079,14 @@ export function useBoard(now: number) {
         .map((t) => t.text)
         .filter(Boolean)
         .join(" ");
-      if (kind === "intention") {
+      // The route already reconciles this, but the review screen lets the
+      // actions be emptied by hand — so guard again here. An action with no
+      // task is filed as a thread, never as one action holding the whole
+      // conversation.
+      const realActions = finalActions.map((a) => a.trim()).filter(Boolean);
+      const effectiveKind =
+        kind === "action" && realActions.length === 0 ? "thread" : kind;
+      if (effectiveKind === "intention") {
         setDistillOpen(false);
         // The reviewed draft records the conversation in the ledger when it
         // is saved (saveDraft consumes the pending ledger note).
@@ -2088,14 +2095,12 @@ export function useBoard(now: number) {
           source: "distill",
         });
         await resetDistill();
-      } else if (kind === "action") {
+      } else if (effectiveKind === "action") {
         const span = SHELF[shelfLife as ShelfLife] ?? null;
         // One timestamp for the actions and their ledger entry, so the
         // record points at exactly the items it describes.
         const at = stamp();
-        const items: Action[] = (
-          finalActions.length ? finalActions : [finalClean]
-        ).map((t) => ({
+        const items: Action[] = realActions.map((t) => ({
           id: uid(),
           text: t,
           done: false,

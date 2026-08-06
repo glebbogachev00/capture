@@ -37,6 +37,31 @@ export type DistillResult = {
 };
 
 /**
+ * Reconcile a settled result before it is shown or filed.
+ *
+ * The settler occasionally calls a long, exploratory conversation an "action"
+ * yet lists nothing to do. Filing that meant the whole distilled conversation
+ * was dumped into a single action's text — the "it saved my conversation as
+ * one giant to-do" bug. An action with no concrete item is a contradiction:
+ * the thing to do is what makes it an action. So an action that names no task
+ * is reclassified as a thread, where the full wording is kept as a readable
+ * fragment. Intentions and real actions pass through untouched.
+ *
+ * Pure and deterministic so it can guard both the route and the client.
+ */
+export function resolveSettled<
+  T extends { kind: "action" | "thread" | "intention"; actions?: string[] },
+>(settled: T): T {
+  const items = (settled.actions ?? [])
+    .map((a) => a.trim())
+    .filter(Boolean);
+  if (settled.kind === "action" && items.length === 0) {
+    return { ...settled, kind: "thread", actions: [] };
+  }
+  return { ...settled, actions: items };
+}
+
+/**
  * How many questions the assistant has already asked so far in a transcript.
  *
  * A turn counts as a question when its trimmed text ends with "?". This is

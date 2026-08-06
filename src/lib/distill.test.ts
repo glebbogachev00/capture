@@ -2,8 +2,42 @@ import { describe, expect, it } from "vitest";
 import {
   countAssistantQuestions,
   hydrateDistill,
+  resolveSettled,
   EMPTY_DISTILL,
 } from "./distill";
+
+describe("resolveSettled", () => {
+  it("reclassifies an action with no items as a thread", () => {
+    const out = resolveSettled({
+      kind: "action",
+      clean: "a long exploration with nothing to do",
+      actions: [],
+    });
+    expect(out.kind).toBe("thread");
+    expect(out.actions).toEqual([]);
+  });
+
+  it("reclassifies an action whose only items are blank", () => {
+    const out = resolveSettled({ kind: "action", actions: ["", "   "] });
+    expect(out.kind).toBe("thread");
+  });
+
+  it("keeps a real action and trims its items", () => {
+    const out = resolveSettled({
+      kind: "action",
+      actions: ["  Call the vet  ", "", "Buy cat food"],
+    });
+    expect(out.kind).toBe("action");
+    expect(out.actions).toEqual(["Call the vet", "Buy cat food"]);
+  });
+
+  it("never touches a thread or an intention", () => {
+    expect(resolveSettled({ kind: "thread", actions: [] }).kind).toBe("thread");
+    expect(resolveSettled({ kind: "intention", actions: [] }).kind).toBe(
+      "intention"
+    );
+  });
+});
 
 describe("countAssistantQuestions", () => {
   it("counts nothing on an empty transcript", () => {

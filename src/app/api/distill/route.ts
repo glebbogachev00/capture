@@ -4,7 +4,7 @@ import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { NoProvidersError, chain, withFallback } from "@/lib/providers";
-import { countAssistantQuestions } from "@/lib/distill";
+import { countAssistantQuestions, resolveSettled } from "@/lib/distill";
 
 /**
  * Distill — the clarifying engine.
@@ -97,11 +97,11 @@ A note on question-counting: the app counts your questions mechanically and tell
 
 const SETTLER = `You are the settling engine inside capture. A person has just had a clarifying conversation, and it is your job to turn the whole exchange into exactly one record of one of three kinds.
 
-- "action" when the conversation converged on something to close: a task, errand, decision, or commitment — a concrete thing to do.
-- "thread" when it converged on thinking to accumulate: an idea being developed, material for something, a topic still growing — with no single thing to do.
+- "action" when the conversation converged on something to close: a task, errand, decision, or commitment — a concrete thing to do. An action REQUIRES at least one nameable task in the "actions" list. If you cannot write down a specific thing to do, it is NOT an action.
+- "thread" when it converged on thinking to accumulate: an idea being developed, material for something, a topic still growing — with no single thing to do. A long or wandering conversation that explored a subject without landing on a concrete task is a thread, and its content is preserved in full.
 - "intention" only when they declared something they are calling into being about themselves or their life — a state to live in, not a task and not a subject to think about. When torn between thread and intention, choose thread.
 
-Be conservative, not eager. Only make an action when the conversation actually settled on something to do; never invent a task that was not said. When torn between action and thread, choose thread — nothing gets lost there.
+Be conservative, not eager. Only make an action when the conversation actually settled on something to do; never invent a task that was not said. When torn between action and thread, choose thread — nothing gets lost there. The longer and more exploratory the conversation, the more likely it is a thread: threads hold the whole thinking, actions hold a task.
 
 The "clean" field is the whole conversation distilled: what it settled on, written in their voice, with their specifics kept and nothing invented. Break it into short paragraphs or bullets where it lists things, like the sort engine does.
 
@@ -369,7 +369,9 @@ export async function POST(request: Request) {
       });
       return object;
     });
-    return Response.json({ ...value, via });
+    // An "action" that names no task is really a thread; coercing here means
+    // the review screen shows the corrected kind, not just the save path.
+    return Response.json({ ...resolveSettled(value), via });
   } catch (error) {
     console.error("settle failed", error);
     const { message, status } = explain(error);
