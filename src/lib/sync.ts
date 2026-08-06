@@ -246,11 +246,15 @@ export function stampChanges(
   });
 
   for (const t of prev.threads)
-    if (!next.threads.some((x) => x.id === t.id)) {
+    if (!next.threads.some((x) => x.id === t.id))
       tombstones.push({ kind: "thread", id: t.id, deletedAt: now });
-      for (const f of t.frags)
-        tombstones.push({ kind: "frag", id: f.id, deletedAt: now });
-    }
+
+  /* A fragment gets a tombstone only when it left the board entirely. One that
+     merely moved to another thread — a merge folds a thread's fragments into
+     its target — is still present under nextFragHome, so it is deliberately
+     spared. Tombstoning every fragment of a removed thread was the merge
+     data-loss bug: the moved copy and its tombstone shared `now`, and
+     applyTombstones (deletedAt >= updatedAt) then deleted the survivor. */
   for (const f of prevFragHome.keys())
     if (!nextFragHome.has(f))
       tombstones.push({ kind: "frag", id: f, deletedAt: now });

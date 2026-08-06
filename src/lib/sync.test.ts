@@ -4,6 +4,7 @@ import {
   mergeBoards,
   mergeSync,
   mergeTombstones,
+  stampChanges,
   type Tombstone,
 } from "@/lib/sync";
 import type { Action, Board, Frag, Thread } from "@/lib/model";
@@ -161,5 +162,52 @@ describe("mergeSync end to end", () => {
     // And the tombstone that lost is not reapplied later.
     const again = mergeSync(state, deleted);
     expect(again.board.actions.map((x) => x.text)).toEqual(["edited"]);
+  });
+});
+
+describe("stampChanges — merge does not tombstone fragments that survived", () => {
+  // A merge folds t2 into t1: t2 is removed, its fragment f2 now lives in t1.
+  const prev = board({
+    threads: [
+      thread("t1", [frag("f1", { text: "kept note" })]),
+      thread("t2", [frag("f2", { text: "folded-in note" })]),
+    ],
+  });
+  const next = board({
+    threads: [
+      thread("t1", [frag("f1", { text: "kept note" }), frag("f2", { text: "folded-in note" })]),
+    ],
+  });
+
+  it("tombstones the removed thread but NOT its moved-in fragment", () => {
+    const { tombstones } = stampChanges(prev, next, 5000);
+    expect(tombstones).toContainEqual({ kind: "thread", id: "t2", deletedAt: 5000 });
+    // f2 moved into t1, so it must not be tombstoned.
+    expect(tombstones.some((t) => t.kind === "frag" && t.id === "f2")).toBe(false);
+  });
+
+  it("the merged board survives applyTombstones (the actual data-loss bug)", () => {
+    const { board: stamped, tombstones } = stampChanges(prev, next, 5000);
+    const after = applyTombstones(stamped, tombstones);
+    const t1 = after.threads.find((t) => t.id === "t1");
+    expect(t1?.frags.map((f) => f.id).sort()).toEqual(["f1", "f2"]);
+  });
+
+  it("survives a full sync against a hub still holding the pre-merge board", () => {
+    const { board: stamped, tombstones } = stampChanges(prev, next, 5000);
+    const hub = { board: prev, tombstones: [] as Tombstone[] };
+    const merged = mergeSync({ board: stamped, tombstones }, hub);
+    const surviving = merged.board.threads.flatMap((t) => t.frags.map((f) => f.id));
+    expect(surviving.sort()).toEqual(["f1", "f2"]);
+    // The folded thread stays gone; it does not resurrect from the hub.
+    expect(merged.board.threads.map((t) => t.id)).toEqual(["t1"]);
+  });
+
+  it("still tombstones a fragment when its thread is genuinely deleted", () => {
+    const before = board({ threads: [thread("t1", [frag("f1")])] });
+    const emptied = board({ threads: [] });
+    const { tombstones } = stampChanges(before, emptied, 5000);
+    expect(tombstones).toContainEqual({ kind: "thread", id: "t1", deletedAt: 5000 });
+    expect(tombstones).toContainEqual({ kind: "frag", id: "f1", deletedAt: 5000 });
   });
 });
