@@ -122,6 +122,17 @@ type CorrectionEntry = {
 - Web: `SingleFile` (gildas-lormeau/SingleFile) single self-contained HTML.
 - Apply at capture time so local-first stays light.
 
+**Status — image half BUILT (v1, commit pending), video/web deferred.** `src/lib/shrink.ts`
+shrinks every picked photo at capture time: downscale to ≤1600px long edge, WebP
+encode at 0.82 with JPEG fallback, browser-native (canvas, no new dependency),
+applied in `Capture.tsx` `addFiles`. Pure helpers unit-tested (`shrink.test.ts`);
+live-verified 3000×2000 → 1600×1067.
+
+**Deferred on purpose:** video needs an encode pipeline (ffmpeg/VideoToolbox —
+native-app territory, not a PWA page), and SingleFile web capture is a browser
+extension. Neither fits a self-contained Next.js PWA without a native wrapper,
+so they stay out until Capture gets a desktop shell.
+
 **Why useful:** captures more than text. Storage stays cheap.
 
 **Complexity:** 6/10. New capture inputs + encode pipeline.
@@ -145,6 +156,22 @@ type CorrectionEntry = {
 - Share fragment → multimodal message (text + image).
 - Optional: `capture_get_fragment(id)` MCP tool returning text + image for Hermes/Claude/Codex.
 - Fix export gap: `export-capture.mjs` writes image count today, not files. Write to `CaptureVault/threads/<slug>/assets/`.
+
+**Status — v1 BUILT (commit pending).**
+- **Vision-aware sort:** the sort route accepts one image, captions it via `visionChain()`
+  (Gemini — the only vision tier in the default chain), and files the capture by what it
+  shows. Verified live: a "COFFEE" image sorted as a *Coffee reminder* thread instead of
+  "(image only)". Caption is a bonus layer — no vision tier, or a spent one, never blocks
+  a capture (`src/lib/caption.ts`, unit-tested).
+- **Backups carry images:** `buildBackup` embeds the image bytes (v2, v1 still restores),
+  `restoreFromFile` writes them back to IndexedDB — a restore no longer silently loses
+  every photo. Unit-tested round-trip.
+- **Share carries the photos:** a thread share attaches its images as real files to the
+  OS share sheet (`Shareable.imgIds` → `File[]`).
+
+**Still open:** the vault export (`export-capture.mjs`) is text-only because image bytes
+never leave the device (only ids live in the sync hub) — browser backup now covers
+images, and the MCP `capture_get_fragment` tool remains a follow-up.
 
 **Why useful:** your bug-report scenario — text + photo, agent sees both.
 
@@ -204,12 +231,12 @@ type CorrectionEntry = {
 
 | Sprint | Name | Complexity | Depends on | Status |
 |---|---|---|---|---|
-| 0 | Language parity | 1 | none | do first |
-| 1 | Finish Tidy | 3 | 0 | core |
-| 2 | Correction ledger | 2 | 1 | core |
-| 3 | Bounded personal model | 5 | 2 | core |
-| 4 | Media capture + shrink | 6 | 0-3 | independent |
-| 5 | Image-aware share | 4 | 4 | after media |
+| 0 | Language parity | 1 | none | ✅ built |
+| 1 | Finish Tidy | 3 | 0 | ✅ built (exceeded — v2 AI) |
+| 2 | Correction ledger | 2 | 1 | ✅ built |
+| 3 | Bounded personal model | 5 | 2 | ✅ built |
+| 4 | Media capture + shrink | 6 | 0-3 | ✅ image half built; video/web deferred |
+| 5 | Image-aware share | 4 | 4 | ✅ v1 built |
 | 6 | Assistant mode | 5 | 1-3 | deferred |
 | 7 | Embeddings | 6 | 1-3 | deferred |
 

@@ -13,13 +13,14 @@ import {
 
 /* ------------------------------ builders ------------------------------ */
 
-const act = (id: string, text: string): Action => ({
+const act = (id: string, text: string, src?: string): Action => ({
   id,
   text,
   done: false,
   at: 100,
   shelf: "keep",
   expires: null,
+  ...(src ? { src } : {}),
 });
 
 const frag = (id: string, text: string): Frag => ({ id, at: 100, text });
@@ -339,6 +340,86 @@ describe("mapAiProposals — mapping", () => {
     const first = mapAiProposals(snapshot(), raw).map((p) => p.id);
     const second = mapAiProposals(snapshot(), raw).map((p) => p.id);
     expect(second).toEqual(first);
+  });
+
+  it("drops a fold_action whose target thread already holds the same note", () => {
+    /* The extract→fold-back loop, AI side: the model proposes folding an
+       action into the thread the note was extracted from — the thread
+       already contains that exact fragment, so folding would duplicate it.
+       The proposal is refused, never mapped. */
+    const s = compactBoard(
+      board({
+        actions: [act("a1", "Find a way to deal with notes that are outdated")],
+        threads: [
+          thread("t1", "Bugs, Issues and Additions", [
+            frag("f1", "Find a way to deal with notes that are outdated"),
+          ]),
+        ],
+      })
+    );
+    const raw: RawAiProposal[] = [
+      {
+        kind: "fold_action",
+        confidence: "high",
+        sourceId: "a1",
+        targetId: "t1",
+        reason: "the action belongs with this thread",
+      },
+    ];
+    expect(mapAiProposals(s, raw)).toEqual([]);
+  });
+
+  it("drops a fold-back even when the model's rewrite differs — src is the original note", () => {
+    /* The real extraction case: extractAction rewrites the note into a clean
+       task ("Audit existing notes…"), so the action TEXT differs from the
+       fragment — but src is the verbatim note the thread already holds.
+       The guard must see through the rewrite and refuse the fold. */
+    const s = compactBoard(
+      board({
+        actions: [
+          act(
+            "a1",
+            "Audit existing notes for outdated features",
+            "Find a way to deal with notes that are outdated—example features I have already built"
+          ),
+        ],
+        threads: [
+          thread("t1", "Bugs, Issues and Additions", [
+            frag(
+              "f1",
+              "Find a way to deal with notes that are outdated—example features I have already built"
+            ),
+          ]),
+        ],
+      })
+    );
+    const raw: RawAiProposal[] = [
+      {
+        kind: "fold_action",
+        confidence: "high",
+        sourceId: "a1",
+        targetId: "t1",
+        reason: "the action belongs with this thread",
+      },
+    ];
+    expect(mapAiProposals(s, raw)).toEqual([]);
+  });
+
+  it("still maps a fold_action into a thread that does NOT hold the note", () => {
+    const raw: RawAiProposal[] = [
+      {
+        kind: "fold_action",
+        confidence: "medium",
+        sourceId: "a2",
+        targetId: "t2",
+        reason: "belongs with the vet notes",
+      },
+    ];
+    const out = mapAiProposals(snapshot(), raw);
+    expect(out).toHaveLength(1);
+    expect(out[0].kind).toBe("fold_action");
+    expect(out[0].sourceId).toBe("a2");
+    expect(out[0].targetId).toBe("t2");
   });
 
   it("caps strong claims first, medium behind them", () => {

@@ -13,8 +13,9 @@ hand, no folders, no tags.
 
 **Your data. Your keys. Your server.** capture is local-first and self-hosted:
 your board lives in your browser's IndexedDB, your model keys stay on your own
-machine, and there is no account, no cloud sync, and no subscription. Built for
-one person's phone — yours.
+machine, and there is no account, no third-party cloud, and no subscription.
+Sync, when you use it, runs through your own machine — one command pairs your
+phone and Mac over Tailscale. Built for one person's devices — yours.
 
 <!--
   DEMO GIF — drop a screen recording here once you have one. Replace this
@@ -61,6 +62,18 @@ Both accept your voice. Dictation drops spoken words into the box; in Distill
 there is also the full spoken conversation described above — you talk, it
 answers aloud, and the mic comes back on its own. The complete voice + phone
 setup lives in [SETUP.md](SETUP.md).
+
+Photos ride along. They are shrunk the moment you pick them (a 12MP phone
+photo stops being a 15MB blob), the sorter can *see* them when a vision tier
+is configured — a photo of your coffee machine files under the coffee thread,
+not as "(image only)" — backups carry them, and sharing a thread hands the
+pictures over with the text.
+
+When the board feels messy, tap the wand. The **Organize** review scans
+everything on demand: duplicates, notes in the wrong thread, notes that are
+really tasks, the same idea worded twice — the model's semantic pass catches
+what word-matching can't. Every claim is one yes/no (or Approve all), and the
+app's Undo puts a capture back exactly, words included.
 
 ## Quickstart
 
@@ -111,6 +124,11 @@ own is a complete setup.
 Model ids are overridable (`GROQ_MODEL`, `MISTRAL_MODEL`, `GEMINI_MODEL`,
 `OPENROUTER_MODEL`), so a retired model can be swapped without editing source.
 
+When a capture carries a photo, the vision tier (Gemini) captions it first, so
+the sorter files the capture by what it shows. The caption is a bonus layer:
+no vision tier configured, or a spent one, and the sort proceeds exactly as
+before — a capture is never blocked on an image.
+
 If every provider fails, a capture is **never lost**. It is saved verbatim,
 flagged unsorted, and routed by whatever you were looking at — an open thread
 takes it as a fragment, the Threads tab starts a new one, otherwise it becomes
@@ -150,14 +168,17 @@ runs full-screen, keeps its own icon, and opens offline.
 
 ## Where your data lives
 
-In your browser's IndexedDB, on the one device. Not on a server, not in an
-account. Captured text goes to your chosen model provider at the moment you ask
-for it to be sorted, and nowhere else.
+In your browser's IndexedDB, on the device you're using. Not on a server, not
+in an account. Captured text goes to your chosen model provider at the moment
+you ask for it to be sorted, and nowhere else. If you pair your phone and Mac
+with the sync command, the two devices merge through a hub on your own
+machine — each device stays local-first, the hub just keeps them in step.
 
 That also means **clearing site data deletes everything**. Settings has a
-*Download backup* button that saves the whole board as one JSON file. Use it.
-Restoring merges by id, so restoring twice is safe and what is already on the
-device always wins.
+*Download backup* button that saves the whole board — photos included — as one
+JSON file. Use it. Restoring merges by id, so restoring twice is safe, what is
+already on the device always wins, and an older v1 backup restores fine too
+(just without the photos).
 
 ## Exporting
 

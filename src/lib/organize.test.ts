@@ -5,13 +5,14 @@ import { HIGH_CAP, scanBoard } from "./organize";
 
 /* ------------------------------ builders ------------------------------ */
 
-const act = (id: string, text: string, at: number): Action => ({
+const act = (id: string, text: string, at: number, src?: string): Action => ({
   id,
   text,
   done: false,
   at,
   shelf: "keep",
   expires: null,
+  ...(src ? { src } : {}),
 });
 
 const frag = (id: string, text: string, at: number): Frag => ({
@@ -185,6 +186,41 @@ describe("scanBoard — fold an action into a thread", () => {
     expect(dups).toHaveLength(1);
     expect(dups[0].sourceId).toBe("a1");
     expect(folds.some((f) => f.sourceId === "a1")).toBe(false);
+  });
+
+  it("never folds an action back into the thread its note already lives in", () => {
+    /* The extract→fold-back loop: extraction leaves the note in the thread,
+       and the extracted action phrase-matches the very fragment it came
+       from. Folding it in would copy the note a second time. */
+    const b = board({
+      actions: [
+        act(
+          "a1",
+          "Audit existing notes for outdated features",
+          200,
+          "Audit existing notes for outdated features. into Bugs, Issues and Additions"
+        ),
+      ],
+      threads: [
+        thread("t1", "Bugs, Issues and Additions", [
+          frag("f1", "Audit existing notes for outdated features. into Bugs, Issues and Additions", 100),
+        ]),
+      ],
+    });
+    expect(scanBoard(b).filter((p) => p.kind === "fold_action")).toEqual([]);
+  });
+
+  it("still folds when the thread holds a related but different note", () => {
+    /* The guard is exact, not fuzzy: a thread about the same subject that
+       does NOT already hold this note is still a legitimate fold. */
+    const b = board({
+      actions: [act("a1", "Buy cold brew equipment for the office", 200)],
+      threads: [thread("t1", "Cold brew", [frag("f1", "cold brew experiments going well", 100)])],
+    });
+    const folds = scanBoard(b).filter((p) => p.kind === "fold_action");
+    expect(folds).toHaveLength(1);
+    expect(folds[0].sourceId).toBe("a1");
+    expect(folds[0].targetId).toBe("t1");
   });
 });
 

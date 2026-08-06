@@ -34,7 +34,14 @@ export const maxDuration = 60;
 const Body = z.object({
   /* at rides along so a duplicate can always name the newer copy — the
      original is never at risk, and both passes propose the same direction. */
-  actions: z.array(z.object({ id: z.string(), text: z.string(), at: z.number() })),
+  actions: z.array(
+    z.object({
+      id: z.string(),
+      text: z.string(),
+      at: z.number(),
+      src: z.string().optional(),
+    })
+  ),
   threads: z.array(
     z.object({
       id: z.string(),
@@ -78,7 +85,7 @@ Propose ONLY changes a person would immediately agree improve the board:
 - extract_action — a fragment that reads as a doable task ("I need to call the vet about Luna's shots", "remember to renew the domain"). The note becomes an action; this is explicitly wanted. Only when it is unambiguously a task. A complaint or observation ("we're out of cold brew again", "the faucet drips at night") is NOT a task — never extract it, and never invent the task it implies.
 - dup_action / dup_fragment — the same task or note captured twice, worded differently. The copy is removed; the original stays.
 - move_fragment — a note sitting in the wrong thread. If a note is clearly about another thread's subject (a groceries complaint belongs with the groceries thread), prefer this over extract_action.
-- fold_action — an action that clearly belongs with a thread (it is really a note on that subject). Folding reduces the action list.
+- fold_action — an action that clearly belongs with a thread (it is really a note on that subject). Folding reduces the action list. NEVER fold an action into a thread that already contains that same note as a fragment — an action extracted from a thread is the very note it came from, and folding it back would copy it a second time. If the thread already holds the note, propose nothing.
 
 Rules that never bend:
 - NEVER merge whole threads. Never output a "merge_threads" kind. Two threads that cover overlapping ground stay separate; at most, an individual fragment that is truly the same idea in another thread may move.
@@ -105,6 +112,7 @@ function capped(body: TidySnapshot): TidySnapshot {
       id: a.id,
       text: clip(a.text, 200),
       at: a.at,
+      src: a.src ? clip(a.src, 240) : undefined,
     })),
     threads: body.threads.slice(0, CAP.threads).map((t) => ({
       id: t.id,

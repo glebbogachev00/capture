@@ -45,16 +45,7 @@ export function chain(): Tier[] {
     });
   }
 
-  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    tiers.push({
-      name: "gemini",
-      model: google(process.env.GEMINI_MODEL || "gemini-3.6-flash"),
-      // Gemini 3 reasons at length by default; a two-way sort does not need it.
-      providerOptions: {
-        google: { thinkingConfig: { thinkingLevel: "low" } },
-      },
-    });
-  }
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) tiers.push(geminiTier());
 
   // Last resort. The previous default (google/gemini-2.5-flash) is a paid
   // slug that 402s on a creditless account — it made the last-resort tier
@@ -72,6 +63,32 @@ export function chain(): Tier[] {
     });
   }
 
+  return tiers;
+}
+
+/** The Gemini tier, shared by the text chain and the vision chain. */
+function geminiTier(): Tier {
+  return {
+    name: "gemini",
+    model: google(process.env.GEMINI_MODEL || "gemini-3.6-flash"),
+    // Gemini 3 reasons at length by default; a two-way sort does not need it.
+    providerOptions: {
+      google: { thinkingConfig: { thinkingLevel: "low" } },
+    },
+  };
+}
+
+/**
+ * Tiers that can see an image, used for captioning a capture that carries a
+ * photo before the sorter files it (Sprint 5). Groq's default model, Mistral,
+ * and the OpenRouter default are text-only, so Gemini is the vision tier
+ * until another key points at an explicitly vision-capable model. Empty when
+ * no vision tier is configured — the app simply sorts without a caption,
+ * exactly as it always has.
+ */
+export function visionChain(): Tier[] {
+  const tiers: Tier[] = [];
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) tiers.push(geminiTier());
   return tiers;
 }
 

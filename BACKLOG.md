@@ -2,6 +2,10 @@
 
 Ideas I want to add to capture next, tracked in the open.
 
+The authoritative build plan — the sprint list with per-sprint status — lives in
+[specs/capture-deepseek-sprints.md](specs/capture-deepseek-sprints.md). The struck
+sections below are the shipped features; the open items are what's left.
+
 ## ~~Voice — talk to it like a person~~ Built
 
 The app sorts what you *write*. This was the next kind: what you *say*.
@@ -34,18 +38,44 @@ The clarifying engine interrogated: it asked questions instead of proposing a re
 
 ## ~~Tidy — on-demand board review~~ Built (as Organize)
 
-A **button**, not a section, not automatic. Press it when the board feels messy; it scans the whole board with the existing related engine (`related.ts`) and proposes:
+A **button**, not a section, not automatic. Press it when the board feels messy; it scans the whole board and proposes:
 
-- **Thread ↔ thread merges** — two threads that share a 3-content-word phrase: "These are the same subject: *both mention 'cold brew routine'*" → `[Merge]` `[Keep]`
 - **Duplicate actions** — the `bestActionDuplicate` engine: the newer copy is always the one removed → `[Remove]` `[Keep]`
 - **Duplicate fragments** — the same note pasted twice, same thread or across threads.
 - **Fold an action in** — an action that clearly belongs with a thread.
+- **Move a note** — a fragment sitting in the wrong thread.
+- **Lift a task out** — a note that is really an action → `[Extract]`.
+- **The same idea twice** — one thought worded differently in two notes, which only the model can see → `[Merge]`.
+
+(Whole-thread merges were in the original sketch and were **removed by the product rule**: Tidy never restructures for its own sake.)
 
 ### Status
 
-**v1 built (deterministic); v2 (AI intelligence) specced, not built.** The wand button, review screen, badges, and yes/no cards are done and live. But `scanBoard` (`src/lib/organize.ts`) is engine-only — no model — so it can only ever propose on shared *words*, never shared *ideas*. Gleb's critique: "it just shows me threads that have the same words… an AI model should look at ideas, context — individual fragments that can be merged together."
+**Built — v2, model-driven.** The wand button is always visible and scans **only when tapped** — never in the background, so the AI pass (which spends real quota) runs only when you ask, and a review stays frozen until you act on it. Two passes feed one review screen:
 
-**v2 direction — model-driven + product rule** (spec: `specs/capture-tidy-connect-prompt.md` rev 3): the model becomes the intelligence layer. A new `/api/organize` route runs the board snapshot through the provider chain and proposes semantic changes — including the new `merge_fragments` kind (the same idea worded differently in two threads, which word-matching can never catch). **Product rule (Gleb's directive): Tidy only reduces clutter / makes the board easier — it never restructures for its own sake. Whole-thread merges are removed entirely** (from the deterministic scan AND the AI pass). Remaining kinds: dup_action, dup_fragment, fold_action, move_fragment, extract_action (a note becomes an action — explicitly wanted), merge_fragments. Deterministic `scanBoard` stays as the instant, free, local first pass; AI proposals merge in after with an origin chip (AI vs instant). Dismissals stay id-stable across both passes. Nothing auto-applies; every claim is one yes/no in the existing review screen.
+- **Instant local scan** (`src/lib/organize.ts`) — deterministic, free, word-based. Shows immediately.
+- **AI semantic pass** (`/api/organize`, rev 3 of the spec) — the provider chain reviews the whole board and sees the same idea in *different words*, which word-matching never can. Live it caught: the espresso note sitting in the wrong thread, and a "call the vet" note that was really a task. Its rows carry an **AI** chip.
+
+**Product rule (Gleb's directive): Tidy only reduces clutter / makes the board easier — it never restructures for its own sake. Whole-thread merges are gone entirely**, from the deterministic scan and the AI pass alike. Remaining kinds: dup_action, dup_fragment, fold_action, move_fragment, extract_action (a note becomes an action — explicitly wanted), merge_fragments. Nothing auto-applies: every claim is one yes/no on the review screen, with an **Approve all (N)** gated behind a confirm modal, and a failed extraction stays listed for retry. Dismissals are remembered by id; a resolved pair never nags again. Verified by 27 case-driven unit tests (`tidyCases.test.ts`) and a live probe through the real chain (`npm run probe:tidy:cases`) — which caught and fixed the model inventing tasks out of complaints.
+
+## ~~Media — photos, seen and kept~~ Built (v1)
+
+The app took photos, but stored them as multi-megabyte base64 strings, sorted image-only captures as the literal string "(image only)", dropped every photo on backup/restore, and shared text without the pictures.
+
+### Status
+
+**v1 built.**
+
+- **Shrink at capture** (`src/lib/shrink.ts`) — every picked photo is downscaled to ≤1600px and re-encoded as WebP (JPEG fallback) before it touches IndexedDB. A 12MP phone photo goes from ~15MB to a few hundred KB.
+- **Vision-aware sorting** — the sort route captions an attached photo through the vision tier (Gemini) and files the capture by what it shows: a photo of a coffee machine becomes a coffee thread, not a mystery "(image only)". The caption is a bonus layer — no vision tier, or a spent one, and the sort proceeds exactly as before.
+- **Backups carry images** — backups v2 embed the photo bytes; restore brings them back, with an existing device image always winning over the backup's copy. v1 backups still restore.
+- **Share carries the photos** — a thread share attaches its images as real files in the OS share sheet.
+
+**Deferred on purpose:** video capture (needs an encode pipeline — ffmpeg/VideoToolbox, native-app territory) and web-page capture (SingleFile is a browser extension). Neither fits the PWA until it gets a desktop shell.
+
+## ~~Bounded personal model — the app learns how you file~~ Built
+
+Every accepted or dismissed suggestion is recorded in a correction ledger; `deriveRules` turns recent outcomes into a bounded set of plain-sentence filing rules, injected into the sorter as tendencies (never orders). The learned rules are visible and individually clearable in Settings.
 
 ## Voice growth (candidates, none committed)
 

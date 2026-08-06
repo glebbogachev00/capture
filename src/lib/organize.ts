@@ -83,6 +83,30 @@ export const HIGH_CAP = 12;
 export const MEDIUM_CAP = 8;
 export const ORGANIZE_CAP = HIGH_CAP + MEDIUM_CAP;
 
+/** Normalised note text — trimmed, lowercased, whitespace collapsed. The
+    unit of note-equality for the fold-back guard. */
+const normNote = (s: string): string =>
+  s.toLowerCase().replace(/\s+/g, " ").trim();
+
+/** Whether any of a thread's fragments reads as the same note as any of the
+    given texts — the fold-back guard. An action extracted from a thread
+    folds right back into the very note it came from; folding would only
+    copy it again, so both the scan and the fold itself must refuse it. */
+export function threadHoldsNote(
+  frags: { text?: string }[] | undefined,
+  ...texts: (string | undefined)[]
+): boolean {
+  const wants = texts
+    .filter((s): s is string => !!s)
+    .map(normNote)
+    .filter((s) => s.length > 0);
+  if (!wants.length) return false;
+  return (frags || []).some((f) => {
+    const have = normNote(f.text || "");
+    return have.length > 0 && wants.includes(have);
+  });
+}
+
 const NAME = (s: string) => (s.length > 60 ? s.slice(0, 60) + "…" : s);
 
 const threadText = (t: Thread): string =>
@@ -210,6 +234,11 @@ export function scanBoard(
     if (a.faded || a.done || dupClaimed.has(a.id)) continue;
     const hit = bestThreadHome(board, actionText(a), a.id);
     if (!hit) continue;
+    /* A fold-back is never a fold: extraction leaves the note in place, so
+       an extracted action phrase-matches the very fragment it came from —
+       folding it in would copy the note a second time. Skip it entirely. */
+    const target = board.threads.find((x) => x.id === hit.id);
+    if (!target || threadHoldsNote(target.frags, a.text, a.src)) continue;
     const phrase = sharedPhrase(actionText(a), threadTextById(board, hit.id));
     out.push({
       id: `fold_action:${a.id}:${hit.id}`,

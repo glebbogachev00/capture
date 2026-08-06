@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { BACKUP_APP, restoreBackup } from "@/lib/backup";
+import {
+  BACKUP_APP,
+  buildBackup,
+  restoreBackup,
+} from "@/lib/backup";
 import type { Board } from "@/lib/model";
 
 function board(over: Partial<Board> = {}): Board {
@@ -20,6 +24,19 @@ function backup(boardData: Partial<Board>) {
     version: 1,
     exportedAt: "2026-01-01T00:00:00.000Z",
     board: board(boardData),
+  };
+}
+
+function backupV2(
+  boardData: Partial<Board>,
+  images: Record<string, string> = {}
+) {
+  return {
+    app: BACKUP_APP,
+    version: 2,
+    exportedAt: "2026-01-01T00:00:00.000Z",
+    board: board(boardData),
+    images,
   };
 }
 
@@ -125,5 +142,30 @@ describe("restoreBackup", () => {
     const r = restoreBackup(backup({}), existing);
     expect(r).toMatchObject({ actions: 0, threads: 0, intentions: 0 });
     expect(r.board.actions).toEqual([]);
+  });
+
+  it("v2 carries the images through a restore", () => {
+    const incoming = backupV2(
+      { actions: [{ id: "a1", imgs: ["img-1"] } as never] },
+      { "img-1": "data:image/webp;base64,AAAA" }
+    );
+    const r = restoreBackup(incoming, board({}));
+    expect(r.actions).toBe(1);
+    expect(r.images).toEqual({ "img-1": "data:image/webp;base64,AAAA" });
+  });
+
+  it("v1 backups restore without images (undefined, not an error)", () => {
+    const r = restoreBackup(
+      backup({ actions: [{ id: "a1" } as never] }),
+      board({})
+    );
+    expect(r.actions).toBe(1);
+    expect(r.images).toBeUndefined();
+  });
+
+  it("buildBackup embeds the image map", () => {
+    const b = buildBackup(board({}), { "img-9": "data:image/jpeg;base64,BBBB" });
+    expect(b.version).toBe(2);
+    expect(b.images).toEqual({ "img-9": "data:image/jpeg;base64,BBBB" });
   });
 });

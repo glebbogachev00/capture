@@ -35,7 +35,18 @@ const span = (times: number[]) => {
   return lo === hi ? lo : `${lo} – ${hi}`;
 };
 
-export type Shareable = { title: string; text: string; summary: string };
+export type Shareable = {
+  title: string;
+  text: string;
+  summary: string;
+  /* The image ids a thread's fragments reference, so the share sheet can
+     carry the actual photos alongside the text. Populated for threads;
+     empty for every other shareable. */
+  imgIds?: string[];
+  /* Built from imgIds by the caller just before sharing — the OS sheet
+     takes File objects, the clipboard fallback ignores them. */
+  files?: File[];
+};
 
 export function shareThread(t: Thread): Shareable {
   const dates = t.frags.map((f) => f.at);
@@ -55,6 +66,7 @@ export function shareThread(t: Thread): Shareable {
     title: t.name,
     text: lines.join("\n").trimEnd(),
     summary: `Thread · ${t.frags.length} fragment${t.frags.length === 1 ? "" : "s"}`,
+    imgIds: t.frags.flatMap((f) => f.imgs || []),
   };
 }
 
@@ -168,7 +180,8 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 export type ShareOutcome = "shared" | "copied" | "cancelled" | "failed";
 
 /**
- * Hand text to the OS share sheet, falling back to the clipboard.
+ * Hand text — and, when present, the photos — to the OS share sheet, falling
+ * back to the clipboard (which carries the text only).
  *
  * On a phone this is the whole feature: the sheet already offers Messages,
  * Mail, AirDrop, whatever chat apps are installed, and Copy — so the app does
@@ -178,7 +191,11 @@ export type ShareOutcome = "shared" | "copied" | "cancelled" | "failed";
 export async function shareText(s: Shareable): Promise<ShareOutcome> {
   if (typeof navigator !== "undefined" && navigator.share) {
     try {
-      await navigator.share({ title: s.title, text: s.text });
+      await navigator.share(
+        s.files?.length
+          ? { title: s.title, text: s.text, files: s.files }
+          : { title: s.title, text: s.text }
+      );
       return "shared";
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {

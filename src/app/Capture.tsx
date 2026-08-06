@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2, Wand2 } from "lucide-react";
+import { BrushCleaning, Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
 import {
@@ -25,6 +25,7 @@ import {
 } from "@/lib/clock";
 import { useDictation } from "@/hooks/useDictation";
 import { get } from "@/lib/storage";
+import { shrinkFile } from "@/lib/shrink";
 import {
   type Action,
   type Frag,
@@ -198,12 +199,17 @@ export function Capture() {
     }
   });
 
+  /* Every picked photo is shrunk before it reaches the box — a phone photo
+     comes in at ~15MB as a data URL, and shrinking it at capture time is what
+     keeps IndexedDB (and backups, which now carry images) light. An unreadable
+     file is skipped rather than shown broken. */
   const addFiles = (files: FileList | null) => {
     [...(files || [])].slice(0, 4).forEach((f) => {
-      const rd = new FileReader();
-      rd.onload = () =>
-        setPics((p) => [...p, { id: uid(), src: rd.result as string }]);
-      rd.readAsDataURL(f);
+      void shrinkFile(f)
+        .then((src) => setPics((p) => [...p, { id: uid(), src }]))
+        .catch(() => {
+          /* unreadable image — drop it silently */
+        });
     });
   };
 
@@ -301,7 +307,7 @@ export function Capture() {
                   : "Scan the board for things to tidy"
               }
             >
-              <Wand2 size={18} strokeWidth={1.7} />
+              <BrushCleaning size={18} strokeWidth={1.7} />
               {highOrganize.length > 0 && (
                 <span className="organize-badge">{highOrganize.length}</span>
               )}

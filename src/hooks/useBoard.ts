@@ -87,6 +87,7 @@ import {
 import { deriveRules, type LearnedRule } from "@/lib/rules";
 import {
   scanBoard,
+  threadHoldsNote,
   type OrganizeProposal,
 } from "@/lib/organize";
 import {
@@ -649,6 +650,22 @@ export function useBoard(now: number) {
     return () => clearTimeout(id);
   }, [query]);
 
+  /* Every banner auto-clears — the "Cleanup ran on open" line and the error
+     line were the two that sat until the next capture. A stale error is
+     worse than a gone one: the text is never at risk, and the banner has
+     said its piece. */
+  useEffect(() => {
+    if (!swept) return;
+    const id = setTimeout(() => setSwept(null), 9000);
+    return () => clearTimeout(id);
+  }, [swept]);
+
+  useEffect(() => {
+    if (!err) return;
+    const id = setTimeout(() => setErr(""), 12000);
+    return () => clearTimeout(id);
+  }, [err]);
+
   /* --------------------------- sorting ----------------------------- */
 
   /**
@@ -660,7 +677,10 @@ export function useBoard(now: number) {
    */
   const requestSort = async (
     raw: string,
-    force?: "action" | "thread" | "intention"
+    force?: "action" | "thread" | "intention",
+    /* The first attached photo, so the sort route can caption it and file
+       the capture by what it shows rather than as "(image only)". */
+    imgSrc?: string
   ) => {
     const known = latest.current.threads.map((t) => ({
       id: t.id,
@@ -690,7 +710,14 @@ export function useBoard(now: number) {
     const res = await fetch("/api/sort", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ raw, threads: known, recent, force, rules }),
+      body: JSON.stringify({
+        raw,
+        threads: known,
+        recent,
+        force,
+        rules,
+        imgs: imgSrc ? [imgSrc] : undefined,
+      }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -985,7 +1012,17 @@ export function useBoard(now: number) {
     setErr("");
     setBusy("Sorting");
     try {
-      const out = await requestSort(a.src || a.text);
+      /* An unsorted capture with a photo re-sorts by what it shows, like the
+         main path — the first image is read back and captioned. */
+      let imgSrc: string | undefined;
+      if (a.imgs?.[0]) {
+        try {
+          imgSrc = (await get(IMG(a.imgs[0]))) || undefined;
+        } catch {
+          /* gone — sort the text alone */
+        }
+      }
+      const out = await requestSort(a.src || a.text, undefined, imgSrc);
       const board = {
         ...latest.current,
         actions: latest.current.actions.filter((x) => x.id !== a.id),
@@ -1068,7 +1105,11 @@ export function useBoard(now: number) {
         return;
       }
 
-      const out = await requestSort(payload || "(image only)", force);
+      const out = await requestSort(
+        payload || "(image only)",
+        force,
+        pics[0]?.src
+      );
 
       // An intention is declared rather than filed, so it takes a second
       // pass through its own engine and stops at a review step instead of
@@ -1651,29 +1692,42 @@ export function useBoard(now: number) {
     const a = latest.current.actions.find((x) => x.id === actionId);
     const t = latest.current.threads.find((x) => x.id === threadId);
     if (!a || !t) return;
+    /* A fold-back must never duplicate: extraction leaves the note in the
+       thread, so an action extracted from it folds right back into the very
+       fragment it came from. When the thread already holds the note, the
+       action is still retired (it was a task, not a note) but nothing is
+       appended — this is the safety net that guarantees approve-all can
+       never stack copies, whatever a stale proposal or cached AI pass says. */
+    const already = threadHoldsNote(t.frags, a.src || a.text, a.text);
     await commit({
       ...latest.current,
       actions: latest.current.actions.filter((x) => x.id !== actionId),
-      threads: latest.current.threads.map((x) =>
-        x.id === threadId
-          ? {
-              ...x,
-              frags: [
-                ...x.frags,
-                {
-                  id: uid(),
-                  at: a.at,
-                  text: a.src || a.text,
-                  imgs: a.imgs || [],
-                },
-              ].sort((p, q) => p.at - q.at),
-            }
-          : x
-      ),
+      threads: already
+        ? latest.current.threads
+        : latest.current.threads.map((x) =>
+            x.id === threadId
+              ? {
+                  ...x,
+                  frags: [
+                    ...x.frags,
+                    {
+                      id: uid(),
+                      at: a.at,
+                      text: a.src || a.text,
+                      imgs: a.imgs || [],
+                    },
+                  ].sort((p, q) => p.at - q.at),
+                }
+              : x
+          ),
     });
-    setNotice(`Moved into ${t.name}.`);
+    setNotice(
+      already
+        ? `${t.name} already has this note — task retired.`
+        : `Moved into ${t.name}.`
+    );
     setTimeout(() => setNotice(null), 4500);
-    await regenerate(latest.current, threadId);
+    if (!already) await regenerate(latest.current, threadId);
   };
 
   /* ---------------------------- threads ----------------------------- */
@@ -2226,9 +2280,33 @@ export function useBoard(now: number) {
     now
   );
 
+  /* A thread share carries its photos as real files in the OS sheet — the
+     text tells the story, the pictures go along with it. The bytes come from
+     IndexedDB, so they are fetched only at the moment of sharing. */
   const doShare = async () => {
     if (!shareable) return;
-    const outcome = await shareText(shareable);
+    const files: File[] = [];
+    if (shareable.imgIds?.length) {
+      for (const id of shareable.imgIds.slice(0, 4)) {
+        try {
+          const url = await get(IMG(id));
+          if (!url) continue;
+          const blob = await (await fetch(url)).blob();
+          const ext = blob.type === "image/webp" ? "webp" : "jpg";
+          files.push(
+            new File([blob], `capture-${id.slice(0, 8)}.${ext}`, {
+              type: blob.type || "image/jpeg",
+            })
+          );
+        } catch {
+          /* one photo failing to load never blocks the share */
+        }
+      }
+    }
+    const outcome = await shareText({
+      ...shareable,
+      files: files.length ? files : undefined,
+    });
     if (outcome === "cancelled") return;
     setNotice(
       outcome === "shared"
@@ -2242,11 +2320,30 @@ export function useBoard(now: number) {
 
   /* ----------------------- getting data in/out ---------------------- */
 
-  const exportBoard = () => {
+  /* A backup carries the photos too — the board stores image ids, and the
+     bytes live in IndexedDB under IMG(id). Collecting them here is what makes
+     a restore bring the pictures back instead of silently dropping them. */
+  const exportBoard = async () => {
     try {
-      downloadJSON(buildBackup(latest.current), backupFilename());
+      const b = latest.current;
+      const ids = new Set<string>();
+      for (const a of b.actions) for (const i of a.imgs || []) ids.add(i);
+      for (const t of b.threads)
+        for (const f of t.frags) for (const i of f.imgs || []) ids.add(i);
+      const images: Record<string, string> = {};
+      await Promise.all(
+        [...ids].map(async (id) => {
+          try {
+            const v = await get(IMG(id));
+            if (v) images[id] = v;
+          } catch {
+            /* gone — the text still backs up */
+          }
+        })
+      );
+      downloadJSON(buildBackup(b, images), backupFilename());
       setIoNote({
-        text: `Saved ${count(latest.current.actions.length, "action")}, ${count(latest.current.threads.length, "thread")} and ${count(latest.current.intentions.length, "intention")} to a file. Keep it somewhere that isn't this phone.`,
+        text: `Saved ${count(latest.current.actions.length, "action")}, ${count(latest.current.threads.length, "thread")} and ${count(latest.current.intentions.length, "intention")} — with ${Object.keys(images).length} image${Object.keys(images).length === 1 ? "" : "s"} — to a file. Keep it somewhere that isn't this phone.`,
         ok: true,
       });
     } catch {
@@ -2258,6 +2355,34 @@ export function useBoard(now: number) {
     setIoNote(null);
     try {
       const result = restoreBackup(await readJsonFile(file), latest.current);
+      /* Bring the photos back too — the backup carries their bytes since v2.
+         Written after the board so a storage hiccup never blocks the text
+         restore. Only newly added items get their backup image: an id that
+         was already on this device keeps the photo it already has ("existing
+         always wins", same rule as the board merge), and a stray id the
+         board doesn't reference is skipped. */
+      if (result.images) {
+        const boardIds = new Set<string>();
+        for (const a of result.board.actions)
+          for (const i of a.imgs || []) boardIds.add(i);
+        for (const t of result.board.threads)
+          for (const f of t.frags) for (const i of f.imgs || []) boardIds.add(i);
+        const preexisting = new Set<string>();
+        for (const a of latest.current.actions)
+          for (const i of a.imgs || []) preexisting.add(i);
+        for (const t of latest.current.threads)
+          for (const f of t.frags)
+            for (const i of f.imgs || []) preexisting.add(i);
+        await Promise.all(
+          Object.entries(result.images).map(([id, url]) =>
+            boardIds.has(id) && !preexisting.has(id)
+              ? set(IMG(id), url).catch(() => {
+                  /* photo skipped; board still restored */
+                })
+              : Promise.resolve()
+          )
+        );
+      }
       const added =
         result.actions +
         result.threads +

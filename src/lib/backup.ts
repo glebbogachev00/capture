@@ -9,27 +9,37 @@ import { mergeCorrections, mergeLedgers } from "./ledger";
  * now there was no way to get a copy out. Export is the more important half of
  * this file: import only matters once something has been exported.
  *
- * Images are deliberately not included. They are stored per-id outside the
- * board and would turn a small readable file into megabytes of base64; a
- * restored board simply shows the text without them.
+ * Images are included since v2. They live per-id outside the board (in
+ * IndexedDB under IMG(id)); a v1 backup carried only the ids and a restore
+ * silently lost every photo. Shrinking at capture (lib/shrink.ts) keeps the
+ * payload in the low single-digit megabytes, which makes carrying the bytes
+ * affordable. v1 backups (no images field) still restore — just without the
+ * photos.
  */
 
 export const BACKUP_APP = "capture";
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
 export type CaptureBackup = {
   app: typeof BACKUP_APP;
   version: number;
   exportedAt: string;
   board: Board;
+  /** Image bytes by id, so a restore can bring the photos back. Keyed by the
+      ids the board references in Action.imgs / Frag.imgs. */
+  images?: Record<string, string>;
 };
 
-export function buildBackup(board: Board): CaptureBackup {
+export function buildBackup(
+  board: Board,
+  images: Record<string, string> = {}
+): CaptureBackup {
   return {
     app: BACKUP_APP,
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     board,
+    images,
   };
 }
 
@@ -79,6 +89,10 @@ export type RestoreResult = {
   threads: number;
   intentions: number;
   principles: number;
+  /** The backup's image bytes, to be written back into IndexedDB. The caller
+      decides which ids the merged board still references; an image whose id
+      is not on the board is simply not restored. */
+  images?: Record<string, string>;
 };
 
 /**
@@ -99,6 +113,7 @@ export function restoreBackup(parsed: unknown, board: Board): RestoreResult {
   const incoming = hydrate(backup.board);
   const merged = { ...board };
   const counts = { actions: 0, threads: 0, intentions: 0, principles: 0 };
+  const images = backup.images || undefined;
 
   const haveActions = new Set(board.actions.map((a) => a.id));
   const newActions = incoming.actions.filter((a) => a?.id && !haveActions.has(a.id));
@@ -136,5 +151,5 @@ export function restoreBackup(parsed: unknown, board: Board): RestoreResult {
     incoming.corrections ?? []
   );
 
-  return { board: merged, ...counts };
+  return { board: merged, ...counts, images };
 }

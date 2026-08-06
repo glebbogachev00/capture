@@ -50,7 +50,13 @@ Voice is an input method, not the product.
 ## AI's Role
 
 Quiet assistance. It organizes, summarizes, and asks clarifying questions only when
-needed. It never overwhelms and never takes over.
+needed. It never overwhelms and never takes over. The Organize review is on demand,
+not automatic — the AI looks at the board only when you tap the wand, and proposes;
+it never mutates on its own.
+
+Photos ride along with the thinking: they shrink at capture, the sorter can see
+them (via a vision tier when one is configured), backups keep them, and a share
+carries them. Media is storage-light by design.
 
 The assistant is configured by a set of **principles** that keep it quiet, clarifying,
 and dependency-reducing — its purpose is to help you think clearly and become *less*
@@ -73,7 +79,8 @@ them locally, and lets you rotate or remove them anytime.
 - **No folders, tags, or taxonomy to maintain.** Organization emerges from the three
   object types.
 - **No AI auto-writing your thoughts.** It files, summarizes, and clarifies; you decide.
-- **No account, cloud sync, or lock-in.** Local-first. Your keys, your data.
+- **No account, cloud, or lock-in.** Local-first. Your keys, your data. Sync,
+  when you use it, runs through your own machine — never a third-party cloud.
 
 ## Sharing Philosophy
 

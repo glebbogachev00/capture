@@ -20,6 +20,7 @@ import type { Board } from "./model";
 import {
   HIGH_CAP,
   MEDIUM_CAP,
+  threadHoldsNote,
   type OrganizeConfidence,
   type OrganizeKind,
   type OrganizeProposal,
@@ -31,7 +32,7 @@ import {
     the source — the original, with its notes and images, is never at risk
     and the two passes propose the same direction (so a pair is deduped). */
 export type TidySnapshot = {
-  actions: { id: string; text: string; at: number }[];
+  actions: { id: string; text: string; at: number; src?: string }[];
   threads: {
     id: string;
     name: string;
@@ -60,7 +61,15 @@ export function compactBoard(board: Board): TidySnapshot {
   return {
     actions: board.actions
       .slice(0, SNAPSHOT_CAPS.actions)
-      .map((a) => ({ id: a.id, text: CLIP(a.text, 200), at: a.at || 0 })),
+      .map((a) => ({
+        id: a.id,
+        text: CLIP(a.text, 200),
+        at: a.at || 0,
+        /* src is the original note an extracted action came from — the
+           fold-back guard needs it to see the thread already holds the
+           note even when the model's rewrite differs. */
+        src: a.src ? CLIP(a.src, 240) : undefined,
+      })),
     threads: board.threads
       .slice(0, SNAPSHOT_CAPS.threads)
       .map((t) => ({
@@ -221,9 +230,16 @@ export function mapAiProposals(
           !!targetThread &&
           targetThread.id !== sourceThread.id;
         break;
-      case "fold_action":
+      case "fold_action": {
         ok = !!actionById.get(dupSource) && !!targetThread;
+        /* A fold-back is never a fold: the thread already holds the note
+           (an action extracted from it folds right back into the fragment
+           it came from — src is the original note), and folding would copy
+           it a second time. The proposal is dropped, not mapped. */
+        const a = snapshot.actions.find((x) => x.id === dupSource);
+        ok = ok && !threadHoldsNote(targetThread?.frags, a?.text, a?.src);
         break;
+      }
     }
     if (!ok) continue;
 

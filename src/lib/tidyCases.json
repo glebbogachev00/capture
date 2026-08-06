@@ -245,5 +245,49 @@
         { "id": "i1", "expanded": "I live somewhere with light and space to think" }
       ]
     }
+  },
+  {
+    "id": "c6-fold-back",
+    "name": "An action folded back into the thread it came from",
+    "blurb": "The user extracted a task out of a note (extract_action leaves the note in place), and the engine proposes folding the extracted action back into that SAME thread. The thread already holds the note — the action's src is the verbatim fragment — so folding would copy it a second time. Neither pass may propose it; the fold-back guard refuses it at the scan, at the AI mapper, and at the fold itself.",
+    "localExpect": [],
+    "aiExpect": [],
+    "aiForbid": ["fold_action"],
+    "soft": [],
+    "silence": false,
+    "cannedAi": [
+      {
+        "kind": "fold_action",
+        "confidence": "high",
+        "sourceId": "a1",
+        "targetId": "t-bugs",
+        "reason": "This action belongs with the Bugs, Issues and Additions thread."
+      }
+    ],
+    "board": {
+      "actions": [
+        {
+          "id": "a1",
+          "text": "Audit existing notes for outdated features",
+          "at": 200,
+          "src": "Find a way to deal with notes that are outdated—example features I have already built"
+        }
+      ],
+      "threads": [
+        {
+          "id": "t-bugs",
+          "name": "Bugs, Issues and Additions",
+          "summary": "",
+          "frags": [
+            {
+              "id": "f1",
+              "text": "Find a way to deal with notes that are outdated—example features I have already built",
+              "at": 150
+            }
+          ]
+        }
+      ],
+      "intentions": []
+    }
   }
 ]

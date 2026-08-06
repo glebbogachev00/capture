@@ -57,6 +57,7 @@ const snapshotToBoard = (s: TidySnapshot): Board => ({
       at: a.at,
       shelf: "keep",
       expires: null,
+      ...(a.src ? { src: a.src } : {}),
     })
   ),
   threads: s.threads.map(
@@ -153,6 +154,14 @@ describe("Tidy use cases — the deterministic local scan", () => {
     const board = snapshotToBoard(byId("c5-clean-silence").board);
     expect(scanBoard(board)).toEqual([]);
   });
+
+  it("c6: the local scan never folds an action back into the thread its note came from", () => {
+    /* extract_action leaves the note in the thread; the extracted action's
+       src is that verbatim note. Folding it back would copy the note a
+       second time — the scan must stay silent. */
+    const board = snapshotToBoard(byId("c6-fold-back").board);
+    expect(scanBoard(board).filter((p) => p.kind === "fold_action")).toEqual([]);
+  });
 });
 
 /* ----------------- the model pass, per use case (canned) ----------------- */
@@ -196,6 +205,11 @@ describe("Tidy use cases — the model pass maps canned answers correctly", () =
     expect(out[0].sourceId).toBe("a-new"); // newer
     expect(out[0].targetId).toBe("a-old"); // original kept
     expect(out[0].id).toBe("ai:dup_action:a-new::a-old");
+  });
+
+  it("c6: the AI pass refuses the canned fold-back proposal", () => {
+    const tc = byId("c6-fold-back");
+    expect(mapAiProposals(tc.board, tc.cannedAi)).toEqual([]);
   });
 
   it("c5: a rogue whole-thread merge is refused even on a clean board", () => {

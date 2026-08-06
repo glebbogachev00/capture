@@ -1,9 +1,10 @@
-import { generateObject } from "ai";
+import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { explain } from "@/lib/aiError";
+import { captionPrompt, mergeCaption, tidyCaption } from "@/lib/caption";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
-import { withFallback } from "@/lib/providers";
+import { visionChain, withFallback } from "@/lib/providers";
 import { reconcileSorted } from "@/lib/sort";
 
 /**
@@ -56,7 +57,44 @@ const Body = z.object({
   rules: z.array(z.string()).max(5).optional(),
   /** The destination is already decided; only the wording is in question. */
   force: z.enum(["action", "thread", "intention"]).optional(),
+  /** One attached photo (data URL), captioned by a vision tier before the
+      sort so an image capture files by what it actually shows. Bounded to
+      the size a shrunk photo actually reaches — a hand-built multi-megabyte
+      payload has no business in a sort request. */
+  imgs: z.array(z.string().max(2_000_000)).max(1).optional(),
 });
+
+/**
+ * Ask a vision-capable tier what a photo shows, in one sentence. Returns null
+ * when no vision tier is configured or the call fails — the caption is a
+ * bonus layer and the sort must never depend on it.
+ */
+async function captionImage(dataUrl: string): Promise<string | null> {
+  if (!visionChain().length) return null;
+  try {
+    const { value } = await withFallback(async (tier) => {
+      const out = await generateText({
+        model: tier.model,
+        maxRetries: 0,
+        providerOptions: tier.providerOptions,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", image: dataUrl },
+              { type: "text", text: captionPrompt() },
+            ],
+          },
+        ],
+      });
+      return { text: out.text };
+    });
+    return tidyCaption(value.text);
+  } catch {
+    /* Vision is a bonus; a spent tier never blocks a capture. */
+    return null;
+  }
+}
 
 /** A short, plain digest of how this person recently filed things. Bounded
     on the client, but capped again here so a large payload can't bloat the
@@ -199,6 +237,15 @@ export async function POST(request: Request) {
     return Response.json({ error: "nothing to sort" }, { status: 400 });
   }
 
+  /* A capture that carries a photo is sorted by what it shows, not as an
+     opaque "(image only)". The caption merges into the raw text; when no
+     vision tier is available it stays as it was sent. */
+  let raw = body.raw;
+  if (body.imgs?.[0]) {
+    const caption = await captionImage(body.imgs[0]);
+    if (caption) raw = mergeCaption(body.raw, caption);
+  }
+
   try {
     const { value, via } = await withFallback(async (tier) => {
       const { object } = await generateObject({
@@ -208,7 +255,7 @@ export async function POST(request: Request) {
         // wait out the backoff.
         maxRetries: 0,
         schema: Sorted,
-        prompt: prompt(body.raw, body.threads, body.force, body.recent, body.rules),
+        prompt: prompt(raw, body.threads, body.force, body.recent, body.rules),
         providerOptions: tier.providerOptions,
       });
       return object;
