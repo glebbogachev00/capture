@@ -89,6 +89,12 @@ import {
   scanBoard,
   type OrganizeProposal,
 } from "@/lib/organize";
+import {
+  compactBoard,
+  mapAiProposals,
+  mergeOrganize,
+  type RawAiProposal,
+} from "@/lib/organizeAi";
 
 /* Carries the server's explanation so the board can show it verbatim. */
 class SortError extends Error {}
@@ -220,6 +226,18 @@ export function useBoard(now: number) {
      same pair never reappears on a later scan. */
   const [organize, setOrganize] = useState<OrganizeProposal[] | null>(null);
   const dismissedOrganize = useRef<string[]>([]);
+  /* Whether the model's semantic pass has run, is running, or failed — the
+     review screen shows a quiet row while it thinks, and a "instant scan
+     only" note when it couldn't run (so the user knows the semantic layer
+     is offline, not that the board is clean). */
+  const [organizeAiStatus, setOrganizeAiStatus] = useState<
+    "idle" | "thinking" | "done" | "offline"
+  >("idle");
+  /* The last AI results, kept so a board change re-merges them instead of
+     dropping them from an open panel. Stale proposals are harmless — accept
+     routes through the id-guarded handlers, which no-op when the item is
+     gone. AI only re-runs on the button press, so this costs nothing. */
+  const aiOrganize = useRef<OrganizeProposal[]>([]);
 
   /* ---------------------------- distill ---------------------------- */
   const [distillOpen, setDistillOpen] = useState(false);
@@ -1315,18 +1333,71 @@ export function useBoard(now: number) {
 
   /* ---------------------------- organize ---------------------------- */
 
-  /** Run the board-wide tidy scan against the latest board. Local and
-      instant — no model, no quota — so it always re-scans on open. */
-  const runOrganize = () => {
+  /**
+   * Run the board-wide tidy scan against the latest board.
+   *
+   * Two passes, both rendered in the one review screen:
+   *   - the local scan is instant and free — it shows immediately;
+   *   - the model's semantic pass follows — it sees the same idea in
+   *     different words, which word-matching never can — and its results
+   *     merge in behind the local ones.
+   * The app never blocks on the model: if the route fails (no keys, quota
+   * spent, network), the local scan stands and the screen notes that the
+   * semantic pass is offline.
+   */
+  const runOrganize = async () => {
+    /* The local scan is shown immediately; the AI results merge in when
+       they arrive. Both are read from the LATEST board at their moment, so
+       a board change mid-fetch is never overwritten by a stale snapshot. */
     setOrganize(scanBoard(latest.current, dismissedOrganize.current));
+    setOrganizeAiStatus("thinking");
+    try {
+      const res = await fetch("/api/organize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(compactBoard(latest.current)),
+      });
+      if (!res.ok) {
+        setOrganizeAiStatus("offline");
+        return;
+      }
+      const out = (await res.json()) as {
+        proposals?: RawAiProposal[];
+      };
+      const ai = mapAiProposals(
+        compactBoard(latest.current),
+        out.proposals ?? []
+      );
+      aiOrganize.current = ai;
+      setOrganize(
+        mergeOrganize(
+          ai,
+          scanBoard(latest.current, dismissedOrganize.current)
+        )
+      );
+      setOrganizeAiStatus("done");
+    } catch {
+      /* The model is a bonus layer; its absence never breaks the scan. */
+      setOrganizeAiStatus("offline");
+    }
   };
 
   /* Keep the badge live: re-scan whenever the board changes, so a capture
-     that duplicates something lights the count without being asked. The scan
-     is local and instant, and a dismissed pair stays filtered out. */
+     that duplicates something lights the count without being asked. The
+     local scan is instant — no model call per keystroke — and a dismissed
+     pair stays filtered out of both passes. The last AI results ride along
+     (minus the dismissed ones), so an open panel keeps its semantic rows
+     across a background change (a sync pull, a sweep) instead of losing
+     them. */
   useEffect(() => {
     if (!loaded) return;
-    setOrganize(scanBoard(latest.current, dismissedOrganize.current));
+    const dropped = new Set(dismissedOrganize.current);
+    setOrganize(
+      mergeOrganize(
+        aiOrganize.current.filter((p) => !dropped.has(p.id)),
+        scanBoard(latest.current, dismissedOrganize.current)
+      )
+    );
   }, [loaded, data]);
 
   /**
@@ -1338,6 +1409,9 @@ export function useBoard(now: number) {
   const acceptOrganize = async (id: string) => {
     const p = organize?.find((x) => x.id === id);
     if (!p) return;
+    /* The applied change must not ride back in from the cached AI results
+       on the next re-scan — a resolved proposal is resolved. */
+    aiOrganize.current = aiOrganize.current.filter((x) => x.id !== id);
     if (p.kind === "dup_action") {
       const a = latest.current.actions.find((x) => x.id === p.sourceId);
       await dropImages(a?.imgs);
@@ -1401,14 +1475,17 @@ export function useBoard(now: number) {
         dismissedOrganize.current = [...dismissedOrganize.current, p.id];
         void set(ORGANIZE_DISMISSED_KEY, JSON.stringify(dismissedOrganize.current));
       }
-    } else {
-      await mergeThreads(p.targetId, p.sourceId);
+    } else if (p.kind === "merge_fragments") {
+      /* The same idea lives in two notes — move the newer one into the
+         thread that already holds it. moveFrag interleaves by date, carries
+         images, re-summarises, and removes an emptied source thread. */
+      await moveFrag(p.sourceThreadId!, p.sourceFragId!, p.targetId);
       await commit(
         noteCorrection(latest.current, {
           proposalKind: "related_suggestion",
           accepted: true,
-          context: `merged a thread into ${p.targetName}`,
-          rule: `Merge threads into "${p.targetName}"`,
+          context: `merged a note into ${p.targetName}`,
+          rule: `Move notes into "${p.targetName}"`,
         })
       );
     }
@@ -1421,6 +1498,7 @@ export function useBoard(now: number) {
   const dismissOrganize = (id: string) => {
     const p = organize?.find((x) => x.id === id);
     if (!p) return;
+    aiOrganize.current = aiOrganize.current.filter((x) => x.id !== id);
     setOrganize((cur) =>
       cur ? cur.filter((x) => x.id !== id) : cur
     );
@@ -2622,6 +2700,7 @@ export function useBoard(now: number) {
     acceptSuggestion,
     dismissSuggestion,
     organize,
+    organizeAiStatus,
     runOrganize,
     acceptOrganize,
     dismissOrganize,

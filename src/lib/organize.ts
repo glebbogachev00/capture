@@ -8,9 +8,15 @@
  *   - dup_action      the same task captured twice — drop the newer action
  *   - dup_fragment    the same note pasted twice — drop the newer fragment
  *   - fold_action     an action clearly belongs with a thread — fold it in
- *   - merge_threads   two threads are the same subject — merge them
  *   - move_fragment   a note is sitting in the wrong thread — move it
  *   - extract_action  a fragment reads as a doable task — lift it out
+ *   - merge_fragments the same idea worded differently in two notes — move
+ *                     one into the other's thread (proposed by the model)
+ *
+ * The product rule: this scan only ever reduces clutter — it never
+ * restructures for its own sake, and it never merges whole threads into one
+ * another (that is the one change the user explicitly rejected). A note may
+ * move; a thread never does.
  *
  * Purely local and deterministic: no model, no quota, instant, and unit-tested.
  * Every claim reuses the strict matching rules of related.ts — only content
@@ -26,8 +32,6 @@ import {
   bestActionDuplicate,
   bestFragmentDuplicate,
   bestThreadHome,
-  contentWords,
-  sharedContentWords,
   sharedPhrase,
 } from "./related";
 
@@ -37,9 +41,9 @@ export type OrganizeKind =
   | "dup_action"
   | "dup_fragment"
   | "fold_action"
-  | "merge_threads"
   | "move_fragment"
-  | "extract_action";
+  | "extract_action"
+  | "merge_fragments";
 
 export type OrganizeProposal = {
   /** Deterministic — same board always yields the same id, so a dismissal
@@ -55,7 +59,8 @@ export type OrganizeProposal = {
       thread holding the copy — sourceFragId names the fragment itself. */
   sourceId: string;
   sourceName: string;
-  /** dup_fragment / move_fragment / extract_action: the thread + fragment. */
+  /** dup_fragment / move_fragment / extract_action / merge_fragments: the
+      thread + fragment. */
   sourceThreadId?: string;
   sourceFragId?: string;
   /** Where it goes, or what stays (for duplicates). */
@@ -65,6 +70,10 @@ export type OrganizeProposal = {
   reason: string;
   /** Ordering weight within a confidence tier. */
   score: number;
+  /** Where the claim came from: the free instant word-match scan, or the
+      model's semantic review (which can see the same idea in different
+      words). The review screen shows a chip per row. */
+  origin: "ai" | "local";
 };
 
 /** The panel shows at most this many strong claims, then this many medium
@@ -108,19 +117,6 @@ const threadTextById = (board: Board, id: string): string => {
 const phraseWords = (phrase: string) =>
   phrase ? phrase.split(" ").length : 0;
 
-/** How many items across the board contain each content word. A word shared
-    by everything means nothing; a word in only a few items is distinctive. */
-function wordRarity(board: Board): Map<string, number> {
-  const counts = new Map<string, number>();
-  const bump = (s: string) => {
-    for (const w of new Set(contentWords(s)))
-      counts.set(w, (counts.get(w) || 0) + 1);
-  };
-  for (const a of board.actions) bump(actionText(a));
-  for (const t of board.threads) bump(threadText(t));
-  return counts;
-}
-
 /** Classify a shared-phrase signal into a confidence tier. */
 function tierFor(phrase: string): OrganizeConfidence {
   return phraseWords(phrase) >= 3 ? "high" : "medium";
@@ -145,10 +141,6 @@ export function scanBoard(
   dismissed: Iterable<string> = []
 ): OrganizeProposal[] {
   const dropped = new Set(dismissed);
-  const counts = wordRarity(board);
-  const itemCount =
-    board.actions.length + board.threads.length + board.intentions.length;
-  const maxShare = Math.max(2, Math.floor(itemCount / 4));
   const out: OrganizeProposal[] = [];
   const dupClaimed = new Set<string>();
   const fragClaimed = new Set<string>();
@@ -176,6 +168,7 @@ export function scanBoard(
       targetName: NAME(dup.name),
       reason: `both mention "${phrase}"`,
       score: 100 + phraseWords(phrase) * 10,
+      origin: "local",
     });
   }
 
@@ -207,6 +200,7 @@ export function scanBoard(
           (crossThread ? ` (in "${dup.threadName}")` : ""),
         reason: `both mention "${phrase}"`,
         score: 100 + phraseWords(phrase) * 10,
+        origin: "local",
       });
     }
   }
@@ -228,70 +222,8 @@ export function scanBoard(
       targetName: NAME(hit.name),
       reason: `belongs with "${phrase}"`,
       score: 90 + phraseWords(phrase) * 10,
+      origin: "local",
     });
-  }
-
-  /* Merge two threads that are the same subject. The bar is deliberately
-     lower than v1's single three-word-phrase test — real threads about the
-     same thing rarely share a long verbatim run — so it combines signals:
-       - a shared content-word phrase (3 words = high, 2 = medium)
-       - a run of shared RARE words, the words only a few items use
-         (3+ shared = medium — "both keep returning to X, Y, Z")
-     The bigger thread is kept (more fragments = more history); a tie goes
-     to the older one by its first fragment, so the direction is
-     deterministic. */
-  for (let i = 0; i < board.threads.length; i++) {
-    for (let j = i + 1; j < board.threads.length; j++) {
-      const a = board.threads[i];
-      const b = board.threads[j];
-      if (!(a.frags || []).length || !(b.frags || []).length) continue;
-      const phrase = sharedPhrase(threadText(a), threadText(b));
-      const words = phraseWords(phrase);
-      const rare = sharedContentWords(threadText(a), threadText(b)).filter(
-        (w) => (counts.get(w) || 99) <= maxShare
-      );
-      let confidence: OrganizeConfidence | null = null;
-      let reason = "";
-      if (words >= 3) {
-        confidence = "high";
-        reason = `both are about "${phrase}"`;
-      } else if (words === 2) {
-        confidence = "medium";
-        reason = `both mention "${phrase}"`;
-      } else if (maxShare > 2 && rare.length >= 3) {
-        /* Rare words only mean rare once the board is big enough that most
-           shared words are NOT rare — at the maxShare floor of 2, any three
-           shared content words would qualify, which is a noise claim. */
-        confidence = "medium";
-        reason = `both keep returning to ${rare.slice(0, 3).join(", ")}`;
-      }
-      if (!confidence) continue;
-      const aBigger = (a.frags?.length || 0) - (b.frags?.length || 0);
-      const aOlder = (a.frags?.[0]?.at ?? 0) <= (b.frags?.[0]?.at ?? 0);
-      const [keep, merge] =
-        aBigger !== 0
-          ? aBigger > 0
-            ? [a, b]
-            : [b, a]
-          : aOlder
-            ? [a, b]
-            : [b, a];
-      out.push({
-        id: `merge_threads:${merge.id}:${keep.id}`,
-        kind: "merge_threads",
-        confidence,
-        verb: "Merge",
-        sourceId: merge.id,
-        sourceName: NAME(merge.name),
-        targetId: keep.id,
-        targetName: NAME(keep.name),
-        reason,
-        score:
-          (confidence === "high" ? 200 : 100) +
-          words * 10 +
-          rare.length * 5,
-      });
-    }
   }
 
   /* Move a fragment to the thread it clearly belongs with. Strict in both
@@ -323,6 +255,7 @@ export function scanBoard(
         targetName: NAME(home.name),
         reason: `belongs with "${phrase}" in "${home.name}"`,
         score: 80 + phraseWords(phrase) * 10,
+        origin: "local",
       });
     }
   }
@@ -356,6 +289,7 @@ export function scanBoard(
         targetName: "an action",
         reason: `reads as a task: "${f.text.slice(0, 60)}"`,
         score: 70,
+        origin: "local",
       });
     }
   }

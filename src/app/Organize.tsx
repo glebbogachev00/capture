@@ -5,13 +5,17 @@
  * cards squeezed under the header.
  *
  * It reads like a review agent's report: a one-line summary of what it
- * found, then each kind of finding under its own heading ("Threads that
- * cover the same ground", "The same thing, twice"…) with a short hint about
- * what accepting means. Every finding is one yes/no — the engine proposes,
- * the user decides, nothing happens without a tap.
+ * found, then each kind of finding under its own heading with a short hint
+ * about what accepting means. Every finding is one yes/no — the engine
+ * proposes, the user decides, nothing happens without a tap.
  *
- * Strong claims show first; less certain ones sit behind "Show more", so
- * the page is calm on purpose.
+ * The product rule: everything here reduces clutter or turns a note into an
+ * action. There is no "merge one thread into another" — that change was
+ * rejected outright. A note may move; a thread never does.
+ *
+ * Two passes feed the list: the instant local word-match scan, and the
+ * model's semantic review (which can see the same idea in different words).
+ * Each row carries a chip saying which pass found it.
  */
 
 import { useState } from "react";
@@ -25,9 +29,9 @@ type Group = {
 
 const GROUPS: Group[] = [
   {
-    kinds: ["merge_threads"],
-    title: "Threads that cover the same ground",
-    hint: "Merging folds one into the other — one subject, one home.",
+    kinds: ["merge_fragments"],
+    title: "One thought, two notes",
+    hint: "The same idea lives in two notes, worded differently. The note moves into the thread that already holds it.",
   },
   {
     kinds: ["dup_action", "dup_fragment"],
@@ -42,11 +46,11 @@ const GROUPS: Group[] = [
   {
     kinds: ["fold_action"],
     title: "Actions that belong with a thread",
-    hint: "Folding turns the action into a note there.",
+    hint: "Folding turns the action into a note there — one less thing on the action list.",
   },
   {
     kinds: ["extract_action"],
-    title: "Tasks to lift out of notes",
+    title: "Notes that are really tasks",
     hint: "The task becomes an action; the note stays where it is.",
   },
 ];
@@ -54,32 +58,32 @@ const GROUPS: Group[] = [
 const YES_LABEL: Record<OrganizeKind, string> = {
   dup_action: "Remove",
   dup_fragment: "Remove",
-  merge_threads: "Merge",
+  merge_fragments: "Merge",
   fold_action: "Fold in",
   move_fragment: "Move",
   extract_action: "Extract",
 };
 
-/** The review's opening line, built from what was found — "1 thread covers
-    the same ground as another and 1 note sits in the wrong thread." */
+/** The review's opening line, built from what was found — "1 thought lives
+    twice and 1 note sits in the wrong thread." */
 function summaryOf(proposals: OrganizeProposal[]): string {
   const count = (k: OrganizeKind) =>
     proposals.filter((p) => p.kind === k).length;
   const parts: string[] = [];
-  const n = count("merge_threads");
-  if (n)
+  const m = count("merge_fragments");
+  if (m)
     parts.push(
-      `${n} ${n === 1 ? "thread" : "threads"} ${n === 1 ? "covers" : "cover"} the same ground as another`
+      `${m} ${m === 1 ? "thought lives" : "thoughts live"} twice, in different words`
     );
   const d = count("dup_action") + count("dup_fragment");
   if (d)
     parts.push(
       `${d} ${d === 1 ? "thing was" : "things were"} captured twice`
     );
-  const m = count("move_fragment");
-  if (m)
+  const mv = count("move_fragment");
+  if (mv)
     parts.push(
-      `${m} ${m === 1 ? "note sits" : "notes sit"} in the wrong thread`
+      `${mv} ${mv === 1 ? "note sits" : "notes sit"} in the wrong thread`
     );
   const f = count("fold_action");
   if (f)
@@ -89,7 +93,7 @@ function summaryOf(proposals: OrganizeProposal[]): string {
   const e = count("extract_action");
   if (e)
     parts.push(
-      `${e} ${e === 1 ? "task can" : "tasks can"} be lifted out of notes`
+      `${e} ${e === 1 ? "note reads" : "notes read"} as a task to lift out`
     );
   if (!parts.length) return "";
   return parts.length === 1
@@ -112,7 +116,7 @@ function Explanation({ p }: { p: OrganizeProposal }) {
       </span>
     );
   }
-  if (p.kind === "move_fragment") {
+  if (p.kind === "move_fragment" || p.kind === "merge_fragments") {
     return (
       <span className="org-line">
         Move <em>{p.sourceName}</em> to <em>{p.targetName}</em>
@@ -128,11 +132,16 @@ function Explanation({ p }: { p: OrganizeProposal }) {
 
 export function OrganizeScreen({
   proposals,
+  aiStatus,
   onBack,
   onAccept,
   onDismiss,
 }: {
   proposals: OrganizeProposal[];
+  /** Whether the model's semantic pass has run. "thinking" shows a quiet
+      row while it works; "offline" tells the user the semantic layer
+      couldn't run, so they don't mistake a quiet model for a clean board. */
+  aiStatus: "idle" | "thinking" | "done" | "offline";
   onBack: () => void;
   onAccept: (id: string) => void;
   onDismiss: (id: string) => void;
@@ -160,6 +169,16 @@ export function OrganizeScreen({
       ) : (
         <>
           <p className="org-summary">{summary}</p>
+          {aiStatus === "thinking" && (
+            <p className="org-status">
+              The model is looking for the same ideas in different words…
+            </p>
+          )}
+          {aiStatus === "offline" && (
+            <p className="org-status">
+              Instant scan only — the semantic pass couldn&apos;t run right now.
+            </p>
+          )}
 
           {GROUPS.map((g) => {
             const items = proposals.filter((p) => g.kinds.includes(p.kind));
@@ -188,6 +207,11 @@ export function OrganizeScreen({
                             : "Possible match"
                         }
                       />
+                      {p.origin === "ai" && (
+                        <span className="org-chip" title="Found by the model — the same idea in different words">
+                          AI
+                        </span>
+                      )}
                       <div className="org-body">
                         <Explanation p={p} />
                         <span className="org-why">{p.reason}</span>

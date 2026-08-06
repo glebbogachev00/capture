@@ -83,6 +83,7 @@ export function Capture() {
     acceptSuggestion,
     dismissSuggestion,
     organize,
+    organizeAiStatus,
     runOrganize,
     acceptOrganize,
     dismissOrganize,
@@ -278,7 +279,7 @@ export function Capture() {
                   /* A Distill session owns the whole surface — close it so the
                      review screen is the only thing on screen. */
                   if (distillOpen) closeDistill();
-                  runOrganize();
+                  void runOrganize();
                   setShowOrganize(true);
                 }}
                 aria-label={`Organize — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`}
@@ -497,6 +498,7 @@ export function Capture() {
         {!distillOpen && (showOrganize ? (
           <OrganizeScreen
             proposals={organize ?? []}
+            aiStatus={organizeAiStatus}
             onBack={() => setShowOrganize(false)}
             onAccept={(id) => void acceptOrganize(id)}
             onDismiss={(id) => dismissOrganize(id)}

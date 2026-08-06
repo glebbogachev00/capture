@@ -2198,6 +2198,29 @@ body {
   font-size: 12px;
   color: var(--muted);
 }
+/* The model's pass can see the same idea in different words — a quiet chip
+   on those rows so the user knows a claim is semantic, not word-matching. */
+.org-chip {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 1px 5px;
+  margin-top: 1px;
+  line-height: 1.4;
+}
+/* A quiet status line under the summary — "the model is looking…" while it
+   thinks, or "instant scan only" when the semantic pass couldn't run, so a
+   quiet model is never mistaken for a clean board. */
+.org-status {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted);
+  margin: 6px 0 0;
+}
 .org-actions {
   display: flex;
   gap: 6px;

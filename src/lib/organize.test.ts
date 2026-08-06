@@ -84,6 +84,16 @@ describe("scanBoard — duplicate actions", () => {
     expect(scanBoard(three)[0].confidence).toBe("high");
   });
 
+  it("marks every local proposal with origin 'local'", () => {
+    const b = board({
+      actions: [
+        act("new", "Book a dentist appointment for Tuesday", 200),
+        act("old", "Book a dentist appointment for Friday", 100),
+      ],
+    });
+    expect(scanBoard(b).every((p) => p.origin === "local")).toBe(true);
+  });
+
   it("proposes exactly one per pair, never the original", () => {
     const b = board({
       actions: [
@@ -178,8 +188,11 @@ describe("scanBoard — fold an action into a thread", () => {
   });
 });
 
-describe("scanBoard — merge threads", () => {
-  it("merges two threads on the same subject (three-word phrase), keeping the bigger", () => {
+describe("scanBoard — no whole-thread merges (the product rule)", () => {
+  it("never proposes merging two threads, even on the same subject", () => {
+    /* Two threads about the same subject — the strongest possible case —
+       still produce no merge: the app never merges one thread into
+       another (Gleb's explicit directive). At most a fragment may move. */
     const b = board({
       threads: [
         thread("big", "Cold brew", [
@@ -192,62 +205,12 @@ describe("scanBoard — merge threads", () => {
         ]),
       ],
     });
-    const merges = scanBoard(b).filter((p) => p.kind === "merge_threads");
-    expect(merges).toHaveLength(1);
-    expect(merges[0].confidence).toBe("high");
-    expect(merges[0].sourceId).toBe("small");
-    expect(merges[0].targetId).toBe("big");
-    expect(merges[0].verb).toBe("Merge");
-  });
-
-  it("rates a two-word phrase as a medium merge, shown behind Show more", () => {
-    const b = board({
-      threads: [
-        thread("ta", "Cold brew", [
-          frag("fa", "Bought a new cold brew maker", 200),
-        ]),
-        thread("tb", "Brew", [
-          frag("fb", "Cold brew is better than drip", 100),
-        ]),
-      ],
-    });
-    const merges = scanBoard(b).filter((p) => p.kind === "merge_threads");
-    expect(merges).toHaveLength(1);
-    expect(merges[0].confidence).toBe("medium");
-  });
-
-  it("merges on shared rare words even without a phrase", () => {
-    /* Rare words only mean rare on a big enough board (maxShare > 2), so the
-       board carries filler items that share nothing with the two threads. */
-    const filler: Action[] = [];
-    for (let i = 0; i < 10; i++) {
-      filler.push(act(`fill${i}`, `Complete quux${i} task`, 1000 + i));
-    }
-    const b = board({
-      actions: filler,
-      threads: [
-        thread("ta", "Notes", [
-          frag("fa", "perfectionism and burnout and overwhelm research notes", 200),
-        ]),
-        thread("tb", "Reflections", [
-          frag("fb", "burnout perfectionism overwhelm reflections", 100),
-        ]),
-      ],
-    });
-    const merges = scanBoard(b).filter((p) => p.kind === "merge_threads");
-    expect(merges).toHaveLength(1);
-    expect(merges[0].confidence).toBe("medium");
-    expect(merges[0].reason).toContain("perfectionism");
-  });
-
-  it("ignores threads with no fragments", () => {
-    const b = board({
-      threads: [
-        { ...thread("ta", "Cold brew routine", [frag("fa", "cold brew routine works", 200)]), frags: [] },
-        thread("tb", "Routine", [frag("fb", "cold brew routine fails", 100)]),
-      ],
-    });
-    expect(kinds(b).filter((k) => k === "merge_threads")).toEqual([]);
+    /* merge_threads was removed from the type entirely — the comparison
+       casts through string to assert the runtime behaviour: no proposal
+       merges one thread into another, even on the strongest case. */
+    expect(
+      scanBoard(b).filter((p) => (p.kind as string) === "merge_threads")
+    ).toEqual([]);
   });
 });
 

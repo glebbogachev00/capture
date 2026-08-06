@@ -1,0 +1,427 @@
+import { describe, expect, it } from "vitest";
+import type { Action, Board, Frag, Thread } from "./model";
+import { EMPTY } from "./model";
+import { HIGH_CAP, MEDIUM_CAP, scanBoard } from "./organize";
+import {
+  compactBoard,
+  mapAiProposals,
+  mergeOrganize,
+  renderBoardForPrompt,
+  SNAPSHOT_CAPS,
+  type RawAiProposal,
+} from "./organizeAi";
+
+/* ------------------------------ builders ------------------------------ */
+
+const act = (id: string, text: string): Action => ({
+  id,
+  text,
+  done: false,
+  at: 100,
+  shelf: "keep",
+  expires: null,
+});
+
+const frag = (id: string, text: string): Frag => ({ id, at: 100, text });
+
+const thread = (id: string, name: string, frags: Frag[]): Thread => ({
+  id,
+  name,
+  summary: "",
+  frags,
+});
+
+const board = (b: Partial<Board>): Board => ({ ...EMPTY, ...b });
+
+/* ---------------------------- compactBoard ---------------------------- */
+
+describe("compactBoard", () => {
+  it("keeps ids and text for the model to reference", () => {
+    const b = board({
+      actions: [act("a1", "Call the vet")],
+      threads: [thread("t1", "Coffee", [frag("f1", "cold brew experiments")])],
+      intentions: [
+        {
+          id: "i1",
+          number: 1,
+          rawInput: "i want light",
+          expandedIntention: "I live somewhere with light",
+          recommendedActions: [],
+          counterIntentions: [],
+          at: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    const s = compactBoard(b);
+    expect(s.actions).toEqual([{ id: "a1", text: "Call the vet", at: 100 }]);
+    expect(s.threads[0]).toMatchObject({
+      id: "t1",
+      name: "Coffee",
+      frags: [{ id: "f1", text: "cold brew experiments", at: 100 }],
+    });
+    expect(s.intentions[0]).toMatchObject({ id: "i1", expanded: "I live somewhere with light" });
+  });
+
+  it("caps a huge board so one prompt stays small", () => {
+    const actions = Array.from({ length: SNAPSHOT_CAPS.actions + 5 }, (_, i) =>
+      act("a" + i, "task number " + i)
+    );
+    const threads = Array.from({ length: SNAPSHOT_CAPS.threads + 5 }, (_, i) =>
+      thread(
+        "t" + i,
+        "thread " + i,
+        Array.from({ length: SNAPSHOT_CAPS.fragsPerThread + 3 }, (_, j) =>
+          frag("f" + i + "-" + j, "note " + j)
+        )
+      )
+    );
+    const s = compactBoard(board({ actions, threads }));
+    expect(s.actions).toHaveLength(SNAPSHOT_CAPS.actions);
+    expect(s.threads).toHaveLength(SNAPSHOT_CAPS.threads);
+    expect(s.threads[0].frags).toHaveLength(SNAPSHOT_CAPS.fragsPerThread);
+  });
+
+  it("clips long text so no single item dominates", () => {
+    const long = "x".repeat(500);
+    const s = compactBoard(board({ threads: [thread("t1", "N", [frag("f1", long)])] }));
+    expect(s.threads[0].frags[0].text.length).toBeLessThan(250);
+  });
+});
+
+/* --------------------------- renderBoardForPrompt --------------------------- */
+
+describe("renderBoardForPrompt", () => {
+  it("renders ids inline so the model can cite them exactly", () => {
+    const s = compactBoard(
+      board({
+        actions: [act("a1", "Call the vet")],
+        threads: [thread("t1", "Coffee", [frag("f1", "cold brew")])],
+        intentions: [
+          {
+            id: "i1",
+            number: 1,
+            rawInput: "light",
+            expandedIntention: "I live somewhere with light",
+            recommendedActions: [],
+            counterIntentions: [],
+            at: 1,
+            updatedAt: 1,
+          },
+        ],
+      })
+    );
+    const out = renderBoardForPrompt(s);
+    expect(out).toContain("[a1]");
+    expect(out).toContain("[t1]");
+    expect(out).toContain("[f1]");
+    expect(out).toContain("[i1]");
+  });
+});
+
+/* ----------------------------- mapAiProposals ----------------------------- */
+
+const snapshot = () =>
+  compactBoard(
+    board({
+      actions: [act("a1", "Book a dentist appointment"), act("a2", "Buy milk")],
+      threads: [
+        thread("t1", "Coffee", [frag("f1", "cold brew experiments"), frag("f2", "espresso machine notes")]),
+        thread("t2", "Vet", [frag("f3", "Luna shots schedule")]),
+      ],
+    })
+  );
+
+describe("mapAiProposals — validation", () => {
+  it("drops proposals referencing ids that do not exist (hallucination)", () => {
+    const raw: RawAiProposal[] = [
+      {
+        kind: "merge_fragments",
+        confidence: "high",
+        sourceId: "t1",
+        sourceFragId: "f1",
+        targetId: "no-such-thread",
+        reason: "same idea",
+      },
+      {
+        kind: "dup_action",
+        confidence: "high",
+        sourceId: "ghost-action",
+        targetId: "a1",
+        reason: "same task",
+      },
+      {
+        kind: "extract_action",
+        confidence: "medium",
+        sourceId: "t1",
+        sourceFragId: "f99",
+        targetId: "t1",
+        reason: "a task",
+      },
+    ];
+    expect(mapAiProposals(snapshot(), raw)).toEqual([]);
+  });
+
+  it("requires fragment kinds to name a thread that actually holds the fragment", () => {
+    const raw: RawAiProposal[] = [
+      {
+        kind: "move_fragment",
+        confidence: "high",
+        sourceId: "t2",
+        sourceFragId: "f1", // f1 lives in t1, not t2
+        targetId: "t1",
+        reason: "belongs elsewhere",
+      },
+    ];
+    expect(mapAiProposals(snapshot(), raw)).toEqual([]);
+  });
+
+  it("move_fragment must land in a real, different thread — a hallucinated target is dropped", () => {
+    const raw: RawAiProposal[] = [
+      {
+        kind: "move_fragment",
+        confidence: "high",
+        sourceId: "t1",
+        sourceFragId: "f1",
+        targetId: "ghost-thread",
+        reason: "belongs elsewhere",
+      },
+    ];
+    expect(mapAiProposals(snapshot(), raw)).toEqual([]);
+  });
+
+  it("extract_action normalises its target to the source thread — a stable ai: id", () => {
+    /* The model may write any targetId for an extraction; the mapped
+       proposal must not carry it, or the deterministic id would change
+       run to run and a dismissal would stop sticking. */
+    const raw = [
+      {
+        kind: "extract_action",
+        confidence: "medium",
+        sourceId: "t1",
+        sourceFragId: "f1",
+        targetId: "whatever-the-model-said",
+        reason: "a task",
+      },
+    ] as RawAiProposal[];
+    const out = mapAiProposals(snapshot(), raw);
+    expect(out).toHaveLength(1);
+    expect(out[0].targetId).toBe("t1");
+    expect(out[0].id).toBe("ai:extract_action:t1:f1:t1");
+  });
+
+  it("merge_fragments must point at a different thread", () => {
+    const raw: RawAiProposal[] = [
+      {
+        kind: "merge_fragments",
+        confidence: "high",
+        sourceId: "t1",
+        sourceFragId: "f1",
+        targetId: "t1", // same thread — moving is meaningless
+        reason: "same idea",
+      },
+    ];
+    expect(mapAiProposals(snapshot(), raw)).toEqual([]);
+  });
+
+  it("refuses merge_threads — the product rule, enforced even if the model disobeys", () => {
+    /* The type can't even express a whole-thread merge (merge_threads was
+       removed from OrganizeKind), so this simulates a rogue model by
+       forcing the kind through. mapAiProposals must refuse it at runtime. */
+    const raw = [
+      {
+        kind: "merge_threads",
+        confidence: "high",
+        sourceId: "t1",
+        targetId: "t2",
+        reason: "same ground",
+      },
+    ] as unknown as RawAiProposal[];
+    expect(mapAiProposals(snapshot(), raw)).toEqual([]);
+  });
+
+  it("dedupes the same pair proposed twice", () => {
+    const same: RawAiProposal = {
+      kind: "dup_action",
+      confidence: "high",
+      sourceId: "a1",
+      targetId: "a2",
+      reason: "same task",
+    };
+    const out = mapAiProposals(snapshot(), [same, { ...same }]);
+    expect(out).toHaveLength(1);
+  });
+});
+
+describe("mapAiProposals — mapping", () => {
+  it("maps a valid merge_fragments into the OrganizeProposal shape", () => {
+    const out = mapAiProposals(snapshot(), [
+      {
+        kind: "merge_fragments",
+        confidence: "high",
+        sourceId: "t2",
+        sourceFragId: "f3",
+        targetId: "t1",
+        reason: "Both notes are really about the espresso routine.",
+      },
+    ]);
+    expect(out).toHaveLength(1);
+    const p = out[0];
+    expect(p.kind).toBe("merge_fragments");
+    expect(p.origin).toBe("ai");
+    expect(p.verb).toBe("Merge");
+    expect(p.sourceThreadId).toBe("t2");
+    expect(p.sourceFragId).toBe("f3");
+    expect(p.targetId).toBe("t1");
+    expect(p.sourceName).toContain("Luna shots");
+    expect(p.reason).toContain("espresso routine");
+    expect(p.id).toBe("ai:merge_fragments:t2:f3:t1");
+  });
+
+  it("normalises dup_action direction — the newer copy is always the source, so both passes propose the same pair", () => {
+    const b = board({
+      actions: [
+        { ...act("a1", "Book a dentist appointment for Tuesday"), at: 100 },
+        { ...act("a2", "Book a dentist appointment for Friday"), at: 300 },
+      ],
+    });
+    /* The model names the pair backwards (source = older). */
+    const raw = [
+      {
+        kind: "dup_action",
+        confidence: "high",
+        sourceId: "a1",
+        targetId: "a2",
+        reason: "same task",
+      },
+    ] as RawAiProposal[];
+    const out = mapAiProposals(compactBoard(b), raw);
+    expect(out).toHaveLength(1);
+    expect(out[0].sourceId).toBe("a2"); // newer
+    expect(out[0].targetId).toBe("a1"); // original kept
+    expect(out[0].id).toBe("ai:dup_action:a2::a1");
+  });
+
+  it("maps an extract_action with the thread as its home", () => {
+    const out = mapAiProposals(snapshot(), [
+      {
+        kind: "extract_action",
+        confidence: "medium",
+        sourceId: "t1",
+        sourceFragId: "f1",
+        targetId: "t1",
+        reason: "reads as a task",
+      },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].targetName).toBe("an action");
+    expect(out[0].sourceThreadId).toBe("t1");
+    expect(out[0].sourceFragId).toBe("f1");
+  });
+
+  it("is deterministic — same input, same ids", () => {
+    const raw: RawAiProposal[] = [
+      {
+        kind: "dup_action",
+        confidence: "high",
+        sourceId: "a1",
+        targetId: "a2",
+        reason: "same task",
+      },
+      {
+        kind: "fold_action",
+        confidence: "medium",
+        sourceId: "a1",
+        targetId: "t1",
+        reason: "belongs with the coffee notes",
+      },
+    ];
+    const first = mapAiProposals(snapshot(), raw).map((p) => p.id);
+    const second = mapAiProposals(snapshot(), raw).map((p) => p.id);
+    expect(second).toEqual(first);
+  });
+
+  it("caps strong claims first, medium behind them", () => {
+    const actions = Array.from({ length: HIGH_CAP + 5 }, (_, i) => act("a" + i, "task " + i));
+    const s = compactBoard(board({ actions }));
+    const raw: RawAiProposal[] = [];
+    for (let i = 0; i < HIGH_CAP + 5; i++) {
+      raw.push({
+        kind: "dup_action",
+        confidence: "high",
+        sourceId: "a" + i,
+        targetId: "a" + (i + 1),
+        reason: "same task",
+      });
+    }
+    const out = mapAiProposals(s, raw);
+    expect(out).toHaveLength(HIGH_CAP);
+    expect(out.every((p) => p.confidence === "high")).toBe(true);
+  });
+});
+
+/* ------------------------------- mergeOrganize ------------------------------- */
+
+describe("mergeOrganize", () => {
+  const ai: RawAiProposal[] = [
+    {
+      kind: "merge_fragments",
+      confidence: "high",
+      sourceId: "t1",
+      sourceFragId: "f2",
+      targetId: "t2",
+      reason: "same idea",
+    },
+  ];
+  it("merges AI claims first, local word-matches after", () => {
+    const b = board({
+      actions: [
+        { ...act("new", "Book a dentist appointment for Tuesday"), at: 200 },
+        { ...act("old", "Book a dentist appointment for Friday"), at: 100 },
+      ],
+      threads: [thread("t1", "Coffee", [frag("f1", "cold brew experiments")])],
+    });
+    const merged = mergeOrganize(mapAiProposals(snapshot(), ai), scanBoard(b));
+    expect(merged.length).toBeGreaterThanOrEqual(2);
+    expect(merged[0].origin).toBe("ai");
+  });
+
+  it("dedupes by PAIR — the same proposal from both passes appears once even though their ids differ", () => {
+    const b = board({
+      actions: [
+        { ...act("a1", "Book a dentist appointment for Tuesday"), at: 200 },
+        { ...act("a2", "Book a dentist appointment for Friday"), at: 100 },
+      ],
+    });
+    const both: RawAiProposal[] = [
+      {
+        kind: "dup_action",
+        confidence: "high",
+        sourceId: "a1",
+        targetId: "a2",
+        reason: "same task",
+      },
+    ];
+    /* Distinct at values make the local scan actually propose this pair —
+       its id (dup_action:a1:a2) differs from the ai: id, so both would
+       show unless mergeOrganize dedupes by pair. The AI version wins. */
+    const merged = mergeOrganize(mapAiProposals(compactBoard(b), both), scanBoard(b));
+    const dups = merged.filter((p) => p.kind === "dup_action");
+    expect(dups).toHaveLength(1);
+    expect(dups[0].origin).toBe("ai");
+  });
+
+  it("caps the merged list together", () => {
+    const actions = Array.from({ length: MEDIUM_CAP + 3 }, (_, i) => act("a" + i, "task " + i));
+    const s = compactBoard(board({ actions }));
+    const raw: RawAiProposal[] = actions.map((a, i) => ({
+      kind: "dup_action" as const,
+      confidence: "medium" as const,
+      sourceId: a.id,
+      targetId: actions[(i + 1) % actions.length].id,
+      reason: "same task",
+    }));
+    const merged = mergeOrganize(mapAiProposals(s, raw), []);
+    expect(merged).toHaveLength(MEDIUM_CAP);
+  });
+});
