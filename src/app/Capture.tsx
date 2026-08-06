@@ -166,11 +166,15 @@ export function Capture() {
   /* Input device plumbing: the hidden file picker, and the speech recogniser
      (shared with Distill — the mic routes to whichever surface is open).
      Read through the ref by useDictation, so the destination is always the
-     one that is current when a result lands. */
+     one that is current when a result lands. The ref remembers that the
+     words in the box came from the microphone, so the capture can be
+     recorded as dictated in the ledger. */
+  const dictatedRef = useRef(false);
   const { canDictate, listening, toggleMic } = useDictation((t) => {
     if (distillOpen) {
       setDistillInput((x) => (x ? x + " " : "") + t.trim());
     } else {
+      dictatedRef.current = true;
       setText((x) => (x ? x + " " : "") + t.trim());
     }
   });
@@ -296,7 +300,10 @@ export function Capture() {
             onChange={(e) => setText(e.target.value)}
             placeholder="Say it however it comes out — it saves automatically. Say “action:”, “thread:” or “intention:” first to aim it somewhere specific."
             onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                submit(dictatedRef.current);
+                dictatedRef.current = false;
+              }
             }}
           />
           {!!pics.length && (
@@ -361,7 +368,10 @@ export function Capture() {
             </button>
             <button
               className="capture-btn"
-              onClick={submit}
+              onClick={() => {
+                submit(dictatedRef.current);
+                dictatedRef.current = false;
+              }}
               disabled={!!busy || (!text.trim() && !pics.length)}
             >
               {busy ? "…" : "Capture"}

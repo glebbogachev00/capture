@@ -73,6 +73,7 @@ import {
 } from "@/lib/sync";
 import type { SyncStore } from "@/lib/syncStore";
 import type { Draft, IoNote } from "@/app/Intentions";
+import { sourceOf, withLedger, type CaptureSource } from "@/lib/ledger";
 
 /* Carries the server's explanation so the board can show it verbatim. */
 class SortError extends Error {}
@@ -93,6 +94,8 @@ type SortResult = {
   shelfLife?: string;
   threadId?: string | null;
   threadName?: string | null;
+  /* Which model tier sorted it — recorded in the capture ledger. */
+  via?: string;
 };
 
 /* What a capture just landed as — the thing a suggestion would act on. */
@@ -170,6 +173,14 @@ export function useBoard(now: number) {
   /* The action being converted to an intention; removed only once the draft
      is saved, never when it is discarded. */
   const [pendingSource, setPendingSource] = useState<string | null>(null);
+  /* What an in-flight intention draft should record in the ledger when it is
+     saved: set by whichever flow opened the draft (a typed/dictated capture,
+     or a Distill settlement), consumed by saveDraft, cleared on discard. */
+  const intentionLedger = useRef<{
+    raw: string;
+    source: CaptureSource;
+    via?: string;
+  } | null>(null);
 
   /* ---------------------------- distill ---------------------------- */
   const [distillOpen, setDistillOpen] = useState(false);
@@ -372,6 +383,7 @@ export function useBoard(now: number) {
       principles: snap.board.principles.map((p) =>
         had(latest.current.principles, p.id) ? p : bump(p)
       ),
+      ledger: snap.board.ledger,
     };
     const nextTombstones = mergeTombstones(snap.tombstones, added);
 
@@ -715,7 +727,8 @@ export function useBoard(now: number) {
     raw: string,
     imgIds: string[],
     at: number,
-    reason: string
+    reason: string,
+    dictated = false
   ) => {
     const b = latest.current;
     const body = raw || "(image only)";
@@ -729,6 +742,8 @@ export function useBoard(now: number) {
     };
 
     let next: Board;
+    let targetId = "";
+    let targetFragId: string | undefined;
     if (openThread) {
       next = {
         ...b,
@@ -736,6 +751,8 @@ export function useBoard(now: number) {
           t.id === openThread.id ? { ...t, frags: [...t.frags, frag] } : t
         ),
       };
+      targetId = openThread.id;
+      targetFragId = frag.id;
       setLanded(openThread.name + " — saved unsorted");
     } else if (tab === "threads") {
       const fresh: Thread = {
@@ -745,6 +762,8 @@ export function useBoard(now: number) {
         frags: [frag],
       };
       next = { ...b, threads: [fresh, ...b.threads] };
+      targetId = fresh.id;
+      targetFragId = frag.id;
       setLanded(fresh.name + " — new thread, unsorted");
     } else {
       const action: Action = {
@@ -759,8 +778,23 @@ export function useBoard(now: number) {
         unsorted: true,
       };
       next = { ...b, actions: [action, ...b.actions] };
+      targetId = action.id;
       setLanded("Kept unsorted");
     }
+
+    // The fallback is still a capture — the ledger records it exactly as it
+    // was said, flagged by the kind it fell back to.
+    next = withLedger(next, {
+      id: uid(),
+      at,
+      raw,
+      clean: body,
+      kind: openThread || tab === "threads" ? "thread" : "action",
+      source: sourceOf(raw, dictated, imgIds.length > 0),
+      targetId,
+      targetFragId,
+      imgs: imgIds.length ? imgIds : undefined,
+    });
 
     setText("");
     setPics([]);
@@ -812,8 +846,10 @@ export function useBoard(now: number) {
     }, 9000);
   };
 
-  /** Praise be. The main capture, sorted and filed. */
-  const submit = async () => {
+  /** Praise be. The main capture, sorted and filed.
+      `dictated` says the words came from the microphone — the ledger records
+      that so a later export can tell speech from typing. */
+  const submit = async (dictated = false) => {
     const raw = text.trim();
     /* A leading command pins the destination: the command word is
        stripped and the rest goes through the sorter with the destination
@@ -850,7 +886,10 @@ export function useBoard(now: number) {
         setCanUndo(false);
         setText("");
         setPics([]);
-        await expandIntention(payload);
+        await expandIntention(payload, {
+          raw: payload,
+          source: sourceOf(payload, dictated, imgIds.length > 0),
+        });
         setTimeout(() => setLanded(null), 4500);
         return;
       }
@@ -866,7 +905,10 @@ export function useBoard(now: number) {
         setCanUndo(false);
         setText("");
         setPics([]);
-        await expandIntention(payload);
+        await expandIntention(payload, {
+          raw: payload,
+          source: sourceOf(payload, dictated, imgIds.length > 0),
+        });
         setTimeout(() => setLanded(null), 4500);
         return;
       }
@@ -877,6 +919,23 @@ export function useBoard(now: number) {
         at,
         latest.current
       );
+      // The capture records itself in the ledger before it lands: what was
+      // said, what it became, where it went, and which model tier sorted it.
+      const filed = withLedger(next, {
+        id: uid(),
+        at,
+        raw,
+        clean: out.clean || payload,
+        kind: out.kind,
+        source: sourceOf(payload, dictated, imgIds.length > 0),
+        targetId:
+          out.kind === "action"
+            ? source?.id ?? next.actions[0]?.id ?? ""
+            : (source?.id ?? targetId ?? ""),
+        targetFragId: source?.fragId,
+        modelVia: out.via,
+        imgs: imgIds.length ? imgIds : undefined,
+      });
       setLanded(landed);
       setTab(out.kind === "action" ? "actions" : "threads");
       setText("");
@@ -888,18 +947,18 @@ export function useBoard(now: number) {
         tombstones: tombstones.current,
       };
       setCanUndo(true);
-      await commit(next);
+      await commit(filed);
       /* A quiet proposal, never applied: if this capture clearly belongs
          with an existing thread, offer the fold. An explicit /action,
          /thread or /intention command is respected — only the model's
          choice is ever second-guessed. Computed before the summary refresh
          so it lands with the banner, never a model round-trip later. */
       setSuggestion(
-        force ? null : computeSuggestion(next, out.clean, source)
+        force ? null : computeSuggestion(filed, out.clean, source)
       );
-      if (targetId) await regenerate(next, targetId);
+      if (targetId) await regenerate(filed, targetId);
     } catch (error) {
-      await saveUnsorted(raw, imgIds, at, reasonOf(error));
+      await saveUnsorted(raw, imgIds, at, reasonOf(error), dictated);
     }
 
     setBusy(null);
@@ -1460,8 +1519,15 @@ export function useBoard(now: number) {
 
   /* --------------------------- intentions -------------------------- */
 
-  /** Run raw words through the intention engine and open the review step. */
-  const expandIntention = async (rawInput: string) => {
+  /** Run raw words through the intention engine and open the review step.
+      `ledger` describes the capture that opened this draft; when the draft is
+      saved, saveDraft records it in the ledger. Absent for conversions of
+      things already captured (an action made into an intention). */
+  const expandIntention = async (
+    rawInput: string,
+    ledger?: { raw: string; source: CaptureSource } | null
+  ) => {
+    intentionLedger.current = ledger ?? null;
     setErr("");
     setBusy("Finding the intention");
     try {
@@ -1479,6 +1545,7 @@ export function useBoard(now: number) {
         throw new SortError(body.error);
       }
       const out = await res.json();
+      if (intentionLedger.current) intentionLedger.current.via = out.via;
       setDraft({
         rawInput,
         expandedIntention: out.expandedIntention,
@@ -1523,6 +1590,21 @@ export function useBoard(now: number) {
         actions: latest.current.actions.filter((a) => a.id !== pendingSource),
       };
     }
+    // A capture that became this intention records itself in the ledger:
+    // what was said (raw) and what it became (the reviewed wording).
+    if (intentionLedger.current) {
+      next = withLedger(next, {
+        id: uid(),
+        at,
+        raw: intentionLedger.current.raw,
+        clean: draft.expandedIntention,
+        kind: "intention",
+        source: intentionLedger.current.source,
+        targetId: intention.id,
+        modelVia: intentionLedger.current.via,
+      });
+      intentionLedger.current = null;
+    }
     await commit(next);
     setDraft(null);
     setPendingSource(null);
@@ -1534,6 +1616,7 @@ export function useBoard(now: number) {
   /** Close the intention draft without saving; the source action stays put. */
   const discardDraft = () => {
     setPendingSource(null);
+    intentionLedger.current = null;
     setDraft(null);
   };
 
@@ -1654,12 +1737,30 @@ export function useBoard(now: number) {
     setIoNote(null);
     try {
       const result = restoreBackup(await readJsonFile(file), latest.current);
-      await commit(result.board);
       const added =
         result.actions +
         result.threads +
         result.intentions +
         result.principles;
+      // A restore that added anything records itself in the ledger.
+      await commit(
+        added
+          ? withLedger(result.board, {
+              id: uid(),
+              at: stamp(),
+              raw: file.name,
+              clean: `Restored ${count(result.actions, "action")}, ${count(result.threads, "thread")} and ${count(result.intentions, "intention")} from a backup.`,
+              kind:
+                result.actions > 0
+                  ? "action"
+                  : result.threads > 0
+                    ? "thread"
+                    : "intention",
+              source: "import",
+              targetId: "",
+            })
+          : result.board
+      );
       setIoNote({
         text: added
           ? `Restored ${count(result.actions, "action")}, ${count(result.threads, "thread")}, ${count(result.intentions, "intention")} and ${count(result.principles, "principle")}.`
@@ -1679,7 +1780,20 @@ export function useBoard(now: number) {
     setIoNote(null);
     try {
       const result = importIntentBackup(await readJsonFile(file), latest.current);
-      await commit(result.board);
+      // An import that added anything records itself in the ledger.
+      await commit(
+        result.added
+          ? withLedger(result.board, {
+              id: uid(),
+              at: stamp(),
+              raw: file.name,
+              clean: `Brought in ${count(result.added, "intention")} from an intent backup.`,
+              kind: "intention",
+              source: "import",
+              targetId: "",
+            })
+          : result.board
+      );
 
       const parts = [`Brought in ${count(result.added, "intention")}`];
       if (result.duplicates) parts.push(`${result.duplicates} already here`);
@@ -1960,28 +2074,52 @@ export function useBoard(now: number) {
       const skipNote = proofreadSkipped
         ? " The proofread pass couldn't run — saved as reviewed."
         : "";
+      // The raw conversation the settlement came from — the ledger's `raw`.
+      const transcript = distillSession.turns
+        .map((t) => t.text)
+        .filter(Boolean)
+        .join(" ");
       if (kind === "intention") {
         setDistillOpen(false);
-        await expandIntention(finalClean);
+        // The reviewed draft records the conversation in the ledger when it
+        // is saved (saveDraft consumes the pending ledger note).
+        await expandIntention(finalClean, {
+          raw: transcript,
+          source: "distill",
+        });
         await resetDistill();
       } else if (kind === "action") {
         const span = SHELF[shelfLife as ShelfLife] ?? null;
+        // One timestamp for the actions and their ledger entry, so the
+        // record points at exactly the items it describes.
+        const at = stamp();
         const items: Action[] = (
           finalActions.length ? finalActions : [finalClean]
         ).map((t) => ({
           id: uid(),
           text: t,
           done: false,
-          at: stamp(),
+          at,
           src: finalClean,
           imgs: [],
           shelf: (shelfLife || "keep") as ShelfLife,
           expires: span ? stamp() + span : null,
         }));
-        await commit({
-          ...latest.current,
-          actions: [...items, ...latest.current.actions],
-        });
+        await commit(
+          withLedger(
+            { ...latest.current, actions: [...items, ...latest.current.actions] },
+            {
+              id: uid(),
+              at,
+              raw: transcript,
+              clean: finalClean,
+              kind: "action",
+              source: "distill",
+              targetId: items[0]?.id ?? "",
+              modelVia: settled.via,
+            }
+          )
+        );
         setNotice(
           `${count(items.length, "action")} distilled from the conversation.` +
             skipNote
@@ -1996,10 +2134,23 @@ export function useBoard(now: number) {
           summary: "",
           frags: [{ id: uid(), at: stamp(), text: finalClean }],
         };
-        const next = {
-          ...latest.current,
-          threads: [thread, ...latest.current.threads],
-        };
+        const next = withLedger(
+          {
+            ...latest.current,
+            threads: [thread, ...latest.current.threads],
+          },
+          {
+            id: uid(),
+            at: stamp(),
+            raw: transcript,
+            clean: finalClean,
+            kind: "thread",
+            source: "distill",
+            targetId: thread.id,
+            targetFragId: thread.frags[0]?.id,
+            modelVia: settled.via,
+          }
+        );
         await commit(next);
         setNotice("Distilled into a thread." + skipNote);
         setTimeout(() => setNotice(null), 5000);

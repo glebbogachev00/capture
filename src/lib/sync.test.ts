@@ -41,6 +41,7 @@ const board = (over: Partial<Board> = {}): Board => ({
   threads: [],
   intentions: [],
   principles: [],
+  ledger: [],
   ...over,
 });
 

@@ -44,6 +44,12 @@ yarn-error.log*
 # the sync hub's on-disk store (self-hosted on the Mac)
 .data/
 
+# the generated Markdown vault (npm run export:capture)
+CaptureVault/
+
+# local Hermes desktop/session attachments
+.hermes/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

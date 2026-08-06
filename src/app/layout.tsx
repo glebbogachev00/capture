@@ -33,7 +33,7 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "capture",
   description:
-    "One capture surface, three destinations, self-clearing. Actions fade. Threads never do.",
+    "Fast notes without the junk drawer. Capture sorts raw thoughts into actions, threads, and intentions.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

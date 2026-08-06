@@ -104,11 +104,11 @@ own is a complete setup.
 | Order | Provider | Get a key | Notes |
 |---|---|---|---|
 | 1 | Groq | [console.groq.com/keys](https://console.groq.com/keys) | Very fast, generous free tier |
-| 2 | Cerebras | [cloud.cerebras.ai](https://cloud.cerebras.ai) | Wafer-scale speed; needs a payment method on the account even for free usage |
+| 2 | Mistral | [console.mistral.ai](https://console.mistral.ai) | Fast fallback once configured; test account/model access directly, and the chain falls through on 429s |
 | 3 | Google AI Studio | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Reliable free tier — the quality fallback |
 | 4 | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | Last resort — defaults to a `:free` model; paid models need a funded account |
 
-Model ids are overridable (`GROQ_MODEL`, `CEREBRAS_MODEL`, `GEMINI_MODEL`,
+Model ids are overridable (`GROQ_MODEL`, `MISTRAL_MODEL`, `GEMINI_MODEL`,
 `OPENROUTER_MODEL`), so a retired model can be swapped without editing source.
 
 If every provider fails, a capture is **never lost**. It is saved verbatim,
@@ -158,6 +158,20 @@ That also means **clearing site data deletes everything**. Settings has a
 *Download backup* button that saves the whole board as one JSON file. Use it.
 Restoring merges by id, so restoring twice is safe and what is already on the
 device always wins.
+
+## Exporting
+
+A script mirrors the board into a plain Markdown vault — actions, threads,
+intentions, principles, and the capture ledger (what you said, what it became,
+where it landed, and which model tier handled it) — so an agent or any tool can
+read your real Capture state without touching the app database:
+
+```bash
+npm run export:capture   # writes CaptureVault/
+```
+
+It reads the sync hub (`.data/sync.json` — the merged copy the Mac keeps when
+you run `npm run phone`), so the vault reflects everything, phone included.
 
 ## Built with
 

@@ -44,6 +44,7 @@ function board(a: {
     threads: a.threads || [],
     intentions: a.intentions || [],
     principles: [],
+    ledger: [],
   };
 }
 

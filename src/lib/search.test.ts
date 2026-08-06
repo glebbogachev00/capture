@@ -37,7 +37,14 @@ function intention(over: Partial<Intention> = {}): Intention {
 }
 
 function board(over: Partial<Board> = {}): Board {
-  return { actions: [], threads: [], intentions: [], principles: [], ...over };
+  return {
+    actions: [],
+    threads: [],
+    intentions: [],
+    principles: [],
+    ledger: [],
+    ...over,
+  };
 }
 
 describe("search", () => {

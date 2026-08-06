@@ -1,4 +1,5 @@
 import { type Board, hydrate } from "./model";
+import { mergeLedgers } from "./ledger";
 
 /**
  * Getting the whole board out of the device, and back in.
@@ -126,6 +127,9 @@ export function restoreBackup(parsed: unknown, board: Board): RestoreResult {
   );
   counts.principles = newPrinciples.length;
   merged.principles = [...board.principles, ...newPrinciples];
+
+  // Ledger entries are immutable and id-unique, so a restore is add-only.
+  merged.ledger = mergeLedgers(board.ledger ?? [], incoming.ledger ?? []);
 
   return { board: merged, ...counts };
 }

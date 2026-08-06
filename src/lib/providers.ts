@@ -1,6 +1,6 @@
-import { cerebras } from "@ai-sdk/cerebras";
 import { google } from "@ai-sdk/google";
 import { groq } from "@ai-sdk/groq";
+import { mistral } from "@ai-sdk/mistral";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import type { LanguageModel } from "ai";
@@ -27,7 +27,7 @@ export function chain(): Tier[] {
 
   // Most capture calls are small, frequent, and latency-sensitive — every
   // capture sorts, every thread update re-summarises, every edit is
-  // proofread — so the fastest free tiers lead: Groq, then Cerebras. Gemini
+  // proofread — so the fastest free tiers lead: Groq, then Mistral. Gemini
   // is the reliable quality fallback. OpenRouter is last: its free models
   // share tight rate limits and are the least dependable, and a paid account
   // should be an explicit choice, not the default path.
@@ -38,15 +38,10 @@ export function chain(): Tier[] {
     });
   }
 
-  if (process.env.CEREBRAS_API_KEY) {
+  if (process.env.MISTRAL_API_KEY) {
     tiers.push({
-      name: "cerebras",
-      model: cerebras(process.env.CEREBRAS_MODEL || "gpt-oss-120b"),
-      // gpt-oss-120b reasons by default; a two-way sort does not need it.
-      // Same call as the Gemini tier, so the free tier lasts longer.
-      providerOptions: {
-        cerebras: { reasoningEffort: "low" },
-      },
+      name: "mistral",
+      model: mistral(process.env.MISTRAL_MODEL || "mistral-small-latest"),
     });
   }
 

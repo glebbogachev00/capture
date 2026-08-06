@@ -21,17 +21,17 @@ type MaybeProviderError = {
 };
 
 const PROVIDER_NAMES: Record<string, string> = {
-  cerebras: "Cerebras",
   gemini: "Google AI Studio",
   groq: "Groq",
+  mistral: "Mistral",
   openrouter: "OpenRouter",
 };
 
 /** The env var each provider's key lives in, so the message can say what to fix. */
 const PROVIDER_ENV: Record<string, string> = {
-  cerebras: "CEREBRAS_API_KEY",
   gemini: "GOOGLE_GENERATIVE_AI_API_KEY",
   groq: "GROQ_API_KEY",
+  mistral: "MISTRAL_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
 };
 

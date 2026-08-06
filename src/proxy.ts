@@ -4,6 +4,9 @@ import { AUTH_COOKIE, isValidSession } from "@/lib/auth";
 /** Paths that must stay reachable without the session cookie. */
 const PUBLIC_PATHS = [
   "/login",
+  "/about",
+  "/funding",
+  "/voice",
   "/api/login",
   "/manifest.webmanifest",
   "/sw.js",

@@ -4,7 +4,7 @@ import { chain } from "./providers";
 const ALL_KEYS = [
   "OPENROUTER_API_KEY",
   "GROQ_API_KEY",
-  "CEREBRAS_API_KEY",
+  "MISTRAL_API_KEY",
   "GOOGLE_GENERATIVE_AI_API_KEY",
 ];
 
@@ -13,11 +13,11 @@ afterEach(() => {
 });
 
 describe("chain", () => {
-  it("tries Groq, Cerebras, Gemini, then OpenRouter when every key is present", () => {
+  it("tries Groq, Mistral, Gemini, then OpenRouter when every key is present", () => {
     for (const k of ALL_KEYS) vi.stubEnv(k, "test-key");
     expect(chain().map((t) => t.name)).toEqual([
       "groq",
-      "cerebras",
+      "mistral",
       "gemini",
       "openrouter",
     ]);
@@ -25,7 +25,7 @@ describe("chain", () => {
 
   it("skips a tier whose key is absent", () => {
     for (const k of ALL_KEYS) vi.stubEnv(k, "test-key");
-    vi.stubEnv("CEREBRAS_API_KEY", "");
+    vi.stubEnv("MISTRAL_API_KEY", "");
     expect(chain().map((t) => t.name)).toEqual(["groq", "gemini", "openrouter"]);
   });
 
@@ -34,18 +34,22 @@ describe("chain", () => {
     expect(chain()).toEqual([]);
   });
 
-  it("defaults Cerebras to gpt-oss-120b unless CEREBRAS_MODEL overrides it", () => {
+  it("defaults Mistral to mistral-small-latest unless MISTRAL_MODEL overrides it", () => {
     // LanguageModel's id isn't on the public type; read it from the runtime
     // object, which carries modelId like every provider instance does.
     const idOf = (tier?: { model: unknown }) =>
       (tier?.model as unknown as { modelId: string }).modelId;
-    vi.stubEnv("CEREBRAS_API_KEY", "test-key");
+    vi.stubEnv("MISTRAL_API_KEY", "test-key");
     // Clear the override first so a host env can't leak into the default.
-    vi.stubEnv("CEREBRAS_MODEL", "");
-    expect(idOf(chain().find((t) => t.name === "cerebras"))).toBe("gpt-oss-120b");
+    vi.stubEnv("MISTRAL_MODEL", "");
+    expect(idOf(chain().find((t) => t.name === "mistral"))).toBe(
+      "mistral-small-latest"
+    );
 
-    vi.stubEnv("CEREBRAS_MODEL", "qwen-3-32b");
-    expect(idOf(chain().find((t) => t.name === "cerebras"))).toBe("qwen-3-32b");
+    vi.stubEnv("MISTRAL_MODEL", "mistral-large-latest");
+    expect(idOf(chain().find((t) => t.name === "mistral"))).toBe(
+      "mistral-large-latest"
+    );
   });
 
   it("defaults OpenRouter to a free model unless OPENROUTER_MODEL overrides it", () => {

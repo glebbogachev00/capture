@@ -32,6 +32,8 @@ export type DistillResult = {
   shelfLife?: string;
   threadId?: string | null;
   threadName?: string | null;
+  /** Which model tier settled it — recorded in the capture ledger. */
+  via?: string;
 };
 
 /**

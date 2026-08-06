@@ -4,6 +4,10 @@
  * Threads are never deleted. Only actions fade.
  */
 
+/* The ledger type lives in its own module; model re-exports it so the
+   whole board can be described from one import. */
+import type { CaptureEntry } from "./ledger";
+export type { CaptureEntry };
 import { del } from "./storage";
 
 export const KEY = "capture:data:v1";
@@ -122,6 +126,10 @@ export type Board = {
   threads: Thread[];
   intentions: Intention[];
   principles: Principle[];
+  /** Append-only memory of every capture: what was said, what it became,
+      where it landed, and which model path handled it. Invisible in the UI;
+      it exists so the board's history can be debugged and exported. */
+  ledger: CaptureEntry[];
 };
 
 /** The engine principles intent shipped with, carried over unchanged. */
@@ -155,6 +163,7 @@ export const EMPTY: Board = {
   threads: [],
   intentions: [],
   principles: SEED_PRINCIPLES,
+  ledger: [],
 };
 
 /**
@@ -180,6 +189,11 @@ export function hydrate(raw: Partial<Board> | null | undefined): Board {
     intentions: (raw?.intentions ?? []).map(stamped),
     principles: (raw?.principles?.length ? raw.principles : SEED_PRINCIPLES).map(
       (p) => ({ ...p, updatedAt: p.updatedAt ?? 0 })
+    ),
+    /* Boards written before the ledger existed carry no ledger key at all;
+       hydrate to empty rather than crash. Malformed entries are dropped. */
+    ledger: (raw?.ledger ?? []).filter(
+      (e) => e && typeof e.id === "string" && typeof e.at === "number"
     ),
   };
 }

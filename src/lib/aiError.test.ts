@@ -16,30 +16,32 @@ describe("explain", () => {
     expect(out.status).toBe(503);
   });
 
-  it("names Cerebras when its key is the failure", () => {
-    const out = explain(providerError("cerebras", "Invalid API key provided"));
-    expect(out.message).toContain("Cerebras");
-    expect(out.message).toContain("CEREBRAS_API_KEY");
+  it("names Mistral when its key is the failure", () => {
+    const out = explain(providerError("mistral", "Invalid API key provided"));
+    expect(out.message).toContain("Mistral");
+    expect(out.message).toContain("MISTRAL_API_KEY");
     expect(out.status).toBe(503);
   });
 
   it("tells the operator when a provider needs billing set up", () => {
+    // OpenRouter paid slugs 402 without credits on the account — the branch
+    // that catches it is generic, but this is the provider it actually hits.
     const e = providerError(
-      "cerebras",
-      "Payment required to access this resource. Visit your billing tab."
+      "openrouter",
+      "This request requires more credits. Payment required."
     ) as Error & { provider: string; statusCode?: number };
     e.statusCode = 402;
     const out = explain(e);
-    expect(out.message).toContain("Cerebras");
+    expect(out.message).toContain("OpenRouter");
     expect(out.message.toLowerCase()).toContain("billing");
     expect(out.status).toBe(503);
   });
 
-  it("maps a Cerebras 429 to rate-limit wording with the provider named", () => {
+  it("maps a Mistral 429 to rate-limit wording with the provider named", () => {
     const e = new Error("rate limit exceeded") as Error & { provider: string };
-    e.provider = "cerebras";
+    e.provider = "mistral";
     const out = explain(e);
-    expect(out.message).toContain("Cerebras");
+    expect(out.message).toContain("Mistral");
     expect(out.status).toBe(429);
   });
 

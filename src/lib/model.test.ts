@@ -176,5 +176,5 @@ describe("left", () => {
 });
 
 function board(actions: Action[]): Board {
-  return { actions, threads: [], intentions: [], principles: [] };
+  return { actions, threads: [], intentions: [], principles: [], ledger: [] };
 }
