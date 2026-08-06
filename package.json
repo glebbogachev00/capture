@@ -9,7 +9,9 @@
     "lint": "eslint",
     "test": "vitest run",
     "phone": "bash scripts/phone.sh",
-    "export:capture": "node scripts/export-capture.mjs"
+    "export:capture": "node scripts/export-capture.mjs",
+    "probe:sort": "node scripts/probe-sort.mjs",
+    "probe:distill": "node scripts/probe-distill.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.27",
