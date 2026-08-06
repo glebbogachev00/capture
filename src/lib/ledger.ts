@@ -24,7 +24,7 @@ export type CaptureEntry = {
   raw: string;
   /** The wording that actually landed on the board. */
   clean: string;
-  kind: "action" | "thread" | "intention";
+  kind: "action" | "thread" | "intention" | "both";
   source: CaptureSource;
   /** The item the capture became (or the thread it folded into). */
   targetId: string;

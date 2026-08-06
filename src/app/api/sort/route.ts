@@ -4,6 +4,7 @@ import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { withFallback } from "@/lib/providers";
+import { reconcileSorted } from "@/lib/sort";
 
 /**
  * The sorting engine.
@@ -22,7 +23,7 @@ const Sorted = z.object({
     .describe(
       "the capture rewritten so it is easy to read weeks later. Repair transcription garble, drop filler and false starts, keep their voice and every idea, and never add ideas that aren't there. Break it into short paragraphs separated by a blank line, one per distinct idea. Use '- ' bullets on their own lines wherever they are listing things. Never return one unbroken block."
     ),
-  kind: z.enum(["action", "thread", "intention"]),
+  kind: z.enum(["action", "thread", "intention", "both"]),
   title: z.string().describe("max 6 words"),
   actions: z.array(z.string()).describe("imperative one-line items"),
   shelfLife: z.enum(["hours", "days", "weeks", "keep"]),
@@ -36,19 +37,50 @@ const Sorted = z.object({
     .describe("name for a new thread, or null"),
 });
 
+/** A compact record of a recent capture and where it landed. */
+const Recent = z.object({
+  raw: z.string(),
+  kind: z.string(),
+  target: z.string(),
+});
+
 const Body = z.object({
   raw: z.string(),
   threads: z.array(
     z.object({ id: z.string(), name: z.string(), about: z.string() })
   ),
+  /** How this person has filed their recent captures — pattern context. */
+  recent: z.array(Recent).max(40).optional(),
   /** The destination is already decided; only the wording is in question. */
   force: z.enum(["action", "thread", "intention"]).optional(),
 });
 
+/** A short, plain digest of how this person recently filed things. Bounded
+    on the client, but capped again here so a large payload can't bloat the
+    prompt. Empty string when there is no history to show. */
+function recentContext(recent: z.infer<typeof Recent>[] | undefined) {
+  if (!recent?.length) return "";
+  const lines = recent
+    .slice(0, 20)
+    .map((r) => {
+      const said = r.raw.length > 90 ? r.raw.slice(0, 90) + "…" : r.raw;
+      const where = r.target ? ` (${r.target})` : "";
+      return `- "${said}" → ${r.kind}${where}`;
+    })
+    .join("\n");
+  return (
+    "\nHow this person has recently filed captures — match their patterns and " +
+    "route into an existing thread when this clearly belongs with one:\n" +
+    lines +
+    "\n"
+  );
+}
+
 function prompt(
   raw: string,
   threads: z.infer<typeof Body>["threads"],
-  force?: "action" | "thread" | "intention"
+  force?: "action" | "thread" | "intention",
+  recent?: z.infer<typeof Recent>[]
 ) {
   if (force === "action") {
     return (
@@ -98,20 +130,25 @@ function prompt(
     "- Do not add headings, numbering, or any commentary of your own.\n\n" +
     "Their existing threads:\n" +
     (threads.length ? JSON.stringify(threads) : "(none yet)") +
-    '\n\nRaw capture:\n"""' +
+    "\n" +
+    recentContext(recent) +
+    '\nRaw capture:\n"""' +
     (raw || "(image only)") +
     '"""\n\n' +
-    'There are three kinds. The reference examples below are your guide for telling them apart.\n' +
+    'There are four kinds. The reference examples below are your guide for telling them apart.\n' +
     'kind = "action" when this is a task, errand, reminder, or decision that gets closed out — there is a concrete thing to do. Fill "actions" with the one to three items actually being asked for, and leave the thread fields null. Never pad the list: if only one thing is genuinely doable, return one.\n' +
     'kind = "thread" when this is thinking, worldbuilding, an idea being developed, or material that accumulates — a subject to keep adding to, with no single thing to do. Set threadId if one clearly fits, otherwise invent a short threadName. Leave "actions" empty.\n' +
     'kind = "intention" only when they are declaring something they are calling into being about themselves or their life — a state they want to be living in, spoken as a wish, a resolve, or an aspiration. "I want to wake at 6 and actually feel rested", "I live somewhere with light", "I stop taking on work I resent". These are about how they want to be, not tasks to close or subjects to think about. Leave "actions" and the thread fields null.\n' +
+    'kind = "both" when the capture carries a line of thinking the person is still turning over AND a concrete task to close — typically a deadline or a commitment to someone. Filing it as only an action throws the thinking away; filing it as only a thread buries the task. So do both: fill "actions" with the task(s), set threadId (route to an existing thread when one fits) or threadName for the thinking, and "clean" holds the thinking for the thread fragment. The tell is a capture where one part is a decision/idea/deliberation and another part is a dated or promised thing to do. Do not use "both" for pure thinking with no committed task (that is a thread), or for a plain task with no real deliberation around it (that is an action).\n' +
     'Do NOT choose "intention" for an ordinary errand phrased as a want ("I want to get milk" is an action), or for thinking about a topic ("been reading about sleep cycles" is a thread).\n' +
-    'Be conservative, not eager. Only make an action when the capture actually asks for something to be done; never invent a task that is not there. When genuinely torn between thread and intention, choose "thread". When genuinely torn between action and thread, choose "thread" — nothing gets lost there, and a task buried in a thread can be lifted out later.\n\n' +
+    'Be conservative, not eager. Only make an action when the capture actually asks for something to be done; never invent a task that is not there. When genuinely torn between thread and intention, choose "thread". When a capture is only thinking, choose "thread" — but when it clearly holds both a keepable line of thinking and a concrete task, "both" is right, so nothing is lost on either side.\n\n' +
     'Reference examples:\n' +
     '- "gotta call the dentist tomorrow and remember to buy milk on the way home" → kind "action", actions: ["Call the dentist tomorrow", "Buy milk on the way home"]\n' +
     '- "booked the flights, remember to sort out travel insurance" → kind "action", actions: ["Sort out travel insurance"]\n' +
     '- "was thinking about whether this project is worth continuing, weighing pros and cons" → kind "thread", threadName: "Is this project worth continuing"\n' +
     '- "been reading about sleep cycles and how they affect productivity" → kind "thread", threadName: "Sleep cycles and productivity"\n' +
+    '- "still turning over whether to leave the agency, the dread every sunday is real — anyway I need to tell them my decision on the raise by friday" → kind "both", actions: ["Tell the agency my decision on the raise by Friday"], threadName: "Whether to leave the agency"\n' +
+    '- "not sure the podcast idea is worth it, keep circling it, anyway I promised jen I\'d send her the draft outline by monday" → kind "both", actions: ["Send Jen the draft outline by Monday"], threadName: "Is the podcast idea worth it"\n' +
     '- "I want to wake up at 6 and actually feel rested" → kind "intention"\n' +
     '- "I live somewhere with light" → kind "intention"\n\n' +
     "shelfLife is how long this stays worth looking at, and it only applies to actions. Judge it honestly:\n" +
@@ -152,7 +189,7 @@ export async function POST(request: Request) {
         // wait out the backoff.
         maxRetries: 0,
         schema: Sorted,
-        prompt: prompt(body.raw, body.threads, body.force),
+        prompt: prompt(body.raw, body.threads, body.force, body.recent),
         providerOptions: tier.providerOptions,
       });
       return object;
@@ -175,7 +212,16 @@ export async function POST(request: Request) {
       threadId = null;
       threadName = null;
     }
-    return Response.json({ ...value, kind, actions, threadId, threadName, via });
+    // Collapse a self-contradicting "both" (no task, or no thinking) to the
+    // single kind its fields actually support.
+    const reconciled = reconcileSorted({
+      ...value,
+      kind,
+      actions,
+      threadId,
+      threadName,
+    });
+    return Response.json({ ...value, ...reconciled, via });
   } catch (error) {
     console.error("sort failed", error);
     const { message, status } = explain(error);

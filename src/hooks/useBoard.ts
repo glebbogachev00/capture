@@ -88,7 +88,7 @@ const reasonOf = (error: unknown) =>
 /** What /api/sort returns. Validated server-side against a schema. */
 type SortResult = {
   clean: string;
-  kind: "action" | "thread";
+  kind: "action" | "thread" | "intention" | "both";
   title: string;
   actions?: string[];
   shelfLife?: string;
@@ -569,10 +569,22 @@ export function useBoard(now: number) {
       name: t.name,
       about: t.summary?.slice(0, 160) || "",
     }));
+    // A bounded slice of filing history, so the engine files the way this
+    // person files and routes into the thread they'd choose. Kept small on
+    // purpose — every capture pays for this context, so it stays recent and
+    // compact rather than the whole 500-entry ledger.
+    const threadName = (id: string) =>
+      latest.current.threads.find((t) => t.id === id)?.name || "";
+    const recent = (latest.current.ledger ?? []).slice(0, 30).map((e) => ({
+      raw: e.raw.length > 120 ? e.raw.slice(0, 120) : e.raw,
+      kind: e.kind,
+      target:
+        e.kind === "thread" || e.kind === "both" ? threadName(e.targetId) : "",
+    }));
     const res = await fetch("/api/sort", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ raw, threads: known, force }),
+      body: JSON.stringify({ raw, threads: known, recent, force }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -618,6 +630,48 @@ export function useBoard(now: number) {
           " action" +
           (items.length > 1 ? "s" : "") +
           (span ? " · fades in " + left(span) : " · kept"),
+      };
+    }
+
+    // "both": the capture holds a task to close AND thinking to keep. The
+    // thinking goes to a thread (its durable home, so images ride with the
+    // fragment) and the task(s) become actions with no images of their own —
+    // deleting a closed action must never drop an image the thread still uses.
+    if (out.kind === "both") {
+      const span = SHELF[out.shelfLife as ShelfLife] ?? null;
+      const items: Action[] = (out.actions ?? []).map((t) => ({
+        id: uid(),
+        text: t,
+        done: false,
+        at,
+        src: out.clean,
+        imgs: [],
+        shelf: (out.shelfLife || "keep") as ShelfLife,
+        expires: span ? stamp() + span : null,
+      }));
+      const bothFrag: Frag = { id: uid(), at, text: out.clean, imgs: imgIds };
+      const home = board.threads.find((x) => x.id === out.threadId);
+      const threads = home
+        ? board.threads.map((x) =>
+            x.id === home.id ? { ...x, frags: [...x.frags, bothFrag] } : x
+          )
+        : [
+            {
+              id: uid(),
+              name: out.threadName || out.title,
+              summary: "",
+              frags: [bothFrag],
+            } as Thread,
+            ...board.threads,
+          ];
+      const homeId = home ? home.id : threads[0].id;
+      const homeName = home ? home.name : threads[0].name;
+      return {
+        next: { ...board, actions: [...items, ...board.actions], threads },
+        targetId: homeId,
+        source: { kind: "thread", id: homeId, fragId: bothFrag.id },
+        landed:
+          count(items.length, "action") + " + thread — " + homeName,
       };
     }
 

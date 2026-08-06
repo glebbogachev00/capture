@@ -138,6 +138,15 @@ const SCENARIOS = [
   // --- long rambly conversation-style input (the reported failure shape) ---
   { g: "long", raw: "okay so i've been going back and forth on this for weeks now, whether to leave the agency job. the money is genuinely good and it would be stupid to walk away from that, but every sunday i get this dread and i know that's not nothing. part of me thinks i should just save for another year and then jump, another part thinks the year will turn into three. i don't have a plan for what i'd do instead which is the scary bit. maybe freelance, maybe something completely different. i keep not deciding and that itself is a decision.", expect: "thread" },
 
+  // --- "both": a real task AND thinking to keep, in one capture. "both" is
+  //     the ideal; action is a defensible near-miss (it keeps the task but
+  //     drops the thinking), so these accept either and the report shows which
+  //     fired. The point of the gate is the guard below, not forcing "both". ---
+  { g: "both", raw: "still going back and forth on whether to rebrand the studio, it's a big call, but either way i need to renew the domain before it expires on the 3rd", expect: ["both", "action"] },
+  { g: "both", raw: "not sure the podcast idea is worth it, keep circling it, anyway i promised jen i'd send her the draft outline by monday", expect: ["both", "action"] },
+  // --- guard: pure thinking must NOT become "both" (no committed task) ---
+  { g: "not-both", raw: "thinking about maybe starting a newsletter someday, not sure what it'd be about", expect: "thread" },
+
   // --- genuinely ambiguous (either is defensible) ---
   { g: "ambiguous", raw: "i should really start going to the gym again", expect: ["action", "thread", "intention"] },
   { g: "ambiguous", raw: "thinking i need to have the hard conversation with my brother about the house", expect: ["action", "thread"] },
