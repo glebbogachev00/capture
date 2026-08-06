@@ -84,9 +84,13 @@ import {
   type CorrectionEntry,
   type CaptureSource,
 } from "@/lib/ledger";
+import { deriveRules, type LearnedRule } from "@/lib/rules";
 
 /* Carries the server's explanation so the board can show it verbatim. */
 class SortError extends Error {}
+
+/* Which learned rules this device has cleared, by normalised key. */
+const FORGOTTEN_RULES_KEY = "capture:forgotten-rules";
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
@@ -191,6 +195,14 @@ export function useBoard(now: number) {
     source: CaptureSource;
     via?: string;
   } | null>(null);
+
+  /* ----------------------- learned rules ------------------------ */
+
+  /* Rules the user cleared in Settings, by normalised key. Device-local on
+     purpose (v1): the correction ledger itself syncs, so both devices learn
+     the same rules, but a clearing is a personal "stop telling me that"
+     and is remembered here, in this browser. */
+  const [forgottenRules, setForgottenRules] = useState<string[]>([]);
 
   /* ---------------------------- distill ---------------------------- */
   const [distillOpen, setDistillOpen] = useState(false);
@@ -512,6 +524,13 @@ export function useBoard(now: number) {
       } catch {
         /* first run */
       }
+      // Cleared learning rules survive a reload too.
+      try {
+        const frRaw = await get(FORGOTTEN_RULES_KEY);
+        if (frRaw) setForgottenRules(JSON.parse(frRaw));
+      } catch {
+        /* first run */
+      }
       setLoaded(true);
     })();
   }, []);
@@ -601,10 +620,18 @@ export function useBoard(now: number) {
       target:
         e.kind === "thread" || e.kind === "both" ? threadName(e.targetId) : "",
     }));
+    // The bounded personal model, advisory: top learned rules as plain
+    // sentences. Empty until the user has accepted or dismissed enough
+    // suggestions for a rule to form — a fresh board sorts exactly as before.
+    const rules = deriveRules(
+      latest.current.corrections ?? [],
+      forgottenRules,
+      stamp()
+    ).map((r) => r.text);
     const res = await fetch("/api/sort", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ raw, threads: known, recent, force }),
+      body: JSON.stringify({ raw, threads: known, recent, force, rules }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -1166,6 +1193,7 @@ export function useBoard(now: number) {
     let context = "";
     if (s.kind === "duplicate") {
       context = `dropped a duplicate of ${s.targetName}`;
+      const rule = `Drop duplicates of "${s.targetName}"`;
       if (s.sourceKind === "thread") {
         /* The copy is a note; drop that fragment (or its whole fresh thread
            when it was the only note) and re-summarise. The original stays
@@ -1189,6 +1217,7 @@ export function useBoard(now: number) {
               proposalKind: "related_suggestion",
               accepted: true,
               context,
+              rule,
             }
           )
         );
@@ -1203,15 +1232,21 @@ export function useBoard(now: number) {
             proposalKind: "related_suggestion",
             accepted: true,
             context,
+            rule,
           })
         );
       }
       return;
     }
+    const article = s.sourceKind === "action" ? "an action" : "a thread";
     context =
       s.verb === "Merge"
-        ? `merged a ${s.sourceKind} into ${s.targetName}`
-        : `moved a ${s.sourceKind} into ${s.targetName}`;
+        ? `merged ${article} into ${s.targetName}`
+        : `moved ${article} into ${s.targetName}`;
+    const rule =
+      s.verb === "Merge"
+        ? `Merge ${s.sourceKind}s into "${s.targetName}"`
+        : `Move ${s.sourceKind}s into "${s.targetName}"`;
     if (s.sourceKind === "action") {
       await foldActionIntoThread(s.sourceId, s.targetId);
     } else if (s.fragId) {
@@ -1224,6 +1259,7 @@ export function useBoard(now: number) {
         proposalKind: "related_suggestion",
         accepted: true,
         context,
+        rule,
       })
     );
   };
@@ -1234,15 +1270,21 @@ export function useBoard(now: number) {
     const s = suggestion;
     setSuggestion(null);
     if (!s) return;
+    const article = s.sourceKind === "action" ? "an action" : "a thread";
     const context =
       s.kind === "duplicate"
         ? `kept the duplicate of ${s.targetName}`
-        : `kept a ${s.sourceKind} out of ${s.targetName}`;
+        : `kept ${article} out of ${s.targetName}`;
+    const rule =
+      s.kind === "duplicate"
+        ? `Don't treat "${s.targetName}" as a duplicate`
+        : `Keep ${s.sourceKind}s out of "${s.targetName}"`;
     void commit(
       noteCorrection(latest.current, {
         proposalKind: "related_suggestion",
         accepted: false,
         context,
+        rule,
       })
     );
   };
@@ -2407,6 +2449,30 @@ export function useBoard(now: number) {
   const intention = data.intentions.find((i) => i.id === openIntention);
   const hits = search(data, debouncedQuery);
   const searching = debouncedQuery.trim().length > 0;
+  /* The bounded personal model, derived fresh from the correction ledger:
+     advisory sentences the sort engine weighs, capped, clearable. */
+  const learnedRules: LearnedRule[] = deriveRules(
+    data.corrections ?? [],
+    forgottenRules,
+    now
+  );
+
+  /** Forget a learned rule for good: it stops being injected into the sort
+      prompt and stops appearing here. The corrections stay — history is
+      never rewritten — the cleared key just filters them out. Remembered
+      on this device only (v1); the settings screen says so. */
+  const clearRule = async (key: string) => {
+    if (forgottenRules.includes(key)) return;
+    const next = [...forgottenRules, key];
+    setForgottenRules(next);
+    try {
+      await set(FORGOTTEN_RULES_KEY, JSON.stringify(next));
+    } catch {
+      /* disk hiccup; next clear retries */
+    }
+    setNotice("That rule is forgotten — sorting won't follow it anymore.");
+    setTimeout(() => setNotice(null), 4000);
+  };
 
   return {
     data,
@@ -2511,5 +2577,7 @@ export function useBoard(now: number) {
     syncNow,
     canUndo,
     undo,
+    learnedRules,
+    clearRule,
   };
 }

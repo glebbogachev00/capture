@@ -161,6 +161,8 @@ export function Capture() {
     syncNow,
     canUndo,
     undo,
+    learnedRules,
+    clearRule,
   } = useBoard(now);
 
   /* Input device plumbing: the hidden file picker, and the speech recogniser
@@ -473,6 +475,8 @@ export function Capture() {
             onRestore={restoreFromFile}
             onImportIntent={importBackup}
             onLogout={logout}
+            rules={learnedRules}
+            onClearRule={(key) => void clearRule(key)}
             ioNote={ioNote}
             sync={sync}
             onSyncNow={syncNow}

@@ -51,6 +51,9 @@ const Body = z.object({
   ),
   /** How this person has filed their recent captures — pattern context. */
   recent: z.array(Recent).max(40).optional(),
+  /** Learned filing preferences (bounded, clearable, advisory). The client
+      sends the rule sentences it derived from the correction ledger. */
+  rules: z.array(z.string()).max(5).optional(),
   /** The destination is already decided; only the wording is in question. */
   force: z.enum(["action", "thread", "intention"]).optional(),
 });
@@ -76,11 +79,26 @@ function recentContext(recent: z.infer<typeof Recent>[] | undefined) {
   );
 }
 
+/** Learned preferences, injected as tendencies — never orders. Empty when
+    the model has learned nothing yet. */
+function rulesContext(rules: z.infer<typeof Body>["rules"]) {
+  if (!rules?.length) return "";
+  const lines = rules.map((r) => "- " + r).join("\n");
+  return (
+    "\nFiling preferences this person has shown over time — treat these as " +
+    "tendencies, not orders, and only follow one when the capture clearly " +
+    "fits it:\n" +
+    lines +
+    "\n"
+  );
+}
+
 function prompt(
   raw: string,
   threads: z.infer<typeof Body>["threads"],
   force?: "action" | "thread" | "intention",
-  recent?: z.infer<typeof Recent>[]
+  recent?: z.infer<typeof Recent>[],
+  rules?: z.infer<typeof Body>["rules"]
 ) {
   if (force === "action") {
     return (
@@ -132,6 +150,7 @@ function prompt(
     (threads.length ? JSON.stringify(threads) : "(none yet)") +
     "\n" +
     recentContext(recent) +
+    rulesContext(rules) +
     '\nRaw capture:\n"""' +
     (raw || "(image only)") +
     '"""\n\n' +
@@ -189,7 +208,7 @@ export async function POST(request: Request) {
         // wait out the backoff.
         maxRetries: 0,
         schema: Sorted,
-        prompt: prompt(body.raw, body.threads, body.force, body.recent),
+        prompt: prompt(body.raw, body.threads, body.force, body.recent, body.rules),
         providerOptions: tier.providerOptions,
       });
       return object;

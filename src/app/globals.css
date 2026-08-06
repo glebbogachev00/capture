@@ -1711,6 +1711,40 @@ body {
   color: var(--muted);
 }
 
+/* what capture has learned — the bounded personal model */
+.learned-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.learned-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.learned-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 11px;
+  padding: 11px 13px;
+  min-width: 0;
+}
+.learned-text {
+  font-size: 14px;
+  color: var(--ink);
+}
+.learned-signal {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* the password gate */
 .gate {
   min-height: 100vh;

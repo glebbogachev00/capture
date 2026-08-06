@@ -13,6 +13,7 @@
 import { useRef, useState } from "react";
 import { Copy, X, MoreHorizontal } from "lucide-react";
 import { type Intention, type Principle, fmt, pad } from "@/lib/model";
+import type { LearnedRule } from "@/lib/rules";
 
 export type Draft = {
   rawInput: string;
@@ -403,6 +404,8 @@ export function SettingsScreen({
   ioNote,
   sync,
   onSyncNow,
+  rules,
+  onClearRule,
 }: {
   principles: Principle[];
   counts: { actions: number; threads: number; intentions: number };
@@ -417,6 +420,10 @@ export function SettingsScreen({
   ioNote: IoNote;
   sync: { ok: boolean; at: number; note?: string } | null;
   onSyncNow: () => void;
+  /* The bounded personal model: what the sort engine has learned to expect,
+      each with a way to forget it. */
+  rules: LearnedRule[];
+  onClearRule: (key: string) => void;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -473,6 +480,41 @@ export function SettingsScreen({
             Sync now
           </button>
         </div>
+      </div>
+
+      <div className="int-block">
+        <h4 className="int-label">What Capture has learned</h4>
+        <p className="int-note">
+          From the suggestions you accept or dismiss. The sort engine treats
+          these as gentle tendencies, not orders — and you can forget any of
+          them whenever you like. Forgetting is remembered on this device.
+        </p>
+        {rules.length === 0 ? (
+          <p className="cap-hint" style={{ marginTop: 8 }}>
+            Nothing yet. As you accept or dismiss suggestions — merges, moves,
+            duplicates — the patterns will show up here.
+          </p>
+        ) : (
+          <ul className="learned-list">
+            {rules.map((r) => (
+              <li key={r.key}>
+                <span className="learned-body">
+                  <span className="learned-text">{r.text}</span>
+                  <span className="learned-signal">
+                    {r.accepts} accepted · {r.dismisses} dismissed
+                  </span>
+                </span>
+                <button
+                  className="ghost warn"
+                  onClick={() => onClearRule(r.key)}
+                  aria-label={"Forget: " + r.text}
+                >
+                  Forget
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="int-block">
