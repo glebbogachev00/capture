@@ -60,12 +60,11 @@ import {
 } from "@/lib/backup";
 import { copyToClipboard, shareText, shareableFor } from "@/lib/share";
 import { search } from "@/lib/search";
-import { applySorted, type LandedSource } from "@/lib/boardOps";
 import {
-  bestActionDuplicate,
-  bestFragmentDuplicate,
-  bestThreadHome,
-} from "@/lib/related";
+  applySorted,
+  computeSuggestion,
+  type Suggestion,
+} from "@/lib/boardOps";
 import { parseCommandPrefix } from "@/lib/command";
 import {
   TOMBSTONE_KEY,
@@ -115,40 +114,8 @@ const reasonOf = (error: unknown) =>
     ? error.message
     : "The sort didn't go through.";
 
-/* SortResult and LandedSource now live in @/lib/boardOps, alongside the pure
-   applySorted that produces them. */
-
-/**
- * A quiet post-capture proposal — never applied; the user confirms or
- * dismisses it. One tap either way.
- *
- * "home": the capture clearly belongs with an existing thread. Merge when
- *   a fresh thread folds in, Move when a fragment or a captured action
- *   moves over.
- * "duplicate": a captured action or note is the same task/note as an
- *   existing one. The copy that just landed is removed; the original
- *   stays. For a note, sourceFragId names the fragment to drop.
- */
-type Suggestion =
-  | {
-      kind: "home";
-      targetId: string;
-      targetName: string;
-      reason: string;
-      sourceKind: "action" | "thread";
-      sourceId: string;
-      fragId?: string;
-      verb: "Merge" | "Move";
-    }
-  | {
-      kind: "duplicate";
-      targetId: string;
-      targetName: string;
-      reason: string;
-      sourceId: string;
-      sourceKind: "action" | "thread";
-      sourceFragId?: string;
-    };
+/* SortResult, LandedSource, Suggestion, applySorted and computeSuggestion now
+   live in @/lib/boardOps — the pure board logic, testable without React. */
 
 export function useBoard(now: number) {
   /* ------------------------------ state ------------------------------ */
@@ -1063,101 +1030,7 @@ export function useBoard(now: number) {
 
   /* ----------------------- capture suggestion ----------------------- */
 
-  /**
-   * Whether a just-landed capture is worth proposing something about.
-   *
-   * Two claims, both deliberately strict — only a shared phrase (never a
-   * lone shared word, however rare) earns a proposal:
-   *   - a captured action that duplicates an existing action — the same
-   *     task twice — the strongest, most actionable claim, checked first;
-   *   - a capture that clearly belongs with an existing thread, in which
-   *     case the thread it landed in is never offered as its own home.
-   * The user's explicit destination (a /action, /thread or /intention
-   * command) is respected: only the model's choice is ever second-guessed.
-   */
-  const computeSuggestion = (
-    board: Board,
-    text: string,
-    source: LandedSource | null
-  ): Suggestion | null => {
-    if (!source || !text.trim()) return null;
-    if (source.kind === "action") {
-      /* The engine is handed the source id so the capture's own text — which
-         it always phrase-matches, and which sits at the front of the list —
-         is never reported as its own duplicate. The counterpart must also be
-         live: re-capturing a task that is already fading away is a refresh,
-         not a duplicate. */
-      const dup = bestActionDuplicate(board, text, source.id);
-      const dupLive =
-        dup && !board.actions.find((a) => a.id === dup.id)?.faded;
-      if (dup && dupLive) {
-        return {
-          kind: "duplicate",
-          targetId: dup.id,
-          targetName: dup.name,
-          reason: dup.reason,
-          sourceId: source.id,
-          sourceKind: "action",
-        };
-      }
-    }
-    /* A capture that landed as a note can still duplicate a note already on
-       the board — the same thing pasted twice lands as two fragments. The
-       fragment duplicate beats the thread home: if it is the same note
-       again, offer to drop the copy instead of merging it in silently. The
-       engine excludes the just-landed fragment itself, which always
-       phrase-matches its own text. */
-    if (source.kind === "thread") {
-      const fragDup = bestFragmentDuplicate(board, text, source.fragId);
-      if (fragDup) {
-        const crossThread = source.fragId && fragDup.threadId !== source.id;
-        return {
-          kind: "duplicate",
-          targetId: fragDup.threadId,
-          targetName:
-            fragDup.name +
-            (crossThread ? ` (in "${fragDup.threadName}")` : ""),
-          reason: fragDup.reason,
-          sourceKind: "thread",
-          sourceId: source.id,
-          sourceFragId: source.fragId,
-        };
-      }
-    }
-    const hit = bestThreadHome(board, text, source.id);
-    if (!hit) return null;
-    if (source.kind === "action") {
-      return {
-        kind: "home",
-        targetId: hit.id,
-        targetName: hit.name,
-        reason: hit.reason,
-        sourceKind: "action",
-        sourceId: source.id,
-        verb: "Move",
-      };
-    }
-    return source.fragId
-      ? {
-          kind: "home",
-          targetId: hit.id,
-          targetName: hit.name,
-          reason: hit.reason,
-          sourceKind: "thread",
-          sourceId: source.id,
-          fragId: source.fragId,
-          verb: "Move",
-        }
-      : {
-          kind: "home",
-          targetId: hit.id,
-          targetName: hit.name,
-          reason: hit.reason,
-          sourceKind: "thread",
-          sourceId: source.id,
-          verb: "Merge",
-        };
-  };
+  /* computeSuggestion (the deterministic proposal logic) is in @/lib/boardOps. */
 
   /**
    * The accepted suggestion.

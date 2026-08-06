@@ -126,3 +126,59 @@ describe("applySorted — both", () => {
     expect(targetId).toBe("t9");
   });
 });
+
+import { computeSuggestion } from "./boardOps";
+import type { Action } from "./model";
+
+const action = (id: string, text: string, over: Partial<Action> = {}): Action => ({
+  id,
+  text,
+  done: false,
+  at: 1000,
+  shelf: "keep",
+  expires: null,
+  ...over,
+});
+
+describe("computeSuggestion — guards", () => {
+  it("returns null with no source", () => {
+    expect(computeSuggestion(base(), "anything", null)).toBe(null);
+  });
+  it("returns null on empty text", () => {
+    expect(
+      computeSuggestion(base(), "   ", { kind: "action", id: "a1" })
+    ).toBe(null);
+  });
+});
+
+describe("computeSuggestion — duplicate action", () => {
+  it("proposes dropping a re-captured task that matches a live action", () => {
+    const board = base({
+      actions: [
+        action("new", "Call the vet about Luna's shots"),
+        action("old", "Call the vet about Luna's shots"),
+      ],
+    });
+    const s = computeSuggestion(board, "Call the vet about Luna's shots", {
+      kind: "action",
+      id: "new",
+    });
+    expect(s?.kind).toBe("duplicate");
+    expect(s?.targetId).toBe("old");
+  });
+
+  it("does not fire when the only match is a faded action (a refresh, not a dup)", () => {
+    const board = base({
+      actions: [
+        action("new", "Renew the passport"),
+        action("old", "Renew the passport", { faded: true }),
+      ],
+    });
+    const s = computeSuggestion(board, "Renew the passport", {
+      kind: "action",
+      id: "new",
+    });
+    // Faded counterpart → not offered as a duplicate.
+    expect(s?.kind).not.toBe("duplicate");
+  });
+});
