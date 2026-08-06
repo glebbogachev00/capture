@@ -20,7 +20,7 @@
  */
 
 import type { Board, Frag, Thread } from "./model";
-import { mergeLedgers } from "./ledger";
+import { mergeCorrections, mergeLedgers } from "./ledger";
 
 export type TombstoneKind =
   | "action"
@@ -127,6 +127,8 @@ export function mergeBoards(a: Board, b: Board): Board {
     /* Ledger entries never change, so the merge is a plain union. The `??`
        guards boards built before the field existed. */
     ledger: mergeLedgers(a.ledger ?? [], b.ledger ?? []),
+    /* Same for corrections — append-only records, union by id. */
+    corrections: mergeCorrections(a.corrections ?? [], b.corrections ?? []),
   };
 }
 
@@ -146,8 +148,9 @@ export function applyTombstones(board: Board, tombstones: Tombstone[]): Board {
       })),
     intentions: board.intentions.filter((i) => !gone("intention", i.id, ts(i))),
     principles: board.principles.filter((p) => !gone("principle", p.id, ts(p))),
-    /* Tombstones claim items, never history — the ledger rides through. */
+    /* Tombstones claim items, never history — the ledgers ride through. */
     ledger: board.ledger,
+    corrections: board.corrections,
   };
 }
 
@@ -260,7 +263,14 @@ export function stampChanges(
       tombstones.push({ kind: "frag", id: f, deletedAt: now });
 
   return {
-    board: { actions, threads, intentions, principles, ledger: next.ledger },
+    board: {
+      actions,
+      threads,
+      intentions,
+      principles,
+      ledger: next.ledger,
+      corrections: next.corrections,
+    },
     tombstones,
   };
 }

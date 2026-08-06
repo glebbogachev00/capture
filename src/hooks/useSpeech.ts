@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DistillTurn } from "@/lib/distill";
+import { detectLang, pickVoiceFor } from "@/lib/lang";
 import { takeCompleteSentences } from "@/lib/sentences";
 
 /* ============================================================
@@ -29,20 +30,6 @@ const KEY = "capture:speak-replies";
 function synth(): SpeechSynthesis | null {
   if (typeof window === "undefined") return null;
   return window.speechSynthesis ?? null;
-}
-
-/** The best-sounding English voice the browser offers, when it has one. */
-function pickVoice(): SpeechSynthesisVoice | null {
-  const s = synth();
-  if (!s) return null;
-  const voices = s.getVoices();
-  if (!voices.length) return null;
-  const en = voices.filter((v) => v.lang.startsWith("en"));
-  const pool = en.length ? en : voices;
-  return (
-    pool.find((v) => /natural|samantha|google us english/i.test(v.name)) ||
-    pool[0]
-  );
 }
 
 type Engine = "server" | "browser";
@@ -75,7 +62,10 @@ export function useVoiceReplies(turns: DistillTurn[], busy: boolean) {
   /* Refs mirror what the async handlers need without stale closures. */
   const enabledRef = useRef(enabled);
   const engineRef = useRef<Engine>("browser");
-  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  /* The browser's loaded voices, kept as a list so the right one can be
+     picked per sentence by the sentence's own language — a Vietnamese reply
+     gets a Vietnamese voice when the Mac has one, English otherwise. */
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
   const spokenRef = useRef(0); // chars of the current reply already spoken
   const tailRef = useRef(""); // incomplete sentence awaiting the next chunk
   const activeRef = useRef(0); // sentences queued or playing
@@ -96,12 +86,14 @@ export function useVoiceReplies(turns: DistillTurn[], busy: boolean) {
   const abortRef = useRef<AbortController | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
 
-  /* Voices for the browser fallback load asynchronously; re-pick on change. */
+  /* Voices for the browser fallback load asynchronously; refresh the list
+     on change. Picking happens per sentence (see synthSpeak) so the voice
+     can match the sentence's language, not just the browser's default. */
   useEffect(() => {
     const s = synth();
     if (!s) return;
     const refresh = () => {
-      voiceRef.current = pickVoice();
+      voicesRef.current = s.getVoices();
     };
     refresh();
     s.addEventListener("voiceschanged", refresh);
@@ -225,7 +217,11 @@ export function useVoiceReplies(turns: DistillTurn[], busy: boolean) {
     const s = synth();
     if (!s || !text.trim()) return;
     const u = new SpeechSynthesisUtterance(text);
-    if (voiceRef.current) u.voice = voiceRef.current;
+    // The voice follows the sentence: a reply in Vietnamese gets a
+    // Vietnamese voice when the Mac has one, English otherwise.
+    u.lang = detectLang(text);
+    const voice = pickVoiceFor(text, voicesRef.current);
+    if (voice) u.voice = voice;
     u.rate = 1.02;
     activeRef.current += 1;
     setSpeaking(true);

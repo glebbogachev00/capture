@@ -9,6 +9,7 @@ function board(over: Partial<Board> = {}): Board {
     intentions: [],
     principles: [],
     ledger: [],
+    corrections: [],
     ...over,
   };
 }

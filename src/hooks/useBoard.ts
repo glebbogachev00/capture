@@ -77,7 +77,13 @@ import {
 } from "@/lib/sync";
 import type { SyncStore } from "@/lib/syncStore";
 import type { Draft, IoNote } from "@/app/Intentions";
-import { sourceOf, withLedger, type CaptureSource } from "@/lib/ledger";
+import {
+  sourceOf,
+  withCorrection,
+  withLedger,
+  type CorrectionEntry,
+  type CaptureSource,
+} from "@/lib/ledger";
 
 /* Carries the server's explanation so the board can show it verbatim. */
 class SortError extends Error {}
@@ -208,6 +214,15 @@ export function useBoard(now: number) {
   /* The latest board, read by handlers so async work never builds on stale
      state. `commit` (and the loader) are the only writers. */
   const latest = useRef<Board>(data);
+
+  /* Append a proposal-outcome record to a board about to be committed: what
+     the user did with the engine's suggestion — accepted, dismissed, or
+     corrected. Invisible in the UI; the correction ledger is the learning
+     signal for the bounded personal model. */
+  const noteCorrection = (
+    next: Board,
+    c: Omit<CorrectionEntry, "id" | "at">
+  ): Board => withCorrection(next, { id: uid(), at: stamp(), ...c });
 
   /* ------------------------------ sync ------------------------------ */
 
@@ -388,6 +403,7 @@ export function useBoard(now: number) {
         had(latest.current.principles, p.id) ? p : bump(p)
       ),
       ledger: snap.board.ledger,
+      corrections: snap.board.corrections,
     };
     const nextTombstones = mergeTombstones(snap.tombstones, added);
 
@@ -758,12 +774,21 @@ export function useBoard(now: number) {
     setBusy("Updating what this thread says now");
     try {
       const { summary } = await requestSummary(target.name, target.frags);
-      await commit({
-        ...latest.current,
-        threads: latest.current.threads.map((t) =>
-          t.id === threadId ? { ...t, summary } : t
-        ),
-      });
+      await commit(
+        noteCorrection(
+          {
+            ...latest.current,
+            threads: latest.current.threads.map((t) =>
+              t.id === threadId ? { ...t, summary } : t
+            ),
+          },
+          {
+            proposalKind: "refresh_summary",
+            accepted: true,
+            context: target.name,
+          }
+        )
+      );
       setNotice("Summary refreshed.");
       setTimeout(() => setNotice(null), 4000);
     } catch (error) {
@@ -1138,7 +1163,9 @@ export function useBoard(now: number) {
     const s = suggestion;
     if (!s) return;
     setSuggestion(null);
+    let context = "";
     if (s.kind === "duplicate") {
+      context = `dropped a duplicate of ${s.targetName}`;
       if (s.sourceKind === "thread") {
         /* The copy is a note; drop that fragment (or its whole fresh thread
            when it was the only note) and re-summarise. The original stays
@@ -1150,15 +1177,41 @@ export function useBoard(now: number) {
       } else {
         const dup = latest.current.actions.find((x) => x.id === s.sourceId);
         await dropImages(dup?.imgs);
-        await commit({
-          ...latest.current,
-          actions: latest.current.actions.filter((x) => x.id !== s.sourceId),
-        });
+        await commit(
+          noteCorrection(
+            {
+              ...latest.current,
+              actions: latest.current.actions.filter(
+                (x) => x.id !== s.sourceId
+              ),
+            },
+            {
+              proposalKind: "related_suggestion",
+              accepted: true,
+              context,
+            }
+          )
+        );
       }
       setNotice("Removed the duplicate.");
       setTimeout(() => setNotice(null), 4000);
+      // The thread-fragment branch committed inside deleteFrag; record the
+      // outcome on top of whatever it left behind.
+      if (s.sourceKind === "thread") {
+        await commit(
+          noteCorrection(latest.current, {
+            proposalKind: "related_suggestion",
+            accepted: true,
+            context,
+          })
+        );
+      }
       return;
     }
+    context =
+      s.verb === "Merge"
+        ? `merged a ${s.sourceKind} into ${s.targetName}`
+        : `moved a ${s.sourceKind} into ${s.targetName}`;
     if (s.sourceKind === "action") {
       await foldActionIntoThread(s.sourceId, s.targetId);
     } else if (s.fragId) {
@@ -1166,10 +1219,33 @@ export function useBoard(now: number) {
     } else {
       await mergeThreads(s.targetId, s.sourceId);
     }
+    await commit(
+      noteCorrection(latest.current, {
+        proposalKind: "related_suggestion",
+        accepted: true,
+        context,
+      })
+    );
   };
 
-  /** Keep it where it landed. */
-  const dismissSuggestion = () => setSuggestion(null);
+  /** Keep it where it landed — and remember that the proposal was waved off,
+      so the personal model can weigh it. */
+  const dismissSuggestion = () => {
+    const s = suggestion;
+    setSuggestion(null);
+    if (!s) return;
+    const context =
+      s.kind === "duplicate"
+        ? `kept the duplicate of ${s.targetName}`
+        : `kept a ${s.sourceKind} out of ${s.targetName}`;
+    void commit(
+      noteCorrection(latest.current, {
+        proposalKind: "related_suggestion",
+        accepted: false,
+        context,
+      })
+    );
+  };
 
   /* ---------------------------- actions ----------------------------- */
 
@@ -1304,23 +1380,49 @@ export function useBoard(now: number) {
       const current = latest.current;
       const a = current.actions.find((x) => x.id === id);
       if (a && a.text === text) {
-        await commit({
-          ...current,
-          actions: current.actions.map((x) =>
-            x.id === id ? { ...x, text: fixed } : x
-          ),
-        });
+        await commit(
+          noteCorrection(
+            {
+              ...current,
+              actions: current.actions.map((x) =>
+                x.id === id ? { ...x, text: fixed } : x
+              ),
+            },
+            {
+              proposalKind: "clean_fragment",
+              accepted: true,
+              context: a.text.slice(0, 120),
+              correctionText: fixed.slice(0, 120),
+            }
+          )
+        );
         setNotice("Fixed a couple of typos.");
         setTimeout(() => setNotice(null), 4000);
       }
     }
   };
 
-  const renameThread = (id: string, name: string) =>
-    commit({
-      ...latest.current,
-      threads: latest.current.threads.map((t) => (t.id === id ? { ...t, name } : t)),
-    });
+  const renameThread = (id: string, name: string) => {
+    const prev = latest.current.threads.find((t) => t.id === id)?.name;
+    if (!name.trim() || name === prev) return;
+    commit(
+      noteCorrection(
+        {
+          ...latest.current,
+          threads: latest.current.threads.map((t) =>
+            t.id === id ? { ...t, name } : t
+          ),
+        },
+        {
+          proposalKind: "rename_thread",
+          accepted: true,
+          context: prev || "",
+          correctionText: name,
+          rule: `threads get named "${name}"`,
+        }
+      )
+    );
+  };
 
   const editFrag = async (threadId: string, fragId: string, text: string) => {
     // A save that changed nothing spends no model call and no push.
@@ -1353,19 +1455,29 @@ export function useBoard(now: number) {
         .find((t) => t.id === threadId)
         ?.frags.find((f) => f.id === fragId);
       if (frag && frag.text === text) {
-        await commit({
-          ...current,
-          threads: current.threads.map((t) =>
-            t.id === threadId
-              ? {
-                  ...t,
-                  frags: t.frags.map((f) =>
-                    f.id === fragId ? { ...f, text: fixed } : f
-                  ),
-                }
-              : t
-          ),
-        });
+        await commit(
+          noteCorrection(
+            {
+              ...current,
+              threads: current.threads.map((t) =>
+                t.id === threadId
+                  ? {
+                      ...t,
+                      frags: t.frags.map((f) =>
+                        f.id === fragId ? { ...f, text: fixed } : f
+                      ),
+                    }
+                  : t
+              ),
+            },
+            {
+              proposalKind: "clean_fragment",
+              accepted: true,
+              context: frag.text.slice(0, 120),
+              correctionText: fixed.slice(0, 120),
+            }
+          )
+        );
         setNotice("Fixed a couple of typos.");
         setTimeout(() => setNotice(null), 4000);
       }
@@ -1527,10 +1639,19 @@ export function useBoard(now: number) {
           };
         }
       );
-      await commit({
-        ...latest.current,
-        actions: [...items, ...latest.current.actions],
-      });
+      await commit(
+        noteCorrection(
+          {
+            ...latest.current,
+            actions: [...items, ...latest.current.actions],
+          },
+          {
+            proposalKind: "extract_action",
+            accepted: true,
+            context: frag.text.slice(0, 120),
+          }
+        )
+      );
       setNotice(
         `${count(items.length, "action")} taken from this note. The note stays here.`
       );

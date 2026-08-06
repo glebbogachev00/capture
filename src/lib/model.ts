@@ -4,10 +4,10 @@
  * Threads are never deleted. Only actions fade.
  */
 
-/* The ledger type lives in its own module; model re-exports it so the
+/* The ledger types live in their own module; model re-exports them so the
    whole board can be described from one import. */
-import type { CaptureEntry } from "./ledger";
-export type { CaptureEntry };
+import type { CaptureEntry, CorrectionEntry } from "./ledger";
+export type { CaptureEntry, CorrectionEntry };
 import { del } from "./storage";
 
 export const KEY = "capture:data:v1";
@@ -130,6 +130,10 @@ export type Board = {
       where it landed, and which model path handled it. Invisible in the UI;
       it exists so the board's history can be debugged and exported. */
   ledger: CaptureEntry[];
+  /** Append-only memory of every proposal outcome: which suggestions the
+      user accepted, dismissed, renamed, or corrected — the signal a bounded
+      personal model will learn from. Same sync semantics as the ledger. */
+  corrections: CorrectionEntry[];
 };
 
 /** The engine principles intent shipped with, carried over unchanged. */
@@ -164,6 +168,7 @@ export const EMPTY: Board = {
   intentions: [],
   principles: SEED_PRINCIPLES,
   ledger: [],
+  corrections: [],
 };
 
 /**
@@ -194,6 +199,14 @@ export function hydrate(raw: Partial<Board> | null | undefined): Board {
        hydrate to empty rather than crash. Malformed entries are dropped. */
     ledger: (raw?.ledger ?? []).filter(
       (e) => e && typeof e.id === "string" && typeof e.at === "number"
+    ),
+    corrections: (raw?.corrections ?? []).filter(
+      (e) =>
+        e &&
+        typeof e.id === "string" &&
+        typeof e.at === "number" &&
+        typeof e.proposalKind === "string" &&
+        typeof e.accepted === "boolean"
     ),
   };
 }

@@ -144,6 +144,7 @@ Never do anything else:
 - Never "fix" a word just because it is unfamiliar. In this app, unusual words are almost always names, brands, jargon, or deliberate spelling ("Mlue", "GurrenGrow", "Hermes", "Kokoro", "Jim", "Distill", "Capture") — leave every such word exactly as written, including its casing.
 - Only correct a word when the intended word is unmistakable from the misspelling alone ("recieve" → "receive", "kitchin" → "kitchen", "expresso" → "espresso"). When in doubt, leave the word alone.
 - Preserve the user's capitalization and punctuation style — a lowercase note stays lowercase, a note with no periods stays without them. Only fix words that are clearly misspelled.
+- The user may write in any language — never translate, never reword across languages. Only fix clear slips in the language they actually wrote; leave every other language exactly as written.
 - Keep roughly the same length. If the text is already clean, return it exactly unchanged.`;
 
 function transcript(turns: { role: string; text: string }[]) {

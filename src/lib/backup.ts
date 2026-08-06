@@ -1,5 +1,5 @@
 import { type Board, hydrate } from "./model";
-import { mergeLedgers } from "./ledger";
+import { mergeCorrections, mergeLedgers } from "./ledger";
 
 /**
  * Getting the whole board out of the device, and back in.
@@ -130,6 +130,11 @@ export function restoreBackup(parsed: unknown, board: Board): RestoreResult {
 
   // Ledger entries are immutable and id-unique, so a restore is add-only.
   merged.ledger = mergeLedgers(board.ledger ?? [], incoming.ledger ?? []);
+  // Same for corrections: a restore never rewrites what this device learned.
+  merged.corrections = mergeCorrections(
+    board.corrections ?? [],
+    incoming.corrections ?? []
+  );
 
   return { board: merged, ...counts };
 }

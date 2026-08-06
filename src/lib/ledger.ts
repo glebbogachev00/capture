@@ -35,6 +35,40 @@ export type CaptureEntry = {
   imgs?: string[];
 };
 
+/**
+ * The Correction Ledger — every proposal outcome and correction, appended
+ * next to the capture ledger.
+ *
+ * The capture ledger records what the engine DID with the user's words; the
+ * correction ledger records what the user did with the engine's proposals —
+ * accepted, dismissed, renamed, corrected. That accept/dismiss/correct signal
+ * is what a bounded personal model (Sprint 3) will learn from: which
+ * suggestions this person takes and which they wave off. Like the capture
+ * ledger it is append-only and invisible in the UI — just data, ready to be
+ * exported and learned from later.
+ */
+export type ProposalKind =
+  | "rename_thread"
+  | "clean_fragment"
+  | "extract_action"
+  | "combine_fragments"
+  | "refresh_summary"
+  | "related_suggestion";
+
+export type CorrectionEntry = {
+  id: string;
+  at: number;
+  proposalKind: ProposalKind;
+  accepted: boolean;
+  /** What the proposal was about, in plain words — the thread, action, or
+      fragment involved — so a later model pass has something to weigh. */
+  context: string;
+  /** What the user actually wrote instead, when they corrected the proposal. */
+  correctionText?: string;
+  /** A distilled rule the correction implies ("threads get renamed to…"). */
+  rule?: string;
+};
+
 /** How many entries the board keeps: a real record, yet light enough that
     sync payloads and the export stay small. Oldest entries drop first. */
 export const LEDGER_CAP = 500;
@@ -67,6 +101,42 @@ export function mergeLedgers(
   return [...byId.values()]
     .sort((x, y) => y.at - x.at || (x.id < y.id ? 1 : -1))
     .slice(0, LEDGER_CAP);
+}
+
+/**
+ * Add a correction to the ledger, newest first — same append-only semantics
+ * as the capture ledger: idempotent by id, capped at LEDGER_CAP.
+ */
+export function appendCorrections(
+  corrections: CorrectionEntry[],
+  entry: CorrectionEntry
+): CorrectionEntry[] {
+  const out = [entry, ...corrections.filter((e) => e.id !== entry.id)];
+  return out.length > LEDGER_CAP ? out.slice(0, LEDGER_CAP) : out;
+}
+
+/** Union two correction ledgers by id, newest first — identical shape to
+    mergeLedgers, because corrections are as immutable as captures. */
+export function mergeCorrections(
+  a: CorrectionEntry[],
+  b: CorrectionEntry[]
+): CorrectionEntry[] {
+  const byId = new Map<string, CorrectionEntry>();
+  for (const e of [...a, ...b]) if (e?.id) byId.set(e.id, e);
+  return [...byId.values()]
+    .sort((x, y) => y.at - x.at || (x.id < y.id ? 1 : -1))
+    .slice(0, LEDGER_CAP);
+}
+
+/** Fold a correction into a board in one step. */
+export function withCorrection(
+  board: Board,
+  entry: CorrectionEntry
+): Board {
+  return {
+    ...board,
+    corrections: appendCorrections(board.corrections ?? [], entry),
+  };
 }
 
 /** How to classify a capture: an image with no words is "image"; the rest

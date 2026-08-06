@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY, hydrate, type Board, type CaptureEntry } from "./model";
 import {
+  appendCorrections,
   appendLedger,
   LEDGER_CAP,
+  mergeCorrections,
   mergeLedgers,
   sourceOf,
+  withCorrection,
   withLedger,
 } from "./ledger";
 import { applyTombstones, mergeBoards, stampChanges } from "./sync";
@@ -137,6 +140,50 @@ describe("sync pass-through", () => {
   });
 });
 
+describe("appendCorrections / mergeCorrections", () => {
+  const correction = (id: string, at: number) => ({
+    id,
+    at,
+    proposalKind: "related_suggestion" as const,
+    accepted: true,
+    context: "kept a thread out of X",
+  });
+
+  it("appends newest first, idempotent by id", () => {
+    const out = appendCorrections([correction("a", 1)], correction("b", 2));
+    expect(out.map((e) => e.id)).toEqual(["b", "a"]);
+    const again = appendCorrections(out, correction("b", 2));
+    expect(again).toHaveLength(2);
+  });
+
+  it("unions two correction ledgers by id, newest first", () => {
+    const a = [correction("a", 2)];
+    const b = [correction("b", 1), correction("a", 2)];
+    expect(mergeCorrections(a, b).map((e) => e.id)).toEqual(["a", "b"]);
+  });
+
+  it("withCorrection folds an entry into a board's corrections", () => {
+    const board: Board = { ...EMPTY, corrections: [correction("a", 1)] };
+    const next = withCorrection(board, correction("b", 2));
+    expect(next.corrections.map((e) => e.id)).toEqual(["b", "a"]);
+    expect(board.corrections).toHaveLength(1); // original untouched
+  });
+
+  it("hydrate defaults missing corrections to [] and drops malformed ones", () => {
+    const old = { actions: [], threads: [], intentions: [], principles: [] };
+    expect(hydrate(old).corrections).toEqual([]);
+    const out = hydrate({
+      ...EMPTY,
+      corrections: [
+        correction("ok", 1),
+        { id: "no-at", proposalKind: "rename_thread", accepted: true },
+        null,
+      ],
+    } as unknown as Board);
+    expect(out.corrections.map((c) => c.id)).toEqual(["ok"]);
+  });
+});
+
 describe("restoreBackup", () => {
   it("merges the incoming ledger add-only", () => {
     const board: Board = { ...EMPTY, ledger: [entry("a", 1)] };
@@ -160,5 +207,28 @@ describe("restoreBackup", () => {
     const once = restoreBackup(backup, EMPTY).board;
     const twice = restoreBackup(backup, once).board;
     expect(twice.ledger).toHaveLength(1);
+  });
+
+  it("merges the incoming corrections add-only like the ledger", () => {
+    const corr = {
+      id: "c1",
+      at: 5,
+      proposalKind: "rename_thread" as const,
+      accepted: true,
+      context: "old name",
+      correctionText: "new name",
+    };
+    const board: Board = { ...EMPTY, corrections: [corr] };
+    const backup = {
+      app: "capture",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      board: {
+        ...EMPTY,
+        corrections: [{ ...corr, id: "c2", at: 6, context: "another" }],
+      },
+    };
+    const { board: merged } = restoreBackup(backup, board);
+    expect(merged.corrections.map((c) => c.id).sort()).toEqual(["c1", "c2"]);
   });
 });
