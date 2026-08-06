@@ -2223,11 +2223,16 @@ body {
 }
 .org-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex: none;
 }
+/* The review's buttons earn a real touch target — 44px-ish tall rows and a
+   generous Approve all. Scoped here so the capture suggestion bar keeps its
+   compact sizing. */
 .org-actions .suggest-btn {
-  padding: 6px 10px;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  border-radius: 8px;
   white-space: nowrap;
 }
 
@@ -2247,17 +2252,28 @@ body {
 }
 .org-more {
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--muted);
   background: var(--paper);
   border: 1px dashed var(--rule);
   border-radius: 8px;
-  padding: 8px 10px;
-  margin-top: 4px;
+  padding: 11px 14px;
+  margin-top: 8px;
   cursor: pointer;
   touch-action: manipulation;
   transition: 0.15s;
+}
+/* Approve all — the screen's primary action, so it reads as one: full width
+   and taller than the row buttons beneath it. */
+.org-approve {
+  margin-top: 16px;
+}
+.org-approve .suggest-btn {
+  width: 100%;
+  padding: 13px 16px;
+  font-size: 14px;
+  border-radius: 9px;
 }
 .org-more:hover {
   color: var(--ink);

@@ -86,6 +86,7 @@ export function Capture() {
     organizeAiStatus,
     runOrganize,
     acceptOrganize,
+    acceptOrganizeAll,
     dismissOrganize,
     notice,
     swept,
@@ -272,29 +273,39 @@ export function Capture() {
                 <Share2 size={18} strokeWidth={1.7} />
               </button>
             )}
-            {(organize ?? []).length > 0 && (
-              <button
-                className="icon-btn organize-btn"
-                onClick={() => {
-                  /* A Distill session owns the whole surface — close it so the
-                     review screen is the only thing on screen. */
-                  if (distillOpen) closeDistill();
-                  void runOrganize();
-                  setShowOrganize(true);
-                }}
-                aria-label={`Organize — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`}
-                title={
-                  highOrganize.length > 0
+            {/* Always visible — the tidy button is a tool, not a
+                notification. It runs a fresh scan on every tap (the AI
+                pass spends real quota, so it only ever runs when asked),
+                and the badge shows the strong claims from the last scan
+                until you scan again — it never flickers in and out as the
+                board changes underneath you. */}
+            <button
+              className="icon-btn organize-btn"
+              onClick={() => {
+                /* A Distill session owns the whole surface — close it so the
+                   review screen is the only thing on screen. */
+                if (distillOpen) closeDistill();
+                void runOrganize();
+                setShowOrganize(true);
+              }}
+              aria-label={
+                (organize ?? []).length > 0
+                  ? `Organize — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`
+                  : "Organize — scan the board for things to tidy"
+              }
+              title={
+                (organize ?? []).length > 0
+                  ? highOrganize.length > 0
                     ? `Organize — ${highOrganize.length} ${highOrganize.length === 1 ? "strong suggestion" : "strong suggestions"} to review`
                     : `Organize — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`
-                }
-              >
-                <Wand2 size={18} strokeWidth={1.7} />
-                {highOrganize.length > 0 && (
-                  <span className="organize-badge">{highOrganize.length}</span>
-                )}
-              </button>
-            )}
+                  : "Scan the board for things to tidy"
+              }
+            >
+              <Wand2 size={18} strokeWidth={1.7} />
+              {highOrganize.length > 0 && (
+                <span className="organize-badge">{highOrganize.length}</span>
+              )}
+            </button>
             <button
               className="icon-btn"
               onClick={() => {
@@ -502,6 +513,7 @@ export function Capture() {
             onBack={() => setShowOrganize(false)}
             onAccept={(id) => void acceptOrganize(id)}
             onDismiss={(id) => dismissOrganize(id)}
+            onApproveAll={() => void acceptOrganizeAll()}
           />
         ) : showSettings ? (
           <SettingsScreen

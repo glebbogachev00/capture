@@ -5,9 +5,10 @@
  * cards squeezed under the header.
  *
  * It reads like a review agent's report: a one-line summary of what it
- * found, then each kind of finding under its own heading with a short hint
- * about what accepting means. Every finding is one yes/no — the engine
- * proposes, the user decides, nothing happens without a tap.
+ * found, then each kind of finding under its own heading. Only the
+ * essentials — the summary, the rows (verb + names + reason), and one
+ * yes/no per finding. The engine proposes, the user decides, nothing
+ * happens without a tap.
  *
  * The product rule: everything here reduces clutter or turns a note into an
  * action. There is no "merge one thread into another" — that change was
@@ -21,38 +22,16 @@
 import { useState } from "react";
 import type { OrganizeKind, OrganizeProposal } from "@/lib/organize";
 
-type Group = {
-  kinds: OrganizeKind[];
-  title: string;
-  hint: string;
-};
-
-const GROUPS: Group[] = [
-  {
-    kinds: ["merge_fragments"],
-    title: "One thought, two notes",
-    hint: "The same idea lives in two notes, worded differently. The note moves into the thread that already holds it.",
-  },
-  {
-    kinds: ["dup_action", "dup_fragment"],
-    title: "The same thing, twice",
-    hint: "The newer copy is removed; the original stays with its notes and images.",
-  },
-  {
-    kinds: ["move_fragment"],
-    title: "Notes sitting in the wrong thread",
-    hint: "Each note moves to the thread it clearly belongs with.",
-  },
-  {
-    kinds: ["fold_action"],
-    title: "Actions that belong with a thread",
-    hint: "Folding turns the action into a note there — one less thing on the action list.",
-  },
-  {
-    kinds: ["extract_action"],
-    title: "Notes that are really tasks",
-    hint: "The task becomes an action; the note stays where it is.",
-  },
+/* Only the essential: a heading per kind of finding. The heading and the
+   row's own verb + names say what accepting does — "The same thing, twice"
+   with a Remove button needs no further explanation, so the hints are
+   gone and the review reads at a glance. */
+const GROUPS: { kinds: OrganizeKind[]; title: string }[] = [
+  { kinds: ["merge_fragments"], title: "One thought, two notes" },
+  { kinds: ["dup_action", "dup_fragment"], title: "The same thing, twice" },
+  { kinds: ["move_fragment"], title: "Notes sitting in the wrong thread" },
+  { kinds: ["fold_action"], title: "Actions that belong with a thread" },
+  { kinds: ["extract_action"], title: "Notes that are really tasks" },
 ];
 
 const YES_LABEL: Record<OrganizeKind, string> = {
@@ -136,6 +115,7 @@ export function OrganizeScreen({
   onBack,
   onAccept,
   onDismiss,
+  onApproveAll,
 }: {
   proposals: OrganizeProposal[];
   /** Whether the model's semantic pass has run. "thinking" shows a quiet
@@ -145,8 +125,11 @@ export function OrganizeScreen({
   onBack: () => void;
   onAccept: (id: string) => void;
   onDismiss: (id: string) => void;
+  /** Apply every proposal at once — gated behind the confirm modal. */
+  onApproveAll: () => void;
 }) {
   const [showMore, setShowMore] = useState(false);
+  const [showApprove, setShowApprove] = useState(false);
   const medium = proposals.filter((p) => p.confidence === "medium");
   const summary = summaryOf(proposals);
 
@@ -163,8 +146,7 @@ export function OrganizeScreen({
       {proposals.length === 0 ? (
         <p className="int-note">
           Nothing to tidy right now — the board looks clean. Capture a couple
-          of similar things and this page will show you where they could come
-          together.
+          of similar things, then tap the wand again to re-scan.
         </p>
       ) : (
         <>
@@ -192,7 +174,6 @@ export function OrganizeScreen({
                 <h4 className="int-label">
                   {g.title} — {items.length}
                 </h4>
-                <p className="int-note">{g.hint}</p>
                 <div className="org-group">
                   {shown.map((p) => (
                     <div className="org-row" key={p.id}>
@@ -246,7 +227,50 @@ export function OrganizeScreen({
                   } I'm less sure about`}
             </button>
           )}
+
+          <div className="org-approve">
+            <button
+              className="suggest-btn suggest-ok"
+              onClick={() => setShowApprove(true)}
+            >
+              Approve all ({proposals.length})
+            </button>
+          </div>
         </>
+      )}
+
+      {showApprove && (
+        <div className="modal" onClick={() => setShowApprove(false)}>
+          <div
+            className="modal-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="discard-title">
+              Approve all {proposals.length}{" "}
+              {proposals.length === 1 ? "suggestion" : "suggestions"}?
+            </p>
+            <p className="discard-hint">
+              Duplicates get removed, notes move to the thread they belong
+              with, and tasks lift out as actions — all automatically, in one
+              go. Each change is applied on its own, so keep anything
+              you&apos;re not sure about.
+            </p>
+            <div className="tools">
+              <button
+                className="ghost warn"
+                onClick={() => {
+                  setShowApprove(false);
+                  onApproveAll();
+                }}
+              >
+                Approve all
+              </button>
+              <button className="ghost" onClick={() => setShowApprove(false)}>
+                Not yet
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

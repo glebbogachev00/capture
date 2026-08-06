@@ -11,7 +11,9 @@
     "phone": "bash scripts/phone.sh",
     "export:capture": "node scripts/export-capture.mjs",
     "probe:sort": "node scripts/probe-sort.mjs",
-    "probe:distill": "node scripts/probe-distill.mjs"
+    "probe:distill": "node scripts/probe-distill.mjs",
+    "probe:tidy": "node scripts/probe-tidy.mjs",
+    "probe:tidy:cases": "node scripts/probe-tidy-cases.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.27",

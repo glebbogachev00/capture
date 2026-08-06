@@ -238,6 +238,9 @@ export function useBoard(now: number) {
      routes through the id-guarded handlers, which no-op when the item is
      gone. AI only re-runs on the button press, so this costs nothing. */
   const aiOrganize = useRef<OrganizeProposal[]>([]);
+  /* Two approve-all runs must never overlap — the second would re-apply a
+     list that the first is already resolving, on a board mid-change. */
+  const applyingOrganize = useRef(false);
 
   /* ---------------------------- distill ---------------------------- */
   const [distillOpen, setDistillOpen] = useState(false);
@@ -288,13 +291,18 @@ export function useBoard(now: number) {
   /* ------------------------------ undo ------------------------------ */
 
   /* The board and tombstones as they were just before the last capture
-     landed, so "Undo" can put it back exactly. Only the capture flows
-     (submit/resort) take the snapshot — summary refreshes and fades never
-     do, so Undo always reverts something the user watched land, never a
-     background change. */
-  const captureSnapshot = useRef<{ board: Board; tombstones: Tombstone[] } | null>(
-    null
-  );
+     landed, so "Undo" can put it back exactly — including the raw words
+     (and pictures) that sat in the capture box, so an undone capture can
+     be edited and re-submitted instead of being lost. Only the capture
+     flows (submit/resort) take the snapshot — summary refreshes and fades
+     never do, so Undo always reverts something the user watched land,
+     never a background change. */
+  const captureSnapshot = useRef<{
+    board: Board;
+    tombstones: Tombstone[];
+    text?: string;
+    pics?: { id: string; src: string }[];
+  } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
 
   /** Send our state to the hub and adopt its merged answer. */
@@ -401,7 +409,9 @@ export function useBoard(now: number) {
 
   /**
    * Undo the last capture: put the board and this device's tombstones back
-   * to exactly how they were before it landed.
+   * to exactly how they were before it landed — and give the capture box
+   * its words (and pictures) back, so the capture can be edited and
+   * re-submitted.
    *
    * Only captures take a snapshot, so this reverts precisely what the user
    * watched land — never a summary refresh or a fade that happened in the
@@ -465,6 +475,13 @@ export function useBoard(now: number) {
     }
     setLanded(null);
     setSuggestion(null);
+    /* The capture box gets its words back too — Undo returns the draft as
+       it was, not just the board. A brand-new draft already being typed is
+       left alone rather than clobbered. */
+    if (!text.trim() && !pics.length) {
+      setText(snap.text ?? "");
+      setPics(snap.pics ?? []);
+    }
     setNotice("Undone — back to how it was.");
     setTimeout(() => setNotice(null), 4000);
     /* Push now, not on the debounce: a pull landing in the debounce window
@@ -475,7 +492,7 @@ export function useBoard(now: number) {
       pushTimer.current = null;
     }
     await pushNow();
-  }, [pushNow]);
+  }, [pushNow, text, pics]);
 
   const commit = useCallback(
     async (next: Board) => {
@@ -950,10 +967,13 @@ export function useBoard(now: number) {
 
     setText("");
     setPics([]);
-    // The fallback still lands something — Undo can take it back.
+    // The fallback still lands something — Undo can take it back, words
+    // and all, so the raw capture is never lost.
     captureSnapshot.current = {
       board: latest.current,
       tombstones: tombstones.current,
+      text,
+      pics,
     };
     setCanUndo(true);
     await commit(next);
@@ -978,10 +998,12 @@ export function useBoard(now: number) {
       );
       setLanded(landed);
       setTab(out.kind === "action" ? "actions" : "threads");
-      // Snapshot right before the re-sort lands — Undo reverts exactly this.
+      // Snapshot right before the re-sort lands — Undo reverts exactly this,
+      // and puts the raw words back in the box.
       captureSnapshot.current = {
         board: latest.current,
         tombstones: tombstones.current,
+        text: a.src || a.text,
       };
       setCanUndo(true);
       await commit(next);
@@ -1093,10 +1115,14 @@ export function useBoard(now: number) {
       setText("");
       setPics([]);
       // Snapshot right before it lands — edits made while the sort ran
-      // survive; only the capture itself is reverted by Undo.
+      // survive; only the capture itself is reverted by Undo, and the raw
+      // words come back to the box so the capture can be edited and
+      // re-submitted.
       captureSnapshot.current = {
         board: latest.current,
         tombstones: tombstones.current,
+        text,
+        pics,
       };
       setCanUndo(true);
       await commit(filed);
@@ -1382,23 +1408,13 @@ export function useBoard(now: number) {
     }
   };
 
-  /* Keep the badge live: re-scan whenever the board changes, so a capture
-     that duplicates something lights the count without being asked. The
-     local scan is instant — no model call per keystroke — and a dismissed
-     pair stays filtered out of both passes. The last AI results ride along
-     (minus the dismissed ones), so an open panel keeps its semantic rows
-     across a background change (a sync pull, a sweep) instead of losing
-     them. */
-  useEffect(() => {
-    if (!loaded) return;
-    const dropped = new Set(dismissedOrganize.current);
-    setOrganize(
-      mergeOrganize(
-        aiOrganize.current.filter((p) => !dropped.has(p.id)),
-        scanBoard(latest.current, dismissedOrganize.current)
-      )
-    );
-  }, [loaded, data]);
+  /* No automatic re-scan on board changes — by design. A live scan would
+     make the badge (and an open review) churn as the board shifts under
+     the user: a sync pull adds an item and the count jumps, a sweep fades
+     an action and a duplicate vanishes, the AI pass lands late and items
+     appear after the fact. The review the user asked for stays exactly as
+     it was when they asked; only the rows they act on (or wave off) leave
+     the list. A fresh scan happens when they press the button again. */
 
   /**
    * Apply one Organize proposal. Each kind routes through the same handlers
@@ -1406,12 +1422,21 @@ export function useBoard(now: number) {
    * consistent with the rest of the app — then the panel re-scans so a
    * resolved pair never lingers.
    */
-  const acceptOrganize = async (id: string) => {
+  /**
+   * Apply one Organize proposal. Each kind routes through the same handlers
+   * the capture suggestions use, so the outcome and its ledger record are
+   * consistent with the rest of the app. Returns whether the change was
+   * applied — an extraction that failed leaves its card in the list so the
+   * user can retry; everything else applies or is already resolved.
+   */
+  const acceptOrganize = async (id: string): Promise<boolean> => {
     const p = organize?.find((x) => x.id === id);
-    if (!p) return;
-    /* The applied change must not ride back in from the cached AI results
-       on the next re-scan — a resolved proposal is resolved. */
+    if (!p) return false;
+    /* The row leaves the list immediately, and the applied change must not
+       ride back in from the cached AI results on a future scan — a
+       resolved proposal is resolved. */
     aiOrganize.current = aiOrganize.current.filter((x) => x.id !== id);
+    setOrganize((cur) => (cur ? cur.filter((x) => x.id !== id) : cur));
     if (p.kind === "dup_action") {
       const a = latest.current.actions.find((x) => x.id === p.sourceId);
       await dropImages(a?.imgs);
@@ -1433,6 +1458,7 @@ export function useBoard(now: number) {
       );
       setNotice(`Removed the duplicate of ${p.targetName}.`);
       setTimeout(() => setNotice(null), 4000);
+      return true;
     } else if (p.kind === "dup_fragment") {
       setNotice(`Removed the duplicate of ${p.targetName}.`);
       setTimeout(() => setNotice(null), 4000);
@@ -1445,6 +1471,7 @@ export function useBoard(now: number) {
           rule: `Drop duplicates of "${p.targetName}"`,
         })
       );
+      return true;
     } else if (p.kind === "fold_action") {
       await foldActionIntoThread(p.sourceId, p.targetId);
       await commit(
@@ -1455,6 +1482,7 @@ export function useBoard(now: number) {
           rule: `Move actions into "${p.targetName}"`,
         })
       );
+      return true;
     } else if (p.kind === "move_fragment") {
       await moveFrag(p.sourceThreadId!, p.sourceFragId!, p.targetId);
       await commit(
@@ -1465,16 +1493,22 @@ export function useBoard(now: number) {
           rule: `Move notes into "${p.targetName}"`,
         })
       );
+      return true;
     } else if (p.kind === "extract_action") {
       /* extractAction records its own correction and notice. Extraction leaves
          the note in place, so a success also remembers the proposal by id —
          otherwise the same card would re-propose on every scan. A failure
-         keeps the card, so the user can retry. */
+         keeps the card, so the user can retry — the row was removed at the
+         top, so a failed extraction puts it back. */
       const ok = await extractAction(p.sourceThreadId!, p.sourceFragId!);
       if (ok) {
         dismissedOrganize.current = [...dismissedOrganize.current, p.id];
         void set(ORGANIZE_DISMISSED_KEY, JSON.stringify(dismissedOrganize.current));
+      } else {
+        setOrganize((cur) => (cur ? [p, ...cur] : cur));
+        aiOrganize.current = [p, ...aiOrganize.current];
       }
+      return ok;
     } else if (p.kind === "merge_fragments") {
       /* The same idea lives in two notes — move the newer one into the
          thread that already holds it. moveFrag interleaves by date, carries
@@ -1488,9 +1522,46 @@ export function useBoard(now: number) {
           rule: `Move notes into "${p.targetName}"`,
         })
       );
+      return true;
     }
-    /* The board changed — the [loaded, data] effect re-scans, and the
-       resolved pair is gone from the panel on the next render. */
+    /* The row is already gone from the list (removed above); the board
+       change is committed, so a future scan will not re-propose it. */
+    return true;
+  };
+
+  /**
+   * Approve every proposal on the board at once — the "Approve all" button.
+   * Each row routes through the same per-kind application as a single tap
+   * (duplicates drop, notes move, tasks lift out), sequentially so later
+   * proposals always read the latest board. Extractions that fail stay in
+   * the list; the summary notice says exactly how many were applied. The
+   * user confirms the bulk action in a modal before this is ever reached.
+   */
+  const acceptOrganizeAll = async () => {
+    const list = organize ?? [];
+    if (!list.length || applyingOrganize.current) return;
+    applyingOrganize.current = true;
+    let applied = 0;
+    /* A row that throws must not brick the button for the rest of the
+       session — the guard is cleared even when a handler misbehaves. */
+    try {
+      for (const p of list) {
+        if (await acceptOrganize(p.id)) applied++;
+      }
+    } finally {
+      applyingOrganize.current = false;
+    }
+    const diff = list.length - applied;
+    setNotice(
+      applied === list.length
+        ? `Applied all ${applied} ${applied === 1 ? "suggestion" : "suggestions"}.`
+        : `Applied ${applied} of ${list.length} — ${diff} ${
+            diff === 1
+              ? "couldn't be applied and is still listed"
+              : "couldn't be applied and are still listed"
+          }.`
+    );
+    setTimeout(() => setNotice(null), 6000);
   };
 
   /** Wave an Organize proposal off — remembered by id so it never reappears,
@@ -1884,7 +1955,9 @@ export function useBoard(now: number) {
     const frag = latest.current.threads
       .find((t) => t.id === threadId)
       ?.frags.find((f) => f.id === fragId);
-    if (!frag) return;
+    /* The note is gone — nothing was applied, so the caller keeps the card
+       listed rather than pretending the extraction succeeded. */
+    if (!frag) return false;
 
     setErr("");
     setBusy("Finding the action");
@@ -2703,6 +2776,7 @@ export function useBoard(now: number) {
     organizeAiStatus,
     runOrganize,
     acceptOrganize,
+    acceptOrganizeAll,
     dismissOrganize,
     notice,
     swept,

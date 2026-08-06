@@ -118,15 +118,15 @@ Two fragments in different threads that are the *same idea* worded differently. 
   - `merge_fragments` — the same idea living in two notes, in different words, in different threads. The strongest, most valuable claim; look for it first. The note moves into the thread that already holds the idea — one subject, one home.
   - `dup_action` / `dup_fragment` — the same task or note captured twice, worded differently. The copy is removed; the original stays.
   - `fold_action` — an action clearly belongs with a thread (it is really a note on that subject). Folding reduces the action list.
-  - `move_fragment` — a note sitting in the wrong thread.
-  - `extract_action` — a fragment reads as a doable task (narrow: only when it is unambiguously a task, e.g. opens with "I need to…" / "remember to…"). The note becomes an action — this is explicitly wanted.
+  - `move_fragment` — a note sitting in the wrong thread. If a note is clearly about another thread's subject (a groceries complaint belongs with the groceries thread), prefer this over `extract_action`.
+  - `extract_action` — a fragment reads as a doable task (narrow: only when it is unambiguously a task, e.g. opens with "I need to…" / "remember to…"). The note becomes an action — this is explicitly wanted. A complaint or observation ("we're out of cold brew again", "the faucet drips at night") is NOT a task — never extract it, and never invent the task it implies.
 - Rules that never bend:
   - **Never merge whole threads.** Two threads that cover overlapping ground stay separate; at most, an individual fragment that is truly the same idea in another thread may move.
   - **Same-topic is not the same idea.** "Morning routine" and "Coffee habits" both being about mornings is not a merge. Propose only when the substance overlaps.
   - **When in doubt, propose nothing.** A change that is not clearly an improvement is a change that must not happen. The user values a clean, quiet board over an over-organized one.
   - Never propose a change that would bury distinct content.
   - `reason` is a plain sentence the user can verify against their own words ("Both notes say the same thing: cut the afternoon espresso"), never a label like "similar keywords".
-  - Do not invent tasks for `extract_action`, do not move a note that also belongs where it sits.
+  - Do not invent tasks for `extract_action` — a complaint or observation is not a task — and do not move a note that also belongs where it sits.
   - Fewer, confident proposals beat many weak ones. High confidence = you would defend it. Medium = plausible but less certain. If unsure, medium or nothing.
 - The prompt body: the board rendered compactly, e.g.:
 

@@ -1,0 +1,249 @@
+[
+  {
+    "id": "c1-semantic-merge",
+    "name": "The same idea, in different words",
+    "blurb": "Two notes about cutting afternoon caffeine share ZERO content words, so the local word-match scan must propose nothing — only the model's semantic pass can see they are one thought and merge the fragment.",
+    "localExpect": [],
+    "aiExpect": ["merge_fragments"],
+    "aiForbid": ["merge_threads"],
+    "soft": [],
+    "silence": false,
+    "cannedAi": [
+      {
+        "kind": "merge_fragments",
+        "confidence": "high",
+        "sourceId": "t-coffee",
+        "sourceFragId": "f3",
+        "targetId": "t-morning",
+        "reason": "Both notes say the same thing: cut the afternoon espresso."
+      }
+    ],
+    "board": {
+      "actions": [],
+      "threads": [
+        {
+          "id": "t-morning",
+          "name": "Morning routine",
+          "summary": "Waking up and feeling good",
+          "frags": [
+            { "id": "f1", "text": "I keep meaning to dial back the evening caffeine", "at": 150 },
+            { "id": "f2", "text": "Wake at 6 and actually feel rested", "at": 100 }
+          ]
+        },
+        {
+          "id": "t-coffee",
+          "name": "Coffee habits",
+          "summary": "",
+          "frags": [
+            { "id": "f3", "text": "Cutting the 4pm espresso has been the plan for a while", "at": 140 },
+            { "id": "f4", "text": "Need to restock the coffee grinder, it's out of beans", "at": 120 }
+          ]
+        },
+        {
+          "id": "t-career",
+          "name": "Career",
+          "summary": "",
+          "frags": [
+            { "id": "f5", "text": "Portfolio review went well", "at": 90 }
+          ]
+        }
+      ],
+      "intentions": [
+        { "id": "i1", "expanded": "I live somewhere with light and space to think" }
+      ]
+    }
+  },
+  {
+    "id": "c2-extract-task",
+    "name": "A task hiding inside a note",
+    "blurb": "One fragment reads as a clear doable task (call the vet), a neighbouring fragment is a reflection (Luna getting old) that must NOT be extracted, and the faucet note is a problem, not a task. Tidy should lift exactly the vet note out as an action.",
+    "localExpect": ["extract_action"],
+    "aiExpect": ["extract_action"],
+    "aiForbid": [],
+    "soft": [],
+    "silence": false,
+    "cannedAi": [
+      {
+        "kind": "extract_action",
+        "confidence": "high",
+        "sourceId": "t-home",
+        "sourceFragId": "f1",
+        "targetId": "t-home",
+        "reason": "This reads as a task: call the vet about Luna's shots."
+      }
+    ],
+    "board": {
+      "actions": [
+        { "id": "a1", "text": "Buy oat milk", "at": 200 }
+      ],
+      "threads": [
+        {
+          "id": "t-home",
+          "name": "Home",
+          "summary": "",
+          "frags": [
+            { "id": "f1", "text": "I need to call the vet about Luna's shots this week", "at": 150 },
+            { "id": "f2", "text": "Luna is getting old now, she sleeps most of the day", "at": 120 },
+            { "id": "f3", "text": "The kitchen faucet drips at night", "at": 100 }
+          ]
+        }
+      ],
+      "intentions": []
+    }
+  },
+  {
+    "id": "c3-duplicate-action",
+    "name": "Captured twice, in different words",
+    "blurb": "Two duplicate kinds on one board: the same dentist appointment captured twice with different wording (deliberately same timing, so there is no ambiguity that they are two different bookings), and the lease-renewal note pasted twice in the same thread. The local scan must find both (via the shared phrases 'dentist appointment' and 'lease renewal form friday'), and every duplicate must name the NEWER capture as the copy to drop — the original is never at risk, and the two passes collapse into one row.",
+    "localExpect": ["dup_action", "dup_fragment"],
+    "aiExpect": ["dup_action", "dup_fragment"],
+    "aiForbid": [],
+    "soft": ["dup_action", "dup_fragment"],
+    "silence": false,
+    "cannedAi": [
+      {
+        "kind": "dup_action",
+        "confidence": "high",
+        "sourceId": "a-new",
+        "targetId": "a-old",
+        "reason": "Both actions are the same task: book a dentist appointment."
+      },
+      {
+        "kind": "dup_fragment",
+        "confidence": "high",
+        "sourceId": "t-general",
+        "sourceFragId": "f2",
+        "targetId": "t-general",
+        "reason": "The lease-renewal note was pasted twice in the same thread."
+      }
+    ],
+    "board": {
+      "actions": [
+        { "id": "a-new", "text": "Schedule the dentist appointment for next week", "at": 300 },
+        { "id": "a-old", "text": "Book a dentist appointment for next week", "at": 100 },
+        { "id": "a3", "text": "Pick up dry cleaning", "at": 200 }
+      ],
+      "threads": [
+        {
+          "id": "t-general",
+          "name": "Random notes",
+          "summary": "",
+          "frags": [
+            { "id": "f1", "text": "A good week overall", "at": 120 },
+            { "id": "f2", "text": "The landlord says the lease renewal form is due by Friday", "at": 110 },
+            { "id": "f3", "text": "Lease renewal form is due by Friday, says the landlord", "at": 80 }
+          ]
+        }
+      ],
+      "intentions": []
+    }
+  },
+  {
+    "id": "c4-move-and-fold",
+    "name": "A misplaced note, and an action that belongs with a thread",
+    "blurb": "The cold-brew complaint is sitting inside the Career thread and belongs with Groceries; the water-filter action is really a note on the kitchen renovation. The groceries note is an observation, not a task, so the only correct claim about it is the move. Tidy should propose the move AND the fold — and never move the groceries note back into Career (a single-fragment thread is never a move source).",
+    "localExpect": ["move_fragment", "fold_action"],
+    "aiExpect": ["move_fragment", "fold_action"],
+    "aiForbid": [],
+    "soft": ["fold_action"],
+    "silence": false,
+    "cannedAi": [
+      {
+        "kind": "move_fragment",
+        "confidence": "high",
+        "sourceId": "t-career",
+        "sourceFragId": "f5",
+        "targetId": "t-groceries",
+        "reason": "The cold-brew note belongs with the groceries thread, not career."
+      },
+      {
+        "kind": "fold_action",
+        "confidence": "medium",
+        "sourceId": "a1",
+        "targetId": "t-kitchen",
+        "reason": "This action is really a note on the kitchen renovation."
+      }
+    ],
+    "board": {
+      "actions": [
+        { "id": "a1", "text": "Compare water filter options for the kitchen renovation", "at": 250 },
+        { "id": "a2", "text": "Renew the car insurance", "at": 100 }
+      ],
+      "threads": [
+        {
+          "id": "t-kitchen",
+          "name": "Kitchen renovation",
+          "summary": "",
+          "frags": [
+            { "id": "f1", "text": "Countertop samples arrived", "at": 150 },
+            { "id": "f2", "text": "Backsplash tile color should be warm", "at": 120 }
+          ]
+        },
+        {
+          "id": "t-career",
+          "name": "Career",
+          "summary": "",
+          "frags": [
+            { "id": "f3", "text": "Portfolio review went well", "at": 140 },
+            { "id": "f4", "text": "Recruiter reached out about a senior role", "at": 110 },
+            { "id": "f5", "text": "We're out of cold brew again, which is annoying", "at": 100 }
+          ]
+        },
+        {
+          "id": "t-groceries",
+          "name": "Groceries",
+          "summary": "",
+          "frags": [
+            { "id": "f6", "text": "Cold brew is the one thing I always keep stocked", "at": 90 }
+          ]
+        }
+      ],
+      "intentions": []
+    }
+  },
+  {
+    "id": "c5-clean-silence",
+    "name": "A clean board stays clean",
+    "blurb": "Three unrelated single-note threads, one real action, one intention — nothing is duplicated, misplaced, or a task in disguise. The local scan must stay silent, and the model must too: same-topic is NOT the same idea, and a change that is not clearly an improvement must not happen.",
+    "localExpect": [],
+    "aiExpect": [],
+    "aiForbid": ["merge_fragments", "dup_action", "dup_fragment", "fold_action", "move_fragment", "extract_action"],
+    "soft": [],
+    "silence": true,
+    "cannedAi": [],
+    "board": {
+      "actions": [
+        { "id": "a1", "text": "Renew passport", "at": 200 }
+      ],
+      "threads": [
+        {
+          "id": "t-books",
+          "name": "Books",
+          "summary": "",
+          "frags": [
+            { "id": "f1", "text": "Just finished The Left Hand of Darkness, loved it", "at": 150 }
+          ]
+        },
+        {
+          "id": "t-music",
+          "name": "Music",
+          "summary": "",
+          "frags": [
+            { "id": "f2", "text": "The new album from the band I like is out", "at": 120 }
+          ]
+        },
+        {
+          "id": "t-morning",
+          "name": "Morning routine",
+          "summary": "",
+          "frags": [
+            { "id": "f3", "text": "Wake at 6 and actually feel rested", "at": 100 }
+          ]
+        }
+      ],
+      "intentions": [
+        { "id": "i1", "expanded": "I live somewhere with light and space to think" }
+      ]
+    }
+  }
+]
