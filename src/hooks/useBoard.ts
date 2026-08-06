@@ -47,6 +47,10 @@ import {
   DISTILL_KEY,
   EMPTY_DISTILL,
   hydrateDistill,
+  findMarker,
+  markerHold,
+  NOTHING_MARKER,
+  READY_MARKER,
 } from "@/lib/distill";
 import {
   backupFilename,
@@ -1964,34 +1968,36 @@ export function useBoard(now: number) {
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let acc = "";
-      /* The [ready] marker is stripped as it streams so it never reaches the
-         transcript — and therefore never appears on screen or gets spoken
+      /* The end-markers are stripped as they stream so they never reach the
+         transcript — and therefore never appear on screen or get spoken
          aloud by the voice layer, which chunks the live text as it lands.
-         Only characters that could begin the marker are held back across
+         [ready] lights the Distill button; [nothing] says the turn was
+         small talk with nothing to file (handled after the stream closes).
+         Only characters that could begin either marker are held back across
          chunks, so a marker split at a chunk boundary is still caught while
          ordinary text streams with no lag. */
-      const MARKER = "[ready]";
+      let nothingSeen = false;
       let carry = "";
       if (reader) {
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
           const raw = carry + decoder.decode(value, { stream: true });
-          const marker = raw.indexOf(MARKER);
-          if (marker !== -1) {
-            setDistillReady(true);
-            carry = raw.slice(marker + MARKER.length);
-            acc += raw.slice(0, marker);
-          } else {
-            /* Longest suffix that could start the marker; hold it for the
-               next chunk, stream everything before it. */
-            let hold = 0;
-            for (let n = Math.min(raw.length, MARKER.length - 1); n >= 1; n--) {
-              if (MARKER.startsWith(raw.slice(-n))) {
-                hold = n;
-                break;
-              }
+          const marker = findMarker(raw);
+          if (marker) {
+            if (marker.kind === "ready") {
+              setDistillReady(true);
+            } else {
+              nothingSeen = true;
             }
+            const markerText =
+              marker.kind === "ready" ? READY_MARKER : NOTHING_MARKER;
+            carry = raw.slice(marker.at + markerText.length);
+            acc += raw.slice(0, marker.at);
+          } else {
+            /* Longest suffix that could start a marker; hold it for the
+               next chunk, stream everything before it. */
+            const hold = markerHold(raw);
             carry = hold ? raw.slice(-hold) : "";
             acc += raw.slice(0, raw.length - hold);
           }
@@ -2006,14 +2012,31 @@ export function useBoard(now: number) {
       }
       /* Trailing bytes that never completed a marker (end of a normal reply).
          A marker left over here is a model misfire, not a boundary — strip
-         it so a stray [ready] can never reach the screen or the voice. */
-      acc += carry.split(MARKER).join("");
+         it so a stray marker can never reach the screen or the voice. */
+      acc += carry
+        .split(READY_MARKER)
+        .join("")
+        .split(NOTHING_MARKER)
+        .join("");
       const doneSession: DistillSession = {
         ...withUser,
         turns: [...withUser.turns, { ...assistantTurn, text: acc.trim() }],
       };
       setDistillSession(doneSession);
       await persistDistill(doneSession);
+      // A [nothing] reply said the turn was pure small talk — nothing to
+      // file. The friendly line stays on screen (and in the speaker) for a
+      // beat, then the session is wiped and the view closes: a greeting is
+      // not a capture, so it is neither filed nor kept. resetDistill
+      // persists a fresh session, so the next Distill opens clean.
+      if (nothingSeen) {
+        setTimeout(() => {
+          void resetDistill();
+          closeDistill();
+          setNotice("Nothing worth capturing — I didn't file it.");
+          setTimeout(() => setNotice(null), 4000);
+        }, 2200);
+      }
     } catch (error) {
       // A reply that died mid-stream may have set the flag already; without
       // this the button would glow over a transcript with no assistant turn.

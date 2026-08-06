@@ -148,6 +148,7 @@ function facts(reply, lastUser) {
   const trimmed = reply.trim();
   return {
     ready: /\[ready\]/.test(trimmed),
+    nothing: /\[nothing\]/.test(trimmed),
     question: trimmed.includes("?"),
     restate: restates(trimmed, lastUser),
     draft: statesDraft(trimmed),
@@ -156,16 +157,18 @@ function facts(reply, lastUser) {
 }
 
 /* Run one scenario. `userTurns` are the fixed things the user says; the
-   conversation stops as soon as the assistant closes with [ready] or the
-   turn cap is reached. */
+   conversation stops as soon as the assistant closes with [ready] or
+   [nothing], or the turn cap is reached. */
 async function runScenario(name, userTurns, cap = 3) {
   const turns = [];
   const replyLog = [];
   let questions = 0;
   let readyAt = null;
+  let nothingAt = null;
   let draftByTurn2 = null;
 
-  for (let i = 0; i < userTurns.length && readyAt === null; i++) {
+  const closed = () => readyAt ?? nothingAt;
+  for (let i = 0; i < userTurns.length && closed() === null; i++) {
     turns.push({ role: "user", text: userTurns[i] });
     const reply = await chat(turns);
     const f = facts(reply, userTurns[i]);
@@ -176,18 +179,24 @@ async function runScenario(name, userTurns, cap = 3) {
        appears on the confirmation reply (turn 2) still counts. */
     if (f.draft && i <= 1) draftByTurn2 = true;
     if (f.ready) readyAt = i + 1; // 1-based assistant-turn count
+    if (f.nothing) nothingAt = i + 1;
     await sleep(SLEEP_MS);
   }
 
   const results = {
     scenario: name,
     readyAt, // null = never closed
+    nothingAt, // null = never dismissed as small talk
     questions,
     restated: replyLog.some((f) => f.restate),
     draftByTurn2: draftByTurn2 === true,
-    closedInTurn: readyAt,
+    /* Small talk must be waved off without inventing a record: no [ready]
+       and no "I'd file this as…" draft in the dismissal. */
+    nothingDraftFree: nothingAt !== null && !replyLog.some((f) => f.draft),
+    closedInTurn: closed(),
     replies: replyLog.map((f) => ({
       ready: f.ready,
+      nothing: f.nothing,
       q: f.question,
       draft: f.draft,
       text: f.text.length > 160 ? f.text.slice(0, 157) + "…" : f.text,
@@ -195,7 +204,7 @@ async function runScenario(name, userTurns, cap = 3) {
   };
 
   results.passes = [
-    readyAt !== null && readyAt <= cap, // closes in time
+    closed() !== null && closed() <= cap, // closes in time
     questions <= 1, // the question budget held
     !results.restated, // never echoes the user back
   ];
@@ -246,6 +255,14 @@ const scenarios = [
       "I don't know, it's fuzzy.",
     ],
   },
+  {
+    name: "SMALL TALK · greeting",
+    cap: 1,
+    /* A pure greeting must be waved off, not filed: the engine replies
+       warmly and ends with [nothing], never [ready], and never invents
+       "I'd file this as a friendly greeting". */
+    userTurns: ["Hey, how are you doing today?"],
+  },
 ];
 
 async function main() {
@@ -259,6 +276,8 @@ async function main() {
     rows.push(r);
     if (r.readyAt) {
       console.log(`  closed with [ready] on turn ${r.readyAt} · ${r.questions} question(s)`);
+    } else if (r.nothingAt) {
+      console.log(`  waved off with [nothing] on turn ${r.nothingAt} · ${r.questions} question(s)`);
     } else {
       console.log(`  NEVER closed · ${r.questions} question(s)`);
     }
@@ -283,13 +302,20 @@ async function main() {
     console.log(
       `  ${ok ? "PASS" : "FAIL"}  ${r.scenario}: ` +
         `closes ≤${r.closedInTurn ? r.closedInTurn : "never"} · ` +
-        `${r.questions} question(s) · ${r.restated ? "restated ✗" : "no restate"}`
+        `${r.questions} question(s) · ${r.restated ? "restated ✗" : "no restate"} · ` +
+        `${r.readyAt ? "[ready]" : r.nothingAt ? "[nothing]" : "no marker"}`
     );
   }
   console.log(
     `  ${draftOk ? "PASS" : "FAIL"}  CONCRETE draft stated by turn 2 (record kind + framing)`
   );
   if (!draftOk) all = false;
+  const smallTalk = rows.find((r) => r.scenario.includes("SMALL TALK"));
+  const nothingOk = smallTalk ? smallTalk.nothingDraftFree : false;
+  console.log(
+    `  ${nothingOk ? "PASS" : "FAIL"}  SMALL TALK waved off with [nothing], no invented record`
+  );
+  if (!nothingOk) all = false;
 
   console.log(
     all

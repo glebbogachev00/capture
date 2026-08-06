@@ -61,6 +61,54 @@ export function resolveSettled<
   return { ...settled, actions: items };
 }
 
+/* The two ways a clarifier reply can end. [ready] means the conversation
+   holds something to file — it lights the Distill button. [nothing] means
+   the turn was pure small talk with nothing worth filing — the app wipes
+   the session instead of lighting the button. */
+export const READY_MARKER = "[ready]";
+export const NOTHING_MARKER = "[nothing]";
+
+/**
+ * Which end-marker appears first in a streamed chunk, if any.
+ *
+ * The chat route streams the clarifier's reply, and a marker can be split
+ * across chunk boundaries, so the client asks this on every chunk (with the
+ * held suffix prepended) rather than once at the end. Returns the earliest
+ * marker and its index; null when neither is present. Purely structural so
+ * it is deterministic and unit-testable.
+ */
+export function findMarker(
+  raw: string
+): { kind: "ready" | "nothing"; at: number } | null {
+  let best: { kind: "ready" | "nothing"; at: number } | null = null;
+  for (const [marker, kind] of [
+    [READY_MARKER, "ready"],
+    [NOTHING_MARKER, "nothing"],
+  ] as const) {
+    const at = raw.indexOf(marker);
+    if (at !== -1 && (!best || at < best.at)) best = { kind, at };
+  }
+  return best;
+}
+
+/**
+ * Longest suffix of `raw` that could be the start of an end-marker.
+ *
+ * The streaming client holds those trailing characters back for the next
+ * chunk so a marker split at a boundary is still caught, while ordinary
+ * text streams with no lag. Returns 0 when nothing could begin a marker.
+ */
+export function markerHold(raw: string): number {
+  const maxPrefix = Math.max(READY_MARKER.length, NOTHING_MARKER.length) - 1;
+  for (let n = Math.min(raw.length, maxPrefix); n >= 1; n--) {
+    const tail = raw.slice(-n);
+    if (READY_MARKER.startsWith(tail) || NOTHING_MARKER.startsWith(tail)) {
+      return n;
+    }
+  }
+  return 0;
+}
+
 /**
  * How many questions the assistant has already asked so far in a transcript.
  *

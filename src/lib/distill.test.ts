@@ -1,10 +1,69 @@
 import { describe, expect, it } from "vitest";
 import {
   countAssistantQuestions,
+  findMarker,
   hydrateDistill,
+  markerHold,
   resolveSettled,
   EMPTY_DISTILL,
 } from "./distill";
+
+describe("findMarker", () => {
+  it("finds nothing in a plain reply", () => {
+    expect(findMarker("Nothing to capture here — just a hello.")).toBeNull();
+  });
+
+  it("finds a trailing [ready]", () => {
+    const s = "I'd file this as a thread.\n[ready]";
+    expect(findMarker(s)).toEqual({ kind: "ready", at: s.indexOf("[ready]") });
+  });
+
+  it("finds a trailing [nothing]", () => {
+    const s = "Just a hello.\n[nothing]";
+    expect(findMarker(s)).toEqual({
+      kind: "nothing",
+      at: s.indexOf("[nothing]"),
+    });
+  });
+
+  it("reports the earliest marker when both appear", () => {
+    // A model misfire: text that carries both. The first one wins.
+    expect(findMarker("[nothing] not [ready]")).toEqual({
+      kind: "nothing",
+      at: 0,
+    });
+  });
+
+  it("catches a marker split at a chunk boundary via the held suffix", () => {
+    // First chunk ends with "[noth" — held by markerHold; prepend to the
+    // next chunk so the full marker is visible to findMarker.
+    expect(markerHold("Just a hello.\n[noth")).toBe(5);
+    const full = "Just a hello.\n[noth" + "ing]";
+    expect(findMarker(full)).toEqual({
+      kind: "nothing",
+      at: full.indexOf("[nothing]"),
+    });
+  });
+});
+
+describe("markerHold", () => {
+  it("holds the longest suffix that could begin a marker", () => {
+    expect(markerHold("just a hello\n[rea")).toBe(4); // [rea → [ready
+    expect(markerHold("just a hello\n[noth")).toBe(5); // [noth → [nothing
+  });
+
+  it("holds nothing when no suffix could begin a marker", () => {
+    expect(markerHold("ordinary text")).toBe(0);
+    expect(markerHold("x]")).toBe(0); // a lone close bracket is not a start
+  });
+
+  it("holds a complete marker too — findMarker catches it first", () => {
+    // A full marker is also a suffix that could begin a marker, so it is
+    // held. Harmless: the client runs findMarker on the same chunk first,
+    // which finds the complete marker and never reaches the hold.
+    expect(markerHold("a [ready]")).toBe(7);
+  });
+});
 
 describe("resolveSettled", () => {
   it("reclassifies an action with no items as a thread", () => {
