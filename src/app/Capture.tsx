@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2, Wand2, X } from "lucide-react";
+import { Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2, Wand2 } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
 import {
@@ -44,6 +44,7 @@ import {
   IntentionDraft,
   SettingsScreen,
 } from "./Intentions";
+import { OrganizeScreen } from "./Organize";
 import { shareIntention, shareThread } from "@/lib/share";
 import { useBoard } from "@/hooks/useBoard";
 
@@ -58,11 +59,11 @@ export function Capture() {
   /* Input device plumbing: the hidden file picker, and the speech recogniser
      (shared with Distill — the mic routes to whichever surface is open). */
   const fileRef = useRef<HTMLInputElement>(null);
-  /* The Organize panel is presentational; the proposals themselves live in
-     useBoard. Opens over the input, under the header. Medium-confidence
-     proposals sit behind "Show more" until the user asks for them. */
+  /* The Organize screen is presentational; the proposals themselves live in
+     useBoard. It opens as a full screen of its own (like Settings), and the
+     wand button only appears when the scan has found something worth
+     reviewing — a clean board keeps the header to sync / share / settings. */
   const [showOrganize, setShowOrganize] = useState(false);
-  const [showOrganizeMore, setShowOrganizeMore] = useState(false);
 
   /* Everything else — the board, every operation on it, and the derived
      views — comes from useBoard. This destructure is the whole logic
@@ -174,12 +175,10 @@ export function Capture() {
     clearRule,
   } = useBoard(now);
 
-  /* Strong claims show in the panel (and light the badge); medium ones sit
-     behind "Show more", so the scan is alive without being noisy. */
+  /* Strong claims light the badge; the button itself only exists when the
+     scan found anything at all. Medium ones sit behind "Show more" inside
+     the screen, so the header stays quiet on a clean board. */
   const highOrganize = (organize ?? []).filter((p) => p.confidence === "high");
-  const mediumOrganize = (organize ?? []).filter(
-    (p) => p.confidence === "medium"
-  );
 
   /* Input device plumbing: the hidden file picker, and the speech recogniser
      (shared with Distill — the mic routes to whichever surface is open).
@@ -272,28 +271,29 @@ export function Capture() {
                 <Share2 size={18} strokeWidth={1.7} />
               </button>
             )}
-            <button
-              className={
-                "icon-btn organize-btn" +
-                (highOrganize.length ? " has-proposals" : "")
-              }
-              onClick={() => {
-                runOrganize();
-                setShowOrganizeMore(false);
-                setShowOrganize(!showOrganize);
-              }}
-              aria-label="Organize — tidy the board"
-              title={
-                highOrganize.length
-                  ? `Organize — ${highOrganize.length} ${highOrganize.length === 1 ? "suggestion" : "suggestions"} to review`
-                  : "Organize — scan the board for duplicates and merges"
-              }
-            >
-              <Wand2 size={18} strokeWidth={1.7} />
-              {!!highOrganize.length && (
-                <span className="organize-badge">{highOrganize.length}</span>
-              )}
-            </button>
+            {(organize ?? []).length > 0 && (
+              <button
+                className="icon-btn organize-btn"
+                onClick={() => {
+                  /* A Distill session owns the whole surface — close it so the
+                     review screen is the only thing on screen. */
+                  if (distillOpen) closeDistill();
+                  runOrganize();
+                  setShowOrganize(true);
+                }}
+                aria-label={`Organize — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`}
+                title={
+                  highOrganize.length > 0
+                    ? `Organize — ${highOrganize.length} ${highOrganize.length === 1 ? "strong suggestion" : "strong suggestions"} to review`
+                    : `Organize — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`
+                }
+              >
+                <Wand2 size={18} strokeWidth={1.7} />
+                {highOrganize.length > 0 && (
+                  <span className="organize-badge">{highOrganize.length}</span>
+                )}
+              </button>
+            )}
             <button
               className="icon-btn"
               onClick={() => {
@@ -307,94 +307,6 @@ export function Capture() {
             </button>
           </div>
         </div>
-
-        {showOrganize && (
-          <div className="organize-panel">
-            <div className="organize-head">
-              <span className="organize-title">
-                Organize
-                {!!organize?.length &&
-                  ` — ${organize.length} ${organize.length === 1 ? "way" : "ways"} to tidy`}
-              </span>
-              <button
-                className="organize-close"
-                onClick={() => setShowOrganize(false)}
-                aria-label="Close Organize"
-              >
-                <X size={16} strokeWidth={1.8} />
-              </button>
-            </div>
-            {organize && organize.length > 0 ? (
-              <div className="organize-list">
-                {(showOrganizeMore ? organize : highOrganize).map((p) => (
-                  <div className="organize-row" key={p.id}>
-                    <div className="organize-main">
-                      <span className="organize-verb">
-                        <span
-                          className={
-                            "organize-dot " +
-                            (p.confidence === "high" ? " high" : " medium")
-                          }
-                        />
-                        {p.verb}
-                      </span>
-                      {p.kind === "dup_action" || p.kind === "dup_fragment" ? (
-                        <span className="organize-text">
-                          <em>{p.sourceName}</em> duplicates{" "}
-                          <em>{p.targetName}</em>
-                        </span>
-                      ) : p.kind === "extract_action" ? (
-                        <span className="organize-text">
-                          Lift a task out of <em>{p.sourceName}</em>
-                        </span>
-                      ) : p.kind === "move_fragment" ? (
-                        <span className="organize-text">
-                          <em>{p.sourceName}</em> to <em>{p.targetName}</em>
-                        </span>
-                      ) : (
-                        <span className="organize-text">
-                          <em>{p.sourceName}</em> into <em>{p.targetName}</em>
-                        </span>
-                      )}
-                      <span className="organize-why">{p.reason}</span>
-                    </div>
-                    <div className="organize-actions">
-                      <button
-                        className="suggest-btn suggest-ok"
-                        onClick={() => void acceptOrganize(p.id)}
-                      >
-                        {p.kind === "dup_action" || p.kind === "dup_fragment"
-                          ? "Remove"
-                          : p.verb}
-                      </button>
-                      <button
-                        className="suggest-btn"
-                        onClick={() => dismissOrganize(p.id)}
-                      >
-                        Keep
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {!showOrganizeMore && mediumOrganize.length > 0 && (
-                  <button
-                    className="organize-more"
-                    onClick={() => setShowOrganizeMore(true)}
-                  >
-                    Show {mediumOrganize.length} more{" "}
-                    {mediumOrganize.length === 1 ? "suggestion" : "suggestions"}
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="organize-empty">
-                {organize === null
-                  ? "Scanning the board…"
-                  : "Nothing to tidy right now — the board is clean."}
-              </div>
-            )}
-          </div>
-        )}
 
         {distillOpen && (
           <DistillView
@@ -582,7 +494,14 @@ export function Capture() {
           </div>
         )}
 
-        {showSettings ? (
+        {!distillOpen && (showOrganize ? (
+          <OrganizeScreen
+            proposals={organize ?? []}
+            onBack={() => setShowOrganize(false)}
+            onAccept={(id) => void acceptOrganize(id)}
+            onDismiss={(id) => dismissOrganize(id)}
+          />
+        ) : showSettings ? (
           <SettingsScreen
             principles={data.principles}
             counts={{
@@ -794,7 +713,7 @@ export function Capture() {
               </>
             )}
           </>
-        )}
+        ))}
       </div>
 
       {editing && (

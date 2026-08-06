@@ -2132,12 +2132,11 @@ body {
 
 /* ------------------------------ organize ----------------------------- */
 
+/* The wand only exists when the scan has found something — it appears lit,
+   like a notification bell, and opens the full review screen. A clean board
+   keeps the header down to sync / share / settings. */
 .organize-btn {
   position: relative;
-}
-.organize-btn.has-proposals {
-  color: var(--accent);
-  border-color: var(--accent);
 }
 .organize-badge {
   position: absolute;
@@ -2155,97 +2154,58 @@ body {
   display: grid;
   place-items: center;
 }
-.organize-panel {
-  background: var(--card);
-  border: 1px solid var(--rule);
-  border-radius: 12px;
-  padding: 12px 12px 4px;
-  margin: 0 0 14px;
-  animation: rise 0.3s ease-out;
-}
-.organize-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.organize-title {
-  font-size: 13px;
-  font-weight: 700;
+
+/* The review screen — reads like a report: a one-line summary, then each
+   kind of finding under its own heading, one yes/no per row. */
+.org-summary {
+  font-size: 14.5px;
+  line-height: 1.55;
   color: var(--ink);
+  margin: 4px 0 0;
 }
-.organize-close {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  transition: 0.15s;
-}
-.organize-close:hover {
-  color: var(--ink);
-  background: var(--paper);
-}
-.organize-list {
+.org-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 46vh;
-  overflow-y: auto;
-  padding-bottom: 8px;
+  margin-top: 4px;
 }
-.organize-row {
+.org-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   border: 1px solid var(--rule);
   border-radius: 10px;
-  padding: 9px 11px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  padding: 10px 12px;
 }
-.organize-main {
+.org-body {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3px;
-  font-size: 13px;
 }
-.organize-verb {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-.organize-text {
+.org-line {
+  font-size: 13.5px;
+  line-height: 1.4;
   color: var(--ink);
-  line-height: 1.35;
 }
-.organize-text em {
+.org-line em {
   font-style: normal;
   font-weight: 600;
   color: var(--ink);
 }
-.organize-why {
+.org-why {
   font-size: 12px;
   color: var(--muted);
 }
-.organize-actions {
+.org-actions {
   display: flex;
   gap: 6px;
+  flex: none;
 }
-.organize-actions .suggest-btn {
-  flex: 1;
-}
-.organize-empty {
-  font-size: 13px;
-  color: var(--muted);
-  padding: 14px 2px 12px;
-  text-align: center;
+.org-actions .suggest-btn {
+  padding: 6px 10px;
+  white-space: nowrap;
 }
 
 .organize-dot {
@@ -2253,6 +2213,7 @@ body {
   height: 7px;
   border-radius: 50%;
   flex: none;
+  margin-top: 5px;
 }
 .organize-dot.high {
   background: var(--accent);
@@ -2261,7 +2222,7 @@ body {
   background: var(--muted);
   opacity: 0.55;
 }
-.organize-more {
+.org-more {
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -2270,11 +2231,12 @@ body {
   border: 1px dashed var(--rule);
   border-radius: 8px;
   padding: 8px 10px;
+  margin-top: 4px;
   cursor: pointer;
   touch-action: manipulation;
   transition: 0.15s;
 }
-.organize-more:hover {
+.org-more:hover {
   color: var(--ink);
   border-color: var(--muted);
 }
