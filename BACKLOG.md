@@ -32,18 +32,18 @@ The clarifying engine interrogated: it asked questions instead of proposing a re
 - **Board-aware clarifier**: pass thread names + active action texts so the engine can say "this connects to your thread X" or "you already have this as an action". The "acts on intent" layer.
 - **Settle reuses the conversation's draft**: the clarifier returns its draft as data (structured `chat` response), and settle confirms/refines that draft instead of cold-processing the transcript.
 
-## Tidy — on-demand board review (agreed, unbuilt)
+## ~~Tidy — on-demand board review~~ Built (as Organize)
 
 A **button**, not a section, not automatic. Press it when the board feels messy; it scans the whole board with the existing related engine (`related.ts`) and proposes:
 
-- **Thread ↔ thread merges** — two threads that phrase-match: "These are the same subject: *both mention 'espresso machine'*" → `[Merge into X]` `[Skip]`
-- **Duplicate actions** — the `bestActionDuplicate` engine already exists: `[Remove duplicate]` `[Skip]`
+- **Thread ↔ thread merges** — two threads that share a 3-content-word phrase: "These are the same subject: *both mention 'cold brew routine'*" → `[Merge]` `[Keep]`
+- **Duplicate actions** — the `bestActionDuplicate` engine: the newer copy is always the one removed → `[Remove]` `[Keep]`
+- **Duplicate fragments** — the same note pasted twice, same thread or across threads.
+- **Fold an action in** — an action that clearly belongs with a thread.
 
-Proposals appear in the existing suggestion-row UI. One tap merges or removes; the batch is undoable via the existing `captureSnapshot` machinery. Engine-only — no model, no quota.
+### Status
 
-Why on-demand and never automatic: an auto-running reviewer is the Related menu's noise at board scale. You press Tidy when you feel it. The engine stays phrase-exact on purpose — a merge moves your data, so a false positive is worse than a miss.
-
-Cost: low — every piece exists (`hitsFor`, `mergeThreads`, `undo`, the suggestion row).
+**Built.** Header wand button with a live count badge opens the Organize panel. `scanBoard` (`src/lib/organize.ts`) is engine-only — no model, no quota — with a strict shared-phrase bar, a hard cap of 12 proposals, deterministic ids, and dismissed pairs remembered by id (`capture:organize-dismissed`). Accepts route through the existing `useBoard` mutations and record `related_suggestion` corrections; the scan re-runs on every board change so the badge lights as soon as a capture duplicates something. 16 unit tests. Live-verified on the dev board (duplicate rocket-checklist notes caught, removed, panel re-scanned clean). One spec deviation: move-fragment and extract-action cards were dropped as noise-prone — extract-action already exists per-fragment in the thread view, and move-fragment was part of the Related menu removed earlier.
 
 ## Voice growth (candidates, none committed)
 
