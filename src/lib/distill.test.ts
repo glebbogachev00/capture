@@ -1,9 +1,33 @@
 import { describe, expect, it } from "vitest";
 import {
   countAssistantQuestions,
+  DISTILL_SETTLER_SYSTEM,
   hydrateDistill,
   EMPTY_DISTILL,
 } from "./distill";
+
+describe("DISTILL_SETTLER_SYSTEM", () => {
+  it("keeps feedback-only conversations out of actions", () => {
+    expect(DISTILL_SETTLER_SYSTEM).toMatch(
+      /only the user(?:'s|’s) turns can authorize an action/i
+    );
+    expect(DISTILL_SETTLER_SYSTEM).toMatch(
+      /feedback or discussion.+thread/i
+    );
+    expect(DISTILL_SETTLER_SYSTEM).toMatch(
+      /assistant.+fil(?:e|ing).+never.+action/i
+    );
+  });
+
+  it("requires explicit actions to be direct and user-facing", () => {
+    expect(DISTILL_SETTLER_SYSTEM).toMatch(
+      /short, direct, and user-facing/i
+    );
+    expect(DISTILL_SETTLER_SYSTEM).toMatch(
+      /never.+fil(?:e|ing).+(?:category|feedback)/i
+    );
+  });
+});
 
 describe("countAssistantQuestions", () => {
   it("counts nothing on an empty transcript", () => {

@@ -4,7 +4,10 @@ import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { NoProvidersError, chain, withFallback } from "@/lib/providers";
-import { countAssistantQuestions } from "@/lib/distill";
+import {
+  countAssistantQuestions,
+  DISTILL_SETTLER_SYSTEM,
+} from "@/lib/distill";
 
 /**
  * Distill — the clarifying engine.
@@ -94,29 +97,6 @@ Rules you never break:
 - Plain language. No lists, no bullets, no labels, no "great question".
 
 A note on question-counting: the app counts your questions mechanically and tells you how many you have already asked. That number is a hard budget, not a suggestion — when the budget is spent, you have no questions left, and you close with [ready] however rough the record is.`;
-
-const SETTLER = `You are the settling engine inside capture. A person has just had a clarifying conversation, and it is your job to turn the whole exchange into exactly one record of one of three kinds.
-
-- "action" when the conversation converged on something to close: a task, errand, decision, or commitment — a concrete thing to do.
-- "thread" when it converged on thinking to accumulate: an idea being developed, material for something, a topic still growing — with no single thing to do.
-- "intention" only when they declared something they are calling into being about themselves or their life — a state to live in, not a task and not a subject to think about. When torn between thread and intention, choose thread.
-
-Be conservative, not eager. Only make an action when the conversation actually settled on something to do; never invent a task that was not said. When torn between action and thread, choose thread — nothing gets lost there.
-
-The "clean" field is the whole conversation distilled: what it settled on, written in their voice, with their specifics kept and nothing invented. Break it into short paragraphs or bullets where it lists things, like the sort engine does.
-
-Set "actions" to the one to three imperative items actually agreed on when kind is action, otherwise empty.
-
-Reference examples:
-- "So the plan is to call the vet about Luna's shots, and I should also grab cat food this week" → "action", actions: ["Call the vet about Luna's shots", "Buy cat food this week"]
-- "I keep going back and forth on whether to start a newsletter and what it would even be about" → "thread"
-- "I want to actually enjoy my mornings instead of dreading them" → "intention"
-
-shelfLife is how long this stays worth looking at, and it only applies to actions:
-- "hours" for something tied to today.
-- "days" for ordinary errands and small follow-ups.
-- "weeks" for real work that takes a while.
-- "keep" for commitments to other people, money, deadlines, or anything with consequences if it silently vanished. When unsure, choose "keep".`;
 
 const POLISHER = `You are the proofreading pass inside capture, a personal thinking app. A person had a spoken conversation that speech-to-text transcribed, and the engine distilled it to the wording below.
 
@@ -363,7 +343,7 @@ export async function POST(request: Request) {
         model: tier.model,
         maxRetries: 0,
         schema: Settled,
-        system: SETTLER,
+        system: DISTILL_SETTLER_SYSTEM,
         prompt: transcript(body.turns),
         providerOptions: tier.providerOptions,
       });

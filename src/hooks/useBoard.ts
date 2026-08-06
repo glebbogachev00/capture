@@ -74,6 +74,11 @@ import {
 import type { SyncStore } from "@/lib/syncStore";
 import type { Draft, IoNote } from "@/app/Intentions";
 import { sourceOf, withLedger, type CaptureSource } from "@/lib/ledger";
+import {
+  activeFoldedSources,
+  foldThread as foldThreadRecords,
+  restoreFoldedThread as restoreFoldedThreadRecords,
+} from "@/lib/threadFold";
 
 /* Carries the server's explanation so the board can show it verbatim. */
 class SortError extends Error {}
@@ -671,22 +676,41 @@ export function useBoard(now: number) {
   const regenerate = async (board: Board, threadId: string): Promise<Board> => {
     const target = board.threads.find((t) => t.id === threadId);
     if (!target?.frags.length) return board;
+    const input = JSON.stringify({
+      name: target.name,
+      frags: target.frags.map((f) => ({ id: f.id, at: f.at, text: f.text })),
+    });
     setBusy("Updating what this thread says now");
-    let result = board;
     try {
       const { summary } = await requestSummary(target.name, target.frags);
-      result = {
-        ...board,
-        threads: board.threads.map((t) =>
-          t.id === threadId ? { ...t, summary } : t
-        ),
-      };
-      await commit(result);
+      const current = latest.current.threads.find((t) => t.id === threadId);
+      const currentInput = current
+        ? JSON.stringify({
+            name: current.name,
+            frags: current.frags.map((f) => ({
+              id: f.id,
+              at: f.at,
+              text: f.text,
+            })),
+          })
+        : "";
+      /* A fold, restore, move, edit, or rename landed while the model was
+         answering. Its summary belongs to the old input and must not write
+         that old board back over the newer state. */
+      if (current && currentInput === input) {
+        const result = {
+          ...latest.current,
+          threads: latest.current.threads.map((t) =>
+            t.id === threadId ? { ...t, summary } : t
+          ),
+        };
+        await commit(result);
+      }
     } catch {
       /* the fragments are saved; the summary can lag */
     }
     setBusy(null);
-    return result;
+    return latest.current;
   };
 
   /**
@@ -1504,17 +1528,33 @@ export function useBoard(now: number) {
     const from = latest.current.threads.find((t) => t.id === fromId);
     if (!into || !from) return;
 
-    const frags = [...into.frags, ...from.frags].sort((a, b) => a.at - b.at);
-    const next: Board = {
-      ...latest.current,
-      threads: latest.current.threads
-        .filter((t) => t.id !== fromId)
-        .map((t) => (t.id === intoId ? { ...t, frags } : t)),
-    };
+    const next = foldThreadRecords(latest.current, intoId, fromId, stamp());
     await commit(next);
     setNotice(from.name + " folded into " + into.name + ".");
     setTimeout(() => setNotice(null), 4500);
     await regenerate(next, intoId);
+  };
+
+  /** Recreate a retained fold source and return its original fragments. */
+  const restoreThreadFold = async (intoId: string, sourceId: string) => {
+    const into = latest.current.threads.find((t) => t.id === intoId);
+    const source = into
+      ? activeFoldedSources(into).find((t) => t.id === sourceId)
+      : undefined;
+    if (!into || !source) return;
+
+    const next = restoreFoldedThreadRecords(
+      latest.current,
+      intoId,
+      sourceId,
+      stamp()
+    );
+    if (next === latest.current) return;
+    await commit(next);
+    setNotice(source.name + " restored as its own thread.");
+    setTimeout(() => setNotice(null), 4500);
+    await regenerate(next, intoId);
+    await regenerate(latest.current, sourceId);
   };
 
   /* --------------------------- intentions -------------------------- */
@@ -2272,6 +2312,7 @@ export function useBoard(now: number) {
     extractAction,
     deleteThread,
     mergeThreads,
+    restoreThreadFold,
     expandIntention,
     saveDraft,
     discardDraft,

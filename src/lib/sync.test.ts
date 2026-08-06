@@ -4,9 +4,15 @@ import {
   mergeBoards,
   mergeSync,
   mergeTombstones,
+  stampChanges,
   type Tombstone,
 } from "@/lib/sync";
 import type { Action, Board, Frag, Thread } from "@/lib/model";
+import {
+  activeFoldedSources,
+  foldThread,
+  restoreFoldedThread,
+} from "@/lib/threadFold";
 
 const action = (id: string, over: Partial<Action> = {}): Action => ({
   id,
@@ -132,6 +138,172 @@ describe("tombstones", () => {
 });
 
 describe("mergeSync end to end", () => {
+  it("keeps fragments moved out of a folded source thread", () => {
+    const source = thread("source", [
+      frag("early", { text: "the earlier thread's note", updatedAt: 100 }),
+    ]);
+    const destination = thread("destination", [
+      frag("later", { text: "the destination note", updatedAt: 200 }),
+    ]);
+    const before = board({ threads: [source, destination] });
+    const folded = board({
+      threads: [
+        thread("destination", [...source.frags, ...destination.frags], {
+          updatedAt: 200,
+        }),
+      ],
+    });
+
+    const local = stampChanges(before, folded, 5_000);
+    expect(local.tombstones).toContainEqual({
+      kind: "thread",
+      id: "source",
+      deletedAt: 5_000,
+    });
+    expect(local.tombstones).not.toContainEqual({
+      kind: "frag",
+      id: "early",
+      deletedAt: 5_000,
+    });
+
+    const synced = mergeSync(
+      { board: local.board, tombstones: local.tombstones },
+      { board: before, tombstones: [] }
+    );
+    expect(synced.board.threads.map((t) => t.id)).toEqual(["destination"]);
+    expect(synced.board.threads[0]?.frags.map((f) => f.id)).toEqual([
+      "early",
+      "later",
+    ]);
+  });
+
+  it("keeps fold recovery metadata through a newer stale thread edit", () => {
+    const source = thread("source", [frag("from-source")], {
+      name: "Earlier thread",
+    });
+    const destination = thread("destination", [frag("already-there")]);
+    const before = board({ threads: [destination, source] });
+    const folded = stampChanges(
+      before,
+      foldThread(before, "destination", "source", 2_000),
+      2_000
+    );
+    const staleEdit = board({
+      threads: [
+        thread("destination", [frag("already-there")], {
+          name: "Renamed elsewhere",
+          updatedAt: 3_000,
+        }),
+        source,
+      ],
+    });
+
+    const synced = mergeSync(
+      { board: folded.board, tombstones: folded.tombstones },
+      { board: staleEdit, tombstones: [] }
+    );
+    const result = synced.board.threads.find((t) => t.id === "destination")!;
+    expect(result.name).toBe("Renamed elsewhere");
+    expect(result.frags.map((f) => f.id).sort()).toEqual([
+      "already-there",
+      "from-source",
+    ]);
+    expect(activeFoldedSources(result).map((f) => f.id)).toEqual(["source"]);
+    expect(synced.board.threads.some((t) => t.id === "source")).toBe(false);
+  });
+
+  it("unions concurrent folds into the same destination", () => {
+    const destination = thread("destination", [frag("base")]);
+    const first = thread("first", [frag("one")]);
+    const second = thread("second", [frag("two")]);
+    const before = board({ threads: [destination, first, second] });
+    const left = stampChanges(
+      before,
+      foldThread(before, "destination", "first", 2_000),
+      2_000
+    );
+    const right = stampChanges(
+      before,
+      foldThread(before, "destination", "second", 3_000),
+      3_000
+    );
+
+    const synced = mergeSync(
+      { board: left.board, tombstones: left.tombstones },
+      { board: right.board, tombstones: right.tombstones }
+    );
+    const result = synced.board.threads.find((t) => t.id === "destination")!;
+    expect(result.frags.map((f) => f.id).sort()).toEqual([
+      "base",
+      "one",
+      "two",
+    ]);
+    expect(activeFoldedSources(result).map((f) => f.id).sort()).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+
+  it("syncs a restoration without resurrecting stale fold metadata", () => {
+    const source = thread("source", [frag("from-source")]);
+    const destination = thread("destination", [frag("base")]);
+    const before = board({ threads: [destination, source] });
+    const folded = stampChanges(
+      before,
+      foldThread(before, "destination", "source", 2_000),
+      2_000
+    );
+    const restoredBoard = restoreFoldedThread(
+      folded.board,
+      "destination",
+      "source",
+      4_000
+    );
+    const restored = stampChanges(folded.board, restoredBoard, 4_000);
+
+    const synced = mergeSync(
+      {
+        board: restored.board,
+        tombstones: mergeTombstones(folded.tombstones, restored.tombstones),
+      },
+      { board: folded.board, tombstones: folded.tombstones }
+    );
+    const result = synced.board.threads.find((t) => t.id === "destination")!;
+    const recovered = synced.board.threads.find((t) => t.id === "source")!;
+    expect(activeFoldedSources(result)).toEqual([]);
+    expect(result.frags.map((f) => f.id)).toEqual(["base"]);
+    expect(recovered.frags.map((f) => f.id)).toEqual(["from-source"]);
+  });
+
+  it("treats a newer source edit as an implicit restoration", () => {
+    const source = thread("source", [frag("from-source")]);
+    const destination = thread("destination", [frag("base")]);
+    const before = board({ threads: [destination, source] });
+    const folded = stampChanges(
+      before,
+      foldThread(before, "destination", "source", 2_000),
+      2_000
+    );
+    const editedSource = thread(
+      "source",
+      [frag("from-source", { text: "edited offline", updatedAt: 4_000 })],
+      { updatedAt: 4_000 }
+    );
+
+    const synced = mergeSync(
+      { board: folded.board, tombstones: folded.tombstones },
+      { board: board({ threads: [destination, editedSource] }), tombstones: [] }
+    );
+    const result = synced.board.threads.find((t) => t.id === "destination")!;
+    expect(synced.board.threads.some((t) => t.id === "source")).toBe(true);
+    expect(activeFoldedSources(result)).toEqual([]);
+    expect(result.foldedFrom?.[0]).toMatchObject({
+      id: "source",
+      foldedAt: 2_000,
+      restoredAt: 4_000,
+    });
+  });
+
   it("converges when run twice (idempotent)", () => {
     const a = {
       board: board({ actions: [action("a1", { updatedAt: 100 })] }),

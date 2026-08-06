@@ -77,7 +77,23 @@ export type Thread = {
   name: string;
   summary: string;
   frags: Frag[];
+  /** Source threads retained by a user-approved fold, so the consolidation
+      can be reversed without reconstructing data from prose or history. */
+  foldedFrom?: FoldedThread[];
   updatedAt?: number;
+};
+
+/** A thread as it existed immediately before it was folded into another. */
+export type FoldedThread = {
+  id: string;
+  name: string;
+  summary: string;
+  frags: Frag[];
+  foldedFrom?: FoldedThread[];
+  updatedAt?: number;
+  foldedAt: number;
+  /** A restore is retained as history so sync cannot resurrect an old fold. */
+  restoredAt?: number;
 };
 
 /**

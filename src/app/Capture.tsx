@@ -45,6 +45,7 @@ import {
   SettingsScreen,
 } from "./Intentions";
 import { shareIntention, shareThread } from "@/lib/share";
+import { activeFoldedSources } from "@/lib/threadFold";
 import { useBoard } from "@/hooks/useBoard";
 
 export function Capture() {
@@ -127,6 +128,7 @@ export function Capture() {
     extractAction,
     deleteThread,
     mergeThreads,
+    restoreThreadFold,
     saveDraft,
     discardDraft,
     refreshSummary,
@@ -508,6 +510,9 @@ export function Capture() {
             onDeleteFrag={(fragId) => deleteFrag(thread.id, fragId)}
             others={data.threads.filter((t) => t.id !== thread.id)}
             onMerge={(fromId) => mergeThreads(thread.id, fromId)}
+            onRestoreFold={(sourceId) =>
+              restoreThreadFold(thread.id, sourceId)
+            }
             onMoveFrag={(fragId, toId) => moveFrag(thread.id, fragId, toId)}
             onMoveFragToNew={(fragId) => moveFragToNew(thread.id, fragId)}
             onCopyThread={() => copyWhole(shareThread(thread))}
@@ -985,6 +990,7 @@ function ThreadView({
   onDeleteFrag,
   others,
   onMerge,
+  onRestoreFold,
   onMoveFrag,
   onMoveFragToNew,
   onCopyThread,
@@ -1002,6 +1008,7 @@ function ThreadView({
   onDeleteFrag: (fragId: string) => void;
   others: Thread[];
   onMerge: (fromId: string) => void;
+  onRestoreFold: (sourceId: string) => void;
   onMoveFrag: (fragId: string, toId: string) => void;
   onMoveFragToNew: (fragId: string) => void;
   onCopyThread: () => void;
@@ -1014,6 +1021,9 @@ function ThreadView({
   const [confirming, setConfirming] = useState(false);
   const [merging, setMerging] = useState(false);
   const [more, setMore] = useState(false);
+  const foldedSources = activeFoldedSources(thread).filter(
+    (source) => !others.some((candidate) => candidate.id === source.id)
+  );
   /* The Related line stays collapsed until asked — a quiet affordance,
      never a list sitting in the thread. */
 
@@ -1169,6 +1179,24 @@ function ThreadView({
         <div className="state">
           <h4>Where this stands</h4>
           <p>{thread.summary}</p>
+        </div>
+      )}
+
+      {!!foldedSources.length && (
+        <div className="state">
+          <h4>Folded threads</h4>
+          <p>Their source details are retained here and can be restored.</p>
+          <div className="row-actions">
+            {foldedSources.map((source) => (
+              <button
+                className="ghost"
+                key={source.id}
+                onClick={() => onRestoreFold(source.id)}
+              >
+                Restore {source.name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

@@ -3,10 +3,10 @@
  * Probe: does the reworked Distill clarifier act on intent instead of
  * interrogating? (specs/distill-intelligence.md)
  *
- * Drives the REAL /api/distill chat op — the actual prompt, the actual
- * question budget, the actual provider chain — through five conversations:
- * the three in-app STARTERS, one concrete message, and one genuinely vague
- * one. Reports the spec's pass criteria per scenario.
+ * Drives the REAL /api/distill route — the actual prompts and provider chain.
+ * The chat op runs through five conversations; the settle op then checks that
+ * feedback-only discussion stays a thread while an explicit user-owned next
+ * step becomes a direct action.
  *
  * Usage:  node scripts/probe-distill.mjs [base-url]
  *   base-url defaults to http://localhost:3000. The dev server must be up
@@ -110,6 +110,24 @@ async function chat(turns) {
     throw new Error(`chat ${res.status}: ${body.error || res.statusText}`);
   }
   return await res.text();
+}
+
+async function settle(turns) {
+  const headers = { "Content-Type": "application/json" };
+  if (cookie) headers.Cookie = cookie;
+  const res = await fetch(`${BASE}/api/distill`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ op: "settle", turns }),
+  });
+  if (res.status === 401) {
+    throw new Error("unauthorized — could not log in. Is APP_PASSWORD set on the server?");
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(`settle ${res.status}: ${body.error || res.statusText}`);
+  }
+  return await res.json();
 }
 
 /* Normalise for word-overlap checks: lowercase, strip punctuation, collapse
@@ -248,6 +266,31 @@ const scenarios = [
   },
 ];
 
+const feedbackTurns = [
+  {
+    role: "user",
+    text: "Capture sometimes turns a long feedback conversation into a task even though I am only explaining what feels wrong. The conversation itself and all the product detail should be kept, but there is no task in this feedback.",
+  },
+  {
+    role: "assistant",
+    text: "I'd file this as product feedback under Distill classification and create an internal filing action for the team.",
+  },
+  {
+    role: "user",
+    text: "Yes, that captures the feedback I wanted to preserve.",
+  },
+];
+
+const explicitActionTurns = [
+  ...feedbackTurns.slice(0, 2),
+  {
+    role: "user",
+    text: "I will fix Capture's distill behavior for long feedback conversations.",
+  },
+];
+
+const metaAction = /\b(file|filing|categorize|category|save (?:this|the conversation) as|record this under)\b/i;
+
 async function main() {
   cookie = await sessionCookie();
   console.log(`Probing ${BASE}/api/distill — the real chain.`);
@@ -290,6 +333,39 @@ async function main() {
     `  ${draftOk ? "PASS" : "FAIL"}  CONCRETE draft stated by turn 2 (record kind + framing)`
   );
   if (!draftOk) all = false;
+
+  console.log("\nSETTLE REGRESSIONS");
+  const feedback = await settle(feedbackTurns);
+  const feedbackOk =
+    feedback.kind === "thread" &&
+    Array.isArray(feedback.actions) &&
+    feedback.actions.length === 0;
+  console.log(
+    `  ${feedbackOk ? "PASS" : "FAIL"}  feedback-only discussion → thread with no actions`
+  );
+  if (!feedbackOk) {
+    console.log(`    received: ${feedback.kind} · ${JSON.stringify(feedback.actions)}`);
+    all = false;
+  }
+
+  await sleep(SLEEP_MS);
+  const explicit = await settle(explicitActionTurns);
+  const actionText = Array.isArray(explicit.actions)
+    ? explicit.actions.join(" ")
+    : "";
+  const explicitOk =
+    explicit.kind === "action" &&
+    actionText.length > 0 &&
+    actionText.length <= 120 &&
+    /fix capture.*distill.*long feedback/i.test(actionText) &&
+    !metaAction.test(actionText);
+  console.log(
+    `  ${explicitOk ? "PASS" : "FAIL"}  explicit user-owned next step → short direct action`
+  );
+  if (!explicitOk) {
+    console.log(`    received: ${explicit.kind} · ${JSON.stringify(explicit.actions)}`);
+    all = false;
+  }
 
   console.log(
     all

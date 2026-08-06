@@ -19,8 +19,9 @@
  *    copy lives.
  */
 
-import type { Board, Frag, Thread } from "./model";
+import type { Board, FoldedThread, Frag, Thread } from "./model";
 import { mergeLedgers } from "./ledger";
+import { mergeFoldedSources } from "./threadFold";
 
 export type TombstoneKind =
   | "action"
@@ -83,7 +84,9 @@ function mergeList<T extends { id: string; updatedAt?: number; at?: number }>(
   return sort ? out.sort(sort) : out;
 }
 
-/** Threads: fields by LWW, fragments by LWW across BOTH sides. */
+/** Threads: ordinary fields by LWW; fragments and fold history merge
+    structurally across BOTH sides so recoverability cannot be overwritten by
+    an unrelated newer rename or summary. */
 function mergeThreads(a: Thread[], b: Thread[]): Thread[] {
   const byId = new Map<string, Thread>();
   for (const t of a) byId.set(t.id, t);
@@ -108,11 +111,17 @@ function mergeThreads(a: Thread[], b: Thread[]): Thread[] {
 
   const out: Thread[] = [];
   for (const t of byId.values()) {
+    const left = a.find((x) => x.id === t.id);
+    const right = b.find((x) => x.id === t.id);
     const own = [...frags.values()]
       .filter((x) => x.home === t.id)
       .map((x) => x.frag)
       .sort((x, y) => x.at - y.at);
-    out.push({ ...t, frags: own });
+    out.push({
+      ...t,
+      frags: own,
+      foldedFrom: mergeFoldedSources(left?.foldedFrom, right?.foldedFrom),
+    });
   }
   return out;
 }
@@ -151,10 +160,41 @@ export function applyTombstones(board: Board, tombstones: Tombstone[]): Board {
   };
 }
 
+/**
+ * A source edited after its fold tombstone legitimately resurrects under the
+ * newest-action rule. That is an implicit restore: mark the retained fold
+ * history so the destination cannot keep offering a no-op Restore control.
+ */
+function reconcileResurrectedFolds(board: Board): Board {
+  const active = new Map(board.threads.map((t) => [t.id, ts(t)]));
+  const reconcile = (sources: FoldedThread[] | undefined): FoldedThread[] =>
+    (sources ?? []).map((source) => {
+      const activeAt = active.get(source.id) ?? 0;
+      const restoredAt =
+        activeAt > source.foldedAt
+          ? Math.max(source.restoredAt ?? 0, activeAt)
+          : source.restoredAt;
+      return {
+        ...source,
+        foldedFrom: reconcile(source.foldedFrom),
+        ...(restoredAt ? { restoredAt } : {}),
+      };
+    });
+  return {
+    ...board,
+    threads: board.threads.map((thread) => ({
+      ...thread,
+      foldedFrom: reconcile(thread.foldedFrom),
+    })),
+  };
+}
+
 /** The full merge: tombstones, then boards, then deletions applied. */
 export function mergeSync(a: SyncState, b: SyncState): SyncState {
   const tombstones = mergeTombstones(a.tombstones, b.tombstones);
-  const board = applyTombstones(mergeBoards(a.board, b.board), tombstones);
+  const board = reconcileResurrectedFolds(
+    applyTombstones(mergeBoards(a.board, b.board), tombstones)
+  );
   return { board, tombstones };
 }
 
@@ -226,16 +266,31 @@ export function stampChanges(
 
   const threads = next.threads.map((t) => {
     const p = prev.threads.find((x) => x.id === t.id);
-    let changed = !p;
+    const threadFields = (x: Thread) => ({
+      id: x.id,
+      name: x.name,
+      summary: x.summary,
+      foldedFrom: x.foldedFrom ?? [],
+    });
+    let changed =
+      !p ||
+      !same(threadFields(p), threadFields(t)) ||
+      p.frags.length !== t.frags.length;
     const frags = t.frags.map((f) => {
       const pf = p?.frags.find((x) => x.id === f.id);
+      /* Check the board-wide home before the destination-local copy. A
+         moved fragment is absent from `p.frags` by definition, but it still
+         needs a fresh timestamp so its new home beats the old copy on sync. */
+      if (
+        prevFragHome.has(f.id) &&
+        prevFragHome.get(f.id) !== nextFragHome.get(f.id)
+      ) {
+        changed = true;
+        return stamp(f);
+      }
       if (!pf) {
         changed = true;
         return fresh(f);
-      }
-      if (prevFragHome.get(f.id) !== nextFragHome.get(f.id)) {
-        changed = true;
-        return stamp(f);
       }
       if (same(pf, f)) return f;
       changed = true;
@@ -248,9 +303,11 @@ export function stampChanges(
   for (const t of prev.threads)
     if (!next.threads.some((x) => x.id === t.id)) {
       tombstones.push({ kind: "thread", id: t.id, deletedAt: now });
-      for (const f of t.frags)
-        tombstones.push({ kind: "frag", id: f.id, deletedAt: now });
     }
+  /* A thread can disappear because it was folded into another thread. Its
+     fragment ids still exist in that case and must not be tombstoned: the
+     move stamp above is what tells sync their new home. Only fragments that
+     disappeared from the whole board are deletions. */
   for (const f of prevFragHome.keys())
     if (!nextFragHome.has(f))
       tombstones.push({ kind: "frag", id: f, deletedAt: now });
