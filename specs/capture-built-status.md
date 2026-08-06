@@ -74,6 +74,53 @@ Deferred. `related.ts` phrase-match suffices at personal scale.
 
 ---
 
+## EXPLORE LATER — boundaries & adjacent capabilities (GitHub scan)
+
+Not committed features. Patterns worth borrowing when the relevant sprint starts.
+Scanned 2026-08-06.
+
+### Human-in-the-loop approval (validates our core principle)
+- `pragati243/Praxis-Human-in-the-Loop-Approval-Agent` — classifies actions by risk,
+  auto-executes safe, halts for human sign-off on high-risk. Pattern: risk-tiered
+  autonomy. Capture already does this (deterministic = safe/auto-suggest, model = propose,
+  user approves). Borrow the *risk tier* idea: low-risk Tidy claims could apply with a
+  lighter confirm than ambiguous ones.
+- `TarunSinghChauhan/hitl-approval-agent` — explores where autonomous decisions need
+  sign-off. Confirms: every structural write in Capture needs approval. Keep.
+
+### Local-first agent experience
+- `Mintplex-Labs/anything-llm` (64k) — local-first agent workspace. Reference for how an
+  agent stays on-device. Capture's `CaptureVault/` + `graph.json` (planned) mirror this:
+  agent reads portable Markdown, not a locked DB.
+- `actualbudget/actual` (28k) — local-first finance, same ethos as Capture. Note: we
+  researched actual.inc earlier (local inference relay); Actual the app is the better
+  analog — plain-data, no lock-in.
+
+### Tool-calling / structured output (for Sprint 6 Assistant)
+- `rubra-ai/rubra` — open-weight tool-calling LLMs. Relevant if Capture ever runs a local
+  Assistant model. Otherwise the Hermes `<tool_call>` schema (in hermes-coworking skill)
+  already covers the format.
+- `Haaaiawd/Nexus-skills` — generates persistent knowledge maps (file structure, dependency
+  graphs) queryable by tool-calling LLMs. This is the *graph.json* idea from a codebase
+  angle: a derived, queryable index. Confirms graph-as-data (not UI) is a sound pattern.
+
+### On-device ML / multimodal (for media + vocal later)
+- `google-ai-edge/gallery` (24k) — on-device ML/GenAI use cases, try models locally.
+  Reference for running vision/voice models on-device instead of cloud tiers.
+- `google-research/project-guideline` — on-device ML enabling independence. Aligns with
+  Gleb's independence goal: keep inference local where possible.
+
+### PKM adjacent (what NOT to copy)
+- `TriliumNext/Trilium` (37k), `kenforthewin/atomic` (semantically-connected PKB) — confirm
+  the graph/PKM pattern we rejected. Useful only as "what Capture is deliberately not":
+  no wiki links, no knowledge graph UI, no semantic embedding as the primary surface.
+
+Lesson: the scan confirms Capture's constraints are right (local-first, approval-gated,
+graph-as-data). The only new idea worth adopting: **risk-tiered autonomy** (safe Tidy
+claims need lighter confirmation than ambiguous ones). Everything else we already do.
+
+---
+
 ## For the model
 - Start from the NOT BUILT list. The BUILT list is current as of commit `124cf7f`.
 - Do not rebuild Organize, ledger, bounded model, shrink, language parity.
