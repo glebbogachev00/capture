@@ -2129,3 +2129,118 @@ body {
     transition: none !important;
   }
 }
+
+/* ------------------------------ organize ----------------------------- */
+
+.organize-btn {
+  position: relative;
+}
+.organize-btn.has-proposals {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.organize-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.organize-panel {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 12px 12px 4px;
+  margin: 0 0 14px;
+  animation: rise 0.3s ease-out;
+}
+.organize-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.organize-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.organize-close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  transition: 0.15s;
+}
+.organize-close:hover {
+  color: var(--ink);
+  background: var(--paper);
+}
+.organize-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+.organize-row {
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.organize-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+}
+.organize-verb {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.organize-text {
+  color: var(--ink);
+  line-height: 1.35;
+}
+.organize-text em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--ink);
+}
+.organize-why {
+  font-size: 12px;
+  color: var(--muted);
+}
+.organize-actions {
+  display: flex;
+  gap: 6px;
+}
+.organize-actions .suggest-btn {
+  flex: 1;
+}
+.organize-empty {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 14px 2px 12px;
+  text-align: center;
+}

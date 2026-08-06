@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Share2, Settings } from "lucide-react";
+import { Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2, Wand2, X } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
 import {
@@ -58,6 +58,9 @@ export function Capture() {
   /* Input device plumbing: the hidden file picker, and the speech recogniser
      (shared with Distill — the mic routes to whichever surface is open). */
   const fileRef = useRef<HTMLInputElement>(null);
+  /* The Organize panel is presentational; the proposals themselves live in
+     useBoard. Opens over the input, under the header. */
+  const [showOrganize, setShowOrganize] = useState(false);
 
   /* Everything else — the board, every operation on it, and the derived
      views — comes from useBoard. This destructure is the whole logic
@@ -76,6 +79,10 @@ export function Capture() {
     suggestion,
     acceptSuggestion,
     dismissSuggestion,
+    organize,
+    runOrganize,
+    acceptOrganize,
+    dismissOrganize,
     notice,
     swept,
     tab,
@@ -257,6 +264,27 @@ export function Capture() {
               </button>
             )}
             <button
+              className={
+                "icon-btn organize-btn" +
+                (organize?.length ? " has-proposals" : "")
+              }
+              onClick={() => {
+                runOrganize();
+                setShowOrganize(!showOrganize);
+              }}
+              aria-label="Organize — tidy the board"
+              title={
+                organize?.length
+                  ? `Organize — ${organize.length} ${organize.length === 1 ? "proposal" : "proposals"} to review`
+                  : "Organize — scan the board for duplicates and merges"
+              }
+            >
+              <Wand2 size={18} strokeWidth={1.7} />
+              {!!organize?.length && (
+                <span className="organize-badge">{organize.length}</span>
+              )}
+            </button>
+            <button
               className="icon-btn"
               onClick={() => {
                 setShowSettings(true);
@@ -269,6 +297,69 @@ export function Capture() {
             </button>
           </div>
         </div>
+
+        {showOrganize && (
+          <div className="organize-panel">
+            <div className="organize-head">
+              <span className="organize-title">
+                Organize
+                {!!organize?.length &&
+                  ` — ${organize.length} ${organize.length === 1 ? "way" : "ways"} to tidy`}
+              </span>
+              <button
+                className="organize-close"
+                onClick={() => setShowOrganize(false)}
+                aria-label="Close Organize"
+              >
+                <X size={16} strokeWidth={1.8} />
+              </button>
+            </div>
+            {organize && organize.length > 0 ? (
+              <div className="organize-list">
+                {organize.map((p) => (
+                  <div className="organize-row" key={p.id}>
+                    <div className="organize-main">
+                      <span className="organize-verb">{p.verb}</span>
+                      {p.kind === "dup_action" || p.kind === "dup_fragment" ? (
+                        <span className="organize-text">
+                          <em>{p.sourceName}</em> duplicates{" "}
+                          <em>{p.targetName}</em>
+                        </span>
+                      ) : (
+                        <span className="organize-text">
+                          <em>{p.sourceName}</em> into <em>{p.targetName}</em>
+                        </span>
+                      )}
+                      <span className="organize-why">{p.reason}</span>
+                    </div>
+                    <div className="organize-actions">
+                      <button
+                        className="suggest-btn suggest-ok"
+                        onClick={() => void acceptOrganize(p.id)}
+                      >
+                        {p.kind === "dup_action" || p.kind === "dup_fragment"
+                          ? "Remove"
+                          : p.verb}
+                      </button>
+                      <button
+                        className="suggest-btn"
+                        onClick={() => dismissOrganize(p.id)}
+                      >
+                        Keep
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="organize-empty">
+                {organize === null
+                  ? "Scanning the board…"
+                  : "Nothing to tidy right now — the board is clean."}
+              </div>
+            )}
+          </div>
+        )}
 
         {distillOpen && (
           <DistillView

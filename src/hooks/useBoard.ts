@@ -85,12 +85,21 @@ import {
   type CaptureSource,
 } from "@/lib/ledger";
 import { deriveRules, type LearnedRule } from "@/lib/rules";
+import {
+  scanBoard,
+  type OrganizeProposal,
+} from "@/lib/organize";
 
 /* Carries the server's explanation so the board can show it verbatim. */
 class SortError extends Error {}
 
 /* Which learned rules this device has cleared, by normalised key. */
 const FORGOTTEN_RULES_KEY = "capture:forgotten-rules";
+
+/* Organize proposals this device has waved off, by deterministic id — a
+   dismissed pair stays dismissed, like a cleared rule. Device-local on
+   purpose (v1): the proposal ids embed item ids that are stable per device. */
+const ORGANIZE_DISMISSED_KEY = "capture:organize-dismissed";
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
@@ -203,6 +212,14 @@ export function useBoard(now: number) {
      the same rules, but a clearing is a personal "stop telling me that"
      and is remembered here, in this browser. */
   const [forgottenRules, setForgottenRules] = useState<string[]>([]);
+
+  /* ---------------------------- organize ---------------------------- */
+
+  /* The board-wide tidy scan. null = never run this session; the button
+     scans on first open. A dismissal is remembered by proposal id so the
+     same pair never reappears on a later scan. */
+  const [organize, setOrganize] = useState<OrganizeProposal[] | null>(null);
+  const dismissedOrganize = useRef<string[]>([]);
 
   /* ---------------------------- distill ---------------------------- */
   const [distillOpen, setDistillOpen] = useState(false);
@@ -528,6 +545,13 @@ export function useBoard(now: number) {
       try {
         const frRaw = await get(FORGOTTEN_RULES_KEY);
         if (frRaw) setForgottenRules(JSON.parse(frRaw));
+      } catch {
+        /* first run */
+      }
+      // Waved-off Organize proposals survive a reload too.
+      try {
+        const oRaw = await get(ORGANIZE_DISMISSED_KEY);
+        if (oRaw) dismissedOrganize.current = JSON.parse(oRaw);
       } catch {
         /* first run */
       }
@@ -1285,6 +1309,108 @@ export function useBoard(now: number) {
         accepted: false,
         context,
         rule,
+      })
+    );
+  };
+
+  /* ---------------------------- organize ---------------------------- */
+
+  /** Run the board-wide tidy scan against the latest board. Local and
+      instant — no model, no quota — so it always re-scans on open. */
+  const runOrganize = () => {
+    setOrganize(scanBoard(latest.current, dismissedOrganize.current));
+  };
+
+  /* Keep the badge live: re-scan whenever the board changes, so a capture
+     that duplicates something lights the count without being asked. The scan
+     is local and instant, and a dismissed pair stays filtered out. */
+  useEffect(() => {
+    if (!loaded) return;
+    setOrganize(scanBoard(latest.current, dismissedOrganize.current));
+  }, [loaded, data]);
+
+  /**
+   * Apply one Organize proposal. Each kind routes through the same handlers
+   * the capture suggestions use, so the outcome and its ledger record are
+   * consistent with the rest of the app — then the panel re-scans so a
+   * resolved pair never lingers.
+   */
+  const acceptOrganize = async (id: string) => {
+    const p = organize?.find((x) => x.id === id);
+    if (!p) return;
+    if (p.kind === "dup_action") {
+      const a = latest.current.actions.find((x) => x.id === p.sourceId);
+      await dropImages(a?.imgs);
+      await commit(
+        noteCorrection(
+          {
+            ...latest.current,
+            actions: latest.current.actions.filter(
+              (x) => x.id !== p.sourceId
+            ),
+          },
+          {
+            proposalKind: "related_suggestion",
+            accepted: true,
+            context: `dropped a duplicate of ${p.targetName}`,
+            rule: `Drop duplicates of "${p.targetName}"`,
+          }
+        )
+      );
+      setNotice(`Removed the duplicate of ${p.targetName}.`);
+      setTimeout(() => setNotice(null), 4000);
+    } else if (p.kind === "dup_fragment") {
+      setNotice(`Removed the duplicate of ${p.targetName}.`);
+      setTimeout(() => setNotice(null), 4000);
+      await deleteFrag(p.sourceThreadId!, p.sourceFragId!);
+      await commit(
+        noteCorrection(latest.current, {
+          proposalKind: "related_suggestion",
+          accepted: true,
+          context: `dropped a duplicate of ${p.targetName}`,
+          rule: `Drop duplicates of "${p.targetName}"`,
+        })
+      );
+    } else if (p.kind === "fold_action") {
+      await foldActionIntoThread(p.sourceId, p.targetId);
+      await commit(
+        noteCorrection(latest.current, {
+          proposalKind: "related_suggestion",
+          accepted: true,
+          context: `moved an action into ${p.targetName}`,
+          rule: `Move actions into "${p.targetName}"`,
+        })
+      );
+    } else {
+      await mergeThreads(p.targetId, p.sourceId);
+      await commit(
+        noteCorrection(latest.current, {
+          proposalKind: "related_suggestion",
+          accepted: true,
+          context: `merged a thread into ${p.targetName}`,
+          rule: `Merge threads into "${p.targetName}"`,
+        })
+      );
+    }
+    /* The board changed — the [loaded, data] effect re-scans, and the
+       resolved pair is gone from the panel on the next render. */
+  };
+
+  /** Wave an Organize proposal off — remembered by id so it never reappears,
+      and recorded in the correction ledger as a waved-off merge. */
+  const dismissOrganize = (id: string) => {
+    const p = organize?.find((x) => x.id === id);
+    if (!p) return;
+    setOrganize((cur) =>
+      cur ? cur.filter((x) => x.id !== id) : cur
+    );
+    dismissedOrganize.current = [...dismissedOrganize.current, id];
+    void set(ORGANIZE_DISMISSED_KEY, JSON.stringify(dismissedOrganize.current));
+    void commit(
+      noteCorrection(latest.current, {
+        proposalKind: "related_suggestion",
+        accepted: false,
+        context: `kept "${p.sourceName}" separate from "${p.targetName}"`,
       })
     );
   };
@@ -2472,6 +2598,10 @@ export function useBoard(now: number) {
     suggestion,
     acceptSuggestion,
     dismissSuggestion,
+    organize,
+    runOrganize,
+    acceptOrganize,
+    dismissOrganize,
     notice,
     swept,
     tab,

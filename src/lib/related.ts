@@ -377,6 +377,14 @@ export function bestActionDuplicate(
   return { kind: "action", id: hit.id, name: hit.name, reason: hit.reason };
 }
 
+/** The longest shared run of content words between two plain texts, or
+    "" when they share nothing distinctive. Exported so a board-wide scan
+    can compare whole items (two threads, say) with the same matching rules
+    without re-implementing them. */
+export function sharedPhrase(a: string, b: string): string {
+  return longestSharedRun(contentWords(a), contentWords(b));
+}
+
 /** A fragment that a piece of text clearly duplicates. */
 export type FragDuplicate = {
   threadId: string;
