@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Action, Board, Frag, Thread } from "./model";
 import { EMPTY } from "./model";
-import { ORGANIZE_CAP, scanBoard } from "./organize";
+import { HIGH_CAP, scanBoard } from "./organize";
 
 /* ------------------------------ builders ------------------------------ */
 
@@ -66,6 +66,24 @@ describe("scanBoard — duplicate actions", () => {
     expect(out[0].verb).toBe("Drop duplicate");
   });
 
+  it("rates a two-word overlap medium and a three-word run high", () => {
+    const two = board({
+      actions: [
+        act("a1", "Reserve a dentist appointment for Tuesday", 200),
+        act("a2", "Book a dentist appointment for Friday", 100),
+      ],
+    });
+    expect(scanBoard(two)[0].confidence).toBe("medium");
+
+    const three = board({
+      actions: [
+        act("a1", "Book a dentist appointment for Tuesday", 200),
+        act("a2", "Book a dentist appointment for Tuesday", 100),
+      ],
+    });
+    expect(scanBoard(three)[0].confidence).toBe("high");
+  });
+
   it("proposes exactly one per pair, never the original", () => {
     const b = board({
       actions: [
@@ -105,11 +123,12 @@ describe("scanBoard — duplicate fragments", () => {
     const out = scanBoard(b);
     expect(out).toHaveLength(1);
     expect(out[0].kind).toBe("dup_fragment");
+    expect(out[0].confidence).toBe("high");
     expect(out[0].sourceFragId).toBe("fnew");
     expect(out[0].sourceThreadId).toBe("t1");
   });
 
-  it("proposes across threads and names the other thread", () => {
+  it("proposes across threads and names the kept thread", () => {
     const b = board({
       threads: [
         thread("ta", "Coffee", [
@@ -124,22 +143,7 @@ describe("scanBoard — duplicate fragments", () => {
     expect(out).toHaveLength(1);
     expect(out[0].sourceFragId).toBe("fb");
     expect(out[0].targetId).toBe("ta");
-    /* The cross-thread note names the kept fragment's home thread. */
     expect(out[0].targetName).toContain("Coffee");
-  });
-
-  it("needs a three-word run, not any overlap", () => {
-    const b = board({
-      threads: [
-        thread("t1", "Coffee", [
-          frag("fa", "Espresso machine grinder calibration notes", 200),
-          frag("fb", "Espresso machine grinder overview", 100),
-        ]),
-      ],
-    });
-    /* "espresso machine grinder" is a shared three-word run — still a dup. */
-    const out = scanBoard(b).filter((p) => p.kind === "dup_fragment");
-    expect(out).toHaveLength(1);
   });
 });
 
@@ -170,14 +174,12 @@ describe("scanBoard — fold an action into a thread", () => {
     const folds = out.filter((p) => p.kind === "fold_action");
     expect(dups).toHaveLength(1);
     expect(dups[0].sourceId).toBe("a1");
-    /* The duplicate's source is never also offered a fold, but the keeper
-       (a2) may still belong in the thread — that fold is legitimately shown. */
     expect(folds.some((f) => f.sourceId === "a1")).toBe(false);
   });
 });
 
 describe("scanBoard — merge threads", () => {
-  it("proposes merging two threads on the same subject, keeping the bigger", () => {
+  it("merges two threads on the same subject (three-word phrase), keeping the bigger", () => {
     const b = board({
       threads: [
         thread("big", "Cold brew", [
@@ -192,12 +194,13 @@ describe("scanBoard — merge threads", () => {
     });
     const merges = scanBoard(b).filter((p) => p.kind === "merge_threads");
     expect(merges).toHaveLength(1);
+    expect(merges[0].confidence).toBe("high");
     expect(merges[0].sourceId).toBe("small");
     expect(merges[0].targetId).toBe("big");
     expect(merges[0].verb).toBe("Merge");
   });
 
-  it("never merges threads that merely touch on a two-word phrase", () => {
+  it("rates a two-word phrase as a medium merge, shown behind Show more", () => {
     const b = board({
       threads: [
         thread("ta", "Cold brew", [
@@ -208,7 +211,33 @@ describe("scanBoard — merge threads", () => {
         ]),
       ],
     });
-    expect(kinds(b).filter((k) => k === "merge_threads")).toEqual([]);
+    const merges = scanBoard(b).filter((p) => p.kind === "merge_threads");
+    expect(merges).toHaveLength(1);
+    expect(merges[0].confidence).toBe("medium");
+  });
+
+  it("merges on shared rare words even without a phrase", () => {
+    /* Rare words only mean rare on a big enough board (maxShare > 2), so the
+       board carries filler items that share nothing with the two threads. */
+    const filler: Action[] = [];
+    for (let i = 0; i < 10; i++) {
+      filler.push(act(`fill${i}`, `Complete quux${i} task`, 1000 + i));
+    }
+    const b = board({
+      actions: filler,
+      threads: [
+        thread("ta", "Notes", [
+          frag("fa", "perfectionism and burnout and overwhelm research notes", 200),
+        ]),
+        thread("tb", "Reflections", [
+          frag("fb", "burnout perfectionism overwhelm reflections", 100),
+        ]),
+      ],
+    });
+    const merges = scanBoard(b).filter((p) => p.kind === "merge_threads");
+    expect(merges).toHaveLength(1);
+    expect(merges[0].confidence).toBe("medium");
+    expect(merges[0].reason).toContain("perfectionism");
   });
 
   it("ignores threads with no fragments", () => {
@@ -219,6 +248,110 @@ describe("scanBoard — merge threads", () => {
       ],
     });
     expect(kinds(b).filter((k) => k === "merge_threads")).toEqual([]);
+  });
+});
+
+describe("scanBoard — move a fragment to the right thread", () => {
+  it("moves a misplaced note to the thread it belongs with", () => {
+    const b = board({
+      threads: [
+        thread("career", "Career", [
+          frag("fc", "Espresso machine grinder calibration notes", 200),
+          frag("fc2", "Portfolio review went well", 100),
+        ]),
+        thread("equip", "Equipment", [
+          frag("fe", "Espresso machine settings overview", 50),
+        ]),
+      ],
+    });
+    /* The move is one-way: the career fragment is misplaced (its own thread
+       has nothing else on the subject), and the equipment thread keeps its
+       single-fragment home — a lone fragment is a merge's claim, not a
+       move's, so the directions never propose each other. */
+    const moves = scanBoard(b).filter((p) => p.kind === "move_fragment");
+    expect(moves).toHaveLength(1);
+    expect(moves[0].confidence).toBe("medium");
+    expect(moves[0].sourceThreadId).toBe("career");
+    expect(moves[0].sourceFragId).toBe("fc");
+    expect(moves[0].targetId).toBe("equip");
+    expect(moves[0].verb).toBe("Move");
+  });
+
+  it("never moves a fragment that also matches its own thread", () => {
+    const b = board({
+      threads: [
+        thread("a", "Cold brew", [
+          frag("fa", "Cold brew experiments with new beans", 200),
+          frag("fb", "cold brew routine notes", 100),
+        ]),
+        thread("c", "Routine", [
+          frag("fc", "cold brew routine overview", 50),
+        ]),
+      ],
+    });
+    expect(kinds(b).filter((k) => k === "move_fragment")).toEqual([]);
+  });
+});
+
+describe("scanBoard — extract a task out of a fragment", () => {
+  it("extracts a fragment that opens with a task marker", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Vet", [
+          frag("f1", "I need to call the vet about Luna's shots", 100),
+        ]),
+      ],
+    });
+    const extracts = scanBoard(b).filter((p) => p.kind === "extract_action");
+    expect(extracts).toHaveLength(1);
+    expect(extracts[0].confidence).toBe("medium");
+    expect(extracts[0].sourceFragId).toBe("f1");
+    expect(extracts[0].verb).toBe("Extract");
+  });
+
+  it("never extracts a fragment that does not read as a task", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Market", [
+          frag("f1", "The market seems fine today", 100),
+        ]),
+      ],
+    });
+    expect(kinds(b).filter((k) => k === "extract_action")).toEqual([]);
+  });
+
+  it("never extracts frame phrases like 'I have to admit' or 'Please note'", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Notes", [
+          frag("f1", "I have to admit the market looks fine", 100),
+          frag("f2", "Please note the deadline moved", 90),
+        ]),
+      ],
+    });
+    expect(kinds(b).filter((k) => k === "extract_action")).toEqual([]);
+  });
+
+  it("a duplicate source is never also moved or extracted", () => {
+    /* fb duplicates fa (three-word run) → dup claims fb, so the copy is
+       never also offered as a move or an extract even though it reads like
+       a task. The KEPT original (fa) may still earn its own proposals. */
+    const b = board({
+      threads: [
+        thread("ta", "Notes", [
+          frag("fa", "I need to call the vet about Luna's shots", 100),
+          frag("fb", "I need to call the vet about Luna's shots again", 200),
+        ]),
+      ],
+    });
+    const out = scanBoard(b);
+    const dups = out.filter((p) => p.kind === "dup_fragment");
+    expect(dups).toHaveLength(1);
+    expect(dups[0].sourceFragId).toBe("fb");
+    expect(out.filter((p) => p.kind === "move_fragment")).toEqual([]);
+    /* The kept original can be extracted — that is a separate, valid claim. */
+    const extracts = out.filter((p) => p.kind === "extract_action");
+    expect(extracts.map((p) => p.sourceFragId)).toEqual(["fa"]);
   });
 });
 
@@ -247,17 +380,15 @@ describe("scanBoard — dismissal and determinism", () => {
     expect(second).toEqual(first);
   });
 
-  it("caps the list so the panel shows the strong claims", () => {
+  it("caps strong claims first, medium behind them", () => {
     const actions: Action[] = [];
-    for (let i = 0; i < ORGANIZE_CAP + 1; i++) {
+    for (let i = 0; i < HIGH_CAP + 1; i++) {
       const word = `gizmo${i}`;
       actions.push(act(`new${i}`, `Oversee ${word} wiring today`, 200 + i));
       actions.push(act(`old${i}`, `Oversee ${word} wiring later`, 100 + i));
     }
     const out = scanBoard(board({ actions }));
-    expect(out.length).toBeLessThanOrEqual(ORGANIZE_CAP);
-    expect(out.filter((p) => p.kind === "dup_action").length).toBe(
-      ORGANIZE_CAP
-    );
+    expect(out.length).toBe(HIGH_CAP);
+    expect(out.every((p) => p.confidence === "high")).toBe(true);
   });
 });

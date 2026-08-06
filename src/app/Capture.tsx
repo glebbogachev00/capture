@@ -59,8 +59,10 @@ export function Capture() {
      (shared with Distill — the mic routes to whichever surface is open). */
   const fileRef = useRef<HTMLInputElement>(null);
   /* The Organize panel is presentational; the proposals themselves live in
-     useBoard. Opens over the input, under the header. */
+     useBoard. Opens over the input, under the header. Medium-confidence
+     proposals sit behind "Show more" until the user asks for them. */
   const [showOrganize, setShowOrganize] = useState(false);
+  const [showOrganizeMore, setShowOrganizeMore] = useState(false);
 
   /* Everything else — the board, every operation on it, and the derived
      views — comes from useBoard. This destructure is the whole logic
@@ -172,6 +174,13 @@ export function Capture() {
     clearRule,
   } = useBoard(now);
 
+  /* Strong claims show in the panel (and light the badge); medium ones sit
+     behind "Show more", so the scan is alive without being noisy. */
+  const highOrganize = (organize ?? []).filter((p) => p.confidence === "high");
+  const mediumOrganize = (organize ?? []).filter(
+    (p) => p.confidence === "medium"
+  );
+
   /* Input device plumbing: the hidden file picker, and the speech recogniser
      (shared with Distill — the mic routes to whichever surface is open).
      Read through the ref by useDictation, so the destination is always the
@@ -266,22 +275,23 @@ export function Capture() {
             <button
               className={
                 "icon-btn organize-btn" +
-                (organize?.length ? " has-proposals" : "")
+                (highOrganize.length ? " has-proposals" : "")
               }
               onClick={() => {
                 runOrganize();
+                setShowOrganizeMore(false);
                 setShowOrganize(!showOrganize);
               }}
               aria-label="Organize — tidy the board"
               title={
-                organize?.length
-                  ? `Organize — ${organize.length} ${organize.length === 1 ? "proposal" : "proposals"} to review`
+                highOrganize.length
+                  ? `Organize — ${highOrganize.length} ${highOrganize.length === 1 ? "suggestion" : "suggestions"} to review`
                   : "Organize — scan the board for duplicates and merges"
               }
             >
               <Wand2 size={18} strokeWidth={1.7} />
-              {!!organize?.length && (
-                <span className="organize-badge">{organize.length}</span>
+              {!!highOrganize.length && (
+                <span className="organize-badge">{highOrganize.length}</span>
               )}
             </button>
             <button
@@ -316,14 +326,30 @@ export function Capture() {
             </div>
             {organize && organize.length > 0 ? (
               <div className="organize-list">
-                {organize.map((p) => (
+                {(showOrganizeMore ? organize : highOrganize).map((p) => (
                   <div className="organize-row" key={p.id}>
                     <div className="organize-main">
-                      <span className="organize-verb">{p.verb}</span>
+                      <span className="organize-verb">
+                        <span
+                          className={
+                            "organize-dot " +
+                            (p.confidence === "high" ? " high" : " medium")
+                          }
+                        />
+                        {p.verb}
+                      </span>
                       {p.kind === "dup_action" || p.kind === "dup_fragment" ? (
                         <span className="organize-text">
                           <em>{p.sourceName}</em> duplicates{" "}
                           <em>{p.targetName}</em>
+                        </span>
+                      ) : p.kind === "extract_action" ? (
+                        <span className="organize-text">
+                          Lift a task out of <em>{p.sourceName}</em>
+                        </span>
+                      ) : p.kind === "move_fragment" ? (
+                        <span className="organize-text">
+                          <em>{p.sourceName}</em> to <em>{p.targetName}</em>
                         </span>
                       ) : (
                         <span className="organize-text">
@@ -350,6 +376,15 @@ export function Capture() {
                     </div>
                   </div>
                 ))}
+                {!showOrganizeMore && mediumOrganize.length > 0 && (
+                  <button
+                    className="organize-more"
+                    onClick={() => setShowOrganizeMore(true)}
+                  >
+                    Show {mediumOrganize.length} more{" "}
+                    {mediumOrganize.length === 1 ? "suggestion" : "suggestions"}
+                  </button>
+                )}
               </div>
             ) : (
               <div className="organize-empty">

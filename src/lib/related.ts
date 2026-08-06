@@ -102,13 +102,6 @@ const GENERIC = new Set([
     only: "text" can never match inside "context". */
 const tokens = (s: string) => s.toLowerCase().match(/[a-z][a-z0-9']*/g) || [];
 
-/** Content words: tokens that survive the stop/generic lists and are long
-    enough to mean something. */
-function contentWords(s: string): string[] {
-  return tokens(s).filter(
-    (w) => w.length >= 4 && !STOP.has(w) && !GENERIC.has(w)
-  );
-}
 
 function itemText(a: Action): string {
   return [a.text, a.src].filter(Boolean).join(" ");
@@ -377,12 +370,29 @@ export function bestActionDuplicate(
   return { kind: "action", id: hit.id, name: hit.name, reason: hit.reason };
 }
 
+/** Content words of a text — the unit of matching. Exported so the
+    board-wide scan can count rarity across the whole board with the exact
+    same token rules the connections use. */
+export function contentWords(s: string): string[] {
+  return tokens(s).filter(
+    (w) => w.length >= 4 && !STOP.has(w) && !GENERIC.has(w)
+  );
+}
+
 /** The longest shared run of content words between two plain texts, or
     "" when they share nothing distinctive. Exported so a board-wide scan
     can compare whole items (two threads, say) with the same matching rules
     without re-implementing them. */
 export function sharedPhrase(a: string, b: string): string {
   return longestSharedRun(contentWords(a), contentWords(b));
+}
+
+/** The distinctive words two texts have in common (order-insensitive), or
+    [] when they share none. A word is included even if it is not rare —
+    rarity is the caller's decision, since it needs the whole board. */
+export function sharedContentWords(a: string, b: string): string[] {
+  const wa = new Set(contentWords(a));
+  return [...new Set(contentWords(b))].filter((w) => wa.has(w));
 }
 
 /** A fragment that a piece of text clearly duplicates. */

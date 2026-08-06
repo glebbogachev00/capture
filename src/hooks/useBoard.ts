@@ -1381,6 +1381,26 @@ export function useBoard(now: number) {
           rule: `Move actions into "${p.targetName}"`,
         })
       );
+    } else if (p.kind === "move_fragment") {
+      await moveFrag(p.sourceThreadId!, p.sourceFragId!, p.targetId);
+      await commit(
+        noteCorrection(latest.current, {
+          proposalKind: "related_suggestion",
+          accepted: true,
+          context: `moved a note into ${p.targetName}`,
+          rule: `Move notes into "${p.targetName}"`,
+        })
+      );
+    } else if (p.kind === "extract_action") {
+      /* extractAction records its own correction and notice. Extraction leaves
+         the note in place, so a success also remembers the proposal by id —
+         otherwise the same card would re-propose on every scan. A failure
+         keeps the card, so the user can retry. */
+      const ok = await extractAction(p.sourceThreadId!, p.sourceFragId!);
+      if (ok) {
+        dismissedOrganize.current = [...dismissedOrganize.current, p.id];
+        void set(ORGANIZE_DISMISSED_KEY, JSON.stringify(dismissedOrganize.current));
+      }
     } else {
       await mergeThreads(p.targetId, p.sourceId);
       await commit(
@@ -1824,10 +1844,13 @@ export function useBoard(now: number) {
         `${count(items.length, "action")} taken from this note. The note stays here.`
       );
       setTimeout(() => setNotice(null), 5000);
+      setBusy(null);
+      return true;
     } catch (error) {
       setErr(reasonOf(error) + " Nothing was added.");
+      setBusy(null);
+      return false;
     }
-    setBusy(null);
   };
 
   const deleteThread = async (id: string) => {

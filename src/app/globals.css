@@ -2212,6 +2212,9 @@ body {
   font-size: 13px;
 }
 .organize-verb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -2243,4 +2246,35 @@ body {
   color: var(--muted);
   padding: 14px 2px 12px;
   text-align: center;
+}
+
+.organize-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+.organize-dot.high {
+  background: var(--accent);
+}
+.organize-dot.medium {
+  background: var(--muted);
+  opacity: 0.55;
+}
+.organize-more {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--paper);
+  border: 1px dashed var(--rule);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: 0.15s;
+}
+.organize-more:hover {
+  color: var(--ink);
+  border-color: var(--muted);
 }
