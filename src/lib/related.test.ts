@@ -4,6 +4,7 @@ import {
   bestActionDuplicate,
   bestFragmentDuplicate,
   bestThreadHome,
+  phraseAsWritten,
   relatedTo,
   relatedToText,
 } from "./related";
@@ -479,5 +480,44 @@ describe("bestFragmentDuplicate", () => {
         "Rocket maintenance checklist — checking the rocket before launch day."
       )?.fragId
     ).toBe("t1-f0");
+  });
+});
+
+describe("phraseAsWritten", () => {
+  it("expands a content-word run back to the raw wording", () => {
+    expect(
+      phraseAsWritten("step step", "Here's the clean step-by-step requirement")
+    ).toBe("step-by-step");
+    expect(
+      phraseAsWritten("source self", "coming back to the source of self")
+    ).toBe("source of self");
+  });
+
+  it("keeps the user's casing", () => {
+    expect(
+      phraseAsWritten("north star", "The North Star for this quarter")
+    ).toBe("North Star");
+  });
+
+  it("returns a literal phrase unchanged", () => {
+    expect(
+      phraseAsWritten("boiler service", "book the boiler service")
+    ).toBe("boiler service");
+  });
+
+  it("picks the tightest window when the words recur", () => {
+    expect(
+      phraseAsWritten(
+        "espresso machine",
+        "espresso beans for the machine — the espresso machine needs them"
+      )
+    ).toBe("espresso machine");
+  });
+
+  it("falls back to the bare phrase when the text no longer carries it", () => {
+    expect(phraseAsWritten("cold brew", "something else entirely")).toBe(
+      "cold brew"
+    );
+    expect(phraseAsWritten("", "anything")).toBe("");
   });
 });

@@ -387,6 +387,52 @@ export function sharedPhrase(a: string, b: string): string {
   return longestSharedRun(contentWords(a), contentWords(b));
 }
 
+/**
+ * The matched phrase as the text actually writes it.
+ *
+ * A shared phrase is a run of CONTENT words, so it can read like machine
+ * output: "step-by-step" matches as "step step", "source of self" as
+ * "source self". Quoting that at the user explains nothing. This expands
+ * the run back to the raw substring — the phrase words in order, small
+ * words allowed between — so the quote is language the user wrote. Falls
+ * back to the bare phrase if the text no longer carries it.
+ */
+export function phraseAsWritten(phrase: string, text: string): string {
+  const want = phrase.split(" ").filter(Boolean);
+  if (!want.length) return phrase;
+  const toks: { w: string; start: number; end: number }[] = [];
+  for (const m of text.matchAll(/[a-zA-Z][a-zA-Z0-9']*/g)) {
+    toks.push({
+      w: m[0].toLowerCase(),
+      start: m.index,
+      end: m.index + m[0].length,
+    });
+  }
+  /* The tightest window carrying the words in order; up to four filler
+     tokens keeps "step by step" together without quoting half a sentence. */
+  let best: { start: number; end: number } | null = null;
+  for (let s = 0; s < toks.length; s++) {
+    if (toks[s].w !== want[0]) continue;
+    let need = 1;
+    let last = s;
+    for (
+      let j = s + 1;
+      j < toks.length && need < want.length && j - s < want.length + 4;
+      j++
+    ) {
+      if (toks[j].w === want[need]) {
+        need++;
+        last = j;
+      }
+    }
+    if (need < want.length) continue;
+    const win = { start: toks[s].start, end: toks[last].end };
+    if (!best || win.end - win.start < best.end - best.start) best = win;
+  }
+  if (!best) return phrase;
+  return text.slice(best.start, best.end).replace(/\s+/g, " ").trim();
+}
+
 /** The distinctive words two texts have in common (order-insensitive), or
     [] when they share none. A word is included even if it is not rare —
     rarity is the caller's decision, since it needs the whole board. */

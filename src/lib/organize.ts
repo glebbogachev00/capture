@@ -32,6 +32,7 @@ import {
   bestActionDuplicate,
   bestFragmentDuplicate,
   bestThreadHome,
+  phraseAsWritten,
   sharedPhrase,
 } from "./related";
 
@@ -190,7 +191,7 @@ export function scanBoard(
       sourceName: NAME(a.text),
       targetId: dup.id,
       targetName: NAME(dup.name),
-      reason: `both mention "${phrase}"`,
+      reason: `both say "${phraseAsWritten(phrase, a.text)}"`,
       score: 100 + phraseWords(phrase) * 10,
       origin: "local",
     });
@@ -222,7 +223,7 @@ export function scanBoard(
         targetName:
           NAME(dup.name) +
           (crossThread ? ` (in "${dup.threadName}")` : ""),
-        reason: `both mention "${phrase}"`,
+        reason: `both say "${phraseAsWritten(phrase, f.text)}"`,
         score: 100 + phraseWords(phrase) * 10,
         origin: "local",
       });
@@ -249,7 +250,7 @@ export function scanBoard(
       sourceName: NAME(a.text),
       targetId: hit.id,
       targetName: NAME(hit.name),
-      reason: `belongs with "${phrase}"`,
+      reason: `the thread already talks about "${phraseAsWritten(phrase, a.text)}"`,
       score: 90 + phraseWords(phrase) * 10,
       origin: "local",
     });
@@ -282,7 +283,7 @@ export function scanBoard(
         sourceFragId: f.id,
         targetId: home.id,
         targetName: NAME(home.name),
-        reason: `belongs with "${phrase}" in "${home.name}"`,
+        reason: `that thread already talks about "${phraseAsWritten(phrase, f.text)}"`,
         score: 80 + phraseWords(phrase) * 10,
         origin: "local",
       });
