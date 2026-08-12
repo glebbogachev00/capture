@@ -65,6 +65,7 @@ import {
   computeSuggestion,
   type Suggestion,
 } from "@/lib/boardOps";
+import { arrivedIn, arrivedNote } from "@/lib/arrived";
 import { parseCommandPrefix } from "@/lib/command";
 import {
   TOMBSTONE_KEY,
@@ -127,6 +128,10 @@ export function useBoard(now: number) {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [landed, setLanded] = useState<string | null>(null);
+  /* What the last capture created, so the board can wash those rows once —
+     the banner says a capture landed; this shows WHERE. Cleared with the
+     banner, and by the animation's own end on each row. */
+  const [landedIds, setLandedIds] = useState<string[]>([]);
   /* The "this also belongs with X" proposal, shown under the landed line
      until it is acted on, dismissed, or the landed window closes. */
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
@@ -352,9 +357,17 @@ export function useBoard(now: number) {
         maxTs(merged.board) !== maxTs(latest.current) ||
         merged.tombstones.length !== tombstones.current.length;
       if (changed) {
+        /* Say what actually came in. The merge has always known; staying
+           silent made "synced" and "three notes arrived" look identical.
+           Additions only — an edit shows itself where it happened. */
+        const note = arrivedNote(arrivedIn(latest.current, merged.board));
         latest.current = merged.board;
         setData(merged.board);
         tombstones.current = merged.tombstones;
+        if (note) {
+          setNotice(note);
+          setTimeout(() => setNotice(null), 5000);
+        }
         try {
           await set(KEY, JSON.stringify(merged.board));
           await set(TOMBSTONE_KEY, JSON.stringify(merged.tombstones));
@@ -456,6 +469,7 @@ export function useBoard(now: number) {
       /* disk hiccup; next commit retries */
     }
     setLanded(null);
+    setLandedIds([]);
     setSuggestion(null);
     /* The capture box gets its words back too — Undo returns the draft as
        it was, not just the board. A brand-new draft already being typed is
@@ -934,13 +948,14 @@ export function useBoard(now: number) {
         ...latest.current,
         actions: latest.current.actions.filter((x) => x.id !== a.id),
       };
-      const { next, targetId, landed, source } = applySorted(
+      const { next, targetId, landed, source, landedIds: fresh } = applySorted(
         out,
         a.imgs || [],
         a.at,
         board
       );
       setLanded(landed);
+      setLandedIds(fresh);
       setTab(out.kind === "action" ? "actions" : "threads");
       // Snapshot right before the re-sort lands — Undo reverts exactly this,
       // and puts the raw words back in the box.
@@ -960,6 +975,7 @@ export function useBoard(now: number) {
     /* Same widened window as the main capture — Undo lives here too. */
     setTimeout(() => {
       setLanded(null);
+      setLandedIds([]);
       setSuggestion(null);
     }, 9000);
   };
@@ -1035,7 +1051,7 @@ export function useBoard(now: number) {
         return;
       }
 
-      const { next, targetId, landed, source } = applySorted(
+      const { next, targetId, landed, source, landedIds: fresh } = applySorted(
         out,
         imgIds,
         at,
@@ -1059,6 +1075,7 @@ export function useBoard(now: number) {
         imgs: imgIds.length ? imgIds : undefined,
       });
       setLanded(landed);
+      setLandedIds(fresh);
       setTab(out.kind === "action" ? "actions" : "threads");
       setText("");
       setPics([]);
@@ -1091,6 +1108,7 @@ export function useBoard(now: number) {
     /* Same widened window as the main capture — Undo lives here too. */
     setTimeout(() => {
       setLanded(null);
+      setLandedIds([]);
       setSuggestion(null);
     }, 9000);
   };
@@ -2724,6 +2742,7 @@ export function useBoard(now: number) {
     busy,
     err,
     landed,
+    landedIds,
     suggestion,
     acceptSuggestion,
     dismissSuggestion,

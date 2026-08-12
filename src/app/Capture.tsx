@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { BrushCleaning, Copy, Image as ImageIcon, Layers, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
+import { BrushCleaning, Check, Copy, Image as ImageIcon, Layers, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
 import {
@@ -55,6 +55,10 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 /** Where the grouped-view toggle is remembered, in the same kv store as the
     board — a view preference that survives reloads on this device. */
 const GROUP_VIEW_KEY = "capture:groupView:v1";
+
+/** How long a ticked action shows itself done before it leaves. Long enough
+    to read as a finish, short enough that nobody waits on it. */
+const TICK_MS = 420;
 
 export function Capture() {
   /* The ticking clock the countdowns and shelf lives derive from. */
@@ -105,6 +109,7 @@ export function Capture() {
     busy,
     err,
     landed,
+    landedIds,
     suggestion,
     acceptSuggestion,
     dismissSuggestion,
@@ -251,6 +256,7 @@ export function Capture() {
       key={a.id}
       a={a}
       faded={faded}
+      landed={landedIds.includes(a.id)}
       now={now}
       shelfOpen={shelfFor === a.id}
       onToggle={() => toggleAction(a.id)}
@@ -305,7 +311,11 @@ export function Capture() {
                   : "Sync this device with the hub"
               }
             >
-              <RefreshCw size={18} strokeWidth={1.7} />
+              <RefreshCw
+                key={sync?.ok ? sync.at : 0}
+                size={18}
+                strokeWidth={1.7}
+              />
             </button>
             {!showSettings && !draft && (
               <button
@@ -770,7 +780,12 @@ export function Capture() {
                   </div>
                 )}
                 {active.map((t) => (
-                  <TCard key={t.id} t={t} onOpen={() => setOpen(t.id)} />
+                  <TCard
+                    key={t.id}
+                    t={t}
+                    landed={landedIds.includes(t.id)}
+                    onOpen={() => setOpen(t.id)}
+                  />
                 ))}
 
                 {!!resting.length && (
@@ -965,6 +980,7 @@ function SearchResults({
 function Row({
   a,
   faded,
+  landed,
   now,
   shelfOpen,
   onToggle,
@@ -980,6 +996,8 @@ function Row({
 }: {
   a: Action;
   faded?: boolean;
+  /** This action is what the last capture created — wash it once. */
+  landed?: boolean;
   now: number;
   shelfOpen: boolean;
   onToggle: () => void;
@@ -997,6 +1015,16 @@ function Row({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(a.text);
   const [more, setMore] = useState(false);
+  /* Ticking used to delete the action mid-tap: the row was gone before your
+     finger lifted, so the most-repeated gesture in the app had no payoff.
+     The box fills, the text strikes through, and the row folds away — then
+     the board commits. Reduced motion still gets the beat, just no slide. */
+  const [ticked, setTicked] = useState(false);
+  const tick = () => {
+    if (ticked) return;
+    setTicked(true);
+    setTimeout(onToggle, TICK_MS);
+  };
 
   const commit = () => {
     if (draft.trim()) onEditText(draft.trim());
@@ -1004,9 +1032,21 @@ function Row({
   };
 
   return (
-    <div className={"act" + (faded ? " is-faded" : "")}>
-
-      <button className="box" onClick={onToggle} aria-label="Mark done" />
+    <div
+      className={
+        "act" +
+        (faded ? " is-faded" : "") +
+        (landed && !ticked ? " focus" : "") +
+        (ticked ? " is-done is-ticking" : "")
+      }
+    >
+      <button
+        className={"box" + (ticked ? " done" : "")}
+        onClick={tick}
+        aria-label="Mark done"
+      >
+        {ticked && <Check size={13} strokeWidth={3} />}
+      </button>
       <div className="act-body">
         {editing ? (
           <input
@@ -1108,22 +1148,35 @@ function Row({
 function TCard({
   t,
   resting,
+  landed,
   onOpen,
 }: {
   t: Thread;
   resting?: boolean;
+  /** This thread is where the last capture went — wash it once. */
+  landed?: boolean;
   onOpen: () => void;
 }) {
   const last = t.frags.at(-1);
+  const bars = t.frags.slice(-22);
   return (
-    <button className={"tcard" + (resting ? " resting" : "")} onClick={onOpen}>
+    <button
+      className={
+        "tcard" + (resting ? " resting" : "") + (landed ? " focus" : "")
+      }
+      onClick={onOpen}
+    >
       <div className="tname">{t.name}</div>
       <div className="tsum">
         {t.summary || (last?.text || "").slice(0, 120) + "…"}
       </div>
       <div className="sed">
-        {t.frags.slice(-22).map((f, i, arr) => (
+        {bars.map((f, i, arr) => (
           <i
+            /* The newest bar settles in rather than appearing — a layer of
+               sediment landing. Only when this thread just took the capture,
+               so the strip is still still on every other render. */
+            className={landed && i === arr.length - 1 ? "settling" : undefined}
             key={f.id}
             style={{
               width: Math.min(100, 22 + f.text.length / 7) + "%",

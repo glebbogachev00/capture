@@ -355,6 +355,28 @@ body {
 .box.done {
   background: var(--accent);
   border-color: var(--accent);
+  color: var(--card);
+}
+/* The tick's finish line: the row holds its struck-through, filled state for
+   a beat, then folds away. The board commits when the fold ends. */
+.act.is-ticking {
+  animation: act-tick 420ms ease-in forwards;
+  overflow: hidden;
+}
+@keyframes act-tick {
+  0% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 1;
+    max-height: 120px;
+  }
+  100% {
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
 }
 .act-body {
   flex: 1;
@@ -367,8 +389,9 @@ body {
 .act.is-faded .act-text {
   color: var(--muted);
 }
-/* Landed here from a Related action row: the action glows for a moment so
-   you can see exactly where you are, like a fragment landed on from search. */
+/* Where a capture just landed — the row washes green for a moment, so you
+   see the place and not only the banner saying it went somewhere. Same
+   wash a fragment gets when a search lands on it. */
 .act.focus {
   border-radius: 9px;
   animation: frag-focus 2.6s ease-out;
@@ -574,6 +597,21 @@ body {
   border-radius: 1px;
   background: var(--accent);
 }
+/* A new layer of sediment settling: only the bar the last capture added
+   draws itself in, and only once. The strip is otherwise perfectly still. */
+.sed i.settling {
+  animation: sed-settle 460ms ease-out;
+  transform-origin: left center;
+}
+@keyframes sed-settle {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
 
 .state {
   background: var(--accent-soft);
@@ -632,6 +670,19 @@ body {
 .frag.focus {
   border-top-color: var(--accent);
   animation: frag-focus 2.6s ease-out;
+}
+/* The thread a capture just joined takes the same wash. The card has its
+   own background, so it fades from the wash back to the card colour. */
+.tcard.focus {
+  animation: tcard-focus 2.6s ease-out;
+}
+@keyframes tcard-focus {
+  0% {
+    background: var(--accent-soft);
+  }
+  100% {
+    background: var(--card);
+  }
 }
 @keyframes frag-focus {
   0% {
@@ -1393,6 +1444,18 @@ body {
 .icon-btn.sync-btn.synced {
   color: var(--accent);
   border-color: var(--accent);
+}
+/* A single half-turn when a sync lands: the one confirmation you can see
+   from across the room, and the only motion in the header. The icon is
+   keyed on the sync timestamp, so each landing remounts it and replays
+   this once — no state, no class to take back off. */
+.icon-btn.sync-btn.synced svg {
+  animation: sync-turn 520ms ease-in-out;
+}
+@keyframes sync-turn {
+  to {
+    transform: rotate(180deg);
+  }
 }
 .icon-btn.sync-btn.sync-bad {
   color: #c4452b;
