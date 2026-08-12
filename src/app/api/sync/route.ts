@@ -40,6 +40,14 @@ export async function GET(request: Request) {
     );
   }
   const stored = await getSync();
+  /* A poll that already knows this revision gets a two-field answer instead
+     of the whole board — the client polls every 10s, and almost every poll
+     finds nothing new. Any mismatch (including a reset hub) falls through
+     to the full payload. */
+  const known = new URL(request.url).searchParams.get("rev");
+  if (known !== null && Number(known) === stored.rev) {
+    return NextResponse.json({ unchanged: true, rev: stored.rev });
+  }
   return NextResponse.json(stored);
 }
 

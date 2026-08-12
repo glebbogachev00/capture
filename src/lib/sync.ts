@@ -40,10 +40,23 @@ export const TOMBSTONE_KEY = "capture:tombstones:v1";
 /** An item's freshness: updatedAt where set, else its creation time. */
 const ts = (x: { updatedAt?: number; at?: number }) => x.updatedAt ?? x.at ?? 0;
 
-/** Tombstones merge to the newest deletedAt per kind+id. */
-export function mergeTombstones(a: Tombstone[], b: Tombstone[]): Tombstone[] {
+/** How long a deletion is remembered. A tombstone's whole job is to reach
+    the other device before an old copy resurrects the item; a device that
+    hasn't synced in a month is restoring from another era anyway. Without
+    a horizon, every deletion ever made rides every sync forever — measured
+    at nearly half the payload on a small board. */
+export const TOMBSTONE_TTL = 30 * 24 * 60 * 60 * 1000;
+
+/** Tombstones merge to the newest deletedAt per kind+id; ancient ones age
+    out (see TOMBSTONE_TTL). `now` is injectable for tests. */
+export function mergeTombstones(
+  a: Tombstone[],
+  b: Tombstone[],
+  now = Date.now()
+): Tombstone[] {
   const byKey = new Map<string, Tombstone>();
   for (const t of [...a, ...b]) {
+    if (now - t.deletedAt > TOMBSTONE_TTL) continue;
     const key = t.kind + ":" + t.id;
     const cur = byKey.get(key);
     if (!cur || t.deletedAt > cur.deletedAt) byKey.set(key, t);
@@ -132,10 +145,13 @@ export function mergeBoards(a: Board, b: Board): Board {
   };
 }
 
-/** Remove everything a tombstone has claimed. */
+/** Remove everything a tombstone has claimed. Indexed once up front: this
+    runs on every pull, and a linear scan per item made it O(items × stones). */
 export function applyTombstones(board: Board, tombstones: Tombstone[]): Board {
+  const byKey = new Map<string, Tombstone>();
+  for (const t of tombstones) byKey.set(t.kind + ":" + t.id, t);
   const gone = (kind: TombstoneKind, id: string, updatedAt: number) => {
-    const tb = tombstones.find((t) => t.kind === kind && t.id === id);
+    const tb = byKey.get(kind + ":" + id);
     return !!tb && tb.deletedAt >= updatedAt;
   };
   return {
@@ -154,9 +170,10 @@ export function applyTombstones(board: Board, tombstones: Tombstone[]): Board {
   };
 }
 
-/** The full merge: tombstones, then boards, then deletions applied. */
-export function mergeSync(a: SyncState, b: SyncState): SyncState {
-  const tombstones = mergeTombstones(a.tombstones, b.tombstones);
+/** The full merge: tombstones, then boards, then deletions applied.
+    `now` feeds the tombstone horizon and is injectable for tests. */
+export function mergeSync(a: SyncState, b: SyncState, now = Date.now()): SyncState {
+  const tombstones = mergeTombstones(a.tombstones, b.tombstones, now);
   const board = applyTombstones(mergeBoards(a.board, b.board), tombstones);
   return { board, tombstones };
 }

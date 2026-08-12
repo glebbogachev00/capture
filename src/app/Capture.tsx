@@ -1386,17 +1386,18 @@ function FragView({
     }
   }, [focus]);
 
+  /* Keyed on the image ids, not the frag object: every sync merge rebuilds
+     the thread's frag objects, and keying on `f` re-read every image in the
+     open thread from IndexedDB on each 10s poll. */
+  const imgKey = (f.imgs || []).join(",");
   useEffect(() => {
     (async () => {
-      const out: string[] = [];
-      for (const id of f.imgs || []) {
-        try {
-          const v = await get(IMG(id));
-          if (v) out.push(v);
-        } catch {
-          /* gone */
-        }
-      }
+      const ids = imgKey ? imgKey.split(",") : [];
+      const out = (
+        await Promise.all(
+          ids.map((id) => get(IMG(id)).catch(() => null))
+        )
+      ).filter((v): v is string => !!v);
       setSrcs(out);
       /* An image above the focused note can land after the first scroll and
          nudge the layout; bring the note back into view once images settle.
@@ -1406,7 +1407,7 @@ function FragView({
         root.current?.scrollIntoView({ behavior: "auto", block: "center" });
       }
     })();
-  }, [f, focus]);
+  }, [imgKey, focus]);
 
   return (
     <div

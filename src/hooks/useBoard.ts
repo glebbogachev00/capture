@@ -16,7 +16,7 @@
  * reactive state React renders and the ref the handlers read.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stamp } from "@/lib/clock";
 import { get, set } from "@/lib/storage";
 import {
@@ -246,13 +246,21 @@ export function useBoard(now: number) {
      flows (submit/resort) take the snapshot — summary refreshes and fades
      never do, so Undo always reverts something the user watched land,
      never a background change. */
+  /* Only the image IDS ride in the snapshot — the bytes were written to
+     IndexedDB before the sort ran and are never garbage-collected, so undo
+     re-reads them. Holding the data URLs here pinned ~300KB per photo in
+     memory for the rest of the session. */
   const captureSnapshot = useRef<{
     board: Board;
     tombstones: Tombstone[];
     text?: string;
-    pics?: { id: string; src: string }[];
+    picIds?: string[];
   } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
+
+  /** The hub revision this device last saw, so a poll can ask "anything
+      newer than N?" and get a two-field answer instead of the whole board. */
+  const hubRev = useRef<number | null>(null);
 
   /** Send our state to the hub and adopt its merged answer. */
   const pushNow = useCallback(async () => {
@@ -269,6 +277,7 @@ export function useBoard(now: number) {
       });
       if (!res.ok) throw new Error("sync failed");
       const stored = (await res.json()) as SyncStore;
+      hubRev.current = stored.rev ?? null;
       /* The hub merged OUR push with whatever else it holds — a superset of
          what we sent. Adopt it, but merge against anything that changed
          locally while the request was in flight so that newer edits win. */
@@ -309,9 +318,19 @@ export function useBoard(now: number) {
    */
   const pullNow = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch("/api/sync");
+      const res = await fetch(
+        hubRev.current === null ? "/api/sync" : `/api/sync?rev=${hubRev.current}`
+      );
       if (!res.ok) return false;
-      const remote = (await res.json()) as SyncStore;
+      const remote = (await res.json()) as SyncStore & { unchanged?: boolean };
+      /* Nothing new on the hub since we last looked: the poll is over before
+         any parse-and-merge work begins. Local edits still push on their own
+         debounce, so skipping here loses nothing. */
+      if (remote.unchanged) {
+        setSync({ ok: true, at: stamp() });
+        return false;
+      }
+      hubRev.current = remote.rev ?? null;
       const merged = mergeSync(
         { board: latest.current, tombstones: tombstones.current },
         { board: remote.board, tombstones: remote.tombstones }
@@ -443,7 +462,20 @@ export function useBoard(now: number) {
        left alone rather than clobbered. */
     if (!text.trim() && !pics.length) {
       setText(snap.text ?? "");
-      setPics(snap.pics ?? []);
+      /* The bytes come back from IndexedDB — the snapshot holds only ids. */
+      const restored = (
+        await Promise.all(
+          (snap.picIds ?? []).map(async (id) => {
+            try {
+              const src = await get(IMG(id));
+              return src ? { id, src } : null;
+            } catch {
+              return null;
+            }
+          })
+        )
+      ).filter((p): p is { id: string; src: string } => !!p);
+      setPics(restored);
     }
     setNotice("Undone — back to how it was.");
     setTimeout(() => setNotice(null), 4000);
@@ -565,6 +597,9 @@ export function useBoard(now: number) {
      Offline is fine — the next commit just keeps everything local. */
   useEffect(() => {
     if (!loaded) return;
+    /* eslint-disable-next-line react-hooks/set-state-in-effect -- the
+       canonical subscribe-to-external-system effect: every setState inside
+       pullNow happens after a network await, never synchronously. */
     void pullNow();
     const onVisible = () => {
       if (document.visibilityState === "visible") void pullNow();
@@ -872,7 +907,7 @@ export function useBoard(now: number) {
       board: latest.current,
       tombstones: tombstones.current,
       text,
-      pics,
+      picIds: pics.map((p) => p.id),
     };
     setCanUndo(true);
     await commit(next);
@@ -1035,7 +1070,7 @@ export function useBoard(now: number) {
         board: latest.current,
         tombstones: tombstones.current,
         text,
-        pics,
+        picIds: pics.map((p) => p.id),
       };
       setCanUndo(true);
       await commit(filed);
@@ -2048,14 +2083,21 @@ export function useBoard(now: number) {
    * control: there is no need to say what to share when you are already
    * looking at it, and no row anywhere grows a share button.
    */
-  const shareable = shareableFor(
-    data,
-    openIntention
-      ? { kind: "intention", id: openIntention }
-      : open
-        ? { kind: "thread", id: open }
-        : { kind: "tab", tab },
-    now
+  /* Memoized because it builds the full markdown of the open view — typing
+     in the capture box re-renders this hook per keystroke, and rebuilding a
+     long thread's export each time was measurable jank. */
+  const shareable = useMemo(
+    () =>
+      shareableFor(
+        data,
+        openIntention
+          ? { kind: "intention", id: openIntention }
+          : open
+            ? { kind: "thread", id: open }
+            : { kind: "tab", tab },
+        now
+      ),
+    [data, openIntention, open, tab, now]
   );
 
   /* A thread share carries its photos as real files in the OS sheet — the
@@ -2624,24 +2666,34 @@ export function useBoard(now: number) {
 
   /* --------------------------- derivations -------------------------- */
 
-  const live = data.actions.filter((a) => !a.done && !a.faded);
-  const fadedList = data.actions.filter((a) => a.faded && !a.done);
-  const active = data.threads.filter(
-    (t) => now - (t.frags.at(-1)?.at || 0) < DORMANT
+  /* All memoized: this hook re-renders on every keystroke in the capture
+     box, and these must not recompute (or change identity — the grouped
+     lens memoizes on `live`) unless the board itself moved. */
+  const live = useMemo(
+    () => data.actions.filter((a) => !a.done && !a.faded),
+    [data.actions]
   );
-  const resting = data.threads.filter(
-    (t) => now - (t.frags.at(-1)?.at || 0) >= DORMANT
+  const fadedList = useMemo(
+    () => data.actions.filter((a) => a.faded && !a.done),
+    [data.actions]
+  );
+  const active = useMemo(
+    () => data.threads.filter((t) => now - (t.frags.at(-1)?.at || 0) < DORMANT),
+    [data.threads, now]
+  );
+  const resting = useMemo(
+    () => data.threads.filter((t) => now - (t.frags.at(-1)?.at || 0) >= DORMANT),
+    [data.threads, now]
   );
   const thread = data.threads.find((t) => t.id === open);
   const intention = data.intentions.find((i) => i.id === openIntention);
-  const hits = search(data, debouncedQuery);
+  const hits = useMemo(() => search(data, debouncedQuery), [data, debouncedQuery]);
   const searching = debouncedQuery.trim().length > 0;
   /* The bounded personal model, derived fresh from the correction ledger:
      advisory sentences the sort engine weighs, capped, clearable. */
-  const learnedRules: LearnedRule[] = deriveRules(
-    data.corrections ?? [],
-    forgottenRules,
-    now
+  const learnedRules: LearnedRule[] = useMemo(
+    () => deriveRules(data.corrections ?? [], forgottenRules, now),
+    [data.corrections, forgottenRules, now]
   );
 
   /** Forget a learned rule for good: it stops being injected into the sort

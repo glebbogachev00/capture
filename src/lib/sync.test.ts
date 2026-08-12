@@ -5,6 +5,7 @@ import {
   mergeSync,
   mergeTombstones,
   stampChanges,
+  TOMBSTONE_TTL,
   type Tombstone,
 } from "@/lib/sync";
 import type { Action, Board, Frag, Thread } from "@/lib/model";
@@ -102,7 +103,8 @@ describe("tombstones", () => {
   it("a delete tombstone removes the item everywhere", () => {
     const state = mergeSync(
       { board: board({ actions: [action("a1", { updatedAt: 100 })] }), tombstones: [] },
-      { board: board({}), tombstones: [{ kind: "action", id: "a1", deletedAt: 500 }] }
+      { board: board({}), tombstones: [{ kind: "action", id: "a1", deletedAt: 500 }] },
+      1000
     );
     expect(state.board.actions).toHaveLength(0);
   });
@@ -118,9 +120,19 @@ describe("tombstones", () => {
   it("tombstones merge keeping the newest deletedAt", () => {
     const merged = mergeTombstones(
       [{ kind: "action", id: "a1", deletedAt: 100 }],
-      [{ kind: "action", id: "a1", deletedAt: 300 }]
+      [{ kind: "action", id: "a1", deletedAt: 300 }],
+      1000
     );
     expect(merged).toEqual([{ kind: "action", id: "a1", deletedAt: 300 }]);
+  });
+
+  it("tombstones age out after the TTL instead of syncing forever", () => {
+    const old = { kind: "action", id: "old", deletedAt: 1000 } as Tombstone;
+    const fresh = { kind: "action", id: "fresh", deletedAt: 2000 } as Tombstone;
+    const now = 1000 + TOMBSTONE_TTL + 1;
+    expect(mergeTombstones([old], [fresh], now)).toEqual([fresh]);
+    /* Inside the horizon both survive. */
+    expect(mergeTombstones([old], [fresh], 3000)).toHaveLength(2);
   });
 
   it("applyTombstones drops tombstoned fragments inside a surviving thread", () => {
@@ -197,7 +209,7 @@ describe("stampChanges — merge does not tombstone fragments that survived", ()
   it("survives a full sync against a hub still holding the pre-merge board", () => {
     const { board: stamped, tombstones } = stampChanges(prev, next, 5000);
     const hub = { board: prev, tombstones: [] as Tombstone[] };
-    const merged = mergeSync({ board: stamped, tombstones }, hub);
+    const merged = mergeSync({ board: stamped, tombstones }, hub, 6000);
     const surviving = merged.board.threads.flatMap((t) => t.frags.map((f) => f.id));
     expect(surviving.sort()).toEqual(["f1", "f2"]);
     // The folded thread stays gone; it does not resurrect from the hub.

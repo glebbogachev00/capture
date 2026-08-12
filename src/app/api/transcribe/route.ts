@@ -108,6 +108,10 @@ async function cleanUp(raw: string): Promise<string> {
       system: CLEANUP_SYSTEM,
       prompt: raw,
       providerOptions: tier.providerOptions,
+      /* The chain IS the retry — like every other route. The SDK default
+         (2 retries with backoff) would stall a live dictation for seconds
+         on a throttled tier before the next provider even gets a turn. */
+      maxRetries: 0,
     });
     return text.trim();
   });
