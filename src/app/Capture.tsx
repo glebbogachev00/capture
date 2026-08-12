@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { BrushCleaning, Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
+import { BrushCleaning, Copy, Image as ImageIcon, Layers, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
 import {
@@ -668,20 +668,18 @@ export function Capture() {
               </button>
               {tab === "actions" && live.length >= 2 && (
                 <button
-                  className={"gtoggle" + (groupView ? " on" : "")}
+                  className={"icon-btn gtoggle" + (groupView ? " on" : "")}
                   role="switch"
                   aria-checked={groupView}
                   onClick={toggleGroupView}
+                  aria-label="Group similar actions"
                   title={
                     groupView
                       ? "Back to the flat list"
                       : "Fold similar actions together"
                   }
                 >
-                  <span className="gtoggle-label">Grouped</span>
-                  <span className="gtoggle-track">
-                    <span className="gtoggle-knob" />
-                  </span>
+                  <Layers size={16} strokeWidth={1.7} />
                 </button>
               )}
             </div>
