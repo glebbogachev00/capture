@@ -49,6 +49,7 @@ import { OrganizeScreen } from "./Organize";
 import { shareIntention, shareThread } from "@/lib/share";
 import { useBoard } from "@/hooks/useBoard";
 import { groupActions } from "@/lib/group";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 
 /** Where the grouped-view toggle is remembered, in the same kv store as the
     board — a view preference that survives reloads on this device. */
@@ -1292,16 +1293,18 @@ function ThreadView({
       )}
 
       {confirming && (
-        <div className="shelf" style={{ marginBottom: 16 }}>
-          <span className="cap-hint" style={{ flex: "1 1 100%" }}>
-            Delete this thread and all {thread.frags.length} fragment
-            {thread.frags.length > 1 ? "s" : ""}? This cannot be undone.
-          </span>
-          <button className="warn" onClick={onDelete}>
-            Delete for good
-          </button>
-          <button onClick={() => setConfirming(false)}>Keep it</button>
-        </div>
+        <ConfirmDelete
+          title="Delete this thread?"
+          hint={
+            thread.frags.length
+              ? `All ${thread.frags.length} fragment${
+                  thread.frags.length > 1 ? "s go" : " goes"
+                } with it. This cannot be undone.`
+              : "This cannot be undone."
+          }
+          onConfirm={onDelete}
+          onCancel={() => setConfirming(false)}
+        />
       )}
 
       {thread.summary && (
@@ -1537,12 +1540,12 @@ function FragView({
       )}
 
       {confirming && !editing && (
-        <div className="shelf">
-          <button className="warn" onClick={onDelete}>
-            Delete fragment
-          </button>
-          <button onClick={() => setConfirming(false)}>Keep it</button>
-        </div>
+        <ConfirmDelete
+          title="Delete this fragment?"
+          confirmLabel="Delete fragment"
+          onConfirm={onDelete}
+          onCancel={() => setConfirming(false)}
+        />
       )}
 
       {srcs.map((s, i) => (

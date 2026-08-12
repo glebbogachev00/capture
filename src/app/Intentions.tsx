@@ -14,6 +14,7 @@ import { useRef, useState } from "react";
 import { Copy, X, MoreHorizontal } from "lucide-react";
 import { type Intention, type Principle, fmt, pad } from "@/lib/model";
 import type { LearnedRule } from "@/lib/rules";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 
 export type Draft = {
   rawInput: string;
@@ -278,15 +279,11 @@ export function IntentionDetail({
       </div>
 
       {confirming && (
-        <div className="shelf" style={{ marginBottom: 18 }}>
-          <span className="cap-hint" style={{ flex: "1 1 100%" }}>
-            Delete intention {pad(intention.number)}? This cannot be undone.
-          </span>
-          <button className="warn" onClick={onDelete}>
-            Delete for good
-          </button>
-          <button onClick={() => setConfirming(false)}>Keep it</button>
-        </div>
+        <ConfirmDelete
+          title={`Delete intention ${pad(intention.number)}?`}
+          onConfirm={onDelete}
+          onCancel={() => setConfirming(false)}
+        />
       )}
 
       <EditableList
