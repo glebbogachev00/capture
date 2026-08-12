@@ -1,10 +1,11 @@
 import type { Action, Board, Intention, Thread } from "./model";
 
 /**
- * Related — "what else in here actually connects to this?"
+ * Relatedness — "does this actually belong with that?"
  *
- * Deliberately strict, because noise is worse than nothing. A connection is
- * only claimed when two items share something specific:
+ * The shared matching engine behind the capture suggestion, the Organize
+ * scan and the grouped lens. Deliberately strict, because noise is worse
+ * than nothing: a connection is only claimed when two texts share
  *
  *   1. a contiguous phrase of content words ("cold brew"), or
  *   2. distinctive words — exact token matches, non-generic, and shared by
@@ -13,16 +14,14 @@ import type { Action, Board, Intention, Thread } from "./model";
  * Matching is token-exact: "text" never matches inside "context", "cross"
  * never matches inside "across". Generic overlap ("content", "capture",
  * "app", "sharing"…) is NOT a connection — those words link everything and
- * mean nothing, so they surface nothing: the Related line simply does not
- * render. Runs on plain text locally — no model, no quota, instant — and
- * every suggestion carries the shared words as a reason you can verify.
- * Nothing is written to the board; the app never auto-links anything.
+ * mean nothing, so they surface nothing at all. Runs on plain text locally
+ * — no model, no quota, instant — and every claim carries the shared words
+ * as a reason you can verify. Nothing is written to the board; the app
+ * never auto-links anything.
+ *
+ * The `best*` functions are the strict ones (a phrase, never a lone word),
+ * because acting on what they return MOVES something.
  */
-
-export type RelatedTarget = {
-  kind: "action" | "thread" | "intention";
-  id: string;
-};
 
 export type RelatedItem = {
   kind: "action" | "thread" | "intention";
@@ -33,10 +32,6 @@ export type RelatedItem = {
   /** For thread hits: the id of the fragment that carries the match, so the
       UI can offer one-tap Move/Extract on that exact fragment. */
   fragId?: string;
-};
-
-export type Related = {
-  items: RelatedItem[];
 };
 
 /** Connector words and everyday verbs that say nothing about a subject. */
@@ -124,18 +119,6 @@ function intentionText(i: Intention): string {
   ]
     .filter(Boolean)
     .join(" ");
-}
-
-function textOf(board: Board, kind: RelatedTarget["kind"], id: string): string {
-  if (kind === "action") {
-    return itemText(board.actions.find((a) => a.id === id) || ({} as Action));
-  }
-  if (kind === "thread") {
-    return threadText(board.threads.find((t) => t.id === id) || ({} as Thread));
-  }
-  return intentionText(
-    board.intentions.find((i) => i.id === id) || ({} as Intention)
-  );
 }
 
 /** How many items across the board contain each word. A word shared by
@@ -305,25 +288,6 @@ function hitsFor(board: Board, text: string, excludeId?: string): Hit[] {
   );
 }
 
-export function relatedTo(board: Board, target: RelatedTarget): Related {
-  return {
-    items: hitsFor(board, textOf(board, target.kind, target.id), target.id)
-      .slice(0, 3)
-      .map(({ kind, id, name, reason, fragId }) => ({ kind, id, name, reason, fragId })),
-  };
-}
-
-/** Same engine as relatedTo, but the target is a piece of raw text rather
-    than an item already on the board. Used for a capture that has just
-    landed and is not yet the thing it may belong with. */
-export function relatedToText(board: Board, text: string): Related {
-  return {
-    items: hitsFor(board, text)
-      .slice(0, 3)
-      .map(({ kind, id, name, reason, fragId }) => ({ kind, id, name, reason, fragId })),
-  };
-}
-
 /**
  * The thread a piece of text clearly belongs with, or none.
  *
@@ -431,14 +395,6 @@ export function phraseAsWritten(phrase: string, text: string): string {
   }
   if (!best) return phrase;
   return text.slice(best.start, best.end).replace(/\s+/g, " ").trim();
-}
-
-/** The distinctive words two texts have in common (order-insensitive), or
-    [] when they share none. A word is included even if it is not rare —
-    rarity is the caller's decision, since it needs the whole board. */
-export function sharedContentWords(a: string, b: string): string[] {
-  const wa = new Set(contentWords(a));
-  return [...new Set(contentWords(b))].filter((w) => wa.has(w));
 }
 
 /** A fragment that a piece of text clearly duplicates. */

@@ -82,7 +82,6 @@ export type OrganizeProposal = {
     the long tail. */
 export const HIGH_CAP = 12;
 export const MEDIUM_CAP = 8;
-export const ORGANIZE_CAP = HIGH_CAP + MEDIUM_CAP;
 
 /** Normalised note text — trimmed, lowercased, whitespace collapsed. The
     unit of note-equality for the fold-back guard. */

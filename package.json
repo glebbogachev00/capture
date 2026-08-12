@@ -14,7 +14,8 @@
     "probe:distill": "node scripts/probe-distill.mjs",
     "probe:tidy": "node scripts/probe-tidy.mjs",
     "probe:tidy:cases": "node scripts/probe-tidy-cases.mjs",
-    "probe:sort:cases": "node scripts/probe-sort-cases.mjs"
+    "probe:sort:cases": "node scripts/probe-sort-cases.mjs",
+    "probe:credits": "node scripts/probe-credits.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.27",

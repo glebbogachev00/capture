@@ -1,6 +1,6 @@
 # Capture — skill-opportunity audit (prompt for a research/audit agent)
 
-Status: research brief. Read AFTER `specs/capture-agent/SKILL.md` and `specs/capture-deepseek-build.md`.
+Status: research brief. Read AFTER `specs/capture-personal-agent-brief.md` and `specs/capture-deepseek-build.md`.
 Date: 2026-08-06. Owner: Gleb.
 Goal: find where Capture's model calls can be made more efficient by adopting a **skill-like prompt system** — task-scoped prompts loaded on demand, not one wall of instructions per call. Also flag operations that should become reusable Capture "skills."
 
