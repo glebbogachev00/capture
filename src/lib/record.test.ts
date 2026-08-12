@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CaptureEntry } from "./ledger";
-import { heatGrid, recordStats } from "./record";
+import { busiestDay, heatGrid, monthLabels, recordStats } from "./record";
 
 const DAY = 24 * 60 * 60 * 1000;
 /* A fixed local noon keeps day bucketing away from midnight edges. */
@@ -65,5 +65,27 @@ describe("heatGrid", () => {
   it("ignores captures older than the window", () => {
     const grid = heatGrid([entry(NOON - 200 * DAY, "action")], NOON, 12);
     expect(grid.flat().every((c) => c.count === 0)).toBe(true);
+  });
+});
+
+describe("monthLabels", () => {
+  it("names a column only where a new month begins", () => {
+    const labels = monthLabels(heatGrid([], NOON, 12));
+    /* May 21 → Aug 12 spans four months; every other column is blank. */
+    expect(labels.filter(Boolean)).toEqual(["May", "Jun", "Jul", "Aug"]);
+    expect(labels[0]).toBe("May");
+    expect(labels).toHaveLength(12);
+  });
+});
+
+describe("busiestDay", () => {
+  it("finds the fullest day, or null on an empty grid", () => {
+    const ledger = [
+      entry(NOON, "action"),
+      ...[1, 2, 3].map((i) => entry(NOON - DAY + i, "thread" as const)),
+    ];
+    const best = busiestDay(heatGrid(ledger, NOON, 12));
+    expect(best).toMatchObject({ day: "2026-08-11", count: 3 });
+    expect(busiestDay(heatGrid([], NOON, 12))).toBeNull();
   });
 });

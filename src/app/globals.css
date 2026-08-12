@@ -47,12 +47,20 @@ body {
   justify-content: space-between;
   padding: 22px 0 14px;
 }
+/* The wordmark and the count are both doors to The record — buttons in
+   plain clothes, keeping their exact type. */
 .capture-mark {
   font-family: var(--font-display), Georgia, serif;
   font-weight: 500;
   font-size: 27px;
   letter-spacing: -0.02em;
   font-variation-settings: "SOFT" 40, "WONK" 1;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
 }
 .capture-mark span {
   color: var(--accent);
@@ -63,6 +71,11 @@ body {
   color: var(--muted);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .cap {
@@ -1125,24 +1138,40 @@ body {
   font-weight: 500;
 }
 
-/* The record's heat grid: twelve weeks of days in the board's greens.
-   Levels are fixed (none / one / a few / many) so a day always looks the
-   same — a busy fortnight never dims the past. */
+/* The record: the editorial sentence in the display serif, then twelve
+   weeks of days on a card. Levels are fixed (none / one / a few / many) so
+   a day always looks the same — a busy fortnight never dims the past. */
+.record-lede {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 19px;
+  line-height: 1.55;
+  font-variation-settings: "SOFT" 30;
+  color: var(--ink);
+  max-width: 34em;
+  margin: 0 0 22px;
+}
+.record-frame {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  padding: 18px;
+  display: inline-block;
+  margin-bottom: 10px;
+}
 .record-grid {
   display: flex;
-  gap: 3px;
-  margin: 12px 0 6px;
+  gap: 4px;
 }
 .record-col {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .record-cell {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  background: var(--card);
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  background: var(--paper);
   box-shadow: inset 0 0 0 1px var(--rule);
 }
 .record-cell.l1 {
@@ -1150,12 +1179,28 @@ body {
   box-shadow: none;
 }
 .record-cell.l2 {
-  background: #8fac97;
+  background: #9cb8a5;
   box-shadow: none;
 }
 .record-cell.l3 {
   background: var(--accent);
   box-shadow: none;
+}
+/* One label where each month begins, aligned under its column. */
+.record-months {
+  display: flex;
+  gap: 4px;
+  margin-top: 7px;
+}
+.record-months span {
+  width: 17px;
+  flex: none;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  overflow: visible;
+  white-space: nowrap;
 }
 .record-caption {
   font-family: var(--font-mono), monospace;
@@ -1163,6 +1208,20 @@ body {
   letter-spacing: 0.06em;
   color: var(--muted);
   margin: 0;
+}
+/* Smaller cells before the twelve columns would overflow a phone. */
+@media (max-width: 420px) {
+  .record-cell,
+  .record-months span {
+    width: 13px;
+  }
+  .record-cell {
+    height: 13px;
+    border-radius: 4px;
+  }
+  .record-frame {
+    padding: 13px;
+  }
 }
 .int-number {
   font-family: var(--font-mono), monospace;

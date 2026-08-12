@@ -16,7 +16,7 @@ import { type Intention, type Principle, fmt, pad } from "@/lib/model";
 import type { LearnedRule } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import type { CaptureEntry } from "@/lib/ledger";
-import { heatGrid, recordStats } from "@/lib/record";
+import { busiestDay, heatGrid, monthLabels, recordStats } from "@/lib/record";
 
 export type Draft = {
   rawInput: string;
@@ -419,43 +419,80 @@ function recordLine(stats: ReturnType<typeof recordStats>): string {
 }
 
 /**
- * The record — the capture ledger, quietly visible. One sentence of what
- * the app has done with everything said to it, and twelve weeks of days.
- * A colophon, not a scoreboard: no streaks, no goals, and an empty day is
- * a pale cell, never a broken chain.
+ * The record — the capture ledger, made visible on its own page. One
+ * sentence of what the app has done with everything said to it, and twelve
+ * weeks of days. A colophon, not a scoreboard: no streaks, no goals, and
+ * an empty day is a pale cell, never a broken chain. Opened from the
+ * masthead count — the one line that is always on screen.
  */
-function RecordBlock({ ledger, now }: { ledger: CaptureEntry[]; now: number }) {
-  if (!ledger.length) {
-    return (
-      <div className="int-block">
-        <h4 className="int-label">The record</h4>
-        <p className="int-note">
-          Starts with your first capture — every thing you say, and what
-          became of it, lands here.
-        </p>
-      </div>
-    );
-  }
+export function RecordScreen({
+  ledger,
+  now,
+  onBack,
+}: {
+  ledger: CaptureEntry[];
+  now: number;
+  onBack: () => void;
+}) {
   const stats = recordStats(ledger);
   const grid = heatGrid(ledger, now);
+  const months = monthLabels(grid);
+  const busiest = busiestDay(grid);
+  const dayName = (day: string) =>
+    new Date(day + "T12:00:00").toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+    });
   return (
-    <div className="int-block">
-      <h4 className="int-label">The record</h4>
-      <p className="int-note">{recordLine(stats)}</p>
-      <div className="record-grid">
-        {grid.map((week) => (
-          <div className="record-col" key={week[0].day}>
-            {week.map((cell) => (
-              <i
-                key={cell.day}
-                className={"record-cell l" + cell.level}
-                title={`${cell.day} · ${cell.count} capture${cell.count === 1 ? "" : "s"}`}
-              />
-            ))}
-          </div>
-        ))}
+    <div>
+      <button className="back" onClick={onBack}>
+        ← capture
+      </button>
+
+      <div className="tname" style={{ fontSize: 26, marginBottom: 10 }}>
+        The record
       </div>
-      <p className="record-caption">the last twelve weeks, day by day</p>
+
+      {!ledger.length ? (
+        <div className="empty">
+          <p className="big">Nothing on the record yet.</p>
+          <p>
+            Every capture lands here — what you said, and what became of it.
+          </p>
+        </div>
+      ) : (
+        <>
+          <p className="record-lede">{recordLine(stats)}</p>
+
+          <div className="record-frame">
+            <div className="record-grid">
+              {grid.map((week) => (
+                <div className="record-col" key={week[0].day}>
+                  {week.map((cell) => (
+                    <i
+                      key={cell.day}
+                      className={"record-cell l" + cell.level}
+                      title={`${dayName(cell.day)} · ${cell.count} capture${cell.count === 1 ? "" : "s"}`}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="record-months">
+              {months.map((m, i) => (
+                <span key={grid[i][0].day}>{m}</span>
+              ))}
+            </div>
+          </div>
+
+          <p className="record-caption">
+            the last twelve weeks, day by day
+            {busiest && busiest.count > 1
+              ? ` — fullest on ${dayName(busiest.day)}, ${busiest.count} said`
+              : ""}
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -476,8 +513,6 @@ export function SettingsScreen({
   onSyncNow,
   rules,
   onClearRule,
-  ledger,
-  now,
 }: {
   principles: Principle[];
   counts: { actions: number; threads: number; intentions: number };
@@ -496,9 +531,6 @@ export function SettingsScreen({
       each with a way to forget it. */
   rules: LearnedRule[];
   onClearRule: (key: string) => void;
-  /** The capture ledger, made quietly visible as "The record". */
-  ledger: CaptureEntry[];
-  now: number;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -512,8 +544,6 @@ export function SettingsScreen({
       <div className="tname" style={{ fontSize: 26, marginBottom: 18 }}>
         Settings
       </div>
-
-      <RecordBlock ledger={ledger} now={now} />
 
       <div className="int-block">
         <h4 className="int-label">Back up everything</h4>

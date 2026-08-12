@@ -43,6 +43,7 @@ import {
   IntentionCard,
   IntentionDetail,
   IntentionDraft,
+  RecordScreen,
   SettingsScreen,
 } from "./Intentions";
 import { OrganizeScreen } from "./Organize";
@@ -71,6 +72,9 @@ export function Capture() {
      wand button only appears when the scan has found something worth
      reviewing — a clean board keeps the header to sync / share / settings. */
   const [showOrganize, setShowOrganize] = useState(false);
+  /* The record opens from the masthead count — the line that is always on
+     screen becomes the door to what it summarises. */
+  const [showRecord, setShowRecord] = useState(false);
 
   /* Grouped view of the Actions tab — a lens, not a structure: nothing is
      written to the board, and toggling off restores the flat list untouched.
@@ -271,13 +275,21 @@ export function Capture() {
     <div className="capture-root">
       <div className="capture-wrap">
         <div className="capture-head">
-          <div className="capture-mark">
+          <button
+            className="capture-mark"
+            onClick={() => setShowRecord(true)}
+            title="The record — everything said, and what became of it"
+          >
             capture<span>.</span>
-          </div>
+          </button>
           <div className="capture-head-right">
-            <div className="capture-count">
+            <button
+              className="capture-count"
+              onClick={() => setShowRecord(true)}
+              title="The record — everything said, and what became of it"
+            >
               {live.length} open · {data.threads.length} threads
-            </div>
+            </button>
             <button
               className={
                 "icon-btn sync-btn" +
@@ -555,6 +567,12 @@ export function Capture() {
             onDismiss={(id) => dismissOrganize(id)}
             onApproveAll={() => void acceptOrganizeAll()}
           />
+        ) : showRecord ? (
+          <RecordScreen
+            ledger={data.ledger ?? []}
+            now={now}
+            onBack={() => setShowRecord(false)}
+          />
         ) : showSettings ? (
           <SettingsScreen
             principles={data.principles}
@@ -579,8 +597,6 @@ export function Capture() {
             ioNote={ioNote}
             sync={sync}
             onSyncNow={syncNow}
-            ledger={data.ledger ?? []}
-            now={now}
           />
         ) : draft ? (
           <IntentionDraft

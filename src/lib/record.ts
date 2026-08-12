@@ -66,6 +66,27 @@ function levelFor(count: number): HeatCell["level"] {
   return 3;
 }
 
+/** A month label for each column: named where a new month begins, blank
+    elsewhere, so the grid reads as a calendar without becoming one. */
+export function monthLabels(grid: HeatCell[][]): string[] {
+  return grid.map((col, i) => {
+    const month = col[0].day.slice(0, 7);
+    if (i > 0 && grid[i - 1][0].day.slice(0, 7) === month) return "";
+    return new Date(col[0].day + "T12:00:00").toLocaleDateString(undefined, {
+      month: "short",
+    });
+  });
+}
+
+/** The fullest day on the grid, or null when every day is empty. */
+export function busiestDay(grid: HeatCell[][]): HeatCell | null {
+  let best: HeatCell | null = null;
+  for (const cell of grid.flat()) {
+    if (cell.count > (best?.count ?? 0)) best = cell;
+  }
+  return best;
+}
+
 /**
  * The last `weeks` weeks as columns of seven days, oldest column first,
  * ending today. Rolling weeks rather than calendar-aligned ones: the grid
