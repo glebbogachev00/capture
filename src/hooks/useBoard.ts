@@ -316,8 +316,21 @@ export function useBoard(now: number) {
         { board: latest.current, tombstones: tombstones.current },
         { board: remote.board, tombstones: remote.tombstones }
       );
+      /* Compare by max updatedAt across all items rather than serialising the
+         whole board — much cheaper on mobile where this fires every 10 seconds. */
+      const maxTs = (b: Board) =>
+        Math.max(
+          0,
+          ...b.actions.map((a) => a.updatedAt ?? a.at ?? 0),
+          ...b.threads.flatMap((t) => [
+            t.updatedAt ?? 0,
+            ...t.frags.map((f) => f.updatedAt ?? f.at ?? 0),
+          ]),
+          ...b.intentions.map((i) => i.updatedAt ?? 0),
+          ...b.principles.map((p) => p.updatedAt ?? 0)
+        );
       const changed =
-        JSON.stringify(merged.board) !== JSON.stringify(latest.current) ||
+        maxTs(merged.board) !== maxTs(latest.current) ||
         merged.tombstones.length !== tombstones.current.length;
       if (changed) {
         latest.current = merged.board;
@@ -331,8 +344,9 @@ export function useBoard(now: number) {
         }
       }
       setSync({ ok: true, at: stamp() });
-      // Our local additions ride up on the next debounced push.
-      schedulePush();
+      // Only push if something actually changed — avoids a redundant round
+      // trip on every pull when the board is already in sync.
+      if (changed) schedulePush();
       return changed;
     } catch {
       /* hub unreachable; local state stands */
@@ -560,12 +574,30 @@ export function useBoard(now: number) {
     /* A pull used to fire only on load and tab-focus, so a desktop tab left
        open and focused never saw the other device's changes. Poll gently so
        the phone's updates land within a few seconds without any interaction.
-       Browsers throttle background tabs, which suits us — idle tabs poll less. */
-    const poll = setInterval(() => void pullNow(), 10_000);
+       Browsers throttle background tabs, which suits us — idle tabs poll less.
+       Skip polling entirely when the device reports no connectivity — saves
+       battery on mobile and avoids spurious sync errors when the Mac is off. */
+    let pollId: ReturnType<typeof setInterval> | null = null;
+    const startPoll = () => {
+      if (pollId !== null) return;
+      pollId = setInterval(() => void pullNow(), 10_000);
+    };
+    const stopPoll = () => {
+      if (pollId === null) return;
+      clearInterval(pollId);
+      pollId = null;
+    };
+    const onOnline = () => { void pullNow(); startPoll(); };
+    const onOffline = () => stopPoll();
+    if (navigator.onLine) startPoll();
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
-      clearInterval(poll);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      stopPoll();
     };
   }, [loaded, pullNow]);
 

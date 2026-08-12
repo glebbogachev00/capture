@@ -51,6 +51,15 @@ export function ttsRateLimit(key: string): LimitResult {
   return rateLimit("tts:" + key, TTS_LIMIT, TTS_WINDOW);
 }
 
+/** Transcription spends local CPU (or a sliver of Groq quota on fallback),
+    same deal as TTS: generous, but a ceiling. */
+const TRANSCRIBE_LIMIT = limitFromEnv("CAPTURE_TRANSCRIBE_LIMIT", 120);
+const TRANSCRIBE_WINDOW = 60_000;
+
+export function transcribeRateLimit(key: string): LimitResult {
+  return rateLimit("transcribe:" + key, TRANSCRIBE_LIMIT, TRANSCRIBE_WINDOW);
+}
+
 export function rateLimit(
   key: string,
   limit = limitFromEnv("CAPTURE_LOGIN_LIMIT", DEFAULT_LIMIT),

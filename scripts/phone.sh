@@ -47,6 +47,24 @@ if [ -z "${HOSTNAME:-}" ]; then
   echo "Couldn't read the Tailscale URL — run 'tailscale serve status' to find it." >&2
 fi
 
+# Start the local transcriber (~/whisper, Parakeet) unless one is already
+# answering. Dictation falls back to Groq without it, so a missing checkout
+# or a failed start degrades rather than blocks.
+TRANSCRIBER_PID=""
+WHISPER_DIR="${WHISPER_DIR:-$HOME/whisper}"
+if curl -sf http://127.0.0.1:8756/health >/dev/null 2>&1; then
+  echo "→ Local transcriber already running."
+elif [ -f "$WHISPER_DIR/server.py" ] && command -v uv >/dev/null 2>&1; then
+  echo "→ Starting local transcriber (log: /tmp/capture-transcriber.log)…"
+  (cd "$WHISPER_DIR" && exec uv run python server.py) \
+    > /tmp/capture-transcriber.log 2>&1 &
+  TRANSCRIBER_PID=$!
+else
+  echo "⚠  No local transcriber found at $WHISPER_DIR — dictation will use" >&2
+  echo "   Groq (needs GROQ_API_KEY in .env.local)." >&2
+fi
+trap '[ -n "$TRANSCRIBER_PID" ] && kill "$TRANSCRIBER_PID" 2>/dev/null || true' EXIT
+
 echo
 echo "→ Open ${HOSTNAME:-the https://…ts.net URL from 'tailscale serve status'} on your phone"
 echo "  (Safari on iPhone — not the installed home-screen app; Chrome on Android is fine)."
@@ -54,4 +72,6 @@ echo "  Allow the mic the first time. Ctrl-C here stops the server."
 echo
 # `npm start -- -H …` so the flags reach `next start`; npm would otherwise
 # swallow them and exit with a usage error (that's how the first run died).
-exec caffeinate -i -s npm start -- -H 0.0.0.0 -p 3000
+# Not `exec` anymore: the EXIT trap above must survive to stop the
+# transcriber when this script ends.
+caffeinate -i -s npm start -- -H 0.0.0.0 -p 3000

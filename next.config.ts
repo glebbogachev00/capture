@@ -1,6 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  /* Dev is reached from the phone through tailscale serve, which makes every
+     request cross-origin from Next's point of view; without this it silently
+     refuses to serve the JS bundles, so pages render but never hydrate. */
+  allowedDevOrigins: [
+    "andreys-macbook-air.tail204d23.ts.net", // tailscale serve (https)
+    "100.117.116.1", // tailnet IP, direct
+    "192.168.0.104", // home LAN, no tailscale needed
+    "172.20.10.14", // iPhone hotspot — phone talks to the Mac directly
+  ],
   async headers() {
     return [
       {
