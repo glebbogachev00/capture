@@ -1,0 +1,99 @@
+[
+  {
+    "id": "want-errand",
+    "why": "a want-phrased errand is an action, never an intention",
+    "raw": "I want to get some oat milk when I'm out later",
+    "threads": [],
+    "expect": { "kindOneOf": ["action"], "actionsBetween": [1, 1], "actionsMention": ["milk"] }
+  },
+  {
+    "id": "aspiration",
+    "why": "a state being called into being is an intention, not a task",
+    "raw": "I want to wake up at six and actually feel rested for once",
+    "threads": [],
+    "expect": { "kindOneOf": ["intention"], "noActions": true }
+  },
+  {
+    "id": "resolve",
+    "why": "a resolve about how to live is an intention even without the word want",
+    "raw": "I stop taking on client work I secretly resent",
+    "threads": [],
+    "expect": { "kindOneOf": ["intention"], "noActions": true }
+  },
+  {
+    "id": "pure-thinking",
+    "why": "deliberation with no committed task is a thread, and no task may be invented",
+    "raw": "been going back and forth on whether the podcast format should be interviews or solo episodes, there are decent arguments both ways",
+    "threads": [],
+    "expect": { "kindOneOf": ["thread"], "noActions": true }
+  },
+  {
+    "id": "complaint-no-task",
+    "why": "a complaint is not a task request — the engine must not invent one",
+    "raw": "so tired of how meetings eat my whole tuesday, barely any deep work happens anymore",
+    "threads": [],
+    "expect": { "kindOneOf": ["thread"], "noActions": true }
+  },
+  {
+    "id": "status-plus-task",
+    "why": "the done part is history; only the remaining task becomes an action",
+    "raw": "booked the flights, still need to sort out travel insurance",
+    "threads": [],
+    "expect": { "kindOneOf": ["action"], "actionsBetween": [1, 1], "actionsMention": ["insurance"] }
+  },
+  {
+    "id": "garbled-multi-errand",
+    "why": "dictation garble still yields the two real errands, no padding",
+    "raw": "uh so remind me to um call the vet about luna's shots and also i need to to pick up the dry cleaning on thursday",
+    "threads": [],
+    "expect": { "kindOneOf": ["action"], "actionsBetween": [2, 2], "actionsMention": ["vet", "cleaning"] }
+  },
+  {
+    "id": "garbled-single",
+    "why": "one real task under heavy filler stays one task",
+    "raw": "okay so um basically just don't let me forget to uh renew the gym thing, the membership, before it auto charges again",
+    "threads": [],
+    "expect": { "kindOneOf": ["action"], "actionsBetween": [1, 1], "actionsMention": ["membership"] }
+  },
+  {
+    "id": "thinking-plus-deadline",
+    "why": "live deliberation plus a committed demo is both — neither side may be dropped",
+    "raw": "still circling whether to rebuild the capture app in swift or keep the pwa, anyway I told marc I'd demo it to him on friday",
+    "threads": [],
+    "expect": { "kindOneOf": ["both"], "actionsBetween": [1, 1], "actionsMention": ["friday"] }
+  },
+  {
+    "id": "route-existing",
+    "why": "a capture continuing a known subject routes into that thread",
+    "raw": "more espresso thoughts — I think the grinder matters more than the machine at this budget",
+    "threads": [
+      { "id": "t-esp", "name": "Espresso setup", "about": "choosing a first espresso machine and grinder" },
+      { "id": "t-run", "name": "Marathon training", "about": "building up to the spring marathon" }
+    ],
+    "expect": { "kindOneOf": ["thread"], "routeTo": "t-esp" }
+  },
+  {
+    "id": "new-thread",
+    "why": "a fresh subject must not be shoehorned into an unrelated thread",
+    "raw": "starting to think the back garden wants raised beds along the fence, maybe cedar",
+    "threads": [
+      { "id": "t-esp", "name": "Espresso setup", "about": "choosing a first espresso machine and grinder" },
+      { "id": "t-run", "name": "Marathon training", "about": "building up to the spring marathon" }
+    ],
+    "expect": { "kindOneOf": ["thread"], "newThread": true }
+  },
+  {
+    "id": "reading-about",
+    "why": "reading about a topic is a thread, not an intention or task",
+    "raw": "been reading about zone 2 training and how mitochondria adapt, interesting stuff",
+    "threads": [],
+    "expect": { "kindOneOf": ["thread"], "noActions": true }
+  },
+  {
+    "id": "promise-keeps",
+    "why": "a commitment to a person must not fade silently",
+    "raw": "promised dana I'd review her portfolio site by sunday evening",
+    "threads": [],
+    "expect": { "kindOneOf": ["action"], "actionsBetween": [1, 1], "shelfIn": ["keep", "days"] }
+  }
+]
