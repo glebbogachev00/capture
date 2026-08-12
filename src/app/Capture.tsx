@@ -579,6 +579,8 @@ export function Capture() {
             ioNote={ioNote}
             sync={sync}
             onSyncNow={syncNow}
+            ledger={data.ledger ?? []}
+            now={now}
           />
         ) : draft ? (
           <IntentionDraft

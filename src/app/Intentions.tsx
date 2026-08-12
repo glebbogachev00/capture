@@ -15,6 +15,8 @@ import { Copy, X, MoreHorizontal } from "lucide-react";
 import { type Intention, type Principle, fmt, pad } from "@/lib/model";
 import type { LearnedRule } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
+import type { CaptureEntry } from "@/lib/ledger";
+import { heatGrid, recordStats } from "@/lib/record";
 
 export type Draft = {
   rawInput: string;
@@ -387,6 +389,77 @@ export type IoNote = { text: string; ok: boolean } | null;
  * in one browser's IndexedDB, so without a file on disk somewhere, clearing
  * site data takes all of it.
  */
+/** One editorial sentence for the record: what was said, what it became. */
+function recordLine(stats: ReturnType<typeof recordStats>): string {
+  const when = stats.since
+    ? new Date(stats.since).toLocaleDateString(undefined, {
+        month: "long",
+        day: "numeric",
+      })
+    : "";
+  const parts: string[] = [];
+  if (stats.actions)
+    parts.push(`${stats.actions} became action${stats.actions === 1 ? "" : "s"}`);
+  if (stats.threads)
+    parts.push(`${stats.threads} joined threads`);
+  if (stats.intentions)
+    parts.push(
+      `${stats.intentions} ${stats.intentions === 1 ? "was" : "were"} declared`
+    );
+  const tail = parts.length
+    ? " — " +
+      (parts.length === 1
+        ? parts[0]
+        : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1])
+    : "";
+  const voice = stats.dictated
+    ? ` ${stats.dictated} arrived by voice.`
+    : "";
+  return `${stats.total} thing${stats.total === 1 ? "" : "s"} said since ${when}${tail}.${voice}`;
+}
+
+/**
+ * The record — the capture ledger, quietly visible. One sentence of what
+ * the app has done with everything said to it, and twelve weeks of days.
+ * A colophon, not a scoreboard: no streaks, no goals, and an empty day is
+ * a pale cell, never a broken chain.
+ */
+function RecordBlock({ ledger, now }: { ledger: CaptureEntry[]; now: number }) {
+  if (!ledger.length) {
+    return (
+      <div className="int-block">
+        <h4 className="int-label">The record</h4>
+        <p className="int-note">
+          Starts with your first capture — every thing you say, and what
+          became of it, lands here.
+        </p>
+      </div>
+    );
+  }
+  const stats = recordStats(ledger);
+  const grid = heatGrid(ledger, now);
+  return (
+    <div className="int-block">
+      <h4 className="int-label">The record</h4>
+      <p className="int-note">{recordLine(stats)}</p>
+      <div className="record-grid">
+        {grid.map((week) => (
+          <div className="record-col" key={week[0].day}>
+            {week.map((cell) => (
+              <i
+                key={cell.day}
+                className={"record-cell l" + cell.level}
+                title={`${cell.day} · ${cell.count} capture${cell.count === 1 ? "" : "s"}`}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+      <p className="record-caption">the last twelve weeks, day by day</p>
+    </div>
+  );
+}
+
 export function SettingsScreen({
   principles,
   counts,
@@ -403,6 +476,8 @@ export function SettingsScreen({
   onSyncNow,
   rules,
   onClearRule,
+  ledger,
+  now,
 }: {
   principles: Principle[];
   counts: { actions: number; threads: number; intentions: number };
@@ -421,6 +496,9 @@ export function SettingsScreen({
       each with a way to forget it. */
   rules: LearnedRule[];
   onClearRule: (key: string) => void;
+  /** The capture ledger, made quietly visible as "The record". */
+  ledger: CaptureEntry[];
+  now: number;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -434,6 +512,8 @@ export function SettingsScreen({
       <div className="tname" style={{ fontSize: 26, marginBottom: 18 }}>
         Settings
       </div>
+
+      <RecordBlock ledger={ledger} now={now} />
 
       <div className="int-block">
         <h4 className="int-label">Back up everything</h4>
