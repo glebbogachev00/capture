@@ -513,6 +513,8 @@ export function SettingsScreen({
   onSyncNow,
   rules,
   onClearRule,
+  onOpenRecord,
+  ledgerCount,
 }: {
   principles: Principle[];
   counts: { actions: number; threads: number; intentions: number };
@@ -531,6 +533,11 @@ export function SettingsScreen({
       each with a way to forget it. */
   rules: LearnedRule[];
   onClearRule: (key: string) => void;
+  /** The signpost to The record — the screen itself lives off the masthead,
+      but Settings is where people go looking, especially on phones where
+      the header count is hidden. */
+  onOpenRecord: () => void;
+  ledgerCount: number;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -544,6 +551,14 @@ export function SettingsScreen({
       <div className="tname" style={{ fontSize: 26, marginBottom: 18 }}>
         Settings
       </div>
+
+      <button
+        className="section-label"
+        style={{ margin: "0 0 14px" }}
+        onClick={onOpenRecord}
+      >
+        The record · {ledgerCount} said · twelve weeks of days
+      </button>
 
       <div className="int-block">
         <h4 className="int-label">Back up everything</h4>

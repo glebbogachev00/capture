@@ -76,6 +76,15 @@ body {
   padding: 0;
   cursor: pointer;
   touch-action: manipulation;
+  /* The editorial "look it up" mark: this line is a reference, and tapping
+     it opens what it refers to — The record. */
+  text-decoration: underline dotted var(--rule);
+  text-underline-offset: 4px;
+  transition: 0.15s;
+}
+.capture-count:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
 }
 
 .cap {

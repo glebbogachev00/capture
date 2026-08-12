@@ -597,6 +597,11 @@ export function Capture() {
             ioNote={ioNote}
             sync={sync}
             onSyncNow={syncNow}
+            onOpenRecord={() => {
+              setShowSettings(false);
+              setShowRecord(true);
+            }}
+            ledgerCount={(data.ledger ?? []).length}
           />
         ) : draft ? (
           <IntentionDraft
