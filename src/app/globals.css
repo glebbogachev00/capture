@@ -253,27 +253,58 @@ body {
   margin-left: 5px;
 }
 
-/* The grouped-view toggle, riding the right edge of the tab row. */
-.tab-toggle {
+/* The grouped-view switch, riding the right edge of the tab row: a label
+   and a sliding knob, in the board's own palette. The global reduced-motion
+   rule stills the slide. */
+.gtoggle {
   margin-left: auto;
   align-self: center;
   margin-bottom: 7px;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
   background: none;
   cursor: pointer;
+  padding: 4px 0;
+  touch-action: manipulation;
+}
+.gtoggle-label {
   font-family: var(--font-mono), monospace;
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
-  padding: 4px 11px;
-  touch-action: manipulation;
+  transition: color 160ms ease;
 }
-.tab-toggle.on {
+.gtoggle.on .gtoggle-label {
   color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-soft);
+}
+.gtoggle-track {
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--rule);
+  position: relative;
+  transition: background 160ms ease;
+}
+.gtoggle.on .gtoggle-track {
+  background: var(--accent);
+}
+.gtoggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(25, 29, 25, 0.22);
+  transition: transform 160ms ease;
+}
+.gtoggle.on .gtoggle-knob {
+  transform: translateX(14px);
 }
 
 /* A group's header: the shared phrase that folded these actions together. */

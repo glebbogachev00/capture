@@ -668,7 +668,9 @@ export function Capture() {
               </button>
               {tab === "actions" && live.length >= 2 && (
                 <button
-                  className={"tab-toggle" + (groupView ? " on" : "")}
+                  className={"gtoggle" + (groupView ? " on" : "")}
+                  role="switch"
+                  aria-checked={groupView}
                   onClick={toggleGroupView}
                   title={
                     groupView
@@ -676,7 +678,10 @@ export function Capture() {
                       : "Fold similar actions together"
                   }
                 >
-                  Grouped
+                  <span className="gtoggle-label">Grouped</span>
+                  <span className="gtoggle-track">
+                    <span className="gtoggle-knob" />
+                  </span>
                 </button>
               )}
             </div>
