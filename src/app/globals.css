@@ -253,6 +253,53 @@ body {
   margin-left: 5px;
 }
 
+/* The grouped-view toggle, riding the right edge of the tab row. */
+.tab-toggle {
+  margin-left: auto;
+  align-self: center;
+  margin-bottom: 7px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 4px 11px;
+  touch-action: manipulation;
+}
+.tab-toggle.on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* A group's header: the shared phrase that folded these actions together. */
+.group-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 18px 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.group-label:after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+.group-note {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin: 14px 0 6px;
+}
+
 .act {
   display: flex;
   gap: 11px;

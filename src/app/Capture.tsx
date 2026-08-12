@@ -14,7 +14,7 @@
    render what it hands back.
    ============================================================ */
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BrushCleaning, Copy, Image as ImageIcon, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
 import { DistillView } from "./Distill";
@@ -23,8 +23,8 @@ import {
   clockSnapshot,
   subscribeToClock,
 } from "@/lib/clock";
-import { useDictation } from "@/hooks/useDictation";
-import { get } from "@/lib/storage";
+import { useRecordedDictation } from "@/hooks/useRecordedDictation";
+import { get, set } from "@/lib/storage";
 import { shrinkFile } from "@/lib/shrink";
 import {
   type Action,
@@ -48,6 +48,11 @@ import {
 import { OrganizeScreen } from "./Organize";
 import { shareIntention, shareThread } from "@/lib/share";
 import { useBoard } from "@/hooks/useBoard";
+import { groupActions } from "@/lib/group";
+
+/** Where the grouped-view toggle is remembered, in the same kv store as the
+    board — a view preference that survives reloads on this device. */
+const GROUP_VIEW_KEY = "capture:groupView:v1";
 
 export function Capture() {
   /* The ticking clock the countdowns and shelf lives derive from. */
@@ -65,6 +70,21 @@ export function Capture() {
      wand button only appears when the scan has found something worth
      reviewing — a clean board keeps the header to sync / share / settings. */
   const [showOrganize, setShowOrganize] = useState(false);
+
+  /* Grouped view of the Actions tab — a lens, not a structure: nothing is
+     written to the board, and toggling off restores the flat list untouched.
+     Remembered across visits; read in an effect so hydration stays clean. */
+  const [groupView, setGroupView] = useState(false);
+  useEffect(() => {
+    void get(GROUP_VIEW_KEY).then((v) => {
+      if (v === "1") setGroupView(true);
+    });
+  }, []);
+  const toggleGroupView = () =>
+    setGroupView((v) => {
+      void set(GROUP_VIEW_KEY, v ? "0" : "1");
+      return !v;
+    });
 
   /* Everything else — the board, every operation on it, and the derived
      views — comes from useBoard. This destructure is the whole logic
@@ -183,14 +203,22 @@ export function Capture() {
      the screen, so the header stays quiet on a clean board. */
   const highOrganize = (organize ?? []).filter((p) => p.confidence === "high");
 
-  /* Input device plumbing: the hidden file picker, and the speech recogniser
-     (shared with Distill — the mic routes to whichever surface is open).
-     Read through the ref by useDictation, so the destination is always the
-     one that is current when a result lands. The ref remembers that the
+  /* The grouped lens over live actions — plain-text matching, no model call,
+     recomputed only when the list itself changes. */
+  const grouped = useMemo(
+    () => (groupView ? groupActions(live) : null),
+    [groupView, live]
+  );
+
+  /* Input device plumbing: the hidden file picker, and the recorded-dictation
+     mic (shared with Distill — the mic routes to whichever surface is open).
+     Read through the ref by useRecordedDictation, so the destination is always
+     the one that is current when a result lands. The ref remembers that the
      words in the box came from the microphone, so the capture can be
      recorded as dictated in the ledger. */
   const dictatedRef = useRef(false);
-  const { canDictate, listening, toggleMic } = useDictation((t) => {
+  const { canDictate, listening, transcribing, toggleMic } =
+    useRecordedDictation((t) => {
     if (distillOpen) {
       setDistillInput((x) => (x ? x + " " : "") + t.trim());
     } else {
@@ -406,15 +434,20 @@ export function Capture() {
               <button
                 className={"icon-btn" + (listening ? " live" : "")}
                 onClick={toggleMic}
+                disabled={transcribing}
                 aria-label="Dictate"
               >
                 <Mic size={18} strokeWidth={1.7} />
               </button>
             )}
             <div className="cap-hint">
-              {canDictate
-                ? "or tap the mic key on your keyboard"
-                : "tap the mic key on your keyboard to dictate"}
+              {transcribing
+                ? "transcribing…"
+                : listening
+                  ? "listening — tap the mic again when you're done"
+                  : canDictate
+                    ? "tap the mic to dictate"
+                    : "tap the mic key on your keyboard to dictate"}
             </div>
             <button
               className="icon-btn"
@@ -632,6 +665,19 @@ export function Capture() {
               >
                 Intentions <b>{data.intentions.length}</b>
               </button>
+              {tab === "actions" && live.length >= 2 && (
+                <button
+                  className={"tab-toggle" + (groupView ? " on" : "")}
+                  onClick={toggleGroupView}
+                  title={
+                    groupView
+                      ? "Back to the flat list"
+                      : "Fold similar actions together"
+                  }
+                >
+                  Grouped
+                </button>
+              )}
             </div>
 
             {tab === "actions" && (
@@ -645,7 +691,31 @@ export function Capture() {
                     </p>
                   </div>
                 )}
-                {live.map((a) => row(a))}
+                {grouped ? (
+                  <>
+                    {!grouped.groups.length && !!live.length && (
+                      <p className="group-note">
+                        Nothing groups yet — no two actions share a subject.
+                      </p>
+                    )}
+                    {grouped.groups.map((g) => (
+                      <div key={g.actions[0].id}>
+                        <div className="group-label">
+                          {g.label} · {g.actions.length}
+                        </div>
+                        {g.actions.map((a) => row(a))}
+                      </div>
+                    ))}
+                    {!!grouped.groups.length && !!grouped.rest.length && (
+                      <div className="group-label">
+                        everything else · {grouped.rest.length}
+                      </div>
+                    )}
+                    {grouped.rest.map((a) => row(a))}
+                  </>
+                ) : (
+                  live.map((a) => row(a))
+                )}
 
                 {!!fadedList.length && (
                   <>
