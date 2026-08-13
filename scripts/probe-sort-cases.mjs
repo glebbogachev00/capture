@@ -155,6 +155,22 @@ function judge(tc, out) {
     );
   if (e.shelfIn && !e.shelfIn.includes(out.shelfLife))
     problems.push(`shelfLife "${out.shelfLife}" not in [${e.shelfIn}]`);
+  /* Shaping: the prompt promises a capture comes back readable — distinct
+     ideas split by a blank line, lists as bullets. A wall of text is a
+     failure even when the kind is right. */
+  const clean = out.clean || "";
+  if (e.cleanParagraphs) {
+    const paras = clean.split(/\n\s*\n/).filter((p) => p.trim()).length;
+    if (paras < e.cleanParagraphs)
+      problems.push(
+        `${paras} paragraph(s), wanted ${e.cleanParagraphs}+ — came back as a block`
+      );
+  }
+  if (e.cleanBullets) {
+    const bullets = clean.split(/\n/).filter((l) => /^\s*-\s+/.test(l)).length;
+    if (bullets < e.cleanBullets)
+      problems.push(`${bullets} bullet line(s), wanted ${e.cleanBullets}+`);
+  }
   return problems;
 }
 
