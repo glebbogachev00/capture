@@ -75,6 +75,10 @@ async function sessionCookie() {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    /* The server runs with APP_PASSWORD unset (a fresh clone, or a local
+       test instance): the gate is off, so no cookie is needed at all. */
+    if (res.status === 400 && /not configured/i.test(body.error || ""))
+      return null;
     throw new Error(`login ${res.status}: ${body.error || res.statusText}`);
   }
   const setCookie = res.headers.get("set-cookie");
