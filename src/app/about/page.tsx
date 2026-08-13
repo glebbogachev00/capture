@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "capture · fast notes without the junk drawer",
+  title: "capture · scattered thoughts in, actions out",
   description:
-    "Capture keeps the speed of quick notes without letting thoughts become a junk drawer.",
+    "Scattered thoughts in — decisions, actions, and useful context out. A thinking system, not a notes app.",
 };
 
 const kinds = [
@@ -63,12 +63,13 @@ export default function AboutPage() {
         </header>
 
         <section className="site-hero">
-          <p className="funding-kicker">Fast notes without the junk drawer</p>
+          <p className="funding-kicker">A thinking system, not a notes app</p>
           <h1>Capture the thought. Do not build the pile.</h1>
           <p className="funding-lede site-lede">
-            Capture keeps the speed of Apple Notes without letting your thoughts
-            become write-only memory. Say it, paste it, or dictate it. Capture
-            sorts it into an action, a thread, or an intention.
+            Scattered thoughts in — decisions, actions, and useful context out.
+            Say it, paste it, or dictate it, half-formed is fine. It comes back
+            as an action with a shelf life, a thread that accumulates, or an
+            intention you are living into. Nothing to organize later.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href="/">

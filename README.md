@@ -4,12 +4,13 @@
 
 # capture
 
-**One place to say things, three places for them to land.**
+**Scattered thoughts in. Decisions, actions, and useful context out.**
 
-You speak or paste a half-formed thought. A model decides whether it is
-something to close, something that accumulates, or something you are declaring
-about your life — cleans up the wording, and files it. Nothing to categorise by
-hand, no folders, no tags.
+A thinking system, not a notes app: one place to say things, three places for
+them to land. You speak or paste a half-formed thought. A model decides
+whether it is something to close, something that accumulates, or something you
+are declaring about your life — cleans up the wording, and files it. Nothing
+to categorise by hand, no folders, no tags, nothing to maintain later.
 
 **Your data. Your keys. Your server.** capture is local-first and self-hosted:
 your board lives in your browser's IndexedDB, your model keys stay on your own

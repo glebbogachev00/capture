@@ -177,7 +177,7 @@ The whole app then sits behind a single-password gate. Set it whenever the
 server is reachable from anything other than localhost — an open `/api/sort`
 is an open tab on your model quota.
 
-## 7. Optional: a human-sounding voice (Kokoro)
+## 6. Optional: a human-sounding voice (Kokoro)
 
 Spoken replies sound robotic by default (the browser's built-in voice). For
 near-human audio, capture can use **Kokoro** — an open-weight TTS model that
