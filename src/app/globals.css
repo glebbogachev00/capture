@@ -2292,12 +2292,20 @@ body {
     margin-left: auto;
   }
   /*
-   * The count collided with the wordmark once the header carried two buttons,
-   * and it was saying nothing the tabs do not already say — Actions, Threads
-   * and Intentions each carry their own number a few rows further down.
+   * The count collided with the wordmark once the header carried two
+   * buttons, so it used to be hidden here. It is a door to The record now,
+   * and hiding it left the phone with no visible way in at all — so it
+   * drops to its own line under the header instead of disappearing.
    */
+  .capture-head-right {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
   .capture-count {
-    display: none;
+    order: 10;
+    flex: 1 0 100%;
+    margin-top: 7px;
+    text-align: right;
   }
   .funding-head .capture-count {
     display: block;
