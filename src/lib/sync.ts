@@ -275,6 +275,19 @@ export function stampChanges(
   const threads = next.threads.map((t) => {
     const p = prev.threads.find((x) => x.id === t.id);
     let changed = !p;
+    /* A thread's OWN fields are content too. Only the fragments used to
+       count here, so a regenerated summary, a rename, or a cover picked on
+       the phone left updatedAt untouched — and the merge, which chooses a
+       thread record by updatedAt, then kept the other device's older copy
+       and pushed the stale one straight back on the next sync. Two bugs
+       were this one line: a summary that kept describing a note the user
+       had deleted, and a photo cover set on the phone that never reached
+       the laptop. */
+    if (
+      p &&
+      (p.name !== t.name || p.summary !== t.summary || p.cover !== t.cover)
+    )
+      changed = true;
     const frags = t.frags.map((f) => {
       const pf = p?.frags.find((x) => x.id === f.id);
       if (!pf) {
@@ -289,6 +302,9 @@ export function stampChanges(
       changed = true;
       return stamp(f);
     });
+    /* A thread that LOST a fragment changed as surely as one that gained
+       it — the pass above only ever sees the fragments that remain. */
+    if (p && p.frags.length !== t.frags.length) changed = true;
     if (!changed) return t;
     return { ...t, frags, updatedAt: now };
   });

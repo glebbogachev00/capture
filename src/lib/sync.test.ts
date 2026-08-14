@@ -226,6 +226,92 @@ describe("stampChanges — merge does not tombstone fragments that survived", ()
   });
 });
 
+describe("stampChanges — a thread's own fields are content", () => {
+  /* The bug: only fragment changes bumped a thread's updatedAt. A summary
+     rewritten after a note was deleted, a rename, or a cover chosen on the
+     phone all left the stamp alone — so mergeThreads, which picks a thread
+     record by updatedAt, kept the other device's older copy and pushed the
+     stale one straight back. The summary went on describing a deleted note
+     and the cover never left the phone. */
+
+  it("stamps a summary rewritten after a note was deleted", () => {
+    const prev = board({
+      threads: [
+        thread("t1", [frag("f1"), frag("f2")], {
+          summary: "Talks about the Nintendo Switch 2.",
+        }),
+      ],
+    });
+    // f2 deleted, then the summary regenerated from what is left.
+    const next = board({
+      threads: [
+        thread("t1", [frag("f1")], { summary: "Talks about the espresso setup." }),
+      ],
+    });
+    const { board: stamped } = stampChanges(prev, next, 5000);
+    expect(stamped.threads[0].updatedAt).toBe(5000);
+  });
+
+  it("stamps a summary-only rewrite", () => {
+    const prev = board({ threads: [thread("t1", [frag("f1")], { summary: "old" })] });
+    const next = board({ threads: [thread("t1", [frag("f1")], { summary: "new" })] });
+    expect(stampChanges(prev, next, 5000).board.threads[0].updatedAt).toBe(5000);
+  });
+
+  it("stamps a rename and a new cover", () => {
+    const prev = board({ threads: [thread("t1", [frag("f1")])] });
+    const renamed = board({
+      threads: [thread("t1", [frag("f1")], { name: "Renamed" })],
+    });
+    const covered = board({
+      threads: [thread("t1", [frag("f1")], { cover: "img:abc" })],
+    });
+    expect(stampChanges(prev, renamed, 5000).board.threads[0].updatedAt).toBe(5000);
+    expect(stampChanges(prev, covered, 5000).board.threads[0].updatedAt).toBe(5000);
+  });
+
+  it("leaves an untouched thread's stamp alone", () => {
+    const same = board({ threads: [thread("t1", [frag("f1")], { summary: "s" })] });
+    const copy = board({ threads: [thread("t1", [frag("f1")], { summary: "s" })] });
+    expect(stampChanges(same, copy, 5000).board.threads[0].updatedAt).toBe(1000);
+  });
+
+  /* The receiving device merges its OWN board first (useBoard pulls with
+     local as `a`, hub as `b`), and mergeThreads only replaces on a strictly
+     newer stamp — so an unstamped change loses the tie and the stale local
+     copy is what gets pushed back. These merge stale-first, which is the
+     direction the bug actually took. */
+
+  it("a regenerated summary reaches the other device", () => {
+    // The phone deletes a note and re-summarises. The laptop, still holding
+    // the old summary, pulls: the fresh summary must win, not its own.
+    const before = board({
+      threads: [
+        thread("t1", [frag("f1"), frag("f2")], { summary: "mentions the deleted note" }),
+      ],
+    });
+    const after = board({
+      threads: [thread("t1", [frag("f1")], { summary: "no longer mentions it" })],
+    });
+    const { board: stamped, tombstones } = stampChanges(before, after, 5000);
+    const laptop = { board: before, tombstones: [] as Tombstone[] };
+    const merged = mergeSync(laptop, { board: stamped, tombstones }, 6000);
+    expect(merged.board.threads[0].summary).toBe("no longer mentions it");
+    expect(merged.board.threads[0].frags.map((f) => f.id)).toEqual(["f1"]);
+  });
+
+  it("a cover set on the phone reaches the laptop", () => {
+    const before = board({ threads: [thread("t1", [frag("f1")])] });
+    const after = board({
+      threads: [thread("t1", [frag("f1")], { cover: "img:photo-1" })],
+    });
+    const { board: stamped, tombstones } = stampChanges(before, after, 5000);
+    const laptop = { board: before, tombstones: [] as Tombstone[] };
+    const merged = mergeSync(laptop, { board: stamped, tombstones }, 6000);
+    expect(merged.board.threads[0].cover).toBe("img:photo-1");
+  });
+});
+
 describe("boardSignature — what a pull compares before adopting a merge", () => {
   /* The bug this replaced: comparing only the newest timestamp. A device
      holding anything fresher than the incoming edit saw an unchanged
