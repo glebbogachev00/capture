@@ -1672,6 +1672,31 @@ export function useBoard(now: number) {
     }
   };
 
+  /**
+   * Set (or clear) a thread's cover.
+   *
+   * Display only: the summary, the fragments and the sort engine never see
+   * it. It rides the normal commit path, so it stamps, syncs and lands on
+   * the other device like any other thread edit — and a photo cover's bytes
+   * travel by the same image reconcile as any other picture.
+   */
+  const setThreadCover = (id: string, cover: string | null) => {
+    const t = latest.current.threads.find((x) => x.id === id);
+    if (!t || (t.cover ?? null) === cover) return;
+    void commit({
+      ...latest.current,
+      /* Clearing drops the key rather than storing null, so a coverless
+         thread serialises exactly as it did before covers existed. */
+      threads: latest.current.threads.map((x) => {
+        if (x.id !== id) return x;
+        if (cover) return { ...x, cover };
+        const next = { ...x };
+        delete next.cover;
+        return next;
+      }),
+    });
+  };
+
   const renameThread = (id: string, name: string) => {
     const prev = latest.current.threads.find((t) => t.id === id)?.name;
     if (!name.trim() || name === prev) return;
@@ -2845,6 +2870,7 @@ export function useBoard(now: number) {
     moveToThread,
     editActionText,
     renameThread,
+    setThreadCover,
     editFrag,
     deleteFrag,
     moveFrag,

@@ -80,6 +80,10 @@ export type Thread = {
   name: string;
   summary: string;
   frags: Frag[];
+  /** A little identity for a thread being built out: "tone:sage" or
+      "img:<id>". Display only — it never touches the summary or the
+      fragments. See lib/cover.ts. */
+  cover?: string;
   updatedAt?: number;
 };
 

@@ -52,6 +52,15 @@ import { shareIntention, shareThread } from "@/lib/share";
 import { useBoard } from "@/hooks/useBoard";
 import { groupActions } from "@/lib/group";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
+import {
+  type Cover,
+  TONE_NAMES,
+  TONES,
+  imgValue,
+  parseCover,
+  toneColour,
+  toneValue,
+} from "@/lib/cover";
 
 /** Where the grouped-view toggle is remembered, in the same kv store as the
     board — a view preference that survives reloads on this device. */
@@ -163,6 +172,7 @@ export function Capture() {
     moveToThread,
     editActionText,
     renameThread,
+    setThreadCover,
     editFrag,
     deleteFrag,
     moveFrag,
@@ -650,6 +660,7 @@ export function Capture() {
             onDeleteFrag={(fragId) => deleteFrag(thread.id, fragId)}
             others={data.threads.filter((t) => t.id !== thread.id)}
             onMerge={(fromId) => mergeThreads(thread.id, fromId)}
+            onSetCover={(cover) => setThreadCover(thread.id, cover)}
             onMoveFrag={(fragId, toId) => moveFrag(thread.id, fragId, toId)}
             onMoveFragToNew={(fragId) => moveFragToNew(thread.id, fragId)}
             onCopyThread={() => copyWhole(shareThread(thread))}
@@ -1159,6 +1170,45 @@ function Row({
   );
 }
 
+/**
+ * A thread's cover: a colour band, or a photo band when one was chosen.
+ * Photos come back from IndexedDB the same way fragment images do, so a
+ * cover picked on the phone appears on the Mac once its bytes sync.
+ */
+function CoverBand({ cover }: { cover: Cover }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const id = cover.kind === "img" ? cover.id : null;
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    void get(IMG(id))
+      .then((v) => {
+        if (alive) setSrc(v);
+      })
+      .catch(() => {
+        /* not here yet — the next sync fetches it */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
+  if (cover.kind === "tone") {
+    return (
+      <div
+        className="tcover"
+        style={{ background: toneColour(cover) || undefined }}
+      />
+    );
+  }
+  return (
+    <div className="tcover">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {src && <img src={src} alt="" />}
+    </div>
+  );
+}
+
 function TCard({
   t,
   resting,
@@ -1173,13 +1223,21 @@ function TCard({
 }) {
   const last = t.frags.at(-1);
   const bars = t.frags.slice(-22);
+  const cover = parseCover(t.cover);
   return (
     <button
       className={
-        "tcard" + (resting ? " resting" : "") + (landed ? " focus" : "")
+        "tcard" +
+        (resting ? " resting" : "") +
+        (landed ? " focus" : "") +
+        (cover ? " has-cover" : "")
       }
       onClick={onOpen}
     >
+      {/* A thread being built out gets a little identity — a band across the
+          top, colour or photo. Threads without one look exactly as they
+          always have, so a quiet board stays quiet. */}
+      {cover && <CoverBand cover={cover} />}
       <div className="tname">{t.name}</div>
       <div className="tsum">
         {t.summary || (last?.text || "").slice(0, 120) + "…"}
@@ -1218,6 +1276,7 @@ function ThreadView({
   onDeleteFrag,
   others,
   onMerge,
+  onSetCover,
   onMoveFrag,
   onMoveFragToNew,
   onCopyThread,
@@ -1235,6 +1294,7 @@ function ThreadView({
   onDeleteFrag: (fragId: string) => void;
   others: Thread[];
   onMerge: (fromId: string) => void;
+  onSetCover: (cover: string | null) => void;
   onMoveFrag: (fragId: string, toId: string) => void;
   onMoveFragToNew: (fragId: string) => void;
   onCopyThread: () => void;
@@ -1246,6 +1306,8 @@ function ThreadView({
   const [name, setName] = useState(thread.name);
   const [confirming, setConfirming] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [pickingCover, setPickingCover] = useState(false);
+  const coverFile = useRef<HTMLInputElement>(null);
   const [more, setMore] = useState(false);
   /* The Related line stays collapsed until asked — a quiet affordance,
      never a list sitting in the thread. */
@@ -1333,6 +1395,17 @@ function ThreadView({
               <button className="ghost" onClick={() => setRenaming(true)}>
                 Rename
               </button>
+              <button
+                className="ghost"
+                onClick={() => {
+                  setPickingCover((v) => !v);
+                  setMerging(false);
+                  setConfirming(false);
+                }}
+                aria-expanded={pickingCover}
+              >
+                Cover
+              </button>
               {others.length > 0 && (
                 <button
                   className="ghost"
@@ -1355,6 +1428,58 @@ function ThreadView({
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {pickingCover && (
+        <div className="shelf cover-picker">
+          <span className="cap-hint" style={{ flex: "1 1 100%" }}>
+            A little identity for this thread — a colour, or a picture of your
+            own.
+          </span>
+          {TONE_NAMES.map((t) => (
+            <button
+              key={t}
+              className={
+                "tone-swatch" +
+                (thread.cover === toneValue(t) ? " on" : "")
+              }
+              style={{ background: TONES[t] }}
+              onClick={() => onSetCover(toneValue(t))}
+              aria-label={"Cover: " + t}
+              title={t}
+            />
+          ))}
+          <button className="ghost" onClick={() => coverFile.current?.click()}>
+            Photo…
+          </button>
+          {thread.cover && (
+            <button className="ghost warn" onClick={() => onSetCover(null)}>
+              None
+            </button>
+          )}
+          <input
+            ref={coverFile}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (!f) return;
+              /* Shrunk exactly like a capture photo, stored under the usual
+                 image key, so it syncs by the same path as any other picture. */
+              void shrinkFile(f)
+                .then(async (src) => {
+                  const id = uid();
+                  await set(IMG(id), src);
+                  onSetCover(imgValue(id));
+                })
+                .catch(() => {
+                  /* unreadable image — leave the cover as it was */
+                });
+            }}
+          />
         </div>
       )}
 

@@ -2573,3 +2573,47 @@ body {
 .act-meta .due.soon {
   color: #c4452b;
 }
+
+/* A thread's cover: a band across the top of its card, colour or photo.
+   Threads without one are untouched — the board only gets louder where
+   you decided it should. */
+.tcard.has-cover {
+  padding-top: 0;
+  overflow: hidden;
+}
+.tcover {
+  height: 64px;
+  /* Full-bleed: the card pads its text by 16px, and a cover that stopped
+     short of the edge would read as a picture pasted on rather than the
+     thread's own top. */
+  margin: 0 -16px 13px;
+  background: var(--accent-soft);
+  overflow: hidden;
+}
+.tcover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* The tones, as round swatches in the picker. */
+.cover-picker {
+  align-items: center;
+}
+/* The hint reads first, whatever the shelf's narrow-screen ordering does. */
+.cover-picker .cap-hint {
+  order: -1;
+}
+.tone-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  flex: none;
+  touch-action: manipulation;
+}
+.tone-swatch.on {
+  border-color: var(--ink);
+}
