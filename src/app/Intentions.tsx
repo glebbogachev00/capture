@@ -464,6 +464,27 @@ export function RecordScreen({
         <>
           <p className="record-lede">{recordLine(stats)}</p>
 
+          {/* The numbers as their own objects, the way a stats panel reads —
+              glanceable first, sentence second. */}
+          <div className="record-tiles">
+            <div className="record-tile">
+              <span className="record-tile-label">Said</span>
+              <b>{stats.total}</b>
+            </div>
+            <div className="record-tile">
+              <span className="record-tile-label">Actions</span>
+              <b>{stats.actions}</b>
+            </div>
+            <div className="record-tile">
+              <span className="record-tile-label">Threads</span>
+              <b>{stats.threads}</b>
+            </div>
+            <div className="record-tile">
+              <span className="record-tile-label">By voice</span>
+              <b>{stats.dictated}</b>
+            </div>
+          </div>
+
           <div className="record-frame">
             <div className="record-grid">
               {grid.map((week) => (

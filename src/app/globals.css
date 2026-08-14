@@ -1210,6 +1210,40 @@ body {
   max-width: 34em;
   margin: 0 0 22px;
 }
+/* The numbers as tiles, in the manner of a stats panel: each figure its own
+   object, label small above it, so the totals read at a glance before the
+   sentence is read at all. */
+.record-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 16px;
+  max-width: 460px;
+}
+.record-tile {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.record-tile-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.record-tile b {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+  font-variation-settings: "SOFT" 30;
+}
+
 .record-frame {
   background: var(--card);
   border: 1px solid var(--rule);
@@ -1273,11 +1307,14 @@ body {
 @media (max-width: 420px) {
   .record-cell,
   .record-months span {
-    width: 13px;
+    width: 15px;
   }
   .record-cell {
-    height: 13px;
+    height: 15px;
     border-radius: 4px;
+  }
+  .record-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .record-frame {
     padding: 13px;
