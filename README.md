@@ -161,7 +161,7 @@ On Vercel, create the store first:
 ```bash
 npm i -g vercel
 vercel link
-vercel blob store add capture
+vercel blob create-store capture
 ```
 
 That sets `BLOB_READ_WRITE_TOKEN` on the project, which is the switch: when
