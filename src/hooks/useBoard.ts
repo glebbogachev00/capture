@@ -68,6 +68,7 @@ import {
 } from "@/lib/boardOps";
 import { arrivedIn, arrivedNote } from "@/lib/arrived";
 import { parseCommandPrefix } from "@/lib/command";
+import { expiryFor, parseDue } from "@/lib/due";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
@@ -2579,6 +2580,14 @@ export function useBoard(now: number) {
             role: t.role,
             text: t.text,
           })),
+          /* The same thread context the sorter gets, so a conversation can
+             continue a subject already on the board instead of starting a
+             second thread about it. */
+          threads: latest.current.threads.map((t) => ({
+            id: t.id,
+            name: t.name,
+            about: t.summary?.slice(0, 160) || "",
+          })),
         }),
       });
       if (!res.ok) {
@@ -2661,6 +2670,11 @@ export function useBoard(now: number) {
         // One timestamp for the actions and their ledger entry, so the
         // record points at exactly the items it describes.
         const at = stamp();
+        /* A deadline said out loud in the conversation counts the same as one
+           typed into the capture box: it holds the action on the board until
+           its date. Distill used to drop it, so "I'll send it Friday" could
+           fade before Friday. */
+        const due = parseDue(settled.due, at);
         const items: Action[] = realActions.map((t) => ({
           id: uid(),
           text: t,
@@ -2669,7 +2683,8 @@ export function useBoard(now: number) {
           src: finalClean,
           imgs: [],
           shelf: (shelfLife || "keep") as ShelfLife,
-          expires: span ? stamp() + span : null,
+          due,
+          expires: expiryFor(span, due, at),
         }));
         await commit(
           withLedger(
@@ -2694,16 +2709,32 @@ export function useBoard(now: number) {
         await resetDistill();
         setTab("actions");
       } else {
-        const thread: Thread = {
+        /* Continue the thread this conversation was actually about. Distill
+           used to mint a fresh thread every time, so thinking a subject
+           through a second time split it across two near-identical threads
+           — the sorter has always routed; the settler simply was not asked
+           to, and the answer was thrown away when it did. */
+        const home = settled.threadId
+          ? latest.current.threads.find((t) => t.id === settled.threadId)
+          : undefined;
+        const frag: Frag = { id: uid(), at: stamp(), text: finalClean };
+        const thread: Thread = home ?? {
           id: uid(),
-          name: title || finalClean.split(/\s+/).slice(0, 5).join(" "),
+          name:
+            settled.threadName ||
+            title ||
+            finalClean.split(/\s+/).slice(0, 5).join(" "),
           summary: "",
-          frags: [{ id: uid(), at: stamp(), text: finalClean }],
+          frags: [],
         };
         const next = withLedger(
           {
             ...latest.current,
-            threads: [thread, ...latest.current.threads],
+            threads: home
+              ? latest.current.threads.map((t) =>
+                  t.id === home.id ? { ...t, frags: [...t.frags, frag] } : t
+                )
+              : [{ ...thread, frags: [frag] }, ...latest.current.threads],
           },
           {
             id: uid(),

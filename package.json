@@ -15,6 +15,7 @@
     "probe:tidy": "node scripts/probe-tidy.mjs",
     "probe:tidy:cases": "node scripts/probe-tidy-cases.mjs",
     "probe:sort:cases": "node scripts/probe-sort-cases.mjs",
+    "probe:settle:cases": "node scripts/probe-settle-cases.mjs",
     "probe:credits": "node scripts/probe-credits.mjs"
   },
   "dependencies": {

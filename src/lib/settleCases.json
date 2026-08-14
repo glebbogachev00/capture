@@ -1,0 +1,157 @@
+[
+  {
+    "id": "continues-known-subject",
+    "why": "a conversation developing a subject already on the board must join that thread, not start a near-twin of it",
+    "turns": [
+      {
+        "role": "user",
+        "text": "been thinking more about the capture app, the organize screen fires the AI pass automatically and that spends quota every time you open it"
+      },
+      {
+        "role": "assistant",
+        "text": "So the cost is paid on opening rather than on asking."
+      },
+      {
+        "role": "user",
+        "text": "exactly, it should only scan when I tap something"
+      }
+    ],
+    "expect": {
+      "kindOneOf": [
+        "thread"
+      ],
+      "routeTo": "t-cap"
+    }
+  },
+  {
+    "id": "fresh-subject-stays-fresh",
+    "why": "an unrelated conversation must NOT be shoehorned into an open thread",
+    "turns": [
+      {
+        "role": "user",
+        "text": "I keep wondering whether to put raised beds along the back fence, maybe cedar, and how much sun that corner really gets"
+      },
+      {
+        "role": "assistant",
+        "text": "Sounds like the sun matters more than the material here."
+      },
+      {
+        "role": "user",
+        "text": "yeah that's the real question"
+      }
+    ],
+    "expect": {
+      "kindOneOf": [
+        "thread"
+      ],
+      "newThread": true
+    }
+  },
+  {
+    "id": "spoken-deadline",
+    "why": "a deadline said out loud must be read, so the action cannot fade before its date",
+    "turns": [
+      {
+        "role": "user",
+        "text": "I need to send Alex the proposal before friday, I keep putting it off"
+      },
+      {
+        "role": "assistant",
+        "text": "Friday is the real constraint then."
+      },
+      {
+        "role": "user",
+        "text": "yes"
+      }
+    ],
+    "expect": {
+      "kindOneOf": [
+        "action"
+      ],
+      "hasDue": true,
+      "actionsBetween": [
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "id": "name-word-trap",
+    "why": "sharing a word with a thread's name is not a reason to file there — the subject is. Kind is free here: 'I want to capture my walks' reads as an intention or a thread, and both are defensible; the trap is t-cap.",
+    "turns": [
+      {
+        "role": "user",
+        "text": "I want to capture more of my walks, just speaking thoughts as they come while I'm out"
+      },
+      {
+        "role": "assistant",
+        "text": "So the walking itself is when the thinking happens."
+      },
+      {
+        "role": "user",
+        "text": "right, that's when it flows"
+      }
+    ],
+    "expect": {
+      "kindOneOf": [
+        "thread",
+        "intention"
+      ],
+      "notRouteTo": "t-cap"
+    }
+  },
+  {
+    "id": "exploratory-stays-thread",
+    "why": "a long wandering conversation with no committed task is a thread, and no task may be invented",
+    "turns": [
+      {
+        "role": "user",
+        "text": "I go back and forth on whether the free tier is attracting the wrong people entirely"
+      },
+      {
+        "role": "assistant",
+        "text": "The worry is who it brings in, not what it costs."
+      },
+      {
+        "role": "user",
+        "text": "yeah, though I'm not sure dropping it is right either"
+      }
+    ],
+    "expect": {
+      "kindOneOf": [
+        "thread"
+      ],
+      "noActions": true
+    }
+  },
+  {
+    "id": "committed-task-closes",
+    "why": "a conversation that settled on a concrete task yields that task, not a thread",
+    "turns": [
+      {
+        "role": "user",
+        "text": "the vet called about Luna's shots and I keep forgetting to ring them back"
+      },
+      {
+        "role": "assistant",
+        "text": "So the call is the outstanding piece."
+      },
+      {
+        "role": "user",
+        "text": "yes I just need to do it"
+      }
+    ],
+    "expect": {
+      "kindOneOf": [
+        "action"
+      ],
+      "actionsBetween": [
+        1,
+        1
+      ],
+      "actionsMention": [
+        "vet"
+      ]
+    }
+  }
+]

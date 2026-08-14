@@ -5,6 +5,7 @@ import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { NoProvidersError, chain, withFallback } from "@/lib/providers";
 import { countAssistantQuestions, resolveSettled } from "@/lib/distill";
+import { DUE_RULE, ROUTING_RULE, todayLine } from "@/lib/engineRules";
 
 /**
  * Distill — the clarifying engine.
@@ -36,7 +37,17 @@ const Turn = z.object({
 
 const Body = z.discriminatedUnion("op", [
   z.object({ op: z.literal("chat"), turns: z.array(Turn) }),
-  z.object({ op: z.literal("settle"), turns: z.array(Turn) }),
+  z.object({
+    op: z.literal("settle"),
+    turns: z.array(Turn),
+    /* The threads this person already keeps. Without them a settled
+       conversation could only ever start a new thread, so a long think
+       about a subject already on the board spawned a near-twin of it. */
+    threads: z
+      .array(z.object({ id: z.string(), name: z.string(), about: z.string() }))
+      .max(40)
+      .optional(),
+  }),
   z.object({
     op: z.literal("polish"),
     clean: z.string(),
@@ -54,6 +65,17 @@ const Settled = z.object({
   title: z.string().describe("max 6 words"),
   actions: z.array(z.string()).describe("imperative one-line items when kind is action"),
   shelfLife: z.enum(["hours", "days", "weeks", "keep"]),
+  threadId: z
+    .string()
+    .nullable()
+    .describe("id of the existing thread this belongs in, or null for a new one"),
+  threadName: z.string().nullable().describe("name for a new thread, or null"),
+  due: z
+    .string()
+    .nullable()
+    .describe(
+      "ISO date the conversation named as its deadline, or null when none was stated"
+    ),
 });
 
 const Polished = z.object({
@@ -78,12 +100,18 @@ You never talk about the app's mechanics. Never say "I'd file this as…", never
 How to respond:
 - Meet them in their own frame. A greeting is a greeting: answer it warmly and invite them in — "Hey! I'm good, thanks — what do you want to work on today?" Keep the door open; a greeting never ends the conversation.
 - If they open with a real thought rather than a greeting, engage that thought directly — never answer a thought with the generic opener question. They already told you what they want to work on.
-- When they bring a real thought, engage with it: say something that shows you get it, in your own words (never parrot theirs back), and if one genuinely important thing is missing, ask the ONE question that would make it concrete. Never more than one question in a reply.
+- When they bring a real thought, EARN the turn. A reply that only shows you understood is a wasted turn — they already know what they said. Every reply must carry at least one of these, and the first three are better than the fourth:
+  1. The tension underneath it, named plainly: the two things actually pulling against each other, which they may not have separated yet.
+  2. What would decide it: the fact, constraint or consequence that would settle the question, rather than more discussion of it.
+  3. A concrete consideration they have not raised — a real trade-off, a cost, an option, an angle. You are allowed to have a view and say it in one sentence.
+  4. Only if none of those exist: the ONE question that would make it concrete. Never a question whose answer they obviously already know, and never a question that just asks them to repeat themselves with more detail.
+- Never more than one question in a reply.
 - When the thought has taken shape — there is clearly something to work on, decide, or keep thinking about — close the conversation: one short line that hands it back ("This feels like a real direction."), then end your reply with the marker [ready] on its own line, so the app knows it can work out where this goes. Say nothing after the marker. The moment the direction is clear, close — do not reach for another question.
 
 Rules you never break:
 - Never mention filing, kinds, records, saving, or where things will go. Ever.
-- Never restate the user's words back at them. Say your understanding in your own words.
+- Never restate the user's words back at them, and never mirror. Banned openers, because they are the sound of a reply with nothing in it: "It sounds like", "So what I'm hearing", "It seems like", "So you're saying", "So the X is Y". A sentence that only reflects their thought back has done no work.
+- Every reply must ADD something they did not say: name the tension underneath it, point at the thing that actually decides it, or say what follows from it. If you cannot add anything, ask the one question that moves it — do not fill the turn with a paraphrase.
 - Small talk is conversation, not a close: greetings, "how are you", pleasantries, thanks — answer warmly and keep going. Never end a reply with [ready] when there is nothing real to file; the conversation continues until there is, or the user leaves.
 - A confirmation word from the user — "yes", "right", "that's it", "correct", "exactly", "sounds good" — when there is something real to file, produces [ready] on your next reply. Never follow a confirmation with another question, however curious you are — the conversation is over, and the user can correct a rough close in review.
 - Never ask more than two questions across the whole conversation. A third question means you are not listening; close instead, however rough.
@@ -106,6 +134,8 @@ Be conservative, not eager. Only make an action when the conversation actually s
 The "clean" field is the whole conversation distilled: what it settled on, written in their voice, with their specifics kept and nothing invented. Break it into short paragraphs or bullets where it lists things, like the sort engine does.
 
 Set "actions" to the one to three imperative items actually agreed on when kind is action, otherwise empty.
+
+When kind is "thread", decide where it lives. The person's existing threads are listed below: set threadId to the one this conversation genuinely continues, or set threadId to null and give a short threadName for a new one. A conversation that developed a subject already on the board belongs IN that thread — a second thread on the same subject splits the thinking in half. When kind is not "thread", set both to null.
 
 Reference examples:
 - "So the plan is to call the vet about Luna's shots, and I should also grab cat food this week" → "action", actions: ["Call the vet about Luna's shots", "Buy cat food this week"]
@@ -376,8 +406,14 @@ export async function POST(request: Request) {
         model: tier.model,
         maxRetries: 0,
         schema: Settled,
-        system: SETTLER,
-        prompt: transcript(body.turns),
+        system:
+          SETTLER +
+          "\n\nTheir existing threads:\n" +
+          (body.threads?.length ? JSON.stringify(body.threads) : "(none yet)") +
+          "\n" +
+          ROUTING_RULE +
+          DUE_RULE,
+        prompt: todayLine() + transcript(body.turns),
         providerOptions: tier.providerOptions,
       });
       return object;

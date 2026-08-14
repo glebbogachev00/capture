@@ -32,6 +32,8 @@ export type DistillResult = {
   shelfLife?: string;
   threadId?: string | null;
   threadName?: string | null;
+  /** An ISO deadline the conversation named, or null. */
+  due?: string | null;
   /** Which model tier settled it — recorded in the capture ledger. */
   via?: string;
 };
