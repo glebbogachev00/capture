@@ -170,6 +170,34 @@ export function applyTombstones(board: Board, tombstones: Tombstone[]): Board {
   };
 }
 
+/**
+ * A stable fingerprint of everything sync cares about: which items exist,
+ * how fresh each one is, and where each fragment lives.
+ *
+ * This is what a pull compares before adopting a merge. The obvious cheap
+ * test — "is the newest timestamp newer than mine?" — is WRONG, and lost
+ * real edits: a device holding anything more recent than the incoming
+ * change (a capture made a minute later, say) sees an unchanged maximum
+ * and throws the merge away, so the other device's edit never lands.
+ *
+ * Order-independent (the parts are sorted) so a merge that merely rebuilds
+ * objects or re-sorts fragments does not read as a change.
+ */
+export function boardSignature(board: Board, tombstones: Tombstone[]): string {
+  const parts: string[] = [];
+  for (const a of board.actions) parts.push(`a:${a.id}:${ts(a)}`);
+  for (const t of board.threads) {
+    parts.push(`t:${t.id}:${t.updatedAt ?? 0}`);
+    /* The thread id rides along, so moving a fragment between threads is a
+       change even when its own timestamp is untouched. */
+    for (const f of t.frags) parts.push(`f:${t.id}:${f.id}:${ts(f)}`);
+  }
+  for (const i of board.intentions) parts.push(`i:${i.id}:${ts(i)}`);
+  for (const p of board.principles) parts.push(`p:${p.id}:${p.updatedAt ?? 0}`);
+  for (const tb of tombstones) parts.push(`x:${tb.kind}:${tb.id}:${tb.deletedAt}`);
+  return parts.sort().join("|");
+}
+
 /** The full merge: tombstones, then boards, then deletions applied.
     `now` feeds the tombstone horizon and is injectable for tests. */
 export function mergeSync(a: SyncState, b: SyncState, now = Date.now()): SyncState {

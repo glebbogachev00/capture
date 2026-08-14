@@ -67,8 +67,10 @@ import {
 } from "@/lib/boardOps";
 import { arrivedIn, arrivedNote } from "@/lib/arrived";
 import { parseCommandPrefix } from "@/lib/command";
+import { referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
+  boardSignature,
   mergeSync,
   mergeTombstones,
   stampChanges,
@@ -267,6 +269,46 @@ export function useBoard(now: number) {
       newer than N?" and get a two-field answer instead of the whole board. */
   const hubRev = useRef<number | null>(null);
 
+  /** Image ids this device has already handed to the hub, so a push does not
+      re-upload the same photo every time. Not persisted: after a reload the
+      first push re-offers them and the hub answers "already here". */
+  const imgsOnHub = useRef<Set<string>>(new Set());
+
+  /**
+   * Make the photos match the board.
+   *
+   * The board syncs as text and carries only image ids, so after a merge a
+   * device can hold a fragment whose picture it has never seen — and hold
+   * pictures the hub has never seen. Both directions are settled here:
+   * anything referenced but missing locally is fetched, anything held
+   * locally but not yet offered is uploaded. Failures are silent by design;
+   * the next sync tries again, and a missing photo never blocks the text.
+   */
+  const reconcileImages = useCallback(async (board: Board) => {
+    for (const id of referencedImageIds(board)) {
+      try {
+        const mine = await get(IMG(id));
+        if (!mine) {
+          const res = await fetch(`/api/img/${id}`);
+          if (!res.ok) continue;
+          const { src } = (await res.json()) as { src?: string };
+          if (src) await set(IMG(id), src);
+          imgsOnHub.current.add(id);
+          continue;
+        }
+        if (imgsOnHub.current.has(id)) continue;
+        const res = await fetch(`/api/img/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ src: mine }),
+        });
+        if (res.ok) imgsOnHub.current.add(id);
+      } catch {
+        /* hub unreachable or disk hiccup — the next sync picks it up */
+      }
+    }
+  }, []);
+
   /** Send our state to the hub and adopt its merged answer. */
   const pushNow = useCallback(async () => {
     if (syncing.current) return;
@@ -300,12 +342,15 @@ export function useBoard(now: number) {
         /* disk hiccup; next commit retries */
       }
       setSync({ ok: true, at: stamp() });
+      /* The text is up; hand the pictures over too. Not awaited — a photo
+         upload must never hold up the sync status the user is watching. */
+      void reconcileImages(merged.board);
     } catch {
       /* hub unreachable — keep everything local, retry on the next change */
       setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
     }
     syncing.current = false;
-  }, []);
+  }, [reconcileImages]);
 
   /** Coalesce bursts of edits into one push a beat after the last one. */
   const schedulePush = useCallback(() => {
@@ -340,22 +385,13 @@ export function useBoard(now: number) {
         { board: latest.current, tombstones: tombstones.current },
         { board: remote.board, tombstones: remote.tombstones }
       );
-      /* Compare by max updatedAt across all items rather than serialising the
-         whole board — much cheaper on mobile where this fires every 10 seconds. */
-      const maxTs = (b: Board) =>
-        Math.max(
-          0,
-          ...b.actions.map((a) => a.updatedAt ?? a.at ?? 0),
-          ...b.threads.flatMap((t) => [
-            t.updatedAt ?? 0,
-            ...t.frags.map((f) => f.updatedAt ?? f.at ?? 0),
-          ]),
-          ...b.intentions.map((i) => i.updatedAt ?? 0),
-          ...b.principles.map((p) => p.updatedAt ?? 0)
-        );
+      /* Item-by-item, not "is the newest thing newer than mine?" — that
+         cheaper test silently dropped real edits whenever this device held
+         anything fresher than the incoming change. The rev short-circuit
+         above means this only runs when the hub genuinely moved. */
       const changed =
-        maxTs(merged.board) !== maxTs(latest.current) ||
-        merged.tombstones.length !== tombstones.current.length;
+        boardSignature(merged.board, merged.tombstones) !==
+        boardSignature(latest.current, tombstones.current);
       if (changed) {
         /* Say what actually came in. The merge has always known; staying
            silent made "synced" and "three notes arrived" look identical.
@@ -378,14 +414,20 @@ export function useBoard(now: number) {
       setSync({ ok: true, at: stamp() });
       // Only push if something actually changed — avoids a redundant round
       // trip on every pull when the board is already in sync.
-      if (changed) schedulePush();
+      if (changed) {
+        /* Whatever just arrived may point at photos this device has never
+           seen. Fetch them in the background so the pictures catch up with
+           the words. */
+        void reconcileImages(merged.board);
+        schedulePush();
+      }
       return changed;
     } catch {
       /* hub unreachable; local state stands */
       setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
       return false;
     }
-  }, [schedulePush]);
+  }, [schedulePush, reconcileImages]);
 
   /** Manual "sync now": bring the other device's changes in, then push ours up. */
   const syncNow = useCallback(async () => {

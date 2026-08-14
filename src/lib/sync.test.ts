@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  boardSignature,
   applyTombstones,
   mergeBoards,
   mergeSync,
@@ -222,5 +223,74 @@ describe("stampChanges — merge does not tombstone fragments that survived", ()
     const { tombstones } = stampChanges(before, emptied, 5000);
     expect(tombstones).toContainEqual({ kind: "thread", id: "t1", deletedAt: 5000 });
     expect(tombstones).toContainEqual({ kind: "frag", id: "f1", deletedAt: 5000 });
+  });
+});
+
+describe("boardSignature — what a pull compares before adopting a merge", () => {
+  /* The bug this replaced: comparing only the newest timestamp. A device
+     holding anything fresher than the incoming edit saw an unchanged
+     maximum and discarded the merge, so the edit never arrived. */
+  const maxTs = (b: Board) =>
+    Math.max(
+      0,
+      ...b.actions.map((a) => a.updatedAt ?? a.at ?? 0),
+      ...b.threads.flatMap((t) => [
+        t.updatedAt ?? 0,
+        ...t.frags.map((f) => f.updatedAt ?? f.at ?? 0),
+      ])
+    );
+
+  it("sees an incoming edit that is older than the device's own newest item", () => {
+    // The phone captured at 10:05; the Mac edited a fragment at 10:00.
+    const mine = board({
+      actions: [action("a1", { updatedAt: 1005 })],
+      threads: [thread("t1", [frag("f1", { text: "one line", updatedAt: 900 })])],
+    });
+    const theirs = board({
+      actions: [action("a1", { updatedAt: 1005 })],
+      threads: [
+        thread("t1", [frag("f1", { text: "one line\ntwo lines", updatedAt: 1000 })]),
+      ],
+    });
+    const merged = mergeSync(
+      { board: mine, tombstones: [] },
+      { board: theirs, tombstones: [] },
+      2000
+    );
+    // The merge itself is correct: the newer fragment text wins.
+    expect(merged.board.threads[0].frags[0].text).toBe("one line\ntwo lines");
+    // The old heuristic could not see it — both boards peak at 1005.
+    expect(maxTs(merged.board)).toBe(maxTs(mine));
+    // The signature does.
+    expect(boardSignature(merged.board, [])).not.toBe(boardSignature(mine, []));
+  });
+
+  it("is stable when nothing changed, whatever the ordering", () => {
+    const a = board({
+      actions: [action("a1", { updatedAt: 100 }), action("a2", { updatedAt: 200 })],
+      threads: [thread("t1", [frag("f1", { updatedAt: 50 })])],
+    });
+    const reordered = board({
+      actions: [action("a2", { updatedAt: 200 }), action("a1", { updatedAt: 100 })],
+      threads: [thread("t1", [frag("f1", { updatedAt: 50 })])],
+    });
+    expect(boardSignature(a, [])).toBe(boardSignature(reordered, []));
+  });
+
+  it("notices a fragment that moved thread without its timestamp changing", () => {
+    const before = board({
+      threads: [thread("t1", [frag("f1", { updatedAt: 100 })]), thread("t2", [])],
+    });
+    const after = board({
+      threads: [thread("t1", []), thread("t2", [frag("f1", { updatedAt: 100 })])],
+    });
+    expect(boardSignature(before, [])).not.toBe(boardSignature(after, []));
+  });
+
+  it("notices a new tombstone", () => {
+    const b = board({ actions: [action("a1", { updatedAt: 100 })] });
+    expect(boardSignature(b, [])).not.toBe(
+      boardSignature(b, [{ kind: "action", id: "gone", deletedAt: 500 }])
+    );
   });
 });
