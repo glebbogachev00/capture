@@ -35,6 +35,7 @@ import {
   GRACE,
   IMG,
   fmt,
+  fmtDue,
   left,
   uid,
 } from "@/lib/model";
@@ -1074,6 +1075,14 @@ function Row({
         )}
         <div className="act-meta">
           <span>{fmt(a.at)}</span>
+          {/* A deadline the capture named for itself. Shown because it is
+              the reason this action is still here — it holds the row on the
+              board until its date, and never leaves the app. */}
+          {!!a.due && !faded && (
+            <span className={"due" + (a.due - now < DAY ? " soon" : "")}>
+              due {fmtDue(a.due)}
+            </span>
+          )}
           {a.unsorted && <span className="raw">unsorted</span>}
           {faded && (
             <span>

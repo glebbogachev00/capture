@@ -53,6 +53,9 @@ export type Action = {
   imgs?: string[];
   shelf: ShelfLife;
   expires: number | null;
+  /** A deadline the capture named for itself. Advisory: it holds the action
+      on the board until its date, and is shown — it never leaves the app. */
+  due?: number | null;
   doneAt?: number | null;
   faded?: boolean;
   fadedAt?: number | null;
@@ -225,6 +228,20 @@ export const fmt = (t: number) =>
     hour: "numeric",
     minute: "2-digit",
   });
+
+/**
+ * A deadline reads as a day.
+ *
+ * The hour is deliberately not shown. Live captures proved the model is
+ * unreliable about it in both directions — it invented "7:00 AM" for a
+ * capture that named no time, and read "Friday at 5" as 05:00 — and a
+ * confidently wrong clock time is worse than none. The day is the part it
+ * gets right, and any time that was actually said is already in the
+ * action's own words. The full timestamp is still stored; only the display
+ * is coarse.
+ */
+export const fmtDue = (t: number) =>
+  new Date(t).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
 export const left = (ms: number) =>
   ms <= 0

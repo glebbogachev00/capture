@@ -328,5 +328,55 @@
       ],
       "noActions": true
     }
+  },
+  {
+    "id": "deadline-named",
+    "why": "a stated deadline must be read, so the action cannot fade before its date",
+    "raw": "renew the car insurance before the 28th of next month",
+    "threads": [],
+    "expect": {
+      "kindOneOf": [
+        "action"
+      ],
+      "hasDue": true
+    }
+  },
+  {
+    "id": "deadline-relative",
+    "why": "a relative day resolves against today, which the sorter is now told",
+    "raw": "send Alex the proposal on friday at 5",
+    "threads": [],
+    "expect": {
+      "kindOneOf": [
+        "action"
+      ],
+      "hasDue": true
+    }
+  },
+  {
+    "id": "no-deadline-invented",
+    "why": "urgency is not a date — a deadline must never be invented",
+    "raw": "I really need to sort out the garage at some point, it's getting ridiculous",
+    "threads": [],
+    "expect": {
+      "kindOneOf": [
+        "action",
+        "thread"
+      ],
+      "noDue": true
+    }
+  },
+  {
+    "id": "date-in-subject",
+    "why": "a date that is part of the subject is not a deadline",
+    "raw": "been listening to that 1998 recording of the symphony again, the strings are extraordinary",
+    "threads": [],
+    "expect": {
+      "kindOneOf": [
+        "thread"
+      ],
+      "noDue": true,
+      "noActions": true
+    }
   }
 ]

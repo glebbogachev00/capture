@@ -44,6 +44,8 @@ describe("sortCases.json", () => {
         ).toBe(true);
       /* noActions and actionsBetween are contradictory — one or the other. */
       if (e.noActions) expect(e.actionsBetween, c.id).toBeUndefined();
+      /* hasDue and noDue are contradictory — one or the other. */
+      if (e.noDue) expect(e.hasDue, c.id).toBeUndefined();
       /* Shaping thresholds are counts the probe compares against. */
       for (const key of ["cleanParagraphs", "cleanBullets"] as const) {
         if (e[key] !== undefined) {

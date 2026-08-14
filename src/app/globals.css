@@ -2576,3 +2576,12 @@ body {
   text-transform: uppercase;
   color: var(--muted);
 }
+
+/* A deadline the capture named for itself, sitting in the action's meta
+   line. It warms as the day arrives — the same red the shelf chip uses. */
+.act-meta .due {
+  color: var(--accent);
+}
+.act-meta .due.soon {
+  color: #c4452b;
+}

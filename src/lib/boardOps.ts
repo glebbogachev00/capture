@@ -9,6 +9,7 @@
  */
 
 import { stamp } from "./clock";
+import { expiryFor, parseDue } from "./due";
 import {
   type Action,
   type Board,
@@ -32,6 +33,8 @@ export type SortResult = {
   title: string;
   actions?: string[];
   shelfLife?: string;
+  /** An ISO deadline the capture named for itself, or null. */
+  due?: string | null;
   threadId?: string | null;
   threadName?: string | null;
   /** Which model tier sorted it — recorded in the capture ledger. */
@@ -72,6 +75,7 @@ export function applySorted(
 ): Applied {
   if (out.kind === "action") {
     const span = SHELF[out.shelfLife as ShelfLife] ?? null;
+    const due = parseDue(out.due, stamp());
     const items: Action[] = (out.actions?.length ? out.actions : [out.title]).map(
       (t: string) => ({
         id: uid(),
@@ -81,7 +85,9 @@ export function applySorted(
         src: out.clean,
         imgs: imgIds,
         shelf: (out.shelfLife || "keep") as ShelfLife,
-        expires: span ? stamp() + span : null,
+        /* A stated deadline never lets the action fade before its date. */
+        due,
+        expires: expiryFor(span, due, stamp()),
       })
     );
     return {
@@ -105,6 +111,7 @@ export function applySorted(
   // deleting a closed action must never drop an image the thread still uses.
   if (out.kind === "both") {
     const span = SHELF[out.shelfLife as ShelfLife] ?? null;
+    const due = parseDue(out.due, stamp());
     const items: Action[] = (out.actions ?? []).map((t) => ({
       id: uid(),
       text: t,
@@ -113,7 +120,8 @@ export function applySorted(
       src: out.clean,
       imgs: [],
       shelf: (out.shelfLife || "keep") as ShelfLife,
-      expires: span ? stamp() + span : null,
+      due,
+      expires: expiryFor(span, due, stamp()),
     }));
     const bothFrag: Frag = { id: uid(), at, text: out.clean, imgs: imgIds };
     const home = board.threads.find((x) => x.id === out.threadId);

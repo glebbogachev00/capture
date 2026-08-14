@@ -28,6 +28,12 @@ const Sorted = z.object({
   title: z.string().describe("max 6 words"),
   actions: z.array(z.string()).describe("imperative one-line items"),
   shelfLife: z.enum(["hours", "days", "weeks", "keep"]),
+  due: z
+    .string()
+    .nullable()
+    .describe(
+      "ISO date or date-time the capture explicitly names as its deadline (resolve relative words like 'friday' or 'tomorrow' against today's date given in the prompt), or null when no date is stated"
+    ),
   threadId: z
     .string()
     .nullable()
@@ -131,6 +137,23 @@ function rulesContext(rules: z.infer<typeof Body>["rules"]) {
   );
 }
 
+/** The sorter cannot resolve "friday" without knowing what today is, and it
+    has never been told. Local time, since the person speaking means theirs. */
+function todayLine(): string {
+  const d = new Date();
+  const day = d.toLocaleDateString("en-US", { weekday: "long" });
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `Today is ${day}, ${date}.\n`;
+}
+
+const DUE_RULE =
+  '\nIf the capture names a deadline of its own — "before Friday", "by the 28th", ' +
+  '"tomorrow morning" — resolve it against today\'s date and return it in "due" ' +
+  'as an ISO date (add a time only when one was actually said). Return null when ' +
+  'no date is stated. Do NOT invent a deadline for something merely urgent-sounding, ' +
+  'and do not treat a date that is part of the subject ("the 1998 recording") as a ' +
+  "deadline.\n";
+
 function prompt(
   raw: string,
   threads: z.infer<typeof Body>["threads"],
@@ -140,6 +163,7 @@ function prompt(
 ) {
   if (force === "action") {
     return (
+      todayLine() +
       "This is an excerpt from someone's running notes, and they have already decided there is something to DO in it. Your only job is to say what.\n\n" +
       'Excerpt:\n"""' +
       raw +
@@ -151,7 +175,8 @@ function prompt(
       '- "hours" for something tied to today.\n' +
       '- "days" for ordinary errands and small follow-ups.\n' +
       '- "weeks" for real work that takes a while.\n' +
-      '- "keep" for commitments to other people, money, deadlines, or anything with consequences if it silently vanished. When unsure, choose "keep".'
+      '- "keep" for commitments to other people, money, deadlines, or anything with consequences if it silently vanished. When unsure, choose "keep".' +
+      DUE_RULE
     );
   }
   if (force === "thread") {
@@ -178,6 +203,7 @@ function prompt(
     );
   }
   return (
+    todayLine() +
     "You are the sorting engine inside a personal capture app. Input arrives either dictated by voice — garbled, repetitive, half-finished — or pasted in as a raw unformatted block. Do the thinking so they don't have to.\n\n" +
     "Shaping the text matters as much as sorting it. A long capture that comes back as one dense paragraph is useless to reread, so:\n" +
     "- Put a blank line between distinct ideas. A capture covering five things should come back as roughly five short paragraphs.\n" +
@@ -212,7 +238,8 @@ function prompt(
     '- "hours" for something tied to today: a call to return, a thing to grab on the way home.\n' +
     '- "days" for ordinary errands and small follow-ups.\n' +
     '- "weeks" for real work that takes a while: drafting, building, contacting someone properly.\n' +
-    '- "keep" for commitments to other people, money, deadlines, or anything with consequences if it silently vanished. When unsure, choose "keep".'
+    '- "keep" for commitments to other people, money, deadlines, or anything with consequences if it silently vanished. When unsure, choose "keep".' +
+    DUE_RULE
   );
 }
 

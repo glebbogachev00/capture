@@ -17,6 +17,8 @@
  *   routeTo        threadId must equal this id
  *   newThread      threadId null AND a threadName invented
  *   shelfIn        shelfLife must be one of these
+ *   hasDue         the capture names a deadline and it must be read
+ *   noDue          no deadline is stated and none may be invented
  *
  * Usage:  node scripts/probe-sort-cases.mjs [base-url]
  *   base-url defaults to http://localhost:3000. The server must be up and
@@ -159,6 +161,10 @@ function judge(tc, out) {
     );
   if (e.shelfIn && !e.shelfIn.includes(out.shelfLife))
     problems.push(`shelfLife "${out.shelfLife}" not in [${e.shelfIn}]`);
+  if (e.hasDue && !out.due)
+    problems.push(`no deadline read from a capture that names one`);
+  if (e.noDue && out.due)
+    problems.push(`invented a deadline: ${out.due}`);
   /* Shaping: the prompt promises a capture comes back readable — distinct
      ideas split by a blank line, lists as bullets. A wall of text is a
      failure even when the kind is right. */
