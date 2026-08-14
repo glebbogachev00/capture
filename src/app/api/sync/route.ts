@@ -3,7 +3,18 @@ import { clientIp } from "@/lib/clientIp";
 import { limitFromEnv, rateLimit } from "@/lib/limiter";
 import { hydrate } from "@/lib/model";
 import { getSync, pushSync } from "@/lib/syncStore";
+import { usingBlob } from "@/lib/hubStore";
 import { type SyncState, type Tombstone } from "@/lib/sync";
+
+/** Why the hub could not store the board, in terms of the thing to fix.
+    Serverless hosts have no writable disk, so a deployment without a blob
+    store has nowhere to put anything — and that is a setup step, not a
+    transient hiccup. */
+function hubUnavailable(): string {
+  return usingBlob()
+    ? "The sync hub could not be written to. Your capture is safe on this device; it will push again shortly."
+    : "This deployment has nowhere to store the board. Create a Vercel Blob store and set BLOB_READ_WRITE_TOKEN, or run the app somewhere with a writable disk.";
+}
 
 /**
  * The sync route.
@@ -98,6 +109,17 @@ export async function POST(request: Request) {
       )
     : [];
 
-  const stored = await pushSync({ board: hydrate(candidate.board), tombstones });
-  return NextResponse.json(stored);
+  try {
+    const stored = await pushSync({
+      board: hydrate(candidate.board),
+      tombstones,
+    });
+    return NextResponse.json(stored);
+  } catch {
+    /* A hub that cannot store must say so in words the person can act on.
+       The old code let the write fail and kept a copy in memory, so a
+       deployment with nowhere to write still looked healthy right up until
+       the instance recycled and took the board with it. */
+    return NextResponse.json({ error: hubUnavailable() }, { status: 503 });
+  }
 }

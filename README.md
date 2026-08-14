@@ -150,17 +150,33 @@ deliberately not a user system: one person, one password.
 
 ## Deploying
 
-Any Node host works. On Vercel:
+The board and the photos need one durable place both devices can reach. A
+host with a writable disk uses `$SYNC_DATA_DIR` (or `.data/`) and needs
+nothing else. A serverless host has no writable disk — so it needs a blob
+store, and **without one nothing is stored at all**: pushes answer 503 and
+photos never cross between devices.
+
+On Vercel, create the store first:
 
 ```bash
 npm i -g vercel
 vercel link
+vercel blob store add capture
+```
+
+That sets `BLOB_READ_WRITE_TOKEN` on the project, which is the switch: when
+it is present the hub writes private blobs instead of files. Then the rest:
+
+```bash
 vercel env add OPENROUTER_API_KEY production
 vercel env add APP_PASSWORD production
 vercel deploy --prod
 ```
 
 `vercel env add` reads the value from stdin and does not echo it.
+
+Everything is written `access: "private"` and read back through the SDK, so
+no board and no photo is reachable from a URL alone.
 
 ## Installing it
 
