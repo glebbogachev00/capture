@@ -1,3 +1,4 @@
+import { parseCover } from "./cover";
 import type { Board } from "./model";
 
 /**
@@ -16,8 +17,17 @@ import type { Board } from "./model";
 export function referencedImageIds(board: Board): string[] {
   const ids = new Set<string>();
   for (const a of board.actions) for (const id of a.imgs || []) ids.add(id);
-  for (const t of board.threads)
+  for (const t of board.threads) {
     for (const f of t.frags || []) for (const id of f.imgs || []) ids.add(id);
+    /* A photo cover is a reference like any other, and the only one that
+       hangs off no fragment — it is picked straight from the file input and
+       stored under a fresh id. Leaving it out of this list is why a cover
+       set on the phone arrived on the laptop as an id with no bytes behind
+       it: the board carried the reference, the reconcile never carried the
+       photo. */
+    const cover = parseCover(t.cover);
+    if (cover?.kind === "img") ids.add(cover.id);
+  }
   return [...ids];
 }
 

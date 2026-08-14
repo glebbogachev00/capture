@@ -49,6 +49,42 @@ describe("referencedImageIds", () => {
   it("is empty on a board with no photos", () => {
     expect(referencedImageIds(board())).toEqual([]);
   });
+
+  it("collects a thread's photo cover", () => {
+    // The regression: a cover is picked from the file input and hangs off no
+    // fragment, so it was never reconciled — the other device got the id and
+    // no bytes, and the cover came up blank.
+    const b = board({
+      threads: [
+        { id: "t1", name: "T", summary: "", frags: [], cover: "img:cov1" },
+      ],
+    });
+    expect(referencedImageIds(b)).toEqual(["cov1"]);
+  });
+
+  it("ignores a tone cover, which carries no photo", () => {
+    const b = board({
+      threads: [
+        { id: "t1", name: "T", summary: "", frags: [], cover: "tone:sage" },
+      ],
+    });
+    expect(referencedImageIds(b)).toEqual([]);
+  });
+
+  it("de-duplicates a cover that is also a fragment's photo", () => {
+    const b = board({
+      threads: [
+        {
+          id: "t1",
+          name: "T",
+          summary: "",
+          frags: [{ id: "f1", at: 0, text: "n", imgs: ["same"] }],
+          cover: "img:same",
+        },
+      ],
+    });
+    expect(referencedImageIds(b)).toEqual(["same"]);
+  });
 });
 
 describe("isSafeImageId", () => {
