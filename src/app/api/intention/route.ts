@@ -56,10 +56,12 @@ Rules you never break:
 
 EXPANDED INTENTION:
 - Keep the user's exact subject and specifics (their places, names, numbers, words). Never abstract them into a broader category — "wake up at 6am" stays "wake up at 6am", never "a morning routine".
-- Bring it to life. Restate it in present tense with a little embodiment and felt texture — how it feels to be living it. This is richer than a bare restatement, but every added word must stay true to what they actually said.
-- Never invent new facts, mechanisms, or outcomes they didn't mention. Enrich the feeling, not the content.
-- Present tense only. "I move through..." / "I stand in..." / "I carry..." — never "I want", never "I will".
-- One to two sentences. Warm and grounded. No generic affirmation language, no filler.
+- Say it plainly. The job is to state what they said as already true, in their own register — not to make it sound profound. The best output reads like the user wrote it themselves on a day they were being precise.
+- Add NOTHING sensory or emotional they did not say. No weather, no light, no bodies — no "dawn light", "settling into my bones", "lightness in my shoulders", "warmth", "stillness". If they did not mention a feeling, do not supply one.
+- Banned phrasings, because they are the sound of a machine trying to be moving: "I move through", "I stand in", "I carry ... with me", "I breathe", "I savor", "I bask", "fully present", "a sense of", "washes over", "anchors me", "ripples out".
+- Ordinary words beat elevated ones. "rested" not "restored". "I sleep well" not "I am held by deep rest".
+- One sentence is usually right. Two only when the intention genuinely has two parts. Never add a second sentence for rhythm.
+- Present tense, first person, no hedging: never "I want", never "I will", never "I am learning to".
 
 COUNTER-INTENTIONS:
 - First-person, present-tense recurring behaviors that pull directly against THIS specific intention — the behaviors that would keep it from becoming real.
@@ -68,10 +70,11 @@ COUNTER-INTENTIONS:
 - Two to four items. Short. One sentence each.
 
 RECOMMENDED ACTIONS:
-- Exactly three actions taken FROM the fulfilled end-state — as someone who has ALREADY achieved this and is now living inside the feeling of it.
-- These are NOT steps to plan, prepare, or make the intention happen. Never "research", "schedule", "book", "finalize", "map out", "start". Assume it is already done.
-- They express and inhabit the feeling — what this person naturally does now that they carry this fulfillment. Savoring, sharing, resting in it, letting it change how they move through everyday life.
-- Written in first person, present tense. One sentence each. No motivational language.`;
+- Exactly three actions taken FROM the fulfilled end-state — things this person does because it is already true, not steps toward making it true.
+- Never "research", "schedule", "book", "finalize", "map out", "start", "plan". Assume it is done.
+- Ordinary and concrete. What actually changes in a normal day when this is true — what they do, say, stop doing, or spend time on. A dull, real action beats a beautiful vague one.
+- No savouring, no sharing-the-feeling, no gratitude, no "letting it shape how I move through the day". Those are filler, not actions.
+- First person, present tense. One short sentence each. No motivational language.`;
 
 function systemPrompt(principles: z.infer<typeof Principle>[] | undefined) {
   const active = (principles || []).filter((p) => p.enabled);
@@ -83,28 +86,40 @@ function systemPrompt(principles: z.infer<typeof Principle>[] | undefined) {
 function expandMessage(rawInput: string) {
   return `Raw input from the user: "${rawInput}"
 
-Write one or two present-tense sentences that bring this intention to life as already real — keeping the user's own words and specifics, adding only a little embodiment and felt texture.
+Write it as already true, in plain first-person present tense, keeping the user's own words and specifics.
 
-There are two ways to fail. Avoid both:
+There are three ways to fail. Avoid all of them:
 
-TOO ABSTRACT (invents concepts, turns a specific thing into a generic mindset — WRONG):
+TOO ORNATE (the most common failure — invents feelings and scenery the user never mentioned):
+Input: "I want to wake up at six and actually feel rested for once"
+Output: "I rise at six, the soft dawn light brushing my eyes, and I actually feel rested, a gentle ease settling into my bones."
+Why wrong: they said nothing about dawn light or their bones. It reads like a meditation app, not like them.
+
+TOO ABSTRACT (turns a specific thing into a generic mindset):
 Input: "I went to Japan for 2 weeks and visited all the places my soul desired"
-Output: "I have a deep sense of fulfillment that anchors my daily life through memories of Japan, requires brief moments of reflection, and allows me to focus on living with intention."
-Why wrong: invents "daily life", "reflection", "validation". Erases Japan into a generic feeling. Uses a canned three-clause template.
+Output: "I have a deep sense of fulfillment that anchors my daily life and allows me to live with intention."
+Why wrong: Japan is gone. So are the two weeks. It could be anyone's intention about anything.
 
-TOO BARE (just swaps tense, adds nothing — WRONG):
-Input: "I went to Japan for 2 weeks and visited all the places my soul desired"
-Output: "I spend two weeks in Japan and visit every place my soul desires."
-Why wrong: it's only the input in present tense. No life, no texture. This is a restatement, not an expansion.
+HEDGED (not written as already true):
+Input: "I stop taking on client work I secretly resent"
+Output: "I am learning to say no to client work that drains me."
+Why wrong: "learning to" puts it in the future. An intention is inhabited, not approached.
 
-JUST RIGHT (keeps every specific, present tense, a little embodiment — DO THIS):
+RIGHT — plain, specific, already true:
+Input: "I want to wake up at six and actually feel rested for once"
+Output: "I wake at six and I'm actually rested."
+
 Input: "I went to Japan for 2 weeks and visited all the places my soul desired"
-Output: "I move through two weeks in Japan fully present, standing in every place my soul was drawn to, and I carry that fullness home with me."
-Why right: keeps Japan, two weeks, soul-desired places. Adds felt presence ("fully present", "carry that fullness home") without inventing new facts.
+Output: "I spend two weeks in Japan and get to every place I wanted to see."
+
+Input: "I stop taking on client work I secretly resent"
+Output: "I don't take on client work I resent."
+
+Notice what the right answers have in common: they are shorter than the wrong ones, they add nothing the user did not say, and they sound like a person rather than a mission statement. Plain is the target, not a compromise.
 
 Rules:
-- Keep the user's exact subject and specifics. Enrich the feeling, never the facts.
-- One to two sentences. Present tense. Warm and grounded — no canned affirmation phrasing.
+- Keep the user's exact subject and specifics. Change the tense and the clarity, nothing else.
+- Usually one sentence. Present tense. Never "I want", "I will", or "I am learning to".
 
 Now write the expanded intention for: "${rawInput}"
 
