@@ -156,6 +156,64 @@ describe("scanBoard — duplicate fragments", () => {
     expect(out[0].targetId).toBe("ta");
     expect(out[0].targetName).toContain("Coffee");
   });
+
+  it("never offers to delete two notes that only share a subject", () => {
+    // The regression: both notes name "Reality Creation Game", neither is a
+    // copy of the other. A Remove button here destroys writing that exists
+    // exactly once. Across threads the most it may offer is a merge.
+    const b = board({
+      threads: [
+        thread("ta", "Reality Creation", [
+          frag(
+            "fa",
+            "The Reality Creation Game rewards purified intent — doing " +
+              "what is asked of you without wanting the outcome yourself.",
+            100
+          ),
+        ]),
+        thread("tb", "Ideas", [
+          frag(
+            "fb",
+            "Turn the Reality Creation Game into something my brother can " +
+              "play on a train journey without any preparation beforehand.",
+            200
+          ),
+        ]),
+      ],
+    });
+    const out = scanBoard(b);
+    expect(out.some((p) => p.kind === "dup_fragment")).toBe(false);
+    const merge = out.find((p) => p.kind === "merge_fragments");
+    expect(merge?.verb).toBe("Merge");
+    // The newer note is the one that moves, and it moves — nothing is lost.
+    expect(merge?.sourceFragId).toBe("fb");
+    expect(merge?.targetId).toBe("ta");
+    // A judgement call sits behind "Show more", out of the strong tier.
+    expect(merge?.confidence).toBe("medium");
+  });
+
+  it("stays quiet about two overlapping notes already in one thread", () => {
+    // They are already side by side; there is nothing to merge or drop.
+    const b = board({
+      threads: [
+        thread("ta", "Reality Creation", [
+          frag(
+            "fa",
+            "The Reality Creation Game rewards purified intent — doing " +
+              "what is asked of you without wanting the outcome yourself.",
+            100
+          ),
+          frag(
+            "fb",
+            "Turn the Reality Creation Game into something my brother can " +
+              "play on a train journey without any preparation beforehand.",
+            200
+          ),
+        ]),
+      ],
+    });
+    expect(kinds(b)).toEqual([]);
+  });
 });
 
 describe("scanBoard — fold an action into a thread", () => {

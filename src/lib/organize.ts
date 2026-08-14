@@ -30,7 +30,7 @@
 import type { Action, Board, Thread } from "./model";
 import {
   bestActionDuplicate,
-  bestFragmentDuplicate,
+  bestFragmentOverlap,
   bestThreadHome,
   phraseAsWritten,
   sharedPhrase,
@@ -196,11 +196,16 @@ export function scanBoard(
     });
   }
 
-  /* Duplicate fragments — the same note pasted twice, in one thread or
-     across two. The newer fragment is the copy. */
+  /* Overlapping fragments. Two notes that share real language are either the
+     same note pasted twice — drop the copy — or two notes about one subject,
+     which is NOT a reason to delete anything. The second case used to arrive
+     here as a duplicate and put a Remove button under a note the user had
+     only written once; it now proposes a merge at most, and only when the
+     notes are sitting in different threads. The newer fragment is the one
+     that moves or goes. */
   for (const t of board.threads) {
     for (const f of t.frags || []) {
-      const dup = bestFragmentDuplicate(board, f.text, f.id);
+      const dup = bestFragmentOverlap(board, f.text, f.id);
       if (!dup) continue;
       const targetFrag = board.threads
         .find((x) => x.id === dup.threadId)
@@ -208,6 +213,32 @@ export function scanBoard(
       if (!targetFrag || f.at <= (targetFrag.at || 0)) continue;
       const phrase = sharedPhrase(f.text, targetFrag.text);
       const crossThread = dup.threadId !== t.id;
+      if (!dup.duplicate) {
+        /* Overlap, not a copy. Two such notes already in one thread are
+           already together — say nothing. Across threads they belong side
+           by side: propose the merge, which MOVES the note. Never high
+           confidence; this is a judgement call, so it sits behind "Show
+           more" and stays out of Approve all's strong tier. */
+        if (!crossThread) continue;
+        if (sharedPhrase(f.text, threadTextWithout(board, t.id, f.id))) continue;
+        fragClaimed.add(f.id);
+        out.push({
+          id: `merge_fragments:${f.id}:${dup.fragId}`,
+          kind: "merge_fragments",
+          confidence: "medium",
+          verb: "Merge",
+          sourceId: t.id,
+          sourceName: NAME(f.text),
+          sourceThreadId: t.id,
+          sourceFragId: f.id,
+          targetId: dup.threadId,
+          targetName: NAME(dup.threadName),
+          reason: `a note there already says "${phraseAsWritten(phrase, f.text)}"`,
+          score: 85,
+          origin: "local",
+        });
+        continue;
+      }
       fragClaimed.add(f.id);
       out.push({
         id: `dup_fragment:${f.id}:${dup.fragId}`,

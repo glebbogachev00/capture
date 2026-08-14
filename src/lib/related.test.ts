@@ -3,6 +3,7 @@ import type { Action, Board, Intention, Thread } from "./model";
 import {
   bestActionDuplicate,
   bestFragmentDuplicate,
+  bestFragmentOverlap,
   bestThreadHome,
   phraseAsWritten,
   sharedPhrase,
@@ -256,6 +257,71 @@ describe("bestFragmentDuplicate", () => {
     );
     expect(hit?.fragId).toBe("t1-f0");
     expect(hit?.threadName).toBe("Cross-device copy and sharing app");
+  });
+
+  it("two notes that only name the same subject are no duplicate", () => {
+    // The regression. Both notes name "Reality Creation Game" — three
+    // content words on its own — so the run-only test called them the same
+    // note and Organize offered to delete one. They share a subject and
+    // nothing else; deleting either destroys writing that exists once.
+    const b = board({
+      threads: [
+        thread("t1", "Reality Creation", [
+          "The Reality Creation Game rewards purified intent — doing what " +
+            "is asked of you without wanting the outcome for yourself.",
+        ]),
+      ],
+    });
+    expect(
+      bestFragmentDuplicate(
+        b,
+        "Turn the Reality Creation Game into something my brother can play " +
+          "on a train journey without any preparation beforehand."
+      )
+    ).toBeNull();
+    // The overlap is still visible — it is a merge's business, not a delete's.
+    const overlap = bestFragmentOverlap(
+      b,
+      "Turn the Reality Creation Game into something my brother can play " +
+        "on a train journey without any preparation beforehand."
+    );
+    expect(overlap?.fragId).toBe("t1-f0");
+    expect(overlap?.duplicate).toBe(false);
+  });
+
+  it("a short note quoted inside a long one is a quotation, not a copy", () => {
+    // Full coverage of the short note, but the notes are nowhere near the
+    // same size: the long note says a great deal the short one never does.
+    const b = board({
+      threads: [
+        thread("t1", "Espresso", [
+          "The espresso machine gasket replacement went fine, though the " +
+            "portafilter still drips whenever the pressure climbs above " +
+            "nine bars and the grinder needs recalibrating afterwards.",
+        ]),
+      ],
+    });
+    expect(
+      bestFragmentDuplicate(b, "espresso machine gasket replacement")
+    ).toBeNull();
+  });
+
+  it("still catches a re-paste the sorter reworded", () => {
+    // The case the strictness must not break: same note, different wording.
+    const b = board({
+      threads: [
+        thread("t1", "Rocket Maintenance", [
+          "Rocket maintenance checklist — checking the rocket thoroughly " +
+            "before every launch day, twice over.",
+        ]),
+      ],
+    });
+    const hit = bestFragmentDuplicate(
+      b,
+      "Rocket maintenance checklist: check the rocket thoroughly before " +
+        "each launch day, twice."
+    );
+    expect(hit?.fragId).toBe("t1-f0");
   });
 
   it("skips the just-landed fragment, which always phrase-matches its own text", () => {

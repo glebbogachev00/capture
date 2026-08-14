@@ -406,45 +406,115 @@ export type FragDuplicate = {
   reason: string;
 };
 
+/** A fragment that a piece of text overlaps with — the same note again, or
+    just another note on the same subject. `duplicate` separates the two. */
+export type FragOverlap = FragDuplicate & {
+  /** True only for the same note twice. False means real overlap that must
+      never be offered for deletion — a merge or a move at most. */
+  duplicate: boolean;
+};
+
 /**
- * The existing fragment a piece of text clearly duplicates, or none.
+ * Whether two notes are the same note twice, rather than two notes that talk
+ * about the same thing.
  *
- * Fragments are long-form notes, so the bar is one notch higher than the
- * action duplicate: a shared phrase of THREE content words — never a lone
- * word, and never a two-word overlap that any two notes on the same subject
- * would share ("espresso machine" is a connection, not a duplicate).
- * Pasting the same note twice survives the sorter's rewording with long
- * runs intact, so the strong cases are caught while incidental overlap in
- * a long-running thread stays quiet. The newest capture is always the one
- * proposed for removal — the original, with its images, is never at risk.
- * excludeFragId drops the just-landed fragment, which always phrase-matches
- * its own text.
+ * A shared run of words cannot decide this on its own. Notes about one
+ * subject share the subject's name, and a name is often three content words
+ * by itself — "Reality Creation Game", "cold brew setup" — so a run-only test
+ * called plainly unrelated notes duplicates and offered to delete one of
+ * them. The claim has to be about the WHOLE note:
+ *
+ *   - most of the shorter note's vocabulary is present in the other, and
+ *   - the two notes are of comparable size — a short note quoted inside a
+ *     long one is a quotation, not a copy.
+ *
+ * Deliberately forgiving on wording (the sorter rewords a re-paste) and
+ * unforgiving on scope: a pasted-twice note covers itself almost entirely,
+ * while two notes sharing a title do not come close.
  */
-export function bestFragmentDuplicate(
+const DUP_MIN_WORDS = 3;
+const DUP_COVERAGE = 0.7;
+const DUP_SIZE_RATIO = 0.5;
+
+function sameNote(a: string[], b: string[]): boolean {
+  const A = new Set(a);
+  const B = new Set(b);
+  const [small, big] = A.size <= B.size ? [A, B] : [B, A];
+  /* A note of one or two distinct words covers anything it touches. */
+  if (small.size < DUP_MIN_WORDS) return false;
+  if (small.size / big.size < DUP_SIZE_RATIO) return false;
+  let shared = 0;
+  for (const w of small) if (big.has(w)) shared++;
+  return shared / small.size >= DUP_COVERAGE;
+}
+
+/**
+ * The existing fragment a piece of text overlaps with, or none.
+ *
+ * Two gates, and the caller needs both answers. First a shared phrase of
+ * THREE content words — never a lone word, and never a two-word overlap that
+ * any two notes on the same subject would share ("espresso machine" is a
+ * connection, not a duplicate). That says the notes touch. Then `sameNote`
+ * says whether they are the SAME note: a phrase alone was never enough, and
+ * treating it as enough is what put a Remove button under notes that merely
+ * named the same thing.
+ *
+ * The newest capture is always the one proposed to move or go — the
+ * original, with its images, is never at risk. excludeFragId drops the
+ * just-landed fragment, which always phrase-matches its own text.
+ */
+export function bestFragmentOverlap(
   board: Board,
   text: string,
   excludeFragId?: string
-): FragDuplicate | null {
+): FragOverlap | null {
   const target = contentWords(text);
   if (!target.length) return null;
-  let best: FragDuplicate | null = null;
+  let best: FragOverlap | null = null;
   let bestLen = -1;
   for (const t of board.threads) {
     for (const f of t.frags || []) {
       if (f.id === excludeFragId) continue;
-      const phrase = longestSharedRun(target, contentWords(f.text));
+      const other = contentWords(f.text);
+      const phrase = longestSharedRun(target, other);
       if (!phrase || phrase.split(" ").length < 3) continue;
-      /* The longest phrase wins; among equals the first found stays. */
-      if (best && phrase.length <= bestLen) continue;
+      const duplicate = sameNote(target, other);
+      /* A true duplicate always beats a mere overlap, however long the
+         overlap's phrase; within a tier the longest phrase wins, and among
+         equals the first found stays. */
+      if (best && best.duplicate && !duplicate) continue;
+      if (best && best.duplicate === duplicate && phrase.length <= bestLen)
+        continue;
       best = {
         threadId: t.id,
         fragId: f.id,
         threadName: t.name,
         name: NAME(f.text),
         reason: `both mention "${phrase}"`,
+        duplicate,
       };
       bestLen = phrase.length;
     }
   }
   return best;
+}
+
+/**
+ * The existing fragment a piece of text clearly duplicates, or none.
+ *
+ * The narrow, destructive question: is this the same note twice? Only a
+ * whole-note match answers yes (see `sameNote`). Everything weaker is
+ * overlap, and overlap is `bestFragmentOverlap`'s to report — acting on
+ * this one DELETES a note, so it may never fire on two notes that merely
+ * share a name.
+ */
+export function bestFragmentDuplicate(
+  board: Board,
+  text: string,
+  excludeFragId?: string
+): FragDuplicate | null {
+  const hit = bestFragmentOverlap(board, text, excludeFragId);
+  if (!hit) return null;
+  const { duplicate, ...dup } = hit;
+  return duplicate ? dup : null;
 }
