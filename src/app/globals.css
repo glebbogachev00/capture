@@ -584,6 +584,14 @@ body {
   color: var(--muted);
   margin-top: 5px;
   line-height: 1.45;
+  /* A card teases; the thread holds the whole thing. "Where this stands" on
+     a well-fed thread runs to a couple of hundred words, and printing all of
+     it turned every card into a wall you had to scroll past to reach the
+     next thread. Three lines, then an ellipsis. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .sed {
   display: flex;
@@ -2582,7 +2590,9 @@ body {
   overflow: hidden;
 }
 .tcover {
-  height: 64px;
+  /* Tall enough to be a picture rather than a stripe — a cover competing
+     with three lines of summary needs presence to earn its place. */
+  height: 116px;
   /* Full-bleed: the card pads its text by 16px, and a cover that stopped
      short of the edge would read as a picture pasted on rather than the
      thread's own top. */
