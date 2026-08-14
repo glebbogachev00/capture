@@ -588,6 +588,8 @@ export function Capture() {
             ledger={data.ledger ?? []}
             now={now}
             onBack={() => setShowRecord(false)}
+            rules={learnedRules}
+            onClearRule={(key) => void clearRule(key)}
           />
         ) : showSettings ? (
           <SettingsScreen
@@ -608,8 +610,6 @@ export function Capture() {
             onRestore={restoreFromFile}
             onImportIntent={importBackup}
             onLogout={logout}
-            rules={learnedRules}
-            onClearRule={(key) => void clearRule(key)}
             ioNote={ioNote}
             sync={sync}
             onSyncNow={syncNow}

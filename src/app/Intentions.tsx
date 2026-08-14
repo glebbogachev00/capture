@@ -435,10 +435,16 @@ export function RecordScreen({
   ledger,
   now,
   onBack,
+  rules,
+  onClearRule,
 }: {
   ledger: CaptureEntry[];
   now: number;
   onBack: () => void;
+  /* The bounded personal model: what the sorter has come to expect, each
+     with a way to forget it. */
+  rules: LearnedRule[];
+  onClearRule: (key: string) => void;
 }) {
   const stats = recordStats(ledger);
   const grid = heatGrid(ledger, now);
@@ -519,6 +525,42 @@ export function RecordScreen({
               : ""}
           </p>
 
+          {/* What the engine has picked up from the suggestions you took or
+              waved off. It belongs here rather than in Settings: this is the
+              screen about what Capture knows, and Settings is for the knobs.
+              Nothing is shown until a tendency actually forms — an empty
+              explainer is just a paragraph asking to be skipped. */}
+          {rules.length > 0 && (
+            <>
+              <div className="section-label" style={{ cursor: "default" }}>
+                What it has learned about your filing
+              </div>
+              <ul className="learned-list">
+                {rules.map((r) => (
+                  <li key={r.key}>
+                    <span className="learned-body">
+                      <span className="learned-text">{r.text}</span>
+                      <span className="learned-signal">
+                        {r.accepts} accepted · {r.dismisses} dismissed
+                      </span>
+                    </span>
+                    <button
+                      className="ghost warn"
+                      onClick={() => onClearRule(r.key)}
+                      aria-label={"Forget: " + r.text}
+                    >
+                      Forget
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="record-caption" style={{ marginBottom: 18 }}>
+                gentle tendencies the sorter weighs, never orders — forgetting
+                is remembered on this device
+              </p>
+            </>
+          )}
+
           {/* The evidence. What landed is shown first, because that is what
               you live with; what you actually said sits under it, and only
               when the engine changed the words. */}
@@ -560,8 +602,6 @@ export function SettingsScreen({
   ioNote,
   sync,
   onSyncNow,
-  rules,
-  onClearRule,
   onOpenRecord,
   ledgerCount,
 }: {
@@ -578,10 +618,6 @@ export function SettingsScreen({
   ioNote: IoNote;
   sync: { ok: boolean; at: number; note?: string } | null;
   onSyncNow: () => void;
-  /* The bounded personal model: what the sort engine has learned to expect,
-      each with a way to forget it. */
-  rules: LearnedRule[];
-  onClearRule: (key: string) => void;
   /** The signpost to The record — the screen itself lives off the masthead,
       but Settings is where people go looking, especially on phones where
       the header count is hidden. */
@@ -590,6 +626,7 @@ export function SettingsScreen({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [showPrinciples, setShowPrinciples] = useState(false);
 
   return (
     <div>
@@ -654,41 +691,6 @@ export function SettingsScreen({
       </div>
 
       <div className="int-block">
-        <h4 className="int-label">What Capture has learned</h4>
-        <p className="int-note">
-          From the suggestions you accept or dismiss. The sort engine treats
-          these as gentle tendencies, not orders — and you can forget any of
-          them whenever you like. Forgetting is remembered on this device.
-        </p>
-        {rules.length === 0 ? (
-          <p className="cap-hint" style={{ marginTop: 8 }}>
-            Nothing yet. As you accept or dismiss suggestions — merges, moves,
-            duplicates — the patterns will show up here.
-          </p>
-        ) : (
-          <ul className="learned-list">
-            {rules.map((r) => (
-              <li key={r.key}>
-                <span className="learned-body">
-                  <span className="learned-text">{r.text}</span>
-                  <span className="learned-signal">
-                    {r.accepts} accepted · {r.dismisses} dismissed
-                  </span>
-                </span>
-                <button
-                  className="ghost warn"
-                  onClick={() => onClearRule(r.key)}
-                  aria-label={"Forget: " + r.text}
-                >
-                  Forget
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="int-block">
         <h4 className="int-label">Restore a capture backup</h4>
         <p className="int-note">
           Adds anything missing, matched by id. Never overwrites what is
@@ -711,13 +713,26 @@ export function SettingsScreen({
       <div className="int-block">
         <h4 className="int-label">Principles</h4>
         <p className="int-note">
-          Applied silently to every intention the engine writes. They never
-          appear in the result — they shape it.{" "}
+          Applied silently when the engine writes an <b>intention</b> — and
+          nowhere else: sorting, threads and Organize never see them. They
+          never appear in the result; they shape it.{" "}
           {principles.filter((p) => p.enabled).length} of {principles.length}{" "}
           active.
         </p>
+        {/* Fifteen of them, and they touch one rare flow — so the list is
+            folded away by default rather than filling the screen. */}
+        <button
+          className="section-label"
+          style={{ margin: "10px 0 0" }}
+          onClick={() => setShowPrinciples((v) => !v)}
+          aria-expanded={showPrinciples}
+        >
+          {showPrinciples ? "▾" : "▸"} {showPrinciples ? "Hide" : "Show"} the
+          fifteen
+        </button>
       </div>
 
+      {showPrinciples && (
       <ul className="prin-list">
         {principles.map((p) => (
           <li key={p.id} className={p.enabled ? "" : "off"}>
@@ -740,7 +755,9 @@ export function SettingsScreen({
           </li>
         ))}
       </ul>
+      )}
 
+      {showPrinciples && (
       <div className="int-block">
         <h4 className="int-label">Add a principle</h4>
         <div className="int-add" style={{ flexDirection: "column" }}>
@@ -769,6 +786,7 @@ export function SettingsScreen({
           </button>
         </div>
       </div>
+      )}
 
       <div className="int-block">
         <h4 className="int-label">Session</h4>
