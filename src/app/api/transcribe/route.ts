@@ -165,5 +165,9 @@ export async function POST(request: Request) {
 
   if (!raw) return Response.json({ text: "" });
   const text = CLEANUP_ON ? await cleanUp(raw).catch(() => raw) : raw;
-  return Response.json({ text });
+  /* `raw` rides along: the words the recogniser actually heard, before the
+     cleanup pass rewrote them. A cleaned line is a convenience; the
+     transcript is the evidence, and it must never be the thing that is
+     silently thrown away. Omitted when cleanup changed nothing. */
+  return Response.json(text === raw ? { text } : { text, raw });
 }

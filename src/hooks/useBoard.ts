@@ -127,6 +127,10 @@ export function useBoard(now: number) {
   const [corrupt, setCorrupt] = useState(false);
   const [text, setText] = useState("");
   const [pics, setPics] = useState<{ id: string; src: string }[]>([]);
+  /* What the recogniser actually heard, before the cleanup pass rewrote it.
+     Held only until the capture lands, then recorded in the ledger beside
+     the words that were filed — evidence, not a second copy to manage. */
+  const [transcript, setTranscript] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [landed, setLanded] = useState<string | null>(null);
@@ -1114,6 +1118,7 @@ export function useBoard(now: number) {
             : (source?.id ?? targetId ?? ""),
         targetFragId: source?.fragId,
         modelVia: out.via,
+        transcript: transcript.trim() || undefined,
         imgs: imgIds.length ? imgIds : undefined,
       });
       setLanded(landed);
@@ -1121,6 +1126,7 @@ export function useBoard(now: number) {
       setTab(out.kind === "action" ? "actions" : "threads");
       setText("");
       setPics([]);
+      setTranscript("");
       // Snapshot right before it lands — edits made while the sort ran
       // survive; only the capture itself is reverted by Undo, and the raw
       // words come back to the box so the capture can be edited and
@@ -2781,6 +2787,7 @@ export function useBoard(now: number) {
     setText,
     pics,
     setPics,
+    setTranscript,
     busy,
     err,
     landed,

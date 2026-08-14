@@ -32,6 +32,10 @@ export type CaptureEntry = {
   targetFragId?: string;
   /** Which model tier answered — the `via` the routes already report. */
   modelVia?: string;
+  /** For a dictated capture: what the recogniser actually heard, before the
+      cleanup pass rewrote it. The tidied words are a convenience; this is
+      the evidence, so a bad transcription can never be the only record. */
+  transcript?: string;
   imgs?: string[];
 };
 

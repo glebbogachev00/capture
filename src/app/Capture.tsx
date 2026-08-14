@@ -106,6 +106,7 @@ export function Capture() {
     setText,
     pics,
     setPics,
+    setTranscript,
     busy,
     err,
     landed,
@@ -228,11 +229,15 @@ export function Capture() {
      recorded as dictated in the ledger. */
   const dictatedRef = useRef(false);
   const { canDictate, listening, transcribing, toggleMic } =
-    useRecordedDictation((t) => {
+    useRecordedDictation((t, raw) => {
     if (distillOpen) {
       setDistillInput((x) => (x ? x + " " : "") + t.trim());
     } else {
       dictatedRef.current = true;
+      /* Keep what the recogniser actually heard, so the capture that lands
+         carries its own evidence and the cleanup pass is never the only
+         record of what was said. */
+      if (raw) setTranscript((x) => (x ? x + " " : "") + raw.trim());
       setText((x) => (x ? x + " " : "") + t.trim());
     }
   });

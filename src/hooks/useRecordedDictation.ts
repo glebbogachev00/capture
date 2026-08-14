@@ -13,7 +13,9 @@ import { capability } from "@/lib/clock";
  * transcribed in one shot and handed to `onResult`. Unlike the recogniser
  * there are no interim results — text lands once, after `transcribing`.
  */
-export function useRecordedDictation(onResult: (text: string) => void) {
+export function useRecordedDictation(
+  onResult: (text: string, raw?: string) => void
+) {
   const onResultRef = useRef(onResult);
   useEffect(() => {
     onResultRef.current = onResult;
@@ -75,8 +77,14 @@ export function useRecordedDictation(onResult: (text: string) => void) {
         })
           .then(async (res) => {
             if (!res.ok) throw new Error(await res.text());
-            const { text } = (await res.json()) as { text: string };
-            if (text) onResultRef.current(text);
+            const { text, raw } = (await res.json()) as {
+              text: string;
+              raw?: string;
+            };
+            /* `raw` is what the recogniser heard before the cleanup pass
+               rewrote it — handed on so the ledger can keep the evidence
+               next to the tidied words. */
+            if (text) onResultRef.current(text, raw);
           })
           .catch((err) => console.error("transcription failed:", err))
           .finally(() => setTranscribing(false));
