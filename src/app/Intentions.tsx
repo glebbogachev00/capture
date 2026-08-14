@@ -16,7 +16,13 @@ import { type Intention, type Principle, fmt, pad } from "@/lib/model";
 import type { LearnedRule } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import type { CaptureEntry } from "@/lib/ledger";
-import { busiestDay, heatGrid, monthLabels, recordStats } from "@/lib/record";
+import {
+  busiestDay,
+  heatGrid,
+  monthLabels,
+  recentCaptures,
+  recordStats,
+} from "@/lib/record";
 
 export type Draft = {
   rawInput: string;
@@ -512,6 +518,28 @@ export function RecordScreen({
               ? ` — fullest on ${dayName(busiest.day)}, ${busiest.count} said`
               : ""}
           </p>
+
+          {/* The evidence. What landed is shown first, because that is what
+              you live with; what you actually said sits under it, and only
+              when the engine changed the words. */}
+          <div className="section-label" style={{ cursor: "default" }}>
+            What you said, and what became of it
+          </div>
+          <ul className="record-log">
+            {recentCaptures(ledger).map((e) => (
+              <li key={e.id}>
+                <p className="record-filed">{e.filed || e.said}</p>
+                {e.differs && (
+                  <p className="record-said">
+                    <span>said</span> {e.said}
+                  </p>
+                )}
+                <p className="record-meta">
+                  {e.kind} · {fmt(e.at)}
+                </p>
+              </li>
+            ))}
+          </ul>
         </>
       )}
     </div>

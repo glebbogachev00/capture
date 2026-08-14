@@ -41,6 +41,51 @@ export function recordStats(ledger: CaptureEntry[]): RecordStats {
   return stats;
 }
 
+/**
+ * One capture, as evidence: what was said, what was filed, and where it
+ * went. `said` prefers the recogniser's own words over the box text, since
+ * for a dictated capture the box already holds a cleaned-up line.
+ *
+ * `differs` is the point of the whole thing — it marks the captures where
+ * the engine changed the words, which are the only ones worth showing the
+ * original for. When it rewrote nothing, showing both is noise.
+ */
+export type RecordEntry = {
+  id: string;
+  at: number;
+  said: string;
+  filed: string;
+  kind: CaptureEntry["kind"];
+  differs: boolean;
+};
+
+/** Compare the way a reader would: case, spacing and trailing punctuation
+    are not the engine "changing your words". */
+const normalise = (s: string) =>
+  s.toLowerCase().replace(/\s+/g, " ").replace(/[.,;:!?]+$/g, "").trim();
+
+/** The most recent captures, newest first, as evidence rows. */
+export function recentCaptures(
+  ledger: CaptureEntry[],
+  limit = 12
+): RecordEntry[] {
+  return [...ledger]
+    .sort((a, b) => b.at - a.at)
+    .slice(0, limit)
+    .map((e) => {
+      const said = (e.transcript || e.raw || "").trim();
+      const filed = (e.clean || "").trim();
+      return {
+        id: e.id,
+        at: e.at,
+        said,
+        filed,
+        kind: e.kind,
+        differs: !!said && !!filed && normalise(said) !== normalise(filed),
+      };
+    });
+}
+
 export type HeatCell = {
   /** Local calendar day, for the title attribute. */
   day: string;

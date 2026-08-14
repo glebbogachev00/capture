@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { CaptureEntry } from "./ledger";
-import { busiestDay, heatGrid, monthLabels, recordStats } from "./record";
+import {
+  busiestDay,
+  heatGrid,
+  monthLabels,
+  recentCaptures,
+  recordStats,
+} from "./record";
 
 const DAY = 24 * 60 * 60 * 1000;
 /* A fixed local noon keeps day bucketing away from midnight edges. */
@@ -87,5 +93,45 @@ describe("busiestDay", () => {
     const best = busiestDay(heatGrid(ledger, NOON, 12));
     expect(best).toMatchObject({ day: "2026-08-11", count: 3 });
     expect(busiestDay(heatGrid([], NOON, 12))).toBeNull();
+  });
+});
+
+describe("recentCaptures", () => {
+  const e = (over: Partial<CaptureEntry>): CaptureEntry => ({
+    id: "e1", at: 100, raw: "r", clean: "c", kind: "action",
+    source: "typed", targetId: "t", ...over,
+  });
+
+  it("prefers the recogniser's own words over the box text", () => {
+    const [row] = recentCaptures([
+      e({ raw: "call the vet tomorrow.", transcript: "uh call the vet tomorrow", clean: "Call the vet tomorrow." }),
+    ]);
+    expect(row.said).toBe("uh call the vet tomorrow");
+    expect(row.filed).toBe("Call the vet tomorrow.");
+    expect(row.differs).toBe(true);
+  });
+
+  it("falls back to the raw box text when nothing was dictated", () => {
+    const [row] = recentCaptures([e({ raw: "buy milk", clean: "Buy milk." })]);
+    expect(row.said).toBe("buy milk");
+  });
+
+  it("does not call casing or trailing punctuation a change", () => {
+    const [row] = recentCaptures([e({ raw: "buy milk", clean: "Buy milk." })]);
+    expect(row.differs).toBe(false);
+  });
+
+  it("newest first, capped", () => {
+    const many = Array.from({ length: 20 }, (_, i) =>
+      e({ id: "e" + i, at: i * 100 })
+    );
+    const rows = recentCaptures(many, 5);
+    expect(rows).toHaveLength(5);
+    expect(rows[0].at).toBe(1900);
+    expect(rows.map((r) => r.at)).toEqual([1900, 1800, 1700, 1600, 1500]);
+  });
+
+  it("is empty on an empty ledger", () => {
+    expect(recentCaptures([])).toEqual([]);
   });
 });

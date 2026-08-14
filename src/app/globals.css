@@ -2536,3 +2536,43 @@ body {
   color: var(--ink);
   border-color: var(--muted);
 }
+
+/* The record's evidence log: what landed, and — only where the engine
+   changed the words — what was actually said underneath it. */
+.record-log {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.record-log li {
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--rule);
+}
+.record-filed {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.record-said {
+  margin: 5px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  padding-left: 11px;
+  border-left: 2px solid var(--rule);
+}
+.record-said span {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+.record-meta {
+  margin: 6px 0 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
