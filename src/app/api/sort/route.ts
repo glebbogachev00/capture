@@ -154,6 +154,31 @@ const DUE_RULE =
   'and do not treat a date that is part of the subject ("the 1998 recording") as a ' +
   "deadline.\n";
 
+/**
+ * How to choose a thread — the rule the sorter was missing.
+ *
+ * Threads were being picked on shared words rather than shared subject. A
+ * thread named "Capture." swallowed every capture containing the word
+ * "capture", whatever it was actually about, because the word was right
+ * there in the name. The same trap waits behind any thread whose name is an
+ * ordinary word. Belonging is about subject; a word in common is not one.
+ */
+const ROUTING_RULE =
+  "\nChoosing a thread — read this before you set threadId:\n" +
+  "- A thread fits when the capture is ABOUT the same subject and would " +
+  "genuinely be read alongside what is already in it. That is the only test.\n" +
+  "- Words in common are not a reason. A capture that merely uses a word " +
+  "appearing in a thread's name or summary does not belong there. A thread " +
+  'named for an ordinary word — "Capture.", "Work", "Ideas" — is the easiest ' +
+  "one to file into wrongly for exactly this reason, so hold it to the " +
+  "subject test like any other.\n" +
+  "- Threads named after the app, the tool, or the act of writing notes are " +
+  "about THAT subject. A capture is not about capturing simply because it " +
+  "was captured.\n" +
+  "- When no thread genuinely fits, set threadId to null and invent a short " +
+  "threadName. A new thread is cheap and honest; a wrong one buries the note " +
+  "where it will not be found again.\n";
+
 function prompt(
   raw: string,
   threads: z.infer<typeof Body>["threads"],
@@ -189,6 +214,8 @@ function prompt(
       "Pick the best existing thread below if one clearly fits and set threadId to its id; otherwise set threadId to null and invent a short threadName.\n" +
       "Their existing threads:\n" +
       (threads.length ? JSON.stringify(threads) : "(none yet)") +
+      "\n" +
+      ROUTING_RULE +
       "\nSet clean to the excerpt tidied up, and title to at most six words."
     );
   }
@@ -213,6 +240,7 @@ function prompt(
     "Their existing threads:\n" +
     (threads.length ? JSON.stringify(threads) : "(none yet)") +
     "\n" +
+    ROUTING_RULE +
     recentContext(recent) +
     rulesContext(rules) +
     '\nRaw capture:\n"""' +

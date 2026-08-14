@@ -378,5 +378,74 @@
       "noDue": true,
       "noActions": true
     }
+  },
+  {
+    "id": "name-word-trap",
+    "why": "a word shared with a thread's name is not a subject: a capture that merely uses the word capture does not belong in the thread named Capture",
+    "raw": "trying to capture the feeling of the light in that Lisbon apartment before it goes — the way it came through the shutters in stripes around seven in the morning",
+    "threads": [
+      {
+        "id": "t-cap",
+        "name": "Capture.",
+        "about": "building the capture app itself — the sorting engine, the board, sync between phone and laptop"
+      },
+      {
+        "id": "t-run",
+        "name": "Marathon training",
+        "about": "building up to the spring marathon"
+      }
+    ],
+    "expect": {
+      "kindOneOf": [
+        "thread"
+      ],
+      "newThread": true
+    }
+  },
+  {
+    "id": "name-word-genuine",
+    "why": "the counterweight: the same thread is still the right home when the capture really is about that subject",
+    "raw": "been thinking about why the sorter keeps putting notes in the wrong thread — it looks like it matches on a shared word rather than what the note is actually about",
+    "threads": [
+      {
+        "id": "t-cap",
+        "name": "Capture.",
+        "about": "building the capture app itself — the sorting engine, the board, sync between phone and laptop"
+      },
+      {
+        "id": "t-run",
+        "name": "Marathon training",
+        "about": "building up to the spring marathon"
+      }
+    ],
+    "expect": {
+      "kindOneOf": [
+        "thread"
+      ],
+      "routeTo": "t-cap"
+    }
+  },
+  {
+    "id": "generic-name-trap",
+    "why": "the same trap behind any ordinary word: saying no idea does not file a capture under a thread named Ideas",
+    "raw": "no idea why the sourdough keeps coming out so dense — I think the starter is underfed, going to try feeding it twice a day for a week and see what happens",
+    "threads": [
+      {
+        "id": "t-ideas",
+        "name": "Ideas",
+        "about": "product ideas and side projects worth trying one day"
+      },
+      {
+        "id": "t-run",
+        "name": "Marathon training",
+        "about": "building up to the spring marathon"
+      }
+    ],
+    "expect": {
+      "kindOneOf": [
+        "thread"
+      ],
+      "newThread": true
+    }
   }
 ]
