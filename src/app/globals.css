@@ -1198,21 +1198,9 @@ body {
   font-weight: 500;
 }
 
-/* The record: the editorial sentence in the display serif, then twelve
-   weeks of days on a card. Levels are fixed (none / one / a few / many) so
-   a day always looks the same — a busy fortnight never dims the past. */
-.record-lede {
-  font-family: var(--font-display), Georgia, serif;
-  font-size: 19px;
-  line-height: 1.55;
-  font-variation-settings: "SOFT" 30;
-  color: var(--ink);
-  max-width: 34em;
-  margin: 0 0 22px;
-}
-/* The numbers as tiles, in the manner of a stats panel: each figure its own
-   object, label small above it, so the totals read at a glance before the
-   sentence is read at all. */
+/* The record: four tiles, then twelve weeks of days on a card. Levels are
+   fixed (none / one / a few / many) so a day always looks the same — a busy
+   fortnight never dims the past. */
 .record-tiles {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

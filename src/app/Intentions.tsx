@@ -395,33 +395,23 @@ export type IoNote = { text: string; ok: boolean } | null;
  * in one browser's IndexedDB, so without a file on disk somewhere, clearing
  * site data takes all of it.
  */
-/** One editorial sentence for the record: what was said, what it became. */
-function recordLine(stats: ReturnType<typeof recordStats>): string {
+/**
+ * The one thing the tiles cannot say.
+ *
+ * This used to be a full sentence — "138 things said since May 27, 67 became
+ * actions, 70 joined threads…" — sitting directly above tiles carrying every
+ * one of those numbers again. The tiles won; what is left is the span of
+ * time, and how much of it was spoken rather than typed.
+ */
+function sinceLine(stats: ReturnType<typeof recordStats>): string {
   const when = stats.since
     ? new Date(stats.since).toLocaleDateString(undefined, {
         month: "long",
         day: "numeric",
       })
     : "";
-  const parts: string[] = [];
-  if (stats.actions)
-    parts.push(`${stats.actions} became action${stats.actions === 1 ? "" : "s"}`);
-  if (stats.threads)
-    parts.push(`${stats.threads} joined threads`);
-  if (stats.intentions)
-    parts.push(
-      `${stats.intentions} ${stats.intentions === 1 ? "was" : "were"} declared`
-    );
-  const tail = parts.length
-    ? " — " +
-      (parts.length === 1
-        ? parts[0]
-        : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1])
-    : "";
-  const voice = stats.dictated
-    ? ` ${stats.dictated} arrived by voice.`
-    : "";
-  return `${stats.total} thing${stats.total === 1 ? "" : "s"} said since ${when}${tail}.${voice}`;
+  const voice = stats.dictated ? ` · ${stats.dictated} arrived by voice` : "";
+  return `since ${when}${voice}`;
 }
 
 /**
@@ -474,8 +464,6 @@ export function RecordScreen({
         </div>
       ) : (
         <>
-          <p className="record-lede">{recordLine(stats)}</p>
-
           {/* The numbers as their own objects, the way a stats panel reads —
               glanceable first, sentence second. */}
           <div className="record-tiles">
@@ -492,10 +480,13 @@ export function RecordScreen({
               <b>{stats.threads}</b>
             </div>
             <div className="record-tile">
-              <span className="record-tile-label">By voice</span>
-              <b>{stats.dictated}</b>
+              <span className="record-tile-label">Intentions</span>
+              <b>{stats.intentions}</b>
             </div>
           </div>
+          <p className="record-caption" style={{ marginBottom: 22 }}>
+            {sinceLine(stats)}
+          </p>
 
           <div className="record-frame">
             <div className="record-grid">
