@@ -61,6 +61,7 @@ import {
 import { copyToClipboard, shareText, shareableFor } from "@/lib/share";
 import { search } from "@/lib/search";
 import {
+  byRecency,
   applySorted,
   computeSuggestion,
   type Suggestion,
@@ -2769,11 +2770,17 @@ export function useBoard(now: number) {
     [data.actions]
   );
   const active = useMemo(
-    () => data.threads.filter((t) => now - (t.frags.at(-1)?.at || 0) < DORMANT),
+    () =>
+      data.threads
+        .filter((t) => now - (t.frags.at(-1)?.at || 0) < DORMANT)
+        .sort(byRecency),
     [data.threads, now]
   );
   const resting = useMemo(
-    () => data.threads.filter((t) => now - (t.frags.at(-1)?.at || 0) >= DORMANT),
+    () =>
+      data.threads
+        .filter((t) => now - (t.frags.at(-1)?.at || 0) >= DORMANT)
+        .sort(byRecency),
     [data.threads, now]
   );
   const thread = data.threads.find((t) => t.id === open);

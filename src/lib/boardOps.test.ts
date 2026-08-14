@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySorted, type SortResult } from "./boardOps";
+import { applySorted, byRecency, type SortResult } from "./boardOps";
 import { EMPTY, type Board, type Thread } from "./model";
 
 const base = (over: Partial<Board> = {}): Board => ({ ...EMPTY, ...over });
@@ -180,5 +180,34 @@ describe("computeSuggestion — duplicate action", () => {
     });
     // Faded counterpart → not offered as a duplicate.
     expect(s?.kind).not.toBe("duplicate");
+  });
+});
+
+describe("byRecency — threads in the order you actually use them", () => {
+  const t = (id: string, fragAt: number[]): Thread => ({
+    id,
+    name: id,
+    summary: "",
+    frags: fragAt.map((at, i) => ({ id: `${id}-${i}`, at, text: "n" })),
+  });
+
+  it("puts the most recently added-to thread first, whatever its age", () => {
+    /* `old` was created long ago but fed this morning; `young` was made
+       yesterday and never touched since. The old one should lead. */
+    const old = t("old", [1_000, 9_000]);
+    const young = t("young", [5_000]);
+    expect([young, old].sort(byRecency).map((x) => x.id)).toEqual(["old", "young"]);
+  });
+
+  it("a thread with no fragments yet falls back to its own stamp", () => {
+    const empty: Thread = { id: "empty", name: "e", summary: "", frags: [], updatedAt: 8_000 };
+    const fed = t("fed", [3_000]);
+    expect([fed, empty].sort(byRecency).map((x) => x.id)).toEqual(["empty", "fed"]);
+  });
+
+  it("is a total order — equal recency does not throw or drop threads", () => {
+    const a = t("a", [500]);
+    const b = t("b", [500]);
+    expect([a, b].sort(byRecency)).toHaveLength(2);
   });
 });

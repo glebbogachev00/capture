@@ -180,6 +180,25 @@ export function applySorted(
   };
 }
 
+/** When a thread was last added to. Threads with no fragments yet fall back
+    to their own stamp, so a freshly made one still sorts sanely. */
+export function lastTouched(t: Thread): number {
+  return t.frags.at(-1)?.at ?? t.updatedAt ?? 0;
+}
+
+/**
+ * Threads, most recently added-to first.
+ *
+ * The list used to be ordered by creation: a new thread went to the front
+ * and then never moved again, however much you fed it. So the subject you
+ * added to this morning could sit below one you started months ago and
+ * abandoned. Recency is what you want essentially always, which is why this
+ * is the order rather than a control to choose it.
+ */
+export function byRecency(a: Thread, b: Thread): number {
+  return lastTouched(b) - lastTouched(a);
+}
+
 /**
  * A quiet post-capture proposal — never applied; the user confirms or
  * dismisses it. One tap either way.
