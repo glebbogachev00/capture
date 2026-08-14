@@ -83,9 +83,18 @@ Every accepted or dismissed suggestion is recorded in a correction ledger; `deri
 - **Choice of voice / speed** for the spoken replies.
 - **Push-to-talk on desktop** for the Capture box itself, not just Distill.
 
-## Thread cover images (later)
+## ~~Thread cover images~~ Built
 
-Fun, Google-Keep-style covers for threads. Aesthetic only. Backlogged.
+Threads are little projects being built out — the app itself, bugs,
+additions — so a cover is identity, not decoration: you recognise the thread
+before you read its name. Chosen, never derived (most threads hold no photo,
+so a picture pulled from the fragments would show nothing).
+
+Eight muted tones from the app's own palette are the default path — eight
+stored characters, no dependence on having taken a picture — and a photo
+cover works too, shrunk and stored like any capture image so it syncs by the
+same reconcile. Display only: the summary, the fragments and the sort engine
+never see it, and a thread without a cover renders exactly as before.
 
 ## Sync verification (unbuilt verification)
 
