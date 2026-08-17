@@ -57,7 +57,12 @@ export type ProposalKind =
   | "extract_action"
   | "combine_fragments"
   | "refresh_summary"
-  | "related_suggestion";
+  | "related_suggestion"
+  /** The sorter filed a capture and the user moved it straight back out —
+      an unprompted correction, with the right answer attached. The only
+      signal here that is about the ENGINE's mistake rather than about a
+      proposal the engine offered. */
+  | "refiled";
 
 export type CorrectionEntry = {
   id: string;

@@ -516,12 +516,36 @@ export function RecordScreen({
               : ""}
           </p>
 
+          {/* The evidence. What landed is shown first, because that is what
+              you live with; what you actually said sits under it, and only
+              when the engine changed the words. */}
+          <div className="section-label" style={{ cursor: "default" }}>
+            What you said, and what became of it
+          </div>
+          <ul className="record-log">
+            {recentCaptures(ledger).map((e) => (
+              <li key={e.id}>
+                <p className="record-filed">{e.filed || e.said}</p>
+                {e.differs && (
+                  <p className="record-said">
+                    <span>said</span> {e.said}
+                  </p>
+                )}
+                <p className="record-meta">
+                  {e.kind} · {fmt(e.at)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
           {/* What the engine has picked up from the suggestions you took or
               waved off. It belongs here rather than in Settings: this is the
               screen about what Capture knows, and Settings is for the knobs.
               Nothing is shown until a tendency actually forms — an empty
               explainer is just a paragraph asking to be skipped. */}
-          {rules.length > 0 && (
+      {rules.length > 0 && (
             <>
               <div className="section-label" style={{ cursor: "default" }}>
                 What it has learned about your filing
@@ -552,29 +576,6 @@ export function RecordScreen({
             </>
           )}
 
-          {/* The evidence. What landed is shown first, because that is what
-              you live with; what you actually said sits under it, and only
-              when the engine changed the words. */}
-          <div className="section-label" style={{ cursor: "default" }}>
-            What you said, and what became of it
-          </div>
-          <ul className="record-log">
-            {recentCaptures(ledger).map((e) => (
-              <li key={e.id}>
-                <p className="record-filed">{e.filed || e.said}</p>
-                {e.differs && (
-                  <p className="record-said">
-                    <span>said</span> {e.said}
-                  </p>
-                )}
-                <p className="record-meta">
-                  {e.kind} · {fmt(e.at)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
     </div>
   );
 }

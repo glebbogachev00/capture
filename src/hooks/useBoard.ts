@@ -68,6 +68,7 @@ import {
 } from "@/lib/boardOps";
 import { arrivedIn, arrivedNote } from "@/lib/arrived";
 import { parseCommandPrefix } from "@/lib/command";
+import { isRefile, refileRule } from "@/lib/refiled";
 import { expiryFor, parseDue } from "@/lib/due";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
@@ -1580,7 +1581,18 @@ export function useBoard(now: number) {
        appended — this is the safety net that guarantees approve-all can
        never stack copies, whatever a stale proposal or cached AI pass says. */
     const already = threadHoldsNote(t.frags, a.src || a.text, a.text);
-    await commit({
+    /* Folded within minutes of landing: the sorter called it a task when it
+       was really a note on a subject already open. Same correction as a
+       re-filed fragment, from the other direction. */
+    const foldLesson = isRefile(a.at, stamp())
+      ? refileRule(
+          a.src || a.text,
+          t.name,
+          [t.name, t.summary, ...t.frags.map((f) => f.text)].join(" ")
+        )
+      : null;
+
+    const folded = {
       ...latest.current,
       actions: latest.current.actions.filter((x) => x.id !== actionId),
       threads: already
@@ -1601,7 +1613,17 @@ export function useBoard(now: number) {
                 }
               : x
           ),
-    });
+    };
+    await commit(
+      foldLesson
+        ? noteCorrection(folded, {
+            proposalKind: "refiled",
+            accepted: true,
+            context: (a.src || a.text).slice(0, 160),
+            rule: foldLesson,
+          })
+        : folded
+    );
     setNotice(
       already
         ? `${t.name} already has this note — task retired.`
@@ -1840,12 +1862,36 @@ export function useBoard(now: number) {
       ? threads.filter((t) => t.id !== fromId)
       : threads.map((t) => (t.id === fromId ? { ...t, frags: remaining } : t));
 
-    const next = { ...latest.current, threads };
+    /* A note moved out within minutes of landing is the sorter being told it
+       was wrong, with the right home attached. That is the strongest signal
+       the app gets, and until now it went unrecorded — the ledger only ever
+       heard about proposals the engine itself had offered. */
+    const lesson = isRefile(frag.at, stamp())
+      ? refileRule(
+          frag.text,
+          to.name,
+          [to.name, to.summary, ...to.frags.map((f) => f.text)].join(" ")
+        )
+      : null;
+
+    const next = lesson
+      ? noteCorrection(
+          { ...latest.current, threads },
+          {
+            proposalKind: "refiled",
+            accepted: true,
+            context: frag.text.slice(0, 160),
+            rule: lesson,
+          }
+        )
+      : { ...latest.current, threads };
     await commit(next);
     setNotice(
       emptied
         ? `Moved to ${to.name}. ${from.name} was left empty and removed.`
-        : `Moved to ${to.name}.`
+        : lesson
+          ? `Moved to ${to.name} — noted for next time.`
+          : `Moved to ${to.name}.`
     );
     setTimeout(() => setNotice(null), 4500);
 
