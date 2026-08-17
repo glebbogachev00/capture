@@ -161,11 +161,17 @@ On Vercel, create the store first:
 ```bash
 npm i -g vercel
 vercel link
-vercel blob create-store capture
+vercel blob create-store capture --access private --yes
 ```
 
-That sets `BLOB_READ_WRITE_TOKEN` on the project, which is the switch: when
-it is present the hub writes private blobs instead of files. Then the rest:
+`--access private` is not optional — the CLI refuses without it, and the
+store holds your notes and photos. That sets `BLOB_READ_WRITE_TOKEN` on the
+project, which is the switch: when it is present the hub writes private blobs
+instead of files.
+
+The CLI also copies the token into your local `.env.local`. Comment it out
+there unless you mean it: with it set locally, `npm run phone` stops using
+`.data/` and writes your board to Vercel instead. Then the rest:
 
 ```bash
 vercel env add OPENROUTER_API_KEY production
