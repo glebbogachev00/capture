@@ -35,6 +35,16 @@ export async function proxy(request: NextRequest) {
 
   // API callers get a status code; browsers get the login page.
   if (pathname.startsWith("/api/")) {
+    /* Say it. A device whose session has lapsed gets 401 here, before any
+       route runs, so nothing downstream can log it — and the platform log
+       line for a rejected request looks identical to a served one. That is
+       how a phone can sit there reporting "Hub unreachable" while the hub
+       looks perfectly healthy from the outside. */
+    console.warn(
+      "unauthorized api call:",
+      pathname,
+      cookie ? "(stale or invalid session cookie)" : "(no session cookie)"
+    );
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
