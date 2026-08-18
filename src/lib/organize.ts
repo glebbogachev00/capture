@@ -33,6 +33,7 @@ import {
   bestActionDuplicate,
   bestFragmentOverlap,
   bestThreadHome,
+  contentWords,
   phraseAsWritten,
   sharedPhrase,
 } from "./related";
@@ -119,12 +120,33 @@ export function threadHoldsNote(
   });
 }
 
-const NAME = (s: string) => (s.length > 60 ? s.slice(0, 60) + "…" : s);
+/** A card named short enough to decide on.
+    Sixty characters wrapped to a second line and cut mid-word, which pushed
+    the thread name — the part you are actually deciding about — out of the
+    first glance. Break on a word, and flatten the newlines a pasted note
+    carries so a list does not unravel across the row. */
+export const NAME = (s: string) => {
+  const flat = s.replace(/\s+/g, " ").trim();
+  if (flat.length <= 46) return flat;
+  const cut = flat.slice(0, 46);
+  const space = cut.lastIndexOf(" ");
+  const kept = space > 24 ? cut.slice(0, space) : cut;
+  /* Drop a trailing orphan ("…drifting after a …" reads as a stumble). */
+  return kept.replace(/\s+\S{1,2}$/, "") + "…";
+};
 
-const threadText = (t: Thread): string =>
-  [t.name, t.summary, ...(t.frags || []).map((f) => f.text)]
-    .filter(Boolean)
-    .join(" ");
+/** A thread's OWN words: what it is called and what was actually put in it.
+    Deliberately excludes `summary`, which is Capture's generated prose about
+    the thread — matching against it lets the app cite itself, and summaries
+    are dense with connective vocabulary ("step-by-step", "records three"),
+    so they manufacture overlap that the thread's real content does not have. */
+const threadOwnText = (t: Thread): string =>
+  [t.name, ...(t.frags || []).map((f) => f.text)].filter(Boolean).join(" ");
+
+const threadOwnTextById = (board: Board, id: string): string => {
+  const t = board.threads.find((x) => x.id === id);
+  return t ? threadOwnText(t) : "";
+};
 
 /** A thread's text with one fragment left out — used to check whether a
     fragment belongs where it sits, rather than matching its own words. */
@@ -145,13 +167,43 @@ const threadTextWithout = (
 const actionText = (a: Action): string =>
   [a.text, a.src].filter(Boolean).join(" ");
 
-const threadTextById = (board: Board, id: string): string => {
-  const t = board.threads.find((x) => x.id === id);
-  return t ? threadText(t) : "";
-};
-
 const phraseWords = (phrase: string) =>
   phrase ? phrase.split(" ").length : 0;
+
+/**
+ * A shared word only means something if it is rare.
+ *
+ * Filing claims used to fire on any two-word overlap, which put a note
+ * about a duplication bug into a thread of bank account numbers because
+ * both contained "three" and "items". Length is the wrong test: "espresso
+ * machine" is two words and decisive, "three items" is two words and
+ * meaningless. What separates them is how common they are on this board.
+ *
+ * A word carried by at most two threads is one that lives essentially here
+ * and there — which is what "this belongs over there" has to mean. Past
+ * that it is floating vocabulary, and the biggest threads catch everything.
+ *
+ * Semantic filing — same meaning, different words — stays the model pass's
+ * job. This pass only claims what it can point at.
+ */
+const RARE_IN_AT_MOST = 2;
+
+/** How many threads use each content word at all. */
+function threadFrequency(board: Board): Map<string, number> {
+  const freq = new Map<string, number>();
+  for (const t of board.threads)
+    for (const w of new Set(contentWords(threadOwnText(t))))
+      freq.set(w, (freq.get(w) || 0) + 1);
+  return freq;
+}
+
+/** Does this overlap rest on anything the board does not say everywhere? */
+function distinctive(phrase: string, freq: Map<string, number>): boolean {
+  if (!phrase) return false;
+  return phrase
+    .split(" ")
+    .some((w) => (freq.get(w) ?? 0) <= RARE_IN_AT_MOST);
+}
 
 /** Classify a shared-phrase signal into a confidence tier. */
 function tierFor(phrase: string): OrganizeConfidence {
@@ -178,6 +230,7 @@ export function scanBoard(
   now: number = Date.now()
 ): OrganizeProposal[] {
   const dropped = new Set(dismissed);
+  const freq = threadFrequency(board);
   const out: OrganizeProposal[] = [];
   const dupClaimed = new Set<string>();
   const fragClaimed = new Set<string>();
@@ -283,7 +336,8 @@ export function scanBoard(
        folding it in would copy the note a second time. Skip it entirely. */
     const target = board.threads.find((x) => x.id === hit.id);
     if (!target || threadHoldsNote(target.frags, a.text, a.src)) continue;
-    const phrase = sharedPhrase(actionText(a), threadTextById(board, hit.id));
+    const phrase = sharedPhrase(actionText(a), threadOwnTextById(board, hit.id));
+    if (!distinctive(phrase, freq)) continue;
     out.push({
       id: `fold_action:${a.id}:${hit.id}`,
       kind: "fold_action",
@@ -293,7 +347,11 @@ export function scanBoard(
       sourceName: NAME(a.text),
       targetId: hit.id,
       targetName: NAME(hit.name),
-      reason: `the thread already talks about "${phraseAsWritten(phrase, a.text)}"`,
+      /* Quote the THREAD, not the action. The claim is about what is
+         already over there, so the evidence has to come from over there —
+         quoting the action's own wording made a two-word overlap read as
+         a sentence the thread had never said. */
+      reason: `that thread already says "${phraseAsWritten(phrase, threadOwnTextById(board, hit.id))}"`,
       score: 90 + phraseWords(phrase) * 10,
       origin: "local",
     });
@@ -313,7 +371,8 @@ export function scanBoard(
       const home = bestThreadHome(board, f.text, t.id);
       if (!home) continue;
       if (sharedPhrase(f.text, threadTextWithout(board, t.id, f.id))) continue;
-      const phrase = sharedPhrase(f.text, threadTextById(board, home.id));
+      const phrase = sharedPhrase(f.text, threadOwnTextById(board, home.id));
+      if (!distinctive(phrase, freq)) continue;
       fragClaimed.add(f.id);
       out.push({
         id: `move_fragment:${f.id}:${home.id}`,
@@ -326,7 +385,7 @@ export function scanBoard(
         sourceFragId: f.id,
         targetId: home.id,
         targetName: NAME(home.name),
-        reason: `that thread already talks about "${phraseAsWritten(phrase, f.text)}"`,
+        reason: `that thread already says "${phraseAsWritten(phrase, threadOwnTextById(board, home.id))}"`,
         score: 80 + phraseWords(phrase) * 10,
         origin: "local",
       });

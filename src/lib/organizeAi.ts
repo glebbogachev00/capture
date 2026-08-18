@@ -20,6 +20,7 @@ import type { Board } from "./model";
 import {
   HIGH_CAP,
   MEDIUM_CAP,
+  NAME,
   threadHoldsNote,
   type OrganizeConfidence,
   type OrganizeKind,
@@ -50,7 +51,6 @@ export const SNAPSHOT_CAPS = {
   intentions: 15,
 } as const;
 
-const NAME = (s: string) => (s.length > 60 ? s.slice(0, 60) + "…" : s);
 
 /** A plain-text cap so one fragment can't dominate the prompt. */
 const CLIP = (s: string, n: number) =>
