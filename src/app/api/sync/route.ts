@@ -115,7 +115,15 @@ export async function POST(request: Request) {
       tombstones,
     });
     return NextResponse.json(stored);
-  } catch {
+  } catch (error) {
+    /* Say it out loud. This catch was silent, and a push that failed every
+       single time for a day left no trace in the logs — the board looked
+       reachable, the blob simply stopped changing. A hub that cannot store
+       is the most important thing this route can report. */
+    console.error(
+      "sync push failed:",
+      error instanceof Error ? error.message : error
+    );
     /* A hub that cannot store must say so in words the person can act on.
        The old code let the write fail and kept a copy in memory, so a
        deployment with nowhere to write still looked healthy right up until

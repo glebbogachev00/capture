@@ -86,6 +86,21 @@ function fileStore(): HubStore {
   };
 }
 
+/**
+ * An ETag we can actually compare against.
+ *
+ * Blob returns a WEAK validator — `W/"abc"` — once an object is big enough
+ * to be stored compressed, and `If-Match` is defined to use strong
+ * comparison, so a weak tag never matches and the conditional write fails
+ * forever. That is not theoretical: a small board got a strong tag and
+ * synced fine, then crossed the size threshold, started coming back as
+ * `W/"..."`, and every push after that failed silently for a day. The
+ * prefix is a transport detail, not part of the identity — strip it and
+ * the same value matches.
+ */
+export const strongEtag = (etag: string | null | undefined): string | null =>
+  etag ? etag.replace(/^W\//, "") : null;
+
 function blobStore(): HubStore {
   return {
     async read(key) {
@@ -97,7 +112,7 @@ function blobStore(): HubStore {
         if (!res || res.statusCode !== 200) return null;
         return {
           body: await new Response(res.stream).text(),
-          version: res.blob.etag,
+          version: strongEtag(res.blob.etag),
         };
       } catch (error) {
         if (error instanceof BlobNotFoundError) return null;
