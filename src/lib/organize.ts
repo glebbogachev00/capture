@@ -12,6 +12,7 @@
  *   - extract_action  a fragment reads as a doable task — lift it out
  *   - merge_fragments the same idea worded differently in two notes — move
  *                     one into the other's thread (proposed by the model)
+ *   - let_go          an action still being carried past its moment — fade it
  *
  * The product rule: this scan only ever reduces clutter — it never
  * restructures for its own sake, and it never merges whole threads into one
@@ -44,7 +45,9 @@ export type OrganizeKind =
   | "fold_action"
   | "move_fragment"
   | "extract_action"
-  | "merge_fragments";
+  | "merge_fragments"
+  /** Still being carried, past its moment — the "get light" claim. */
+  | "let_go";
 
 export type OrganizeProposal = {
   /** Deterministic — same board always yields the same id, so a dismissal
@@ -81,6 +84,15 @@ export type OrganizeProposal = {
     ones behind "Show more" — a personal board needs the strong claims, not
     the long tail. */
 export const HIGH_CAP = 12;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** A dated action is only overdue once it has outlived the grace its own
+    deadline bought it — the same day the shelf life already allows. */
+const AFTER_DUE = DAY_MS;
+/** How long a "keep" action may sit before the scan asks about it. Six
+    weeks: long enough that a real commitment is not nagged at, short enough
+    that a dead one is not carried for a year. */
+const LONG_CARRY = 45 * DAY_MS;
 export const MEDIUM_CAP = 8;
 
 /** Normalised note text — trimmed, lowercased, whitespace collapsed. The
@@ -162,7 +174,8 @@ function tierFor(phrase: string): OrganizeConfidence {
  */
 export function scanBoard(
   board: Board,
-  dismissed: Iterable<string> = []
+  dismissed: Iterable<string> = [],
+  now: number = Date.now()
 ): OrganizeProposal[] {
   const dropped = new Set(dismissed);
   const out: OrganizeProposal[] = [];
@@ -318,6 +331,53 @@ export function scanBoard(
         origin: "local",
       });
     }
+  }
+
+  /* ------------------------------ get light ------------------------------
+     A different question from the rest of this scan. Everything above asks
+     "what is messy?"; this asks "what is still pulling at you?".
+
+     It only ever looks at actions the board will NEVER clear by itself.
+     Everything with a shelf life fades on its own — that is the whole
+     design — so the only things that can pile up indefinitely are the ones
+     the app promised to keep, plus anything whose stated deadline has come
+     and gone. Those are the open loops, and they are invisible precisely
+     because nothing is going to remove them.
+
+     Accepting does NOT delete. It fades the action: it moves to Faded,
+     recoverable for two weeks, then goes. Letting go, in the app's own
+     vocabulary, and reversible for a fortnight — because "get light" must
+     never be a thing you regret having tapped. */
+  for (const a of board.actions) {
+    if (a.faded || a.done) continue;
+
+    /* Its own stated deadline has passed. The strongest case: the capture
+       named the day itself, so nothing here is inferred. */
+    const overdue = !!a.due && a.due < now - AFTER_DUE;
+    /* Kept, and carried a long time. "keep" means the app will never fade
+       it, so this is the only pile that grows without limit. */
+    const carried =
+      a.shelf === "keep" && !a.due && now - (a.at || 0) > LONG_CARRY;
+    if (!overdue && !carried) continue;
+
+    const days = Math.floor((now - (overdue ? a.due! : a.at || now)) / DAY_MS);
+    out.push({
+      id: `let_go:${a.id}`,
+      kind: "let_go",
+      /* Never "high": nothing here is a mistake to correct, only a question
+         worth asking, so it never crowds out a real clutter claim. */
+      confidence: "medium",
+      verb: "Let go",
+      sourceId: a.id,
+      sourceName: NAME(a.text),
+      targetId: a.id,
+      targetName: NAME(a.text),
+      reason: overdue
+        ? `its own deadline passed ${days} days ago and it is still open`
+        : `kept for ${days} days without being closed — nothing will fade it`,
+      score: 40 + Math.min(days, 40),
+      origin: "local",
+    });
   }
 
   /* Extract a doable task out of a fragment. Deliberately narrow — only

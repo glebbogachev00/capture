@@ -130,6 +130,11 @@ const VERBS: Record<OrganizeKind, string> = {
   move_fragment: "Move",
   extract_action: "Extract",
   merge_fragments: "Merge",
+  /* Deterministic only — the model is never asked about it, and the
+     route's kind whitelist drops it if a model ever invents one. Get Light
+     is free by design; routing it through the AI pass would put a quota
+     cost on the one claim that needs none. */
+  let_go: "Let go",
 };
 
 /** Fragment kinds — proposals that name a specific note inside a thread. */

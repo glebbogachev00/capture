@@ -1406,6 +1406,29 @@ export function useBoard(now: number) {
         })
       );
       return true;
+    } else if (p.kind === "let_go") {
+      /* Fade it, never delete it. The action moves to Faded exactly as it
+         would have if it had a shelf life that ran out — recoverable for
+         two weeks, then gone. Getting light must never be a tap you regret,
+         and fading is the app's own word for letting something go.
+
+         No correction is recorded: letting go of a stale task says nothing
+         about how captures should be FILED, and feeding it to the learning
+         loop would teach the sorter a lesson that was never about sorting. */
+      const gone = latest.current.actions.find((x) => x.id === p.sourceId);
+      if (!gone) return false;
+      const at = stamp();
+      await commit({
+        ...latest.current,
+        actions: latest.current.actions.map((x) =>
+          x.id === p.sourceId
+            ? { ...x, faded: true, fadedAt: at, updatedAt: at }
+            : x
+        ),
+      });
+      setNotice("Let go — it sits in Faded for two weeks if you want it back.");
+      setTimeout(() => setNotice(null), 5000);
+      return true;
     } else if (p.kind === "move_fragment") {
       await moveFrag(p.sourceThreadId!, p.sourceFragId!, p.targetId);
       await commit(

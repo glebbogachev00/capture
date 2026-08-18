@@ -22,6 +22,15 @@
 
 import { describe, expect, it } from "vitest";
 import cases from "./tidyCases.json";
+
+/**
+ * These boards were written with symbolic timestamps (at: 200, 1000), and
+ * every fixture action is shelf "keep". Judged against the real clock they
+ * are all decades old, so the get-light claim fires on every one of them
+ * and drowns the clutter claims these cases exist to pin. The scan is given
+ * the fixtures' own era instead: staleness has its own tests.
+ */
+const FIXTURE_NOW = 10_000;
 import type { Action, Board, Frag, Intention, Thread } from "./model";
 import { scanBoard, type OrganizeKind, type OrganizeProposal } from "./organize";
 import {
@@ -96,19 +105,19 @@ describe("Tidy use cases — the deterministic local scan", () => {
     "%s: proposes exactly the expected kinds (no more, no less)",
     (_id, tc) => {
       const board = snapshotToBoard(tc.board);
-      const got = kinds(scanBoard(board)).sort();
+      const got = kinds(scanBoard(board, [], FIXTURE_NOW)).sort();
       expect(got).toEqual([...tc.localExpect].sort());
     }
   );
 
   it("c1: the semantic pair shares zero content words — local must be silent", () => {
     const board = snapshotToBoard(byId("c1-semantic-merge").board);
-    expect(scanBoard(board)).toEqual([]);
+    expect(scanBoard(board, [], FIXTURE_NOW)).toEqual([]);
   });
 
   it("c2: the extract names the task fragment (f1), never the reflection (f2) or the faucet note", () => {
     const board = snapshotToBoard(byId("c2-extract-task").board);
-    const extract = scanBoard(board).find((p) => p.kind === "extract_action")!;
+    const extract = scanBoard(board, [], FIXTURE_NOW).find((p) => p.kind === "extract_action")!;
     expect(extract).toBeDefined();
     expect(extract.sourceFragId).toBe("f1");
     expect(extract.sourceName).toContain("call the vet");
@@ -116,7 +125,7 @@ describe("Tidy use cases — the deterministic local scan", () => {
 
   it("c3: the action duplicate names the NEWER capture as the copy, the original stays", () => {
     const board = snapshotToBoard(byId("c3-duplicate-action").board);
-    const dup = scanBoard(board).find((p) => p.kind === "dup_action")!;
+    const dup = scanBoard(board, [], FIXTURE_NOW).find((p) => p.kind === "dup_action")!;
     expect(dup.sourceId).toBe("a-new"); // at 300 — the copy
     expect(dup.targetId).toBe("a-old"); // at 100 — the original kept
     expect(dup.reason).toContain("dentist appointment");
@@ -124,7 +133,7 @@ describe("Tidy use cases — the deterministic local scan", () => {
 
   it("c3: the pasted-twice fragment duplicate names the NEWER fragment as the copy, in the same thread", () => {
     const board = snapshotToBoard(byId("c3-duplicate-action").board);
-    const dup = scanBoard(board).find((p) => p.kind === "dup_fragment")!;
+    const dup = scanBoard(board, [], FIXTURE_NOW).find((p) => p.kind === "dup_fragment")!;
     expect(dup).toBeDefined();
     expect(dup.sourceFragId).toBe("f2"); // at 110 — the copy
     expect(dup.sourceThreadId).toBe("t-general");
@@ -134,7 +143,7 @@ describe("Tidy use cases — the deterministic local scan", () => {
 
   it("c4: move targets the groceries thread and fold targets the kitchen thread", () => {
     const board = snapshotToBoard(byId("c4-move-and-fold").board);
-    const ps = scanBoard(board);
+    const ps = scanBoard(board, [], FIXTURE_NOW);
     const move = ps.find((p) => p.kind === "move_fragment")!;
     const fold = ps.find((p) => p.kind === "fold_action")!;
     expect(move.sourceFragId).toBe("f5");
@@ -145,14 +154,14 @@ describe("Tidy use cases — the deterministic local scan", () => {
 
   it("c4: the single-fragment groceries thread is never a move source — no reverse move", () => {
     const board = snapshotToBoard(byId("c4-move-and-fold").board);
-    const moves = scanBoard(board).filter((p) => p.kind === "move_fragment");
+    const moves = scanBoard(board, [], FIXTURE_NOW).filter((p) => p.kind === "move_fragment");
     expect(moves).toHaveLength(1);
     expect(moves[0].sourceId).toBe("t-career");
   });
 
   it("c5: a clean board gets nothing at all", () => {
     const board = snapshotToBoard(byId("c5-clean-silence").board);
-    expect(scanBoard(board)).toEqual([]);
+    expect(scanBoard(board, [], FIXTURE_NOW)).toEqual([]);
   });
 
   it("c6: the local scan never folds an action back into the thread its note came from", () => {
@@ -160,7 +169,7 @@ describe("Tidy use cases — the deterministic local scan", () => {
        src is that verbatim note. Folding it back would copy the note a
        second time — the scan must stay silent. */
     const board = snapshotToBoard(byId("c6-fold-back").board);
-    expect(scanBoard(board).filter((p) => p.kind === "fold_action")).toEqual([]);
+    expect(scanBoard(board, [], FIXTURE_NOW).filter((p) => p.kind === "fold_action")).toEqual([]);
   });
 });
 
@@ -267,7 +276,7 @@ describe("Tidy use cases — the merged review list", () => {
     const tc = byId("c5-clean-silence");
     const merged = mergeOrganize(
       mapAiProposals(tc.board, tc.cannedAi),
-      scanBoard(snapshotToBoard(tc.board))
+      scanBoard(snapshotToBoard(tc.board), [], FIXTURE_NOW)
     );
     expect(merged).toEqual([]);
   });

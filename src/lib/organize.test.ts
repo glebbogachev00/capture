@@ -5,6 +5,12 @@ import { HIGH_CAP, scanBoard } from "./organize";
 
 /* ------------------------------ builders ------------------------------ */
 
+/* These fixtures use symbolic timestamps and every action is shelf "keep",
+   so against the real clock they all read as decades-old open loops and the
+   get-light claim fires on each one. Judge them in their own era; staleness
+   has its own suite in getLight.test.ts. */
+const FIXTURE_NOW = 10_000;
+
 const act = (id: string, text: string, at: number, src?: string): Action => ({
   id,
   text,
@@ -30,7 +36,7 @@ const thread = (id: string, name: string, frags: Frag[]): Thread => ({
 
 const board = (b: Partial<Board>): Board => ({ ...EMPTY, ...b });
 
-const kinds = (b: Board) => scanBoard(b).map((p) => p.kind);
+const kinds = (b: Board) => scanBoard(b, [], FIXTURE_NOW).map((p) => p.kind);
 
 /* ------------------------------ the scan ------------------------------ */
 
@@ -59,7 +65,7 @@ describe("scanBoard — duplicate actions", () => {
         act("old", "Book a dentist appointment for Friday", 100),
       ],
     });
-    const out = scanBoard(b);
+    const out = scanBoard(b, [], FIXTURE_NOW);
     expect(out).toHaveLength(1);
     expect(out[0].kind).toBe("dup_action");
     expect(out[0].sourceId).toBe("new");
@@ -74,7 +80,7 @@ describe("scanBoard — duplicate actions", () => {
         act("a2", "Book a dentist appointment for Friday", 100),
       ],
     });
-    expect(scanBoard(two)[0].confidence).toBe("medium");
+    expect(scanBoard(two, [], FIXTURE_NOW)[0].confidence).toBe("medium");
 
     const three = board({
       actions: [
@@ -82,7 +88,7 @@ describe("scanBoard — duplicate actions", () => {
         act("a2", "Book a dentist appointment for Tuesday", 100),
       ],
     });
-    expect(scanBoard(three)[0].confidence).toBe("high");
+    expect(scanBoard(three, [], FIXTURE_NOW)[0].confidence).toBe("high");
   });
 
   it("marks every local proposal with origin 'local'", () => {
@@ -92,7 +98,7 @@ describe("scanBoard — duplicate actions", () => {
         act("old", "Book a dentist appointment for Friday", 100),
       ],
     });
-    expect(scanBoard(b).every((p) => p.origin === "local")).toBe(true);
+    expect(scanBoard(b, [], FIXTURE_NOW).every((p) => p.origin === "local")).toBe(true);
   });
 
   it("proposes exactly one per pair, never the original", () => {
@@ -103,7 +109,7 @@ describe("scanBoard — duplicate actions", () => {
         act("old", "Book a dentist appointment for Monday", 100),
       ],
     });
-    const dups = scanBoard(b).filter((p) => p.kind === "dup_action");
+    const dups = scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "dup_action");
     expect(dups).toHaveLength(1);
     expect(dups[0].sourceId).toBe("new");
     expect(dups[0].targetId).toBe("mid");
@@ -131,7 +137,7 @@ describe("scanBoard — duplicate fragments", () => {
         ]),
       ],
     });
-    const out = scanBoard(b);
+    const out = scanBoard(b, [], FIXTURE_NOW);
     expect(out).toHaveLength(1);
     expect(out[0].kind).toBe("dup_fragment");
     expect(out[0].confidence).toBe("high");
@@ -150,7 +156,7 @@ describe("scanBoard — duplicate fragments", () => {
         ]),
       ],
     });
-    const out = scanBoard(b).filter((p) => p.kind === "dup_fragment");
+    const out = scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "dup_fragment");
     expect(out).toHaveLength(1);
     expect(out[0].sourceFragId).toBe("fb");
     expect(out[0].targetId).toBe("ta");
@@ -181,7 +187,7 @@ describe("scanBoard — duplicate fragments", () => {
         ]),
       ],
     });
-    const out = scanBoard(b);
+    const out = scanBoard(b, [], FIXTURE_NOW);
     expect(out.some((p) => p.kind === "dup_fragment")).toBe(false);
     const merge = out.find((p) => p.kind === "merge_fragments");
     expect(merge?.verb).toBe("Merge");
@@ -222,7 +228,7 @@ describe("scanBoard — fold an action into a thread", () => {
       actions: [act("a1", "Buy cold brew equipment for the office", 200)],
       threads: [thread("t1", "Cold brew", [frag("f1", "cold brew experiments going well", 100)])],
     });
-    const out = scanBoard(b);
+    const out = scanBoard(b, [], FIXTURE_NOW);
     expect(out).toHaveLength(1);
     expect(out[0].kind).toBe("fold_action");
     expect(out[0].sourceId).toBe("a1");
@@ -238,7 +244,7 @@ describe("scanBoard — fold an action into a thread", () => {
       ],
       threads: [thread("t1", "Cold brew", [frag("f1", "cold brew experiments", 100)])],
     });
-    const out = scanBoard(b);
+    const out = scanBoard(b, [], FIXTURE_NOW);
     const dups = out.filter((p) => p.kind === "dup_action");
     const folds = out.filter((p) => p.kind === "fold_action");
     expect(dups).toHaveLength(1);
@@ -265,7 +271,7 @@ describe("scanBoard — fold an action into a thread", () => {
         ]),
       ],
     });
-    expect(scanBoard(b).filter((p) => p.kind === "fold_action")).toEqual([]);
+    expect(scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "fold_action")).toEqual([]);
   });
 
   it("still folds when the thread holds a related but different note", () => {
@@ -275,7 +281,7 @@ describe("scanBoard — fold an action into a thread", () => {
       actions: [act("a1", "Buy cold brew equipment for the office", 200)],
       threads: [thread("t1", "Cold brew", [frag("f1", "cold brew experiments going well", 100)])],
     });
-    const folds = scanBoard(b).filter((p) => p.kind === "fold_action");
+    const folds = scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "fold_action");
     expect(folds).toHaveLength(1);
     expect(folds[0].sourceId).toBe("a1");
     expect(folds[0].targetId).toBe("t1");
@@ -303,7 +309,7 @@ describe("scanBoard — no whole-thread merges (the product rule)", () => {
        casts through string to assert the runtime behaviour: no proposal
        merges one thread into another, even on the strongest case. */
     expect(
-      scanBoard(b).filter((p) => (p.kind as string) === "merge_threads")
+      scanBoard(b, [], FIXTURE_NOW).filter((p) => (p.kind as string) === "merge_threads")
     ).toEqual([]);
   });
 });
@@ -325,7 +331,7 @@ describe("scanBoard — move a fragment to the right thread", () => {
        has nothing else on the subject), and the equipment thread keeps its
        single-fragment home — a lone fragment is a merge's claim, not a
        move's, so the directions never propose each other. */
-    const moves = scanBoard(b).filter((p) => p.kind === "move_fragment");
+    const moves = scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "move_fragment");
     expect(moves).toHaveLength(1);
     expect(moves[0].confidence).toBe("medium");
     expect(moves[0].sourceThreadId).toBe("career");
@@ -359,7 +365,7 @@ describe("scanBoard — extract a task out of a fragment", () => {
         ]),
       ],
     });
-    const extracts = scanBoard(b).filter((p) => p.kind === "extract_action");
+    const extracts = scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "extract_action");
     expect(extracts).toHaveLength(1);
     expect(extracts[0].confidence).toBe("medium");
     expect(extracts[0].sourceFragId).toBe("f1");
@@ -401,7 +407,7 @@ describe("scanBoard — extract a task out of a fragment", () => {
         ]),
       ],
     });
-    const out = scanBoard(b);
+    const out = scanBoard(b, [], FIXTURE_NOW);
     const dups = out.filter((p) => p.kind === "dup_fragment");
     expect(dups).toHaveLength(1);
     expect(dups[0].sourceFragId).toBe("fb");
@@ -420,8 +426,8 @@ describe("scanBoard — dismissal and determinism", () => {
         act("old", "Book a dentist appointment for Friday", 100),
       ],
     });
-    const [p] = scanBoard(b);
-    expect(scanBoard(b, [p.id])).toEqual([]);
+    const [p] = scanBoard(b, [], FIXTURE_NOW);
+    expect(scanBoard(b, [p.id], FIXTURE_NOW)).toEqual([]);
   });
 
   it("is deterministic — same board, same ids in the same order", () => {
@@ -432,8 +438,8 @@ describe("scanBoard — dismissal and determinism", () => {
       ],
       threads: [thread("t1", "Cold brew", [frag("f1", "cold brew experiments", 50)])],
     });
-    const first = scanBoard(b).map((p) => p.id);
-    const second = scanBoard(b).map((p) => p.id);
+    const first = scanBoard(b, [], FIXTURE_NOW).map((p) => p.id);
+    const second = scanBoard(b, [], FIXTURE_NOW).map((p) => p.id);
     expect(second).toEqual(first);
   });
 
@@ -444,7 +450,7 @@ describe("scanBoard — dismissal and determinism", () => {
       actions.push(act(`new${i}`, `Oversee ${word} wiring today`, 200 + i));
       actions.push(act(`old${i}`, `Oversee ${word} wiring later`, 100 + i));
     }
-    const out = scanBoard(board({ actions }));
+    const out = scanBoard(board({ actions }), [], FIXTURE_NOW);
     expect(out.length).toBe(HIGH_CAP);
     expect(out.every((p) => p.confidence === "high")).toBe(true);
   });

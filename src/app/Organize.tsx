@@ -32,6 +32,10 @@ const GROUPS: { kinds: OrganizeKind[]; title: string }[] = [
   { kinds: ["move_fragment"], title: "Notes sitting in the wrong thread" },
   { kinds: ["fold_action"], title: "Actions that belong with a thread" },
   { kinds: ["extract_action"], title: "Notes that are really tasks" },
+  /* Last, and phrased as a question rather than a claim: everything above
+     found something wrong, this one only asks whether you are still
+     carrying something. */
+  { kinds: ["let_go"], title: "Still carrying these — let them go?" },
 ];
 
 const YES_LABEL: Record<OrganizeKind, string> = {
@@ -41,6 +45,7 @@ const YES_LABEL: Record<OrganizeKind, string> = {
   fold_action: "Fold in",
   move_fragment: "Move",
   extract_action: "Extract",
+  let_go: "Let go",
 };
 
 /** The review's opening line, built from what was found — "1 thought lives
@@ -85,6 +90,16 @@ function Explanation({ p }: { p: OrganizeProposal }) {
     return (
       <span className="org-line">
         <em>{p.sourceName}</em> duplicates <em>{p.targetName}</em>
+      </span>
+    );
+  }
+  if (p.kind === "let_go") {
+    /* Source and target are the same card here — nothing moves anywhere, it
+       just stops being carried. The generic "X into Y" line would read as
+       "Sort out the garage into Sort out the garage". */
+    return (
+      <span className="org-line">
+        <em>{p.sourceName}</em>
       </span>
     );
   }
