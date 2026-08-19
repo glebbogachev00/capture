@@ -216,6 +216,9 @@ export function Capture() {
     sync,
     syncNow,
     canUndo,
+    misfiled,
+    sortAgainAs,
+    dismissMisfiled,
     undo,
     learnedRules,
     clearRule,
@@ -591,6 +594,35 @@ export function Capture() {
                 Undo
               </button>
             )}
+          </div>
+        )}
+        {/* The undo asked a question. One tap answers it: the capture is
+            sorted again with that destination pinned, and the pair — wrong
+            kind, right kind — becomes something the engine reads next time.
+            No typing, and no obligation: dismissing is a tap too. */}
+        {misfiled && (
+          <div className="misfiled">
+            <span className="misfiled-q">Then what was it?</span>
+            <div className="misfiled-opts">
+              {(["action", "thread", "intention"] as const)
+                .filter((k) => k !== misfiled.wrong)
+                .map((k) => (
+                  <button
+                    key={k}
+                    className="misfiled-btn"
+                    onClick={() => void sortAgainAs(k)}
+                  >
+                    {k === "action" ? "An action" : k === "thread" ? "A note" : "An intention"}
+                  </button>
+                ))}
+              <button
+                className="misfiled-btn misfiled-skip"
+                onClick={dismissMisfiled}
+                aria-label="Never mind"
+              >
+                ×
+              </button>
+            </div>
           </div>
         )}
         {suggestion && (

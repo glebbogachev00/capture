@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REFILE_WINDOW_MS, isRefile, refileRule } from "./refiled";
+import { REFILE_WINDOW_MS, isRefile, refileRule, undoRule } from "./refiled";
 
 const MIN = 60 * 1000;
 
@@ -64,5 +64,32 @@ describe("refileRule — what the fix teaches", () => {
   it("says nothing when there is nothing specific to say", () => {
     expect(refileRule("it is", "Groceries", "things to buy")).toBeNull();
     expect(refileRule("cold brew", "", "anything")).toBeNull();
+  });
+});
+
+describe("undoRule — what an answered undo teaches", () => {
+  it("names the subject, the right kind, and the wrong one", () => {
+    expect(
+      undoRule("We are out of cold brew again, which is annoying", "action", "thread")
+    ).toBe('Captures about "cold brew" are a thread, not an action');
+  });
+
+  it("says nothing when the answer is the kind it already chose", () => {
+    /* Not a correction, so there is nothing to learn. */
+    expect(undoRule("Buy running clothes", "action", "action")).toBeNull();
+  });
+
+  it("says nothing when there is no subject to anchor on", () => {
+    expect(undoRule("   ", "action", "thread")).toBeNull();
+  });
+
+  it("gives two captures about one subject the same rule, so they aggregate", () => {
+    /* deriveRules groups by exact wording and needs two signals, so the
+       rule has to be anchored on the subject rather than the sentence —
+       otherwise every correction is a group of one and nothing is ever
+       learned. */
+    const a = undoRule("cold brew is out again", "action", "thread");
+    const b = undoRule("cold brew, we ran out this week too", "action", "thread");
+    expect(a).toBe(b);
   });
 });

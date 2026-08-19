@@ -68,12 +68,13 @@ import {
 } from "@/lib/boardOps";
 import { arrivedIn, arrivedNote } from "@/lib/arrived";
 import { parseCommandPrefix } from "@/lib/command";
-import { isRefile, refileRule } from "@/lib/refiled";
+import { isRefile, refileRule, undoRule, type SortKind } from "@/lib/refiled";
 import { expiryFor, parseDue } from "@/lib/due";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
   boardSignature,
+  applyTombstones,
   mergeSync,
   mergeTombstones,
   stampChanges,
@@ -271,6 +272,16 @@ export function useBoard(now: number) {
     picIds?: string[];
   } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
+
+  /* What the last undo threw away, kept just long enough to ask one
+     question about it. Undo on its own says the sorting was wrong and
+     nothing about what was right, which is not enough to learn from — so
+     the capture waits here while the person taps the kind it should have
+     been. Cleared by answering, by dismissing, or by the next capture. */
+  const [misfiled, setMisfiled] = useState<{
+    text: string;
+    wrong: SortKind;
+  } | null>(null);
 
   /** The hub revision this device last saw, so a poll can ask "anything
       newer than N?" and get a two-field answer instead of the whole board. */
@@ -506,13 +517,41 @@ export function useBoard(now: number) {
       ledger: snap.board.ledger,
       corrections: snap.board.corrections,
     };
+
+    /* The capture being undone: the one ledger entry the snapshot does not
+       have. It carries both halves of the question — what was said, and
+       what the sorter decided it was. */
+    const undoneEntry = latest.current.ledger.find(
+      (e) => !snap.board.ledger.some((x) => x.id === e.id)
+    );
+    /* "both" is not a kind anyone can pick, so there is nothing to ask. */
+    const wrongKind: SortKind | null =
+      undoneEntry && undoneEntry.kind !== "both" ? undoneEntry.kind : null;
+    /* The complaint is worth recording even if the question goes
+       unanswered: it has no rule attached, so it can never become a
+       learned rule on its own, but the record shows the engine was wrong
+       here. */
+    const learned: Board = wrongKind
+      ? withCorrection(board, {
+          id: uid(),
+          at: now,
+          proposalKind: "undone",
+          accepted: false,
+          context: (undoneEntry!.raw || undoneEntry!.clean).slice(0, 160),
+        })
+      : board;
     const nextTombstones = mergeTombstones(snap.tombstones, added);
 
-    latest.current = board;
-    setData(board);
+    latest.current = learned;
+    setData(learned);
     tombstones.current = nextTombstones;
+    if (wrongKind)
+      setMisfiled({
+        text: undoneEntry!.raw || undoneEntry!.clean,
+        wrong: wrongKind,
+      });
     try {
-      await set(KEY, JSON.stringify(board));
+      await set(KEY, JSON.stringify(learned));
       await set(TOMBSTONE_KEY, JSON.stringify(nextTombstones));
     } catch {
       /* disk hiccup; next commit retries */
@@ -552,12 +591,78 @@ export function useBoard(now: number) {
     await pushNow();
   }, [pushNow, text, pics]);
 
+  /**
+   * The answer to "then what was it?".
+   *
+   * One tap, no typing. It writes the lesson the undo could not write on
+   * its own — the wrong kind and the right one, anchored on the capture's
+   * subject so two corrections about the same subject aggregate instead of
+   * splitting — and then re-runs the capture with the destination pinned,
+   * so answering the question also does the thing.
+   */
+  /**
+   * The answer to "then what was it?".
+   *
+   * One tap, no typing. It writes the lesson the undo could not write on
+   * its own — the wrong kind and the right one, anchored on the capture's
+   * subject so two corrections about the same subject aggregate instead of
+   * splitting — and then re-runs the capture with the destination pinned,
+   * so answering the question also does the thing.
+   *
+   * Deliberately NOT memoised. Undo restores the draft text one tick after
+   * it raises this question, so a useCallback keyed on the question would
+   * close over the render before the words came back, and re-submit an
+   * empty box. Defined fresh each render, it always reads the box as it
+   * actually is.
+   */
+  const sortAgainAs = async (right: SortKind) => {
+    const m = misfiled;
+    setMisfiled(null);
+    if (m) {
+      const rule = undoRule(m.text, m.wrong, right);
+      if (rule) {
+        const learned = withCorrection(latest.current, {
+          id: uid(),
+          at: stamp(),
+          proposalKind: "undone",
+          accepted: true,
+          context: m.text.slice(0, 160),
+          rule,
+        });
+        latest.current = learned;
+        setData(learned);
+        try {
+          await set(KEY, JSON.stringify(learned));
+        } catch {
+          /* disk hiccup; the next commit writes it */
+        }
+      }
+      /* The box holds the restored words, but a re-sort must not depend on
+         that: if anything cleared them, the capture being corrected is
+         still right here. */
+      if (!text.trim()) setText(m.text);
+    }
+    await submit(false, right, m?.text);
+  };
+
   const commit = useCallback(
     async (next: Board) => {
       /* Every mutation funnels through here, so the sync bookkeeping lives in
          one place: diff what changed, stamp the changed items, tombstone the
-         deletions, then push. */
-      const stamped = stampChanges(latest.current, next);
+         deletions, then push.
+
+         Tombstones are re-applied first, because a write can be older than
+         it looks. A thread's summary is fetched in the background; if the
+         capture that created the thread is undone while that request is in
+         flight, the reply arrives holding a thread the board no longer has,
+         and committing it put the thread back — empty, since its fragment
+         had been tombstoned separately — and stamped it fresh, so it then
+         out-aged its own tombstone and survived every later merge. A
+         deletion must not be undone by a writer that set out before it. */
+      const stamped = stampChanges(
+        latest.current,
+        applyTombstones(next, tombstones.current)
+      );
       setData(stamped.board);
       latest.current = stamped.board;
       if (stamped.tombstones.length) {
@@ -1032,19 +1137,32 @@ export function useBoard(now: number) {
   /** Praise be. The main capture, sorted and filed.
       `dictated` says the words came from the microphone — the ledger records
       that so a later export can tell speech from typing. */
-  const submit = async (dictated = false) => {
-    const raw = text.trim();
+  const submit = async (
+    dictated = false,
+    pinned?: SortKind,
+    /* The words to sort, when the caller holds them and the box may not
+       yet — a re-sort after undo runs a tick before the draft is back. */
+    override?: string
+  ) => {
+    const raw = (override ?? text).trim();
     /* A leading command pins the destination: the command word is
        stripped and the rest goes through the sorter with the destination
        already decided. Works typed (/action …) or spoken ("slash action …"
        or "action. …") — the parser accepts all the forms dictation and
        keyboards actually produce. */
-    const { force, payload } = parseCommandPrefix(raw);
+    const { force: typed, payload } = parseCommandPrefix(raw);
+    /* A kind chosen after an undo outranks a typed prefix: the person has
+       just been asked the question outright and answered it. */
+    const force = pinned ?? typed;
     if (!payload && !pics.length) return;
     setErr("");
     setSwept(null);
     // A new capture takes over the banner: no stale proposal survives.
     setSuggestion(null);
+    /* Asking about the previous capture stops making sense once a new one
+       is on its way. A re-sort passes `pinned`, and must keep its own
+       question alive long enough to have written the rule. */
+    if (!pinned) setMisfiled(null);
     setBusy("Sorting");
 
     const at = stamp();
@@ -3023,6 +3141,9 @@ export function useBoard(now: number) {
     syncNow,
     canUndo,
     undo,
+    misfiled,
+    sortAgainAs,
+    dismissMisfiled: () => setMisfiled(null),
     learnedRules,
     clearRule,
   };

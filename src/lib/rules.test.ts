@@ -141,3 +141,49 @@ describe("deriveRules", () => {
     ]);
   });
 });
+
+describe("deriveRules — an answer counts on its own", () => {
+  const answered = (rule: string, at = 1000) => ({
+    id: "c" + at,
+    at,
+    proposalKind: "undone" as const,
+    accepted: true,
+    context: "context",
+    rule,
+  });
+
+  it("learns from one undo that was answered", () => {
+    /* The capture was thrown away, the app asked what it should have been,
+       and the person tapped a kind. Making them repeat that before it
+       counts is just ignoring them. */
+    const out = deriveRules(
+      [answered('Captures about "cold brew" are an action, not a thread')],
+      [],
+      2000
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].text).toBe(
+      'Captures about "cold brew" are an action, not a thread'
+    );
+  });
+
+  it("still needs two signals for a rule nobody was asked about", () => {
+    const inferred = {
+      id: "c1",
+      at: 1000,
+      proposalKind: "rename_thread" as const,
+      accepted: true,
+      context: "context",
+      rule: "Threads get renamed to their subject",
+    };
+    expect(deriveRules([inferred], [], 2000)).toHaveLength(0);
+    expect(
+      deriveRules([inferred, { ...inferred, id: "c2" }], [], 2000)
+    ).toHaveLength(1);
+  });
+
+  it("still respects a rule the person chose to forget", () => {
+    const rule = 'Captures about "cold brew" are an action, not a thread';
+    expect(deriveRules([answered(rule)], [rule.toLowerCase()], 2000)).toEqual([]);
+  });
+});

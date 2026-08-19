@@ -38,6 +38,18 @@ export const RULES_CAP = 5;
     loud; a single accept or dismiss is noise. */
 const MIN_SIGNALS = 2;
 
+/**
+ * Except when the person was asked outright.
+ *
+ * Every other signal here is inferred from behaviour — a suggestion taken,
+ * a suggestion waved away — and one of those really can be a slip of the
+ * thumb. An "undone" correction is different in kind: the capture was
+ * thrown away, the app asked what it should have been, and the answer was
+ * a deliberate tap on a named kind. That is a statement, not a hint, and
+ * making someone repeat it before it counts is just ignoring them.
+ */
+const ANSWERED = "undone";
+
 /** Confidence above this is a positive rule (the user wants it); below this
     it is a negative one (they don't). In between is mixed — the user is
     inconsistent, and the engine should ignore it rather than guess. */
@@ -70,7 +82,13 @@ export function deriveRules(
   /* Group by rule key, keeping the newest phrasing. */
   const groups = new Map<
     string,
-    { text: string; accepts: number; dismisses: number; lastAt: number }
+    {
+      text: string;
+      accepts: number;
+      dismisses: number;
+      lastAt: number;
+      answered: boolean;
+    }
   >();
   for (const c of corrections) {
     if (!c?.rule || typeof c.rule !== "string") continue;
@@ -81,7 +99,9 @@ export function deriveRules(
       accepts: 0,
       dismisses: 0,
       lastAt: c.at,
+      answered: false,
     };
+    if (c.proposalKind === ANSWERED) g.answered = true;
     if (c.accepted) g.accepts += 1;
     else g.dismisses += 1;
     // A key is an exact wording, so the phrasing is constant; only the
@@ -95,7 +115,7 @@ export function deriveRules(
   const candidates: Scored[] = [];
   for (const [key, g] of groups) {
     const total = g.accepts + g.dismisses;
-    if (total < MIN_SIGNALS) continue;
+    if (total < (g.answered ? 1 : MIN_SIGNALS)) continue;
     const confidence = g.accepts / total;
     // The middle band (≈50%) is the user being inconsistent — drop it.
     // Anything one-sided, in either direction, is a real preference.

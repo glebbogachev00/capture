@@ -1160,6 +1160,60 @@ body {
   flex: none;
 }
 
+/* After an undo: one quiet question, answered with one tap. Sized like the
+   suggestion bar it sits next to, never louder than the capture box. */
+.misfiled {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--card);
+}
+.misfiled-q {
+  font-size: 13px;
+  color: var(--muted);
+}
+.misfiled-opts {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.misfiled-btn {
+  border: 1px solid var(--rule);
+  background: none;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 6px 11px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.misfiled-btn:hover {
+  border-color: var(--ink);
+}
+.misfiled-skip {
+  color: var(--muted);
+  padding: 6px 9px;
+}
+@media (max-width: 460px) {
+  .misfiled-opts {
+    margin-left: 0;
+    width: 100%;
+  }
+  .misfiled-btn {
+    flex: 1;
+  }
+  .misfiled-skip {
+    flex: 0 0 auto;
+  }
+}
+
 /* inline editing */
 .act-edit {
   width: 100%;
