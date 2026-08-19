@@ -2438,14 +2438,6 @@ body {
   place-items: center;
 }
 
-/* The review screen — reads like a report: a one-line summary, then each
-   kind of finding under its own heading, one yes/no per row. */
-.org-summary {
-  font-size: 14.5px;
-  line-height: 1.55;
-  color: var(--ink);
-  margin: 4px 0 0;
-}
 .org-group {
   display: flex;
   flex-direction: column;
@@ -2518,21 +2510,26 @@ body {
   border-radius: 8px;
   white-space: nowrap;
 }
+/* On a phone the two buttons took enough width that the sentence wrapped
+   every two or three words, which reads as more text rather than less.
+   Give the sentence the full line and put the choice underneath it, where
+   a thumb is anyway. */
+@media (max-width: 560px) {
+  .org-row {
+    flex-wrap: wrap;
+  }
+  .org-body {
+    flex: 1 1 100%;
+  }
+  .org-actions {
+    flex: 1 1 100%;
+    margin-top: 8px;
+  }
+  .org-actions .suggest-btn {
+    flex: 1;
+  }
+}
 
-.organize-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex: none;
-  margin-top: 5px;
-}
-.organize-dot.high {
-  background: var(--accent);
-}
-.organize-dot.medium {
-  background: var(--muted);
-  opacity: 0.55;
-}
 .org-more {
   font: inherit;
   font-size: 13.5px;
