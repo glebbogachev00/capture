@@ -202,6 +202,10 @@ export function useBoard(now: number) {
      review screen shows a quiet row while it thinks, and a "instant scan
      only" note when it couldn't run (so the user knows the semantic layer
      is offline, not that the board is clean). */
+  /* The last reading, kept against the board it was made about. */
+  const organizeRead = useRef<{ sig: string; ai: OrganizeProposal[] } | null>(
+    null
+  );
   const [organizeAiStatus, setOrganizeAiStatus] = useState<
     "idle" | "thinking" | "done" | "offline"
   >("idle");
@@ -1480,6 +1484,32 @@ export function useBoard(now: number) {
        they arrive. Both are read from the LATEST board at their moment, so
        a board change mid-fetch is never overwritten by a stale snapshot. */
     setOrganize(scanStale(latest.current, dismissedOrganize.current));
+
+    /* Asking a model the same question twice does not get the same answer:
+       one unchanged board gave 0, then 3, then 3 proposals on consecutive
+       taps. That reads as the app changing its mind rather than the person
+       changing the board, and it makes the badge untrustworthy. So a
+       reading is kept against the exact board it was made about, and
+       re-tapping shows that reading again rather than buying a new one.
+
+       The fingerprint is the sync signature — which items exist and how
+       fresh each one is — so the cache invalidates itself the moment
+       anything actually changes, including a pull from the other device.
+       Dismissals are re-applied on the way out rather than being baked in,
+       so waving a row away does not cost a re-read. */
+    const sig = boardSignature(latest.current, []);
+    const cached = organizeRead.current;
+    if (cached && cached.sig === sig) {
+      setOrganize(
+        mergeOrganize(
+          cached.ai.filter((p) => !dismissedOrganize.current.includes(p.id)),
+          scanStale(latest.current, dismissedOrganize.current)
+        )
+      );
+      setOrganizeAiStatus("done");
+      return;
+    }
+
     setOrganizeAiStatus("thinking");
     try {
       const res = await fetch("/api/organize", {
@@ -1499,6 +1529,7 @@ export function useBoard(now: number) {
         out.proposals ?? []
       );
       aiOrganize.current = ai;
+      organizeRead.current = { sig: boardSignature(latest.current, []), ai };
       setOrganize(
         mergeOrganize(
           ai,
