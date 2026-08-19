@@ -132,6 +132,41 @@ export function busiestDay(grid: HeatCell[][]): HeatCell | null {
   return best;
 }
 
+export type RecordRun = {
+  /** Days on the grid with at least one capture. */
+  marked: number;
+  /** The longest unbroken stretch of marked days. */
+  longest: number;
+};
+
+/**
+ * How much of the grid is filled, and the longest run without a gap.
+ *
+ * The grid answers "when"; this answers "how steadily", which is the part
+ * worth being a little pleased about. Days are read in calendar order, so
+ * a run crosses column boundaries — the columns are a layout, not a week
+ * the streak should care about.
+ */
+export function recordRun(grid: HeatCell[][]): RecordRun {
+  const days = grid
+    .flat()
+    .slice()
+    .sort((a, b) => a.day.localeCompare(b.day));
+  let marked = 0;
+  let longest = 0;
+  let run = 0;
+  for (const cell of days) {
+    if (cell.count > 0) {
+      marked++;
+      run++;
+      if (run > longest) longest = run;
+    } else {
+      run = 0;
+    }
+  }
+  return { marked, longest };
+}
+
 /**
  * The last `weeks` weeks as columns of seven days, oldest column first,
  * ending today. Rolling weeks rather than calendar-aligned ones: the grid

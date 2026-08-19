@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Board, Frag, Thread } from "./model";
+import type { Action, Board, Frag, Thread } from "./model";
 import { EMPTY } from "./model";
 import { scanBoard } from "./organize";
 
@@ -123,5 +123,58 @@ describe("filing — a shared word only counts when it is rare", () => {
     expect(quoted).toBeTruthy();
     expect("Kitchen Equipment Espresso machine settings overview".toLowerCase())
       .toContain(quoted.toLowerCase());
+  });
+});
+
+describe("evidence — the card, not the breath it arrived in", () => {
+  const act = (id: string, text: string, src: string, at = 100): Action => ({
+    id,
+    text,
+    done: false,
+    at,
+    shelf: "keep",
+    expires: null,
+    src,
+  });
+
+  it("does not call two actions duplicates over a shared aside in dictation", () => {
+    /* Real board, 2026-08-19. Two separate captures, days apart, each a
+       paragraph of dictation that happened to end with the same passing
+       thought. Capture distilled them into two unrelated actions — but the
+       scan was still comparing the raw transcripts, so it offered to delete
+       one as a copy of the other, quoting "find ways gamify": words that
+       appear on neither card. */
+    const b: Board = {
+      ...EMPTY,
+      actions: [
+        act(
+          "a1",
+          "Fix heat map bug",
+          "Heat map seems off: some months are present, some are too close to each other. Fix this bug.\n\n- Find other ways to gamify capture and give users a sense of accomplishment."
+        ),
+        act(
+          "a2",
+          "Identify and prototype new gamification ideas for capture",
+          "Heat map is working very well.\n\nFind other ways to gamify capture and give the user a sense of accomplishment, but keep changes small."
+        ),
+      ],
+    };
+    expect(scanBoard(b, [], NOW).filter((p) => p.kind === "dup_action")).toHaveLength(0);
+  });
+
+  it("still catches two actions that really do say the same thing", () => {
+    const b: Board = {
+      ...EMPTY,
+      actions: [
+        /* Distinct timestamps: only the newer of a pair proposes, so a
+           fixture where both share an `at` is silent for reasons that have
+           nothing to do with what is being tested here. */
+        act("a1", "Book the dentist appointment", "remember the dentist", 100),
+        act("a2", "Book the dentist appointment for next week", "call them", 200),
+      ],
+    };
+    expect(
+      scanBoard(b, [], NOW).filter((p) => p.kind === "dup_action").length
+    ).toBeGreaterThan(0);
   });
 });

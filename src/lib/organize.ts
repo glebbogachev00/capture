@@ -164,8 +164,21 @@ const threadTextWithout = (
     .join(" ");
 };
 
-const actionText = (a: Action): string =>
-  [a.text, a.src].filter(Boolean).join(" ");
+/**
+ * An action is what Capture made of it, not the breath it arrived in.
+ *
+ * `src` is the raw utterance, and one utterance routinely carries several
+ * subjects — "heat map seems off, fix this bug" and, four lines later, an
+ * aside about gamifying capture. Matching on it made two unrelated actions
+ * duplicates of each other because both transcripts mentioned the aside,
+ * and the row then quoted words that appear nowhere on the row: the card
+ * says "Fix heat map bug", the reason said both say "find ways gamify".
+ *
+ * Evidence has to be visible where the claim points. The grouping lens
+ * already reads `a.text` alone, which is why it said no two actions shared
+ * a subject while Organize called those same two duplicates.
+ */
+const actionText = (a: Action): string => a.text;
 
 const phraseWords = (phrase: string) =>
   phrase ? phrase.split(" ").length : 0;

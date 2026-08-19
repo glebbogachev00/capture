@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { CaptureEntry } from "./ledger";
+import type { HeatCell } from "./record";
 import {
   busiestDay,
   heatGrid,
   monthLabels,
   recentCaptures,
+  recordRun,
   recordStats,
 } from "./record";
 
@@ -133,5 +135,79 @@ describe("recentCaptures", () => {
 
   it("is empty on an empty ledger", () => {
     expect(recentCaptures([])).toEqual([]);
+  });
+});
+
+describe("recordRun — how steadily, not just when", () => {
+  const cell = (day: string, count: number): HeatCell => ({
+    day,
+    count,
+    level: count === 0 ? 0 : 1,
+  });
+
+  it("counts marked days and the longest unbroken run", () => {
+    /* Laid out as two columns of seven, the way the grid stores them. */
+    const grid: HeatCell[][] = [
+      [
+        cell("2026-06-01", 1),
+        cell("2026-06-02", 2),
+        cell("2026-06-03", 0),
+        cell("2026-06-04", 1),
+        cell("2026-06-05", 1),
+        cell("2026-06-06", 1),
+        cell("2026-06-07", 0),
+      ],
+      [
+        cell("2026-06-08", 3),
+        cell("2026-06-09", 0),
+        cell("2026-06-10", 0),
+        cell("2026-06-11", 0),
+        cell("2026-06-12", 0),
+        cell("2026-06-13", 0),
+        cell("2026-06-14", 0),
+      ],
+    ];
+    expect(recordRun(grid)).toEqual({ marked: 6, longest: 3 });
+  });
+
+  it("lets a run cross a column boundary", () => {
+    /* Columns are a layout choice; a streak does not end because the week
+       did. Sunday into Monday is one run of two. */
+    const grid: HeatCell[][] = [
+      [
+        cell("2026-06-01", 0),
+        cell("2026-06-02", 0),
+        cell("2026-06-03", 0),
+        cell("2026-06-04", 0),
+        cell("2026-06-05", 0),
+        cell("2026-06-06", 0),
+        cell("2026-06-07", 1),
+      ],
+      [
+        cell("2026-06-08", 1),
+        cell("2026-06-09", 0),
+        cell("2026-06-10", 0),
+        cell("2026-06-11", 0),
+        cell("2026-06-12", 0),
+        cell("2026-06-13", 0),
+        cell("2026-06-14", 0),
+      ],
+    ];
+    expect(recordRun(grid)).toEqual({ marked: 2, longest: 2 });
+  });
+
+  it("says nothing happened on an empty grid", () => {
+    const grid: HeatCell[][] = [
+      [
+        cell("2026-06-01", 0),
+        cell("2026-06-02", 0),
+        cell("2026-06-03", 0),
+        cell("2026-06-04", 0),
+        cell("2026-06-05", 0),
+        cell("2026-06-06", 0),
+        cell("2026-06-07", 0),
+      ],
+    ];
+    expect(recordRun(grid)).toEqual({ marked: 0, longest: 0 });
   });
 });

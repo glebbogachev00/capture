@@ -19,6 +19,7 @@ import type { CaptureEntry } from "@/lib/ledger";
 import {
   busiestDay,
   heatGrid,
+  recordRun,
   monthLabels,
   recentCaptures,
   recordStats,
@@ -440,6 +441,7 @@ export function RecordScreen({
   const grid = heatGrid(ledger, now);
   const months = monthLabels(grid);
   const busiest = busiestDay(grid);
+  const run = recordRun(grid);
   const dayName = (day: string) =>
     new Date(day + "T12:00:00").toLocaleDateString(undefined, {
       month: "long",
@@ -515,6 +517,14 @@ export function RecordScreen({
               ? ` — fullest on ${dayName(busiest.day)}, ${busiest.count} said`
               : ""}
           </p>
+          {/* A second line only when there is something to be pleased about:
+              a run of one day is just a day, and a grid with nothing on it
+              should stay quiet rather than congratulate an empty week. */}
+          {run.longest > 1 && (
+            <p className="record-caption record-run">
+              {run.marked} days marked · longest run {run.longest} in a row
+            </p>
+          )}
 
           {/* The evidence. What landed is shown first, because that is what
               you live with; what you actually said sits under it, and only

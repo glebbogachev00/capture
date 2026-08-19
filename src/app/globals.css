@@ -1258,9 +1258,9 @@ body {
   gap: 4px;
 }
 .record-cell {
-  width: 17px;
-  height: 17px;
-  border-radius: 5px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   background: var(--paper);
   box-shadow: inset 0 0 0 1px var(--rule);
 }
@@ -1283,7 +1283,7 @@ body {
   margin-top: 7px;
 }
 .record-months span {
-  width: 17px;
+  width: 22px;
   flex: none;
   font-family: var(--font-mono), monospace;
   font-size: 10px;
@@ -1291,6 +1291,10 @@ body {
   color: var(--muted);
   overflow: visible;
   white-space: nowrap;
+}
+.record-run {
+  margin-top: 4px;
+  color: var(--muted);
 }
 .record-caption {
   font-family: var(--font-mono), monospace;
@@ -1303,11 +1307,11 @@ body {
 @media (max-width: 420px) {
   .record-cell,
   .record-months span {
-    width: 15px;
+    width: 19px;
   }
   .record-cell {
-    height: 15px;
-    border-radius: 4px;
+    height: 19px;
+    border-radius: 5px;
   }
   .record-tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
