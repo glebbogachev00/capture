@@ -211,3 +211,92 @@ describe("byRecency — threads in the order you actually use them", () => {
     expect([a, b].sort(byRecency)).toHaveLength(2);
   });
 });
+
+describe("applySorted — a picture that arrives with a task", () => {
+  /* An action cannot show an image: nothing renders one, and ticking the
+     action off would take the picture with it. So the capture lands twice
+     — the image on a thread fragment that keeps it, the task as an action
+     that points back at it. */
+
+  it("keeps the picture on a fragment and points the action at it", () => {
+    const { next, targetId } = applySorted(
+      sorted({ kind: "action", title: "Fix the leak", clean: "Fix the leak" }),
+      ["img-1"],
+      500,
+      base()
+    );
+    expect(next.actions).toHaveLength(1);
+    /* The action never owns the image — deleting it must not drop a picture
+       the thread is still showing. */
+    expect(next.actions[0].imgs).toEqual([]);
+
+    expect(next.threads).toHaveLength(1);
+    const frag = next.threads[0].frags[0];
+    expect(frag.imgs).toEqual(["img-1"]);
+    expect(next.actions[0].shot).toEqual({
+      threadId: next.threads[0].id,
+      fragId: frag.id,
+    });
+    expect(targetId).toBe(next.threads[0].id);
+  });
+
+  it("prefers a thread the sorter named over opening a new one", () => {
+    const board = base({ threads: [thread("t1", "Kitchen renovation")] });
+    const { next } = applySorted(
+      sorted({ kind: "action", title: "Fix the leak", threadId: "t1" }),
+      ["img-1"],
+      500,
+      board
+    );
+    expect(next.threads).toHaveLength(1);
+    expect(next.threads[0].id).toBe("t1");
+    expect(next.threads[0].frags[0].imgs).toEqual(["img-1"]);
+    expect(next.actions[0].shot?.threadId).toBe("t1");
+  });
+
+  it("points every action at the one picture when a capture holds several", () => {
+    const { next } = applySorted(
+      sorted({
+        kind: "action",
+        title: "two things",
+        actions: ["Call the plumber", "Order the part"],
+      }),
+      ["img-1"],
+      500,
+      base()
+    );
+    expect(next.actions).toHaveLength(2);
+    const fragId = next.threads[0].frags[0].id;
+    for (const a of next.actions) {
+      expect(a.imgs).toEqual([]);
+      expect(a.shot?.fragId).toBe(fragId);
+    }
+    /* One picture, one fragment — not a copy per action. */
+    expect(next.threads[0].frags).toHaveLength(1);
+  });
+
+  it("changes nothing when a capture has no picture", () => {
+    const { next, targetId, source } = applySorted(
+      sorted({ kind: "action", title: "Fix the leak" }),
+      [],
+      500,
+      base()
+    );
+    expect(next.threads).toHaveLength(0);
+    expect(next.actions[0].shot).toBeUndefined();
+    expect(targetId).toBeNull();
+    /* A plain lone action is still offered a thread to fold into. */
+    expect(source).toEqual({ kind: "action", id: next.actions[0].id });
+  });
+
+  it("says where the picture went", () => {
+    const board = base({ threads: [thread("t1", "Kitchen renovation")] });
+    const { landed } = applySorted(
+      sorted({ kind: "action", title: "Fix the leak", threadId: "t1" }),
+      ["img-1"],
+      500,
+      board
+    );
+    expect(landed).toContain("Kitchen renovation");
+  });
+});

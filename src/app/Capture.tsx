@@ -342,6 +342,15 @@ export function Capture() {
       onMakeIntention={() =>
         makeIntention(a.src || a.text, a.id)
       }
+      onOpenShot={
+        a.shot
+          ? () => {
+              setTab("threads");
+              setOpen(a.shot!.threadId);
+              setOpenFrag(a.shot!.fragId);
+            }
+          : undefined
+      }
       busy={!!busy}
     />
   );
@@ -1062,6 +1071,7 @@ function Row({
   onEditText,
   onResort,
   onMakeIntention,
+  onOpenShot,
   busy,
 }: {
   a: Action;
@@ -1079,6 +1089,8 @@ function Row({
   onEditText: (text: string) => void;
   onResort: () => void;
   onMakeIntention: () => void;
+  /** Present only when a picture came in with this capture. */
+  onOpenShot?: () => void;
   busy: boolean;
 }) {
   const ms = a.expires ? a.expires - now : null;
@@ -1146,6 +1158,19 @@ function Row({
             <span className={"due" + (a.due - now < DAY ? " soon" : "")}>
               due {fmtDue(a.due)}
             </span>
+          )}
+          {/* The picture lives on a thread fragment, not here — this is the
+              way back to it, so a screenshot is never a thing you captured
+              and then could not find. */}
+          {!!onOpenShot && (
+            <button className="shot-link" onClick={onOpenShot} title="Open the note holding this picture">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <circle cx="8.5" cy="10" r="1.6" />
+                <path d="M21 16l-5-5-6 6" />
+              </svg>
+              picture
+            </button>
           )}
           {a.unsorted && <span className="raw">unsorted</span>}
           {faded && (

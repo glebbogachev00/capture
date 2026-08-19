@@ -76,6 +76,41 @@ export function applySorted(
   if (out.kind === "action") {
     const span = SHELF[out.shelfLife as ShelfLife] ?? null;
     const due = parseDue(out.due, stamp());
+
+    /* A picture that arrives with a task has nowhere to live on an action:
+       nothing renders an action's images, and ticking the action off would
+       take the picture with it. So the capture lands in both places — the
+       image on a thread fragment that keeps it, the task as an action that
+       points at it. The thread the sorter named is preferred; otherwise the
+       capture opens one, because a screenshot with no home is a screenshot
+       you will never see again. */
+    const shotFrag: Frag | null = imgIds.length
+      ? { id: uid(), at, text: out.clean, imgs: imgIds }
+      : null;
+    const shotHome = shotFrag
+      ? board.threads.find((x) => x.id === out.threadId)
+      : undefined;
+    const threads: Thread[] = !shotFrag
+      ? board.threads
+      : shotHome
+        ? board.threads.map((x) =>
+            x.id === shotHome.id ? { ...x, frags: [...x.frags, shotFrag] } : x
+          )
+        : [
+            {
+              id: uid(),
+              name: out.threadName || out.title,
+              summary: "",
+              frags: [shotFrag],
+            } as Thread,
+            ...board.threads,
+          ];
+    const shotThreadId = shotFrag
+      ? shotHome
+        ? shotHome.id
+        : threads[0].id
+      : null;
+
     const items: Action[] = (out.actions?.length ? out.actions : [out.title]).map(
       (t: string) => ({
         id: uid(),
@@ -83,25 +118,40 @@ export function applySorted(
         done: false,
         at,
         src: out.clean,
-        imgs: imgIds,
+        /* Never the action's own: the fragment owns the picture. */
+        imgs: [],
+        ...(shotFrag && shotThreadId
+          ? { shot: { threadId: shotThreadId, fragId: shotFrag.id } }
+          : {}),
         shelf: (out.shelfLife || "keep") as ShelfLife,
         /* A stated deadline never lets the action fade before its date. */
         due,
         expires: expiryFor(span, due, stamp()),
       })
     );
+    const plain =
+      items.length +
+      " action" +
+      (items.length > 1 ? "s" : "") +
+      (span ? " · fades in " + left(span) : " · kept");
     return {
-      next: { ...board, actions: [...items, ...board.actions] },
-      targetId: null,
+      next: { ...board, actions: [...items, ...board.actions], threads },
+      targetId: shotThreadId,
       /* A single action can fold into a thread; several cannot, so only a
-         lone action is ever offered a home. */
-      source: items.length === 1 ? { kind: "action", id: items[0].id } : null,
-      landedIds: items.map((i) => i.id),
-      landed:
-        items.length +
-        " action" +
-        (items.length > 1 ? "s" : "") +
-        (span ? " · fades in " + left(span) : " · kept"),
+         lone action is ever offered a home. An action whose picture already
+         sits in a thread is not offered one — it has a home. */
+      source:
+        items.length === 1 && !shotFrag
+          ? { kind: "action", id: items[0].id }
+          : null,
+      landedIds: shotThreadId
+        ? [...items.map((i) => i.id), shotThreadId]
+        : items.map((i) => i.id),
+      landed: shotFrag
+        ? plain +
+          " · picture kept in " +
+          (shotHome ? shotHome.name : threads[0].name)
+        : plain,
     };
   }
 

@@ -1134,6 +1134,32 @@ body {
   text-transform: uppercase;
 }
 
+/* A picture rode in with this capture and is kept on a thread fragment;
+   this is the way back to it. Sits with the other meta chips rather than
+   shouting — it is a reference, not a thumbnail. */
+.shot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--rule);
+  background: none;
+  color: var(--muted);
+  border-radius: 20px;
+  padding: 1px 8px 1px 6px;
+  font: inherit;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.shot-link:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+.shot-link svg {
+  flex: none;
+}
+
 /* inline editing */
 .act-edit {
   width: 100%;

@@ -61,6 +61,11 @@ export type Action = {
   fadedAt?: number | null;
   /** Landed here raw because no model would answer. Can be sorted later. */
   unsorted?: boolean;
+  /** A picture arrived with this capture and lives on a thread fragment.
+      Actions are made to be cleared away and threads are made to keep
+      things, so the image is never owned by the row that will be ticked
+      off — this only points at where to find it. */
+  shot?: { threadId: string; fragId: string };
   /** When this item last changed — the sync merge compares these. */
   updatedAt?: number;
 };
