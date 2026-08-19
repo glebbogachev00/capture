@@ -120,6 +120,34 @@ export function threadHoldsNote(
   });
 }
 
+/**
+ * Is this note already an action on the board?
+ *
+ * The mirror of threadHoldsNote, and it exists for the same reason. A fold
+ * must not copy a note back into the thread it came from; an extract must
+ * not mint an action that is already sitting in the list. Left unguarded
+ * the two claims feed each other — extract makes the action, fold offers to
+ * put it back — and the board grows a copy on every lap.
+ */
+export function actionsHoldNote(
+  actions: { text?: string; src?: string; done?: boolean; faded?: boolean }[]
+    | undefined,
+  ...texts: (string | undefined)[]
+): boolean {
+  const wants = texts
+    .filter((s): s is string => !!s)
+    .map(normNote)
+    .filter((s) => s.length > 0);
+  if (!wants.length) return false;
+  return (actions || []).some((a) => {
+    if (a.done || a.faded) return false;
+    return [a.text, a.src]
+      .filter((t): t is string => !!t)
+      .map(normNote)
+      .some((have) => have.length > 0 && wants.includes(have));
+  });
+}
+
 /** A card named short enough to decide on.
     Sixty characters wrapped to a second line and cut mid-word, which pushed
     the thread name — the part you are actually deciding about — out of the
@@ -224,7 +252,36 @@ function tierFor(phrase: string): OrganizeConfidence {
 }
 
 /**
+ * What the board can say about itself without a model.
+ *
+ * Only staleness. Everything else the local pass can compute rests on
+ * shared words, and shared words are not a shared idea: the board offered
+ * to file a duplication bug with a list of bank account numbers because
+ * both said "three" and "items", and to delete one action as a copy of
+ * another because two dictations ended with the same aside. The point of
+ * Organize is duplicate MEANING — that is the model's pass, and it is the
+ * only thing allowed to make those claims now.
+ *
+ * Staleness is different in kind: it is arithmetic on dates, not a guess
+ * about language, so it is exactly right every time and costs nothing.
+ */
+export function scanStale(
+  board: Board,
+  dismissed: Iterable<string> = [],
+  now: number = Date.now()
+): OrganizeProposal[] {
+  const dropped = new Set(dismissed);
+  return scanBoard(board, dismissed, now).filter(
+    (p) => p.kind === "let_go" && !dropped.has(p.id)
+  );
+}
+
+/**
  * Scan the whole board for consolidation moves, strongest first.
+ *
+ * NOTE: the word-matching claims below no longer reach the Organize screen
+ * — see scanStale. They remain the definition of what word overlap can and
+ * cannot see, and the suite that pins it.
  *
  * Rules that keep the scan honest:
  *   - A proposal only forms on real overlap — shared content words; generic

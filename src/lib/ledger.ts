@@ -62,7 +62,11 @@ export type ProposalKind =
       an unprompted correction, with the right answer attached. The only
       signal here that is about the ENGINE's mistake rather than about a
       proposal the engine offered. */
-  | "refiled";
+  | "refiled"
+  /** The capture was undone outright. On its own this says only that the
+      sorting was wrong, not what would have been right — so it is recorded
+      without a rule until the person says which kind it should have been. */
+  | "undone";
 
 export type CorrectionEntry = {
   id: string;

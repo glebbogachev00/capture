@@ -89,3 +89,32 @@ function canonicalSubject(captureText: string, threadText: string): string {
      the rule again. */
   return contentWords(captureText)[0] || "";
 }
+
+/** The kinds a capture can be sorted into, for the undo lesson. */
+export type SortKind = "action" | "thread" | "intention";
+
+const KIND_WORD: Record<SortKind, string> = {
+  action: "an action",
+  thread: "a thread",
+  intention: "an intention",
+};
+
+/**
+ * The lesson in an undo that was answered.
+ *
+ * Undo alone is only a complaint: it says the sorting was wrong and nothing
+ * about what was right, which is not enough to learn from. Once the person
+ * taps the kind it should have been, the pair becomes a rule in the same
+ * shape as a re-file — anchored on the subject rather than the wording, so
+ * two corrections about the same subject aggregate instead of splitting.
+ */
+export function undoRule(
+  captureText: string,
+  wrong: SortKind,
+  right: SortKind
+): string | null {
+  if (wrong === right) return null;
+  const words = contentWords(captureText).slice(0, 2);
+  if (!words.length) return null;
+  return `Captures about "${words.join(" ")}" are ${KIND_WORD[right]}, not ${KIND_WORD[wrong]}`;
+}

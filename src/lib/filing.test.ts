@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Action, Board, Frag, Thread } from "./model";
 import { EMPTY } from "./model";
 import { scanBoard } from "./organize";
+import { mapAiProposals } from "./organizeAi";
 
 /*
  * Filing claims — "this note is sitting in the wrong thread".
@@ -176,5 +177,70 @@ describe("evidence — the card, not the breath it arrived in", () => {
     expect(
       scanBoard(b, [], NOW).filter((p) => p.kind === "dup_action").length
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("extract — never mint an action the board already has", () => {
+  it("is refused when the note is already sitting in the action list", () => {
+    /* Observed on the real board: the model offered to lift "Finish Ovid as
+       a story while I am working on the game" out of a thread, when an
+       action of exactly that note was already open. Left unguarded, extract
+       and fold feed each other — one makes the action, the other offers to
+       put it back — and the board grows a copy on every lap. */
+    const note = "Finish Ovid as a story while I am working on the game";
+    const snapshot = {
+      actions: [{ id: "a1", text: "Finish Ovid story", at: 100, src: note }],
+      threads: [
+        {
+          id: "t1",
+          name: "Ovid",
+          frags: [
+            { id: "f1", text: note, at: 100 },
+            { id: "f2", text: "The ending needs another pass", at: 100 },
+          ],
+        },
+      ],
+      intentions: [],
+    };
+    const out = mapAiProposals(snapshot, [
+      {
+        kind: "extract_action",
+        confidence: "high",
+        sourceId: "t1",
+        sourceFragId: "f1",
+        targetId: "t1",
+        reason: "This reads as a task.",
+      },
+    ]);
+    expect(out).toHaveLength(0);
+  });
+
+  it("still extracts a note that is not yet an action", () => {
+    const snapshot = {
+      actions: [{ id: "a1", text: "Something else entirely", at: 100 }],
+      threads: [
+        {
+          id: "t1",
+          name: "Ovid",
+          frags: [
+            { id: "f1", text: "Renew the domain before it lapses", at: 100 },
+            { id: "f2", text: "The ending needs another pass", at: 100 },
+          ],
+        },
+      ],
+      intentions: [],
+    };
+    const out = mapAiProposals(snapshot, [
+      {
+        kind: "extract_action",
+        confidence: "high",
+        sourceId: "t1",
+        sourceFragId: "f1",
+        targetId: "t1",
+        reason: "This reads as a task.",
+      },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].kind).toBe("extract_action");
   });
 });

@@ -91,7 +91,7 @@ import {
 } from "@/lib/ledger";
 import { deriveRules, type LearnedRule } from "@/lib/rules";
 import {
-  scanBoard,
+  scanStale,
   threadHoldsNote,
   type OrganizeProposal,
 } from "@/lib/organize";
@@ -1298,7 +1298,7 @@ export function useBoard(now: number) {
     /* The local scan is shown immediately; the AI results merge in when
        they arrive. Both are read from the LATEST board at their moment, so
        a board change mid-fetch is never overwritten by a stale snapshot. */
-    setOrganize(scanBoard(latest.current, dismissedOrganize.current));
+    setOrganize(scanStale(latest.current, dismissedOrganize.current));
     setOrganizeAiStatus("thinking");
     try {
       const res = await fetch("/api/organize", {
@@ -1321,7 +1321,7 @@ export function useBoard(now: number) {
       setOrganize(
         mergeOrganize(
           ai,
-          scanBoard(latest.current, dismissedOrganize.current)
+          scanStale(latest.current, dismissedOrganize.current)
         )
       );
       setOrganizeAiStatus("done");

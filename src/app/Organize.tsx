@@ -132,19 +132,21 @@ export function OrganizeScreen({
 
       {proposals.length === 0 ? (
         <p className="int-note">
-          Nothing to tidy right now — the board looks clean. Capture a couple
-          of similar things, then tap the wand again to re-scan.
+          {aiStatus === "thinking"
+            ? "Reading the board…"
+            : aiStatus === "offline"
+              ? "The board couldn't be read just now — this pass needs the model, and it didn't answer. Try again in a moment."
+              : "Nothing worth changing — the board reads clean."}
         </p>
       ) : (
         <>
           {aiStatus === "thinking" && (
-            <p className="org-status">
-              The model is looking for the same ideas in different words…
-            </p>
+            <p className="org-status">Reading the board…</p>
           )}
           {aiStatus === "offline" && (
             <p className="org-status">
-              Instant scan only — the semantic pass couldn&apos;t run right now.
+              Only what the dates alone can tell — the reading pass
+              couldn&apos;t run just now.
             </p>
           )}
 

@@ -21,6 +21,7 @@ import {
   HIGH_CAP,
   MEDIUM_CAP,
   NAME,
+  actionsHoldNote,
   threadHoldsNote,
   type OrganizeConfidence,
   type OrganizeKind,
@@ -224,6 +225,10 @@ export function mapAiProposals(
         break;
       case "extract_action":
         ok = !!sourceThread && !!frag && frag.threadId === dupSource;
+        /* An extract-back is never an extract: if this note is already an
+           action, lifting it out again just makes a second copy — and the
+           fold claim would then offer to put it back, forever. */
+        if (ok && actionsHoldNote(snapshot.actions, frag!.text)) ok = false;
         break;
       case "merge_fragments":
         /* The two fragments must genuinely live in different threads, or
