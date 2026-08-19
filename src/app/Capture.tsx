@@ -1400,7 +1400,11 @@ function TCard({
         ))}
       </div>
       <div className="act-meta" style={{ marginTop: 9 }}>
-        {t.frags.length} fragment{t.frags.length > 1 ? "s" : ""}
+        {/* Layers, not fragments: the sediment bars above already say a
+            thread accumulates, and this is the line that should agree with
+            them. The data model still calls them frags — this is what the
+            thread looks like, not what it is stored as. */}
+        {t.frags.length} layer{t.frags.length > 1 ? "s" : ""}
         {last ? " · last " + fmt(last.at) : ""}
       </div>
     </button>

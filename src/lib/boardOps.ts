@@ -195,7 +195,8 @@ export function applySorted(
       targetId: homeId,
       source: { kind: "thread", id: homeId, fragId: bothFrag.id },
       landedIds: [...items.map((i) => i.id), homeId],
-      landed: count(items.length, "action") + " + thread — " + homeName,
+      landed:
+        count(items.length, "action") + " · a layer on " + homeName,
     };
   }
 
@@ -212,7 +213,7 @@ export function applySorted(
       targetId: existing.id,
       source: { kind: "thread", id: existing.id, fragId: frag.id },
       landedIds: [existing.id],
-      landed: existing.name + " — thread updated",
+      landed: existing.name + " · a new layer",
     };
   }
   const fresh: Thread = {
@@ -226,7 +227,7 @@ export function applySorted(
     targetId: fresh.id,
     source: { kind: "thread", id: fresh.id, fragId: frag.id },
     landedIds: [fresh.id],
-    landed: fresh.name + " — thread updated",
+    landed: fresh.name + " · a new thread",
   };
 }
 

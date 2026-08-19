@@ -651,11 +651,11 @@ export function SettingsScreen({
       <div className="int-block">
         <h4 className="int-label">Back up everything</h4>
         <p className="int-note">
-          All of it lives in this browser and nowhere else — {counts.actions}{" "}
-          action{counts.actions === 1 ? "" : "s"}, {counts.threads} thread
+          In this browser and nowhere else: {counts.actions} action
+          {counts.actions === 1 ? "" : "s"}, {counts.threads} thread
           {counts.threads === 1 ? "" : "s"}, {counts.intentions} intention
-          {counts.intentions === 1 ? "" : "s"}. Clearing site data would take
-          the lot. Pictures are left out to keep the file small.
+          {counts.intentions === 1 ? "" : "s"}. Clearing site data takes them.
+          Pictures are left out.
         </p>
         <div className="int-add">
           <button className="capture-btn" onClick={onExport}>
@@ -667,11 +667,8 @@ export function SettingsScreen({
       <div className="int-block">
         <h4 className="int-label">Keep devices in step</h4>
         <p className="int-note">
-          Edits, deletes and moves flow between this device and the sync hub
-          automatically — every change is pushed a moment after you make it,
-          and fresh state is pulled every few seconds while this tab is open.
-          If two devices change the same thing, the newer edit wins and
-          nothing is silently lost. Tap Sync now to force a pull + push.
+          Automatic, both ways. If two devices change the same thing, the
+          newer edit wins.
         </p>
         <div className="int-add">
           <span
@@ -695,8 +692,7 @@ export function SettingsScreen({
       <div className="int-block">
         <h4 className="int-label">Restore a capture backup</h4>
         <p className="int-note">
-          Adds anything missing, matched by id. Never overwrites what is
-          already here, so restoring twice is safe.
+          Adds what is missing, matched by id. Restoring twice is safe.
         </p>
         <FileButton label="Upload a capture backup" onFile={onRestore} />
       </div>
@@ -704,8 +700,7 @@ export function SettingsScreen({
       <div className="int-block">
         <h4 className="int-label">Bring intentions across</h4>
         <p className="int-note">
-          A backup exported from the old intent app. Matched by id, so
-          importing twice adds nothing the second time.
+          From the old intent app. Matched by id, so twice is safe.
         </p>
         <FileButton label="Upload an intent backup" onFile={onImportIntent} />
       </div>
@@ -715,9 +710,7 @@ export function SettingsScreen({
       <div className="int-block">
         <h4 className="int-label">Principles</h4>
         <p className="int-note">
-          Applied silently when the engine writes an <b>intention</b> — and
-          nowhere else: sorting, threads and Organize never see them. They
-          never appear in the result; they shape it.{" "}
+          Shape how an <b>intention</b> is written. Nothing else sees them.{" "}
           {principles.filter((p) => p.enabled).length} of {principles.length}{" "}
           active.
         </p>
@@ -792,10 +785,7 @@ export function SettingsScreen({
 
       <div className="int-block">
         <h4 className="int-label">Session</h4>
-        <p className="int-note">
-          Ends this login on this device. You&apos;ll be asked for the password
-          again next time.
-        </p>
+        <p className="int-note">Ends this login on this device.</p>
         <button className="ghost warn" onClick={onLogout}>
           Log out
         </button>
