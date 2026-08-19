@@ -96,6 +96,138 @@ cover works too, shrunk and stored like any capture image so it syncs by the
 same reconcile. Display only: the summary, the fragments and the sort engine
 never see it, and a thread without a cover renders exactly as before.
 
-## Sync verification (unbuilt verification)
+## ~~Sync verification~~ Done 2026-08-19
 
-Sync shipped but was never confirmed device-to-device — the "desktop doesn't pick up phone updates" thread was parked when the preview broke. Needs one clean end-to-end pass: phone edit → hub → desktop, and the reverse, checking tombstones on both sides.
+Confirmed device-to-device. The hub went rev 4 → 6 and the phone's divergent
+board (11 threads, 29 intentions) merged and won over the hub's stale Aug 14
+state, with 149 tombstones applying correctly.
+
+Two stacked causes had kept it broken for four days: Vercel Blob returns a
+**weak** ETag (`W/"…"`) on larger bodies and `If-Match` requires strong
+comparison, so every push of the real ~128KB board was rejected while a tiny
+test payload succeeded — and the fix for that, plus the diagnostic logging
+meant to reveal it, sat committed on an unpushed branch while production ran
+older code. `/api/sync` POST also had an empty catch, so a push failing every
+time for four days left no trace. It logs now.
+
+**Lesson worth keeping: check what is actually deployed before diagnosing
+anything else.** `npx vercel ls` / `inspect` / `logs` are authenticated on the
+Mac.
+
+
+---
+
+# What's next — 2026-08-19
+
+Everything below is open. Ordered by what unblocks what, not by size.
+
+## Decisions waiting on Gleb
+
+- **Back up both devices.** Skipped twice now. A lot changed today and the
+  phone held the only copy of three intentions this morning.
+- **"Bring intentions across" in Settings** — the import path from the old
+  intent app. The board shows it has never been used: 117 ledger entries,
+  zero imports, and the 29 intentions are numbered 1–31 sequentially from
+  22 July, which is the pattern of things created here. Either do the
+  migration and delete the section, or delete it now.
+- **The heat-map streak line** (`23 days marked · longest run 5 in a row`).
+  Kept for now — it is a fact about the record, not encouragement — but one
+  line to remove after living with it.
+
+## Next up — the public face
+
+The engine is trustworthy enough to point people at, which was the blocker.
+Nothing here should make the app itself noisier: the landing page explains
+the hidden intelligence, the app performs it.
+
+- **Move the app to `/app`, landing at `/`.** The structural unlock — the
+  landing page has nowhere to live while `/` is the board. Needs a redirect
+  plan and a manifest change, or the installed PWA opens the marketing page.
+  This is the one with real hazard; do it deliberately.
+- **Rewrite the landing page.** Open with the wound, not the claim. Make the
+  first object a transformation, not a pitch. Sections worth having: what
+  Capture refuses to become, local-first as an emotional argument ("your
+  thinking system should not disappear because someone else's startup
+  dies"), and a "for people who…" block of pain states.
+  - The thesis line is **"It works best when you don't perform clarity."**
+  - Use the **verified** demo, run eight times against the live sorter:
+    `"uh fix the signup bug before friday and i keep going back and forth on
+    usage based pricing vs seats"` → one action, one thread, every time.
+  - **Do not** use the vet/boiler example. Both actions inherit one due date,
+    so it publishes a visible bug.
+  - Keep the mayfly and sediment metaphors; drop "altars".
+- **X posts.** Same spine as the page. The material is in today's commit
+  messages, and the failures are the good part: sync dead four days behind
+  an empty catch; an app that offered to file a bug report into a list of
+  bank account numbers because both said "three" and "items"; a fix that
+  existed for three days on a branch nobody pushed.
+- **Demo GIF.** `docs/demo-storyboard.md` is written and unused.
+
+## Debt worth paying
+
+- **Per-action deadlines.** A capture carries one `due`, so "fix the bug
+  before Friday and call the vet tomorrow" stamps tomorrow on both. Hit this
+  while choosing the empty-state demo sentence.
+- **Distill settle reuses the clarifier's draft** rather than cold-processing
+  the transcript (already listed above as Distill v2; still the right call).
+- **Skip Groq for the Tidy route.** Its prompt is ~9.5K tokens against an 8K
+  per-minute ceiling, so it can never fit and always falls through to
+  Mistral — one doomed request per tap. Trimming context is the wrong fix;
+  that pass needs the material it reasons over.
+
+## Features considered and deferred
+
+Kept here with the reasoning so they are not re-proposed from scratch.
+
+- **Compost from faded actions** — "three faded actions mention posting about
+  Capture; this may be a thread, not an action". Genuinely novel and the best
+  idea left. Needs a fade record that outlives the two-week clear, since the
+  evidence currently deletes itself. Route it through Tidy as a proposal;
+  never a "you keep failing" surface.
+- **Counter-intention detection from real captures.** Valuable, risky: a
+  false accusation about your own intentions is worse than silence, and the
+  model's judgement is measurably variable. Deterministic first (shipped as
+  the revisit row), semantic later.
+- **`/a`, `/i`, `/t` shortcuts.** Held because shortening the manual override
+  optimises the path that used to bypass learning. Weaker objection now that
+  commands teach, so a reasonable pickup.
+- **Importing Apple Notes / Google Keep.** Declined. It contradicts the
+  premise — a note from 2021 is an archive, not an escaping thought — Apple
+  has no real bulk export, and 500 notes is 500 model calls of
+  garbage-in. The good half is already built: frame **Distill** as the
+  cleanout surface. "Paste your five oldest notes and see what's still
+  alive." Triage, not migration.
+- **Proofs list on intentions.** Superseded by the revisit row, which asks
+  the same question without a visible list.
+- **Current question for threads** — the summary already ends on the open
+  question; a second generated field would double the prose.
+- **Thread ripeness** — that is `extract_action`, already built.
+- **Decision fossils, board weather, agent contract, share-shows-formation** —
+  declined: cruft in an app about not accumulating cruft, analytics wearing a
+  hat, speculative, low priority respectively.
+- **Per-capture receipt in the capture flow.** Declined, correctly: the
+  record screen already shows raw → cleaned → kind → time, conditionally, one
+  tap behind the count, and undo already puts the raw words back in the box.
+  Transparency is a claim, not a feature — make it on the landing page.
+
+## Watch
+
+- **Thread proliferation from images.** A capture carrying a picture opens a
+  new thread when the sorter names no existing one, so the thread can echo
+  its own action. Watch the count; the alternative is rendering images on
+  actions and letting the picture die with the action.
+- **Tidy runs on Mistral, not Groq** (see above). Fine, but know it.
+- **Corrections lost before 2026-08-19 are gone.** A stale background summary
+  write was reverting the ledger and corrections wholesale; re-filing lessons
+  had been vanishing for an unknown period. Fixed; the engine accumulates
+  from today.
+
+## The rule these were filtered through
+
+> Intelligence may increase. Surface area should not.
+> If the user does not need to act on it, do not show it in the app.
+
+With one addition earned the hard way today: **invisible when it works,
+unmissable when it does not.** Three separate failures — dead sync, erased
+corrections, a resurrected thread — all looked identical to working software
+from the outside. Quiet intelligence needs loud failure.
