@@ -2,48 +2,82 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "capture · scattered thoughts in, actions out",
+  title: "capture · notes, before they rot",
   description:
-    "Scattered thoughts in — decisions, actions, and useful context out. A thinking system, not a notes app.",
+    "Your notes app became a junk drawer. Capture catches the thought before it becomes a pile — say it messy, it comes back with a shape.",
 };
+
+/*
+ * The public page is allowed to be strange, because the app is not.
+ *
+ * Everything the app does quietly — learning from corrections, fading what
+ * stopped mattering, asking whether a two-month-old intention is still
+ * yours — gets explained once, here, so it never has to be explained
+ * inside the product. That is the whole trade: the landing page carries the
+ * weirdness so the board can stay empty.
+ */
+
+/* Run against the live sorter eight times while writing this page: one
+   action and one thread, every time. The wording and the thread's name
+   vary between runs, so neither is quoted as a promise. An earlier
+   candidate — two tasks, two deadlines — was dropped because a capture
+   carries a single due date, and the demo would have shipped a visible
+   bug. */
+const DEMO_IN =
+  "uh fix the signup bug before friday and i keep going back and forth on usage based pricing vs seats";
+
+const DEMO_OUT = [
+  {
+    kind: "Action",
+    text: "Fix the signup bug before Friday",
+    note: "closes, and fades if it stops mattering",
+  },
+  {
+    kind: "Thread",
+    text: "Pricing model decision",
+    note: "keeps, and the summary stays current",
+  },
+];
 
 const kinds = [
   {
     name: "Actions",
-    label: "Close it",
-    copy: "A task should not rot in an inbox. Capture gives it a shape, a shelf life, and a clear way to finish.",
+    label: "Mayflies",
+    copy: "They exist to be closed. Each one gets a shelf life, and if it stops mattering it fades on its own. The list keeps itself honest.",
   },
   {
     name: "Threads",
-    label: "Build it",
-    copy: "An idea rarely arrives whole. Capture adds each fragment to the right thread and keeps the gist visible.",
+    label: "Sediment",
+    copy: "An idea rarely arrives whole. Each fragment adds a layer, and the thread keeps a current account of where the thinking stands.",
   },
   {
     name: "Intentions",
-    label: "Inhabit it",
-    copy: "Some notes are not tasks. They are declared states. Capture keeps them present without turning them into checkboxes.",
+    label: "Standing decisions",
+    copy: "Not goals. No checkbox, no due date — a state you are choosing to inhabit. Every couple of months it asks whether you still mean it.",
   },
 ];
 
-const uses = [
-  "Save the thought before it disappears.",
-  "Turn a loose task into something that can close.",
-  "Add fragments to ideas without building folders first.",
-  "Use voice without creating a graveyard of recordings.",
+const hidden = [
+  "It learns when you correct it. Undo a capture and it asks what it should have been; answer once and the sorter carries that.",
+  "It proposes only when there is a decision. No graph of what it knows, no dashboard of what it noticed.",
+  "It shows its working where you would look for it, and nowhere else — the record, and the file you export.",
 ];
 
-const principles = [
-  "Capture first. Sort after.",
-  "One thought lands as one useful shape.",
-  "Search should understand gist, not only exact words.",
-  "Your thinking must stay portable.",
+const pains = [
+  "have four hundred notes and trust maybe twelve of them",
+  "use Apple Notes as a dumping ground",
+  "dictate thoughts and never listen to the recordings",
+  "hate choosing a folder before the sentence is finished",
+  "want AI help without AI ownership",
 ];
 
 const rejects = [
+  "A dashboard",
+  "A folder system",
+  "A graph to stare at",
   "A meeting notetaker",
-  "A second-brain dashboard",
-  "A tags-first PKM system",
-  "A transcript graveyard",
+  "A streak machine",
+  "An AI companion that talks forever",
 ];
 
 export default function AboutPage() {
@@ -63,13 +97,12 @@ export default function AboutPage() {
         </header>
 
         <section className="site-hero">
-          <p className="funding-kicker">A thinking system, not a notes app</p>
-          <h1>Capture the thought. Do not build the pile.</h1>
+          <p className="funding-kicker">Notes, before they rot</p>
+          <h1>Your notes app became a junk drawer.</h1>
           <p className="funding-lede site-lede">
-            Scattered thoughts in — decisions, actions, and useful context out.
-            Say it, paste it, or dictate it, half-formed is fine. It comes back
-            as an action with a shelf life, a thread that accumulates, or an
-            intention you are living into. Nothing to organize later.
+            Everything goes in. Nothing comes back out. Capture catches the
+            thought on its way past and gives it a shape — so the pile never
+            forms in the first place.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href="/">
@@ -84,12 +117,37 @@ export default function AboutPage() {
           </div>
         </section>
 
+        {/* The transformation is the product, so it is the first object on
+            the page — above the cards, above any explanation. */}
+        <section className="site-card site-demo" aria-label="What it does">
+          <p className="funding-card-label">You say</p>
+          <p className="demo-in">“{DEMO_IN}”</p>
+          <p className="demo-arrow" aria-hidden="true">
+            ↓
+          </p>
+          <p className="funding-card-label">It lands as</p>
+          <ul className="demo-out">
+            {DEMO_OUT.map((row) => (
+              <li key={row.kind}>
+                <span className="demo-kind">{row.kind}</span>
+                <span className="demo-text">{row.text}</span>
+                <span className="demo-note">{row.note}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="demo-caption">
+            One sentence, two different species of thing. You did not have to
+            decide which, or tidy it first, or pick a folder.
+          </p>
+        </section>
+
         <section className="site-card site-problem">
-          <p className="funding-card-label">The problem</p>
+          <p className="funding-card-label">The point</p>
+          <h2>It works best when you don&apos;t perform clarity.</h2>
           <p>
-            The app that is easy to write into becomes hard to find things in.
-            The app that is good at finding things is too heavy to write into.
-            Capture keeps the fast door and adds the sorting layer.
+            Say it messy. Paste the fragment. Dictate the half-thought at a
+            traffic light. Most tools want a clean prompt; this one is built
+            for the sentence you actually produce.
           </p>
         </section>
 
@@ -103,53 +161,59 @@ export default function AboutPage() {
           ))}
         </section>
 
-        <section className="site-card site-split">
-          <div>
-            <p className="funding-card-label">Use it when you need to</p>
-            <ul className="funding-list">
-              {uses.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p className="funding-card-label">Product rules</p>
-            <ul className="funding-list">
-              {principles.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
+        <section className="site-card site-quiet">
+          <p className="funding-card-label">The sorting layer</p>
+          <h2>The app is quiet because the sorting is not.</h2>
+          <p>
+            Capture is closer to a subconscious layer than a dashboard: it
+            notices, files, fades and learns without narrating any of it.
+          </p>
+          <ul className="funding-list">
+            {hidden.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
         </section>
 
         <section className="site-card site-split">
           <div>
-            <p className="funding-card-label">What Capture is not</p>
+            <p className="funding-card-label">For people who</p>
+            <ul className="funding-list">
+              {pains.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <p className="funding-card-label">
+              What Capture refuses to become
+            </p>
             <ul className="funding-list">
               {rejects.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
           </div>
-          <div>
-            <p className="funding-card-label">The operating loop</p>
-            <p>
-              Fast input first. Shape second. Review only when the thought has
-              enough weight to deserve it.
-            </p>
-          </div>
         </section>
 
         <section className="site-card site-proof">
-          <p className="funding-card-label">The model</p>
-          <h2>The full thinking system stays free.</h2>
+          <p className="funding-card-label">Yours</p>
+          <h2>
+            Your thinking system should not disappear because someone
+            else&apos;s startup does.
+          </h2>
           <p>
-            Run it yourself with your own keys. Pay only if you want managed
-            sync, backup, AI, publishing, and hosting.
+            It runs locally, on your own keys, and everything in it exports to
+            a file you keep. Nothing here needs my server to go on existing.
           </p>
-          <Link className="ghost site-ghost" href="/funding">
-            See the funding model
-          </Link>
+          <div className="site-actions">
+            <Link className="capture-btn" href="/">
+              Open app
+            </Link>
+            <Link className="ghost site-ghost" href="/funding">
+              How it stays free
+            </Link>
+          </div>
         </section>
       </div>
     </main>
