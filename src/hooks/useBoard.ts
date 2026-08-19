@@ -68,7 +68,13 @@ import {
 } from "@/lib/boardOps";
 import { arrivedIn, arrivedNote } from "@/lib/arrived";
 import { parseCommandPrefix } from "@/lib/command";
-import { isRefile, refileRule, undoRule, type SortKind } from "@/lib/refiled";
+import {
+  commandRule,
+  isRefile,
+  refileRule,
+  undoRule,
+  type SortKind,
+} from "@/lib/refiled";
 import { expiryFor, parseDue } from "@/lib/due";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
@@ -84,6 +90,8 @@ import {
 import type { SyncStore } from "@/lib/syncStore";
 import type { Draft, IoNote } from "@/app/Intentions";
 import {
+  mergeCorrections,
+  mergeLedgers,
   sourceOf,
   withCorrection,
   withLedger,
@@ -659,9 +667,26 @@ export function useBoard(now: number) {
          had been tombstoned separately — and stamped it fresh, so it then
          out-aged its own tombstone and survived every later merge. A
          deletion must not be undone by a writer that set out before it. */
+      /* History is union-merged rather than taken wholesale, for the same
+         reason tombstones are re-applied: a write can be older than it
+         looks. A thread capture kicks off a summary refresh, and that
+         request carries the board as it was when it set out. Committing
+         its reply used to hand back `next.corrections` verbatim — quietly
+         reverting any lesson recorded while it was in flight, which is
+         exactly when lessons are recorded. The ledger and the corrections
+         are append-only and keyed by id, so unioning them is always safe
+         and never loses a record to a slow reply. */
+      const merged: Board = {
+        ...next,
+        ledger: mergeLedgers(latest.current.ledger ?? [], next.ledger ?? []),
+        corrections: mergeCorrections(
+          latest.current.corrections ?? [],
+          next.corrections ?? []
+        ),
+      };
       const stamped = stampChanges(
         latest.current,
-        applyTombstones(next, tombstones.current)
+        applyTombstones(merged, tombstones.current)
       );
       setData(stamped.board);
       latest.current = stamped.board;
@@ -1134,6 +1159,26 @@ export function useBoard(now: number) {
     }, 9000);
   };
 
+  /** Write a command's lesson on its own.
+      The forced-intention branch hands off to the intention engine and
+      never reaches the capture's commit, so its lesson is recorded here or
+      nowhere. Same shape as the one folded into a filed capture. */
+  const noteCommand = async (rule: string, context: string) => {
+    const learned = noteCorrection(latest.current, {
+      proposalKind: "commanded",
+      accepted: true,
+      context: context.slice(0, 160),
+      rule,
+    });
+    latest.current = learned;
+    setData(learned);
+    try {
+      await set(KEY, JSON.stringify(learned));
+    } catch {
+      /* disk hiccup; the next commit writes it */
+    }
+  };
+
   /** Praise be. The main capture, sorted and filed.
       `dictated` says the words came from the microphone — the ledger records
       that so a later export can tell speech from typing. */
@@ -1154,6 +1199,13 @@ export function useBoard(now: number) {
     /* A kind chosen after an undo outranks a typed prefix: the person has
        just been asked the question outright and answered it. */
     const force = pinned ?? typed;
+    /* A destination named up front is a statement about where this kind of
+       thing belongs, so it teaches — the same loop an answered undo feeds.
+       Only a TYPED command: a re-sort after undo has already written its
+       own, stronger lesson, and recording both would count one correction
+       twice. */
+    const commandLesson =
+      !pinned && typed ? commandRule(payload, typed) : null;
     if (!payload && !pics.length) return;
     setErr("");
     setSwept(null);
@@ -1187,6 +1239,9 @@ export function useBoard(now: number) {
         setCanUndo(false);
         setText("");
         setPics([]);
+        /* This branch never reaches the commit below, so the lesson is
+           written here or not at all. */
+        if (commandLesson) await noteCommand(commandLesson, payload);
         await expandIntention(payload, {
           raw: payload,
           source: sourceOf(payload, dictated, imgIds.length > 0),
@@ -1242,6 +1297,14 @@ export function useBoard(now: number) {
         transcript: transcript.trim() || undefined,
         imgs: imgIds.length ? imgIds : undefined,
       });
+      const recorded = commandLesson
+        ? noteCorrection(filed, {
+            proposalKind: "commanded",
+            accepted: true,
+            context: payload.slice(0, 160),
+            rule: commandLesson,
+          })
+        : filed;
       setLanded(landed);
       setLandedIds(fresh);
       setTab(out.kind === "action" ? "actions" : "threads");
@@ -1259,7 +1322,7 @@ export function useBoard(now: number) {
         picIds: pics.map((p) => p.id),
       };
       setCanUndo(true);
-      await commit(filed);
+      await commit(recorded);
       /* A quiet proposal, never applied: if this capture clearly belongs
          with an existing thread, offer the fold. An explicit /action,
          /thread or /intention command is respected — only the model's

@@ -118,3 +118,23 @@ export function undoRule(
   if (!words.length) return null;
   return `Captures about "${words.join(" ")}" are ${KIND_WORD[right]}, not ${KIND_WORD[wrong]}`;
 }
+
+/**
+ * The lesson in a destination chosen up front.
+ *
+ * A slash command is a statement about where this kind of thing belongs,
+ * so it teaches the same way an answered undo does — but it is weaker
+ * evidence, and deliberately so. An answered undo follows a mistake you
+ * watched happen; a command is a preference you asserted before the engine
+ * ever gave its opinion, and it may well have agreed with you. So this
+ * carries no "not a …" half, and it needs the ordinary two signals before
+ * deriveRules will say it out loud.
+ */
+export function commandRule(
+  captureText: string,
+  kind: SortKind
+): string | null {
+  const words = contentWords(captureText).slice(0, 2);
+  if (!words.length) return null;
+  return `Captures about "${words.join(" ")}" are ${KIND_WORD[kind]}`;
+}

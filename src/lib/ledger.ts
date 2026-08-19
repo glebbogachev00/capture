@@ -63,6 +63,10 @@ export type ProposalKind =
       signal here that is about the ENGINE's mistake rather than about a
       proposal the engine offered. */
   | "refiled"
+  /** A capture that named its own destination with a slash command. A
+      preference stated before the engine answered, so it teaches — at the
+      ordinary two-signal strength, unlike an answered undo. */
+  | "commanded"
   /** The capture was undone outright. On its own this says only that the
       sorting was wrong, not what would have been right — so it is recorded
       without a rule until the person says which kind it should have been. */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { REFILE_WINDOW_MS, isRefile, refileRule, undoRule } from "./refiled";
+import { REFILE_WINDOW_MS, commandRule, isRefile, refileRule, undoRule } from "./refiled";
+import { deriveRules } from "./rules";
 
 const MIN = 60 * 1000;
 
@@ -91,5 +92,47 @@ describe("undoRule — what an answered undo teaches", () => {
     const a = undoRule("cold brew is out again", "action", "thread");
     const b = undoRule("cold brew, we ran out this week too", "action", "thread");
     expect(a).toBe(b);
+  });
+});
+
+describe("commandRule — a destination named up front", () => {
+  it("states where this kind of thing belongs", () => {
+    expect(commandRule("cold brew is out again", "thread")).toBe(
+      'Captures about "cold brew" are a thread'
+    );
+  });
+
+  it("makes no claim about what it is not", () => {
+    /* An answered undo follows a mistake you watched happen, so it can say
+       "not a thread". A command is a preference asserted before the engine
+       gave its opinion — it may well have agreed — so it only states the
+       positive, and needs the ordinary two signals to be heard. */
+    const rule = commandRule("cold brew is out again", "thread")!;
+    expect(rule).not.toContain("not");
+  });
+
+  it("aggregates across captures about the same subject", () => {
+    expect(commandRule("cold brew ran out", "thread")).toBe(
+      commandRule("cold brew again, annoying", "thread")
+    );
+  });
+
+  it("says nothing when there is no subject", () => {
+    expect(commandRule("   ", "thread")).toBeNull();
+  });
+});
+
+describe("a command is weaker evidence than an answered undo", () => {
+  it("needs two signals where an answered undo needs one", () => {
+    const commanded = (at: number) => ({
+      id: "c" + at,
+      at,
+      proposalKind: "commanded" as const,
+      accepted: true,
+      context: "cold brew",
+      rule: 'Captures about "cold brew" are a thread',
+    });
+    expect(deriveRules([commanded(1000)], [], 2000)).toHaveLength(0);
+    expect(deriveRules([commanded(1000), commanded(1100)], [], 2000)).toHaveLength(1);
   });
 });
