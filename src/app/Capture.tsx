@@ -849,18 +849,21 @@ export function Capture() {
               <div>
                 {!data.actions.length && loaded && (
                   <div className="empty">
-                    <p className="big">Nothing to close yet.</p>
-                    <p>
-                      Anything you capture that&apos;s a task lands here, with a
-                      shelf life.
-                    </p>
+                    {/* An app about clearing clutter cannot open with a wall
+                        of prose. What is actually needed here is three
+                        things: nothing is wrong, one thing to try, and what
+                        will happen. Everything else was cut — including the
+                        note that you can aim a capture yourself, which is
+                        both advanced and off-message: the whole pitch is
+                        that you do not have to. */}
+                    <p className="big">No open loops.</p>
                     {/* One messy sentence explains this app faster than any
                         amount of description. Tapping it fills the box but
                         does not send — the capture is still yours to make.
-                        The claim underneath is deliberately only what the
-                        engine does reliably: one action, one thread, every
-                        run. It says nothing about the wording or the
-                        thread's name, both of which vary. */}
+                        The two lines under it are pinned to what the engine
+                        reliably does: run eight times, this sentence gave
+                        one action and one thread every time. They claim the
+                        shape, never the wording or the thread's name. */}
                     <button
                       className="try-line"
                       onClick={() => setText(TRY_IT)}
@@ -868,13 +871,10 @@ export function Capture() {
                     >
                       “{TRY_IT}”
                     </button>
-                    <p className="try-note">
-                      Tap it, then Capture. The task becomes an action; the
-                      thinking becomes a thread.
-                      <br />
-                      Or aim it yourself: start with “action:”, “thread:” or
-                      “intention:”.
-                    </p>
+                    <ul className="try-list">
+                      <li>the bug becomes an action, with a shelf life</li>
+                      <li>the pricing question becomes a thread that grows</li>
+                    </ul>
                   </div>
                 )}
                 {grouped ? (
@@ -921,11 +921,8 @@ export function Capture() {
               <div>
                 {!data.threads.length && loaded && (
                   <div className="empty">
-                    <p className="big">No threads running.</p>
-                    <p>
-                      Talk something through. It&apos;ll start one and keep it —
-                      threads never expire.
-                    </p>
+                    <p className="big">Nothing accumulating yet.</p>
+                    <p>Threads never expire. They just get deeper.</p>
                   </div>
                 )}
                 {active.map((t) => (
@@ -964,11 +961,8 @@ export function Capture() {
               <div>
                 {!data.intentions.length && loaded && (
                   <div className="empty">
-                    <p className="big">No intentions set.</p>
-                    <p>
-                      Say what you are calling into being and it gets written
-                      as already true, with what pulls against it named.
-                    </p>
+                    <p className="big">Nothing declared yet.</p>
+                    <p>Not a goal. The state you are choosing to inhabit.</p>
                   </div>
                 )}
                 {data.intentions.map((i) => (
@@ -1034,7 +1028,7 @@ function SearchResults({
   if (!hits.total) {
     return (
       <div className="empty">
-        <p className="big">Nothing matches.</p>
+        <p className="big">Nothing by that shape.</p>
         <p>Every word has to appear somewhere in the item.</p>
       </div>
     );
