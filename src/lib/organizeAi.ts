@@ -136,6 +136,7 @@ const VERBS: Record<OrganizeKind, string> = {
      is free by design; routing it through the AI pass would put a quota
      cost on the one claim that needs none. */
   let_go: "Let go",
+  revisit_intention: "Still true",
 };
 
 /** Fragment kinds — proposals that name a specific note inside a thread. */

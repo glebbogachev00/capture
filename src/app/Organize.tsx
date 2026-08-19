@@ -38,6 +38,7 @@ const YES_LABEL: Record<OrganizeKind, string> = {
   move_fragment: "Move",
   extract_action: "Make action",
   let_go: "Let go",
+  revisit_intention: "Still true",
 };
 
 /**
@@ -53,6 +54,15 @@ function Ask({ p }: { p: OrganizeProposal }) {
     return (
       <span className="org-line">
         Delete <em>{p.sourceName}</em>
+      </span>
+    );
+  }
+  if (p.kind === "revisit_intention") {
+    /* A question, not a claim — the only row here that asks rather than
+       proposes, so it is the only one phrased as one. */
+    return (
+      <span className="org-line">
+        Still choosing <em>{p.sourceName}</em>?
       </span>
     );
   }

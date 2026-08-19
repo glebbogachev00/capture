@@ -655,6 +655,12 @@ export function useBoard(now: number) {
       if (!text.trim()) setText(m.text);
     }
     await submit(false, right, m?.text);
+    /* After the capture lands, not before — the banner says where it went,
+       this says why that was the right shape for it. */
+    if (m) {
+      setNotice(SHAPE_NOTE[right]);
+      setTimeout(() => setNotice(null), 6000);
+    }
   };
 
   const commit = useCallback(
@@ -1163,6 +1169,21 @@ export function useBoard(now: number) {
     }, 9000);
   };
 
+  /**
+   * What the distinction actually is, said once, at the only moment it
+   * matters.
+   *
+   * Not an explanation of every filing — that would be a machine narrating
+   * itself. This fires only after a correction, when the person has just
+   * demonstrated that the difference between these kinds was not obvious,
+   * and is therefore the one moment they might want to know it.
+   */
+  const SHAPE_NOTE: Record<SortKind, string> = {
+    action: "An action, then — there is something to close.",
+    thread: "A thread, then — nothing to close, so it keeps.",
+    intention: "An intention, then — a state, not a task.",
+  };
+
   /** Write a command's lesson on its own.
       The forced-intention branch hands off to the intention engine and
       never reaches the capture's commit, so its lesson is recorded here or
@@ -1639,6 +1660,25 @@ export function useBoard(now: number) {
         ),
       });
       setNotice("Let go — it sits in Faded for two weeks if you want it back.");
+      setTimeout(() => setNotice(null), 5000);
+      return true;
+    } else if (p.kind === "revisit_intention") {
+      /* Saying it is still true IS the revisit. Nothing about the intention
+         changes except when it was last stood behind, which is exactly what
+         was being asked about — so it goes quiet for another two months.
+
+         No correction is recorded: standing by a declared state says
+         nothing about how captures should be filed. */
+      const still = latest.current.intentions.find((x) => x.id === p.sourceId);
+      if (!still) return false;
+      const at = stamp();
+      await commit({
+        ...latest.current,
+        intentions: latest.current.intentions.map((x) =>
+          x.id === p.sourceId ? { ...x, updatedAt: at } : x
+        ),
+      });
+      setNotice("Still yours. It won't ask again for a while.");
       setTimeout(() => setNotice(null), 5000);
       return true;
     } else if (p.kind === "move_fragment") {

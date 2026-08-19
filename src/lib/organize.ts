@@ -48,7 +48,10 @@ export type OrganizeKind =
   | "extract_action"
   | "merge_fragments"
   /** Still being carried, past its moment — the "get light" claim. */
-  | "let_go";
+  | "let_go"
+  /** Declared a long time ago and untouched since — "are you still
+      choosing this?". The only claim Capture makes about an intention. */
+  | "revisit_intention";
 
 export type OrganizeProposal = {
   /** Deterministic — same board always yields the same id, so a dismissal
@@ -229,6 +232,21 @@ const phraseWords = (phrase: string) =>
  */
 const RARE_IN_AT_MOST = 2;
 
+/**
+ * How long an intention is left alone before it is worth asking about.
+ *
+ * An intention is a decision that manifests over time unless something
+ * pulls against it, so silence is not failure and there is nothing to
+ * chase. But a decision nobody has revisited in two months is either still
+ * true — worth saying so — or quietly no longer yours, and neither answer
+ * is available while nothing ever asks.
+ *
+ * Long on purpose. Actions are chased at 45 days; intentions move slower
+ * than actions by definition, and asking too often would turn a standing
+ * choice into a chore.
+ */
+const INTENTION_QUIET = 56 * DAY_MS;
+
 /** How many threads use each content word at all. */
 function threadFrequency(board: Board): Map<string, number> {
   const freq = new Map<string, number>();
@@ -264,6 +282,8 @@ function tierFor(phrase: string): OrganizeConfidence {
  *
  * Staleness is different in kind: it is arithmetic on dates, not a guess
  * about language, so it is exactly right every time and costs nothing.
+ * Two questions come out of it — what are you still carrying, and what are
+ * you still choosing.
  */
 export function scanStale(
   board: Board,
@@ -272,7 +292,9 @@ export function scanStale(
 ): OrganizeProposal[] {
   const dropped = new Set(dismissed);
   return scanBoard(board, dismissed, now).filter(
-    (p) => p.kind === "let_go" && !dropped.has(p.id)
+    (p) =>
+      (p.kind === "let_go" || p.kind === "revisit_intention") &&
+      !dropped.has(p.id)
   );
 }
 
@@ -507,6 +529,46 @@ export function scanBoard(
       score: 40 + Math.min(days, 40),
       origin: "local",
     });
+  }
+
+  /* --------------------- are you still choosing this? -------------------
+     One at a time, always. Twenty-nine intentions crossing the line in the
+     same week would turn a standing choice into a queue of paperwork, and
+     the point of asking is that it feels like being asked, not audited.
+     The oldest silence goes first; the rest wait their turn. */
+  {
+    const quiet = board.intentions
+      .filter((i) => now - (i.updatedAt || i.at || now) > INTENTION_QUIET)
+      .sort(
+        (a, b) => (a.updatedAt || a.at || 0) - (b.updatedAt || b.at || 0)
+      );
+    const oldest = quiet.find((i) => !dropped.has(`revisit_intention:${i.id}`));
+    if (oldest) {
+      const weeks = Math.floor(
+        (now - (oldest.updatedAt || oldest.at || now)) / (7 * DAY_MS)
+      );
+      out.push({
+        id: `revisit_intention:${oldest.id}`,
+        kind: "revisit_intention",
+        /* Never "high". Nothing here is a mistake to correct — it is a
+           question, and it must never outrank a real clutter claim. */
+        confidence: "medium",
+        verb: "Still true",
+        sourceId: oldest.id,
+        /* The row ends in a question mark, and an intention is written as
+           a sentence — "…is perfect.?" reads as a typo. */
+        sourceName: NAME(
+          (oldest.expandedIntention || oldest.rawInput).replace(/[.!]+$/, "")
+        ),
+        targetId: oldest.id,
+        targetName: NAME(
+          (oldest.expandedIntention || oldest.rawInput).replace(/[.!]+$/, "")
+        ),
+        reason: `declared ${weeks} weeks ago and untouched since`,
+        score: 30 + Math.min(weeks, 30),
+        origin: "local",
+      });
+    }
   }
 
   /* Extract a doable task out of a fragment. Deliberately narrow — only

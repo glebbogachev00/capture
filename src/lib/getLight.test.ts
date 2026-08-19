@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY, type Action, type Board } from "./model";
-import { scanBoard } from "./organize";
+import { EMPTY, type Action, type Board, type Intention } from "./model";
+import { scanBoard, scanStale } from "./organize";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date(2026, 7, 18, 12, 0, 0).getTime();
@@ -79,5 +79,80 @@ describe("get light — what is still being carried", () => {
     const b = board([action({ due: NOW - 30 * DAY })]);
     const [p] = letGo(b);
     expect(scanBoard(b, [p.id], NOW).filter((x) => x.kind === "let_go")).toEqual([]);
+  });
+});
+
+describe("still choosing this? — the only claim about an intention", () => {
+  const intent = (id: string, text: string, updatedAt: number): Intention => ({
+    id,
+    number: 1,
+    rawInput: text,
+    expandedIntention: text,
+    recommendedActions: [],
+    counterIntentions: [],
+    at: updatedAt,
+    updatedAt,
+  });
+
+  const LATER = 200 * DAY;
+
+  it("asks about an intention nobody has touched in two months", () => {
+    const b: Board = {
+      ...EMPTY,
+      intentions: [intent("i1", "I present Capture through proof", LATER - 70 * DAY)],
+    };
+    const out = scanStale(b, [], LATER).filter(
+      (p) => p.kind === "revisit_intention"
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].sourceId).toBe("i1");
+    expect(out[0].confidence).toBe("medium");
+    expect(out[0].reason).toContain("weeks ago");
+  });
+
+  it("stays quiet about a recent one", () => {
+    /* Silence is not failure. An intention is a decision that manifests
+       over time, so there is nothing to chase — only, eventually, worth
+       asking whether it is still yours. */
+    const b: Board = {
+      ...EMPTY,
+      intentions: [intent("i1", "I ship before it is perfect", LATER - 20 * DAY)],
+    };
+    expect(
+      scanStale(b, [], LATER).filter((p) => p.kind === "revisit_intention")
+    ).toHaveLength(0);
+  });
+
+  it("asks about one at a time, oldest first", () => {
+    /* Twenty-nine intentions crossing the line the same week would be a
+       queue of paperwork, not a question. */
+    const b: Board = {
+      ...EMPTY,
+      intentions: [
+        intent("newer", "b", LATER - 60 * DAY),
+        intent("oldest", "a", LATER - 90 * DAY),
+        intent("middle", "c", LATER - 75 * DAY),
+      ],
+    };
+    const out = scanStale(b, [], LATER).filter(
+      (p) => p.kind === "revisit_intention"
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].sourceId).toBe("oldest");
+  });
+
+  it("moves to the next one once the oldest is waved away", () => {
+    const b: Board = {
+      ...EMPTY,
+      intentions: [
+        intent("oldest", "a", LATER - 90 * DAY),
+        intent("middle", "c", LATER - 75 * DAY),
+      ],
+    };
+    const out = scanStale(b, ["revisit_intention:oldest"], LATER).filter(
+      (p) => p.kind === "revisit_intention"
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].sourceId).toBe("middle");
   });
 });
