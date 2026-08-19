@@ -51,6 +51,7 @@ import { OrganizeScreen } from "./Organize";
 import { shareIntention, shareThread } from "@/lib/share";
 import { useBoard } from "@/hooks/useBoard";
 import { groupActions } from "@/lib/group";
+import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import {
   type Cover,
@@ -226,11 +227,63 @@ export function Capture() {
   const highOrganize = (organize ?? []).filter((p) => p.confidence === "high");
 
   /* The grouped lens over live actions — plain-text matching, no model call,
-     recomputed only when the list itself changes. */
-  const grouped = useMemo(
+     recomputed only when the list itself changes. This is what shows the
+     instant the toggle flips, and what stays if the model never answers. */
+  const localGrouped = useMemo(
     () => (groupView ? groupActions(live) : null),
     [groupView, live]
   );
+
+  /* The model's reading of the same list, once it arrives.
+     Keyed by the exact set of actions it was asked about, so a board that
+     changes underneath can never show groups drawn over rows that moved. */
+  const [aiGroups, setAiGroups] = useState<{
+    key: string;
+    groups: RawAiGroup[];
+  } | null>(null);
+  const groupAsked = useRef<string>("");
+  const liveKey = useMemo(() => live.map((a) => a.id).join(","), [live]);
+
+  useEffect(() => {
+    if (!groupView) return;
+    /* Word grouping already answers a short list, and a model call on two
+       rows is waste. */
+    if (live.length < 3) return;
+    if (groupAsked.current === liveKey) return;
+    groupAsked.current = liveKey;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/group", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            actions: live.map((a) => ({ id: a.id, text: a.text })),
+          }),
+        });
+        if (!res.ok) return;
+        const out = (await res.json()) as { groups?: RawAiGroup[] };
+        if (cancelled) return;
+        setAiGroups({ key: liveKey, groups: out.groups ?? [] });
+      } catch {
+        /* The lens is a bonus layer: word grouping is already on screen. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [groupView, liveKey, live]);
+
+  /* The model's groups when they belong to this exact list and it found
+     something; the word lens otherwise. Never a blend of the two — a pile
+     assembled by meaning and a pile assembled by spelling would sit under
+     the same heading style and mean different things. */
+  const grouped = useMemo(() => {
+    if (!groupView) return null;
+    if (aiGroups && aiGroups.key === liveKey && aiGroups.groups.length)
+      return mapAiGroups(live, aiGroups.groups);
+    return localGrouped;
+  }, [groupView, aiGroups, liveKey, live, localGrouped]);
 
   /* Input device plumbing: the hidden file picker, and the recorded-dictation
      mic (shared with Distill — the mic routes to whichever surface is open).
