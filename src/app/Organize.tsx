@@ -126,8 +126,11 @@ export function OrganizeScreen({
         ← capture
       </button>
 
+      {/* "Tidy", not "Organize": the icon is a brush, the prompt constant
+          is TIDY, the fixtures are tidyCases and the route calls itself the
+          tidy engine. The screen was the only thing using another word. */}
       <div className="tname" style={{ fontSize: 26, marginBottom: 6 }}>
-        Organize
+        Tidy
       </div>
 
       {proposals.length === 0 ? (

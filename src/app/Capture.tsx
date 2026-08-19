@@ -67,6 +67,19 @@ import {
     board — a view preference that survives reloads on this device. */
 const GROUP_VIEW_KEY = "capture:groupView:v1";
 
+/** The sentence offered on an empty board.
+    Deliberately messy — that it does not need tidying first is half the
+    point — and deliberately a builder's sentence, because a shipping task
+    tangled up with an unresolved decision is the shape of thought this is
+    for. It also demonstrates the distinction the whole app rests on: the
+    task can be closed, the thinking cannot, so they are kept differently.
+    Pinned: run through the live sorter eight times, it produced one action
+    and one thread every time. That is the only thing the copy beside it
+    claims — not the wording, and not the thread's name, both of which
+    vary. Change the sentence and the claim has to be re-earned. */
+const TRY_IT =
+  "uh fix the signup bug before friday and i keep going back and forth on usage based pricing vs seats";
+
 /** How long a ticked action shows itself done before it leaves. Long enough
     to read as a finish, short enough that nobody waits on it. */
 const TICK_MS = 420;
@@ -428,14 +441,14 @@ export function Capture() {
               }}
               aria-label={
                 (organize ?? []).length > 0
-                  ? `Organize — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`
-                  : "Organize — scan the board for things to tidy"
+                  ? `Tidy — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`
+                  : "Tidy — scan the board for things worth changing"
               }
               title={
                 (organize ?? []).length > 0
                   ? highOrganize.length > 0
-                    ? `Organize — ${highOrganize.length} ${highOrganize.length === 1 ? "strong suggestion" : "strong suggestions"} to review`
-                    : `Organize — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`
+                    ? `Tidy — ${highOrganize.length} ${highOrganize.length === 1 ? "strong suggestion" : "strong suggestions"} to review`
+                    : `Tidy — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`
                   : "Scan the board for things to tidy"
               }
             >
@@ -488,7 +501,11 @@ export function Capture() {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Say it however it comes out — it saves automatically. Say “action:”, “thread:” or “intention:” first to aim it somewhere specific."
+            /* Short on purpose. This used to carry the aiming instructions too,
+               which overflowed the box and cut off mid-word — the guidance now
+               lives in the empty state, where there is room for it and where
+               someone with an empty board is actually looking. */
+            placeholder="Say it however it comes out."
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 submit(dictatedRef.current);
@@ -836,6 +853,27 @@ export function Capture() {
                     <p>
                       Anything you capture that&apos;s a task lands here, with a
                       shelf life.
+                    </p>
+                    {/* One messy sentence explains this app faster than any
+                        amount of description. Tapping it fills the box but
+                        does not send — the capture is still yours to make.
+                        The claim underneath is deliberately only what the
+                        engine does reliably: one action, one thread, every
+                        run. It says nothing about the wording or the
+                        thread's name, both of which vary. */}
+                    <button
+                      className="try-line"
+                      onClick={() => setText(TRY_IT)}
+                      disabled={!!busy}
+                    >
+                      “{TRY_IT}”
+                    </button>
+                    <p className="try-note">
+                      Tap it, then Capture. The task becomes an action; the
+                      thinking becomes a thread.
+                      <br />
+                      Or aim it yourself: start with “action:”, “thread:” or
+                      “intention:”.
                     </p>
                   </div>
                 )}

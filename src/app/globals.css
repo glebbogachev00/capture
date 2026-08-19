@@ -1214,6 +1214,37 @@ body {
   }
 }
 
+/* The offered sentence on an empty board. A button, because it fills the
+   box — but styled as the quoted thought it is, not as a control. */
+.try-line {
+  display: block;
+  margin: 16px auto 8px;
+  max-width: 34ch;
+  border: 1px dashed var(--rule);
+  background: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.try-line:hover:not(:disabled) {
+  border-color: var(--ink);
+  border-style: solid;
+}
+.try-line:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.try-note {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
 /* inline editing */
 .act-edit {
   width: 100%;
