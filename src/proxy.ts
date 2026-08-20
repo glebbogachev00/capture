@@ -5,6 +5,7 @@ import { AUTH_COOKIE, isValidSession } from "@/lib/auth";
 const PUBLIC_PATHS = [
   "/login",
   "/about",
+  "/start",
   "/funding",
   "/voice",
   "/api/login",

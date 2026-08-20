@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  /* A second dev server (Retake records demos against an isolated copy on
+     :3100) needs its own build dir, or Next refuses to start it. */
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+  /* The demo copy must not record Next's dev-tools badge into the videos.
+     The normal dev server on :3000 keeps its indicators. */
+  ...(process.env.NEXT_DIST_DIR ? { devIndicators: false as const } : {}),
   /* Dev is reached from the phone through tailscale serve, which makes every
      request cross-origin from Next's point of view; without this it silently
      refuses to serve the JS bundles, so pages render but never hydrate. */

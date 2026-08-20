@@ -53,3 +53,4 @@ CaptureVault/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.next-retake/
