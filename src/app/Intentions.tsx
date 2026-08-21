@@ -798,10 +798,7 @@ export function SettingsScreen({
         </button>
       </div>
       {reporting && (
-        <ReportBugForm
-          ctx={{ screen: "settings", ...counts }}
-          onClose={() => setReporting(false)}
-        />
+        <ReportBugForm onClose={() => setReporting(false)} />
       )}
 
       <div className="int-block">

@@ -995,22 +995,7 @@ export function Capture() {
 
       {/* Last thing on the page, under every note — where you end up when
           something has already gone wrong and you want to tell someone. */}
-      <ReportBug
-        ctx={{
-          screen: intention
-            ? "intention"
-            : thread
-              ? "thread"
-              : showOrganize
-                ? "tidy"
-                : searching
-                  ? "search"
-                  : tab,
-          actions: data.actions.length,
-          threads: data.threads.length,
-          intentions: data.intentions.length,
-        }}
-      />
+      <ReportBug />
 
       {editing && (
         <Markup

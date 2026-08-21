@@ -19,50 +19,26 @@ import { createPortal } from "react-dom";
  * answerable in public, and the next person with the same problem finds it
  * instead of writing it again.
  *
- * Diagnostics are shown, not hidden, and they are counts only — how many
- * of each kind exist, never a word of what any of them say. If the server
- * has no token the whole thing degrades to opening GitHub pre-filled,
- * which is where this started.
+ * Nothing rides along. An earlier version attached the screen, the window
+ * size, the browser string and how many actions and threads the board
+ * held. None of it was note content — but "2 actions · 0 threads" is still
+ * a fact about someone's board, a user-agent is still a fingerprint, and
+ * an app that promises your thinking stays yours does not get to make
+ * quiet exceptions for its own convenience. If a report needs the browser,
+ * it can be asked for in the issue.
+ *
+ * If the server has no token the whole thing degrades to opening GitHub
+ * pre-filled, which is where this started.
  */
 
 const REPO = "https://github.com/glebbogachev00/capture";
 
-export type BugContext = {
-  /** Where they were when it went wrong. */
-  screen: string;
-  actions: number;
-  threads: number;
-  intentions: number;
-};
-
-function contextLines(ctx: BugContext): string {
-  const device =
-    typeof navigator === "undefined" ? "unknown" : navigator.userAgent;
-  const size =
-    typeof window === "undefined"
-      ? "unknown"
-      : `${window.innerWidth}×${window.innerHeight}`;
-  return [
-    `- screen: ${ctx.screen}`,
-    `- board: ${ctx.actions} actions · ${ctx.threads} threads · ${ctx.intentions} intentions`,
-    `- window: ${size}`,
-    `- device: ${device}`,
-  ].join("\n");
-}
-
 /** The old path, still the fallback: GitHub, pre-filled, in a new tab. */
-function githubUrl(what: string, ctx: BugContext): string {
-  const body = [what, "", "---", "", contextLines(ctx)].join("\n");
-  return `${REPO}/issues/new?body=${encodeURIComponent(body)}`;
+function githubUrl(what: string): string {
+  return `${REPO}/issues/new?body=${encodeURIComponent(what)}`;
 }
 
-export function ReportBugForm({
-  ctx,
-  onClose,
-}: {
-  ctx: BugContext;
-  onClose: () => void;
-}) {
+export function ReportBugForm({ onClose }: { onClose: () => void }) {
   const [what, setWhat] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ number?: number; url?: string } | null>(
@@ -78,10 +54,7 @@ export function ReportBugForm({
       const res = await fetch("/api/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          what: what.trim(),
-          context: contextLines(ctx),
-        }),
+        body: JSON.stringify({ what: what.trim() }),
       });
       if (res.ok) {
         setDone((await res.json()) as { number?: number; url?: string });
@@ -90,7 +63,7 @@ export function ReportBugForm({
       /* 501 means no token is configured — not this person's problem, so
          hand them the pre-filled page rather than an apology. */
       if (res.status === 501) {
-        window.open(githubUrl(what, ctx), "_blank", "noreferrer");
+        window.open(githubUrl(what), "_blank", "noreferrer");
         onClose();
         return;
       }
@@ -157,12 +130,7 @@ export function ReportBugForm({
                 Never mind
               </button>
             </div>
-            {/* Shown rather than collected — under the buttons, where it is
-                available without being part of the task. */}
-            <details className="bug-ctx">
-              <summary>what gets sent with it</summary>
-              <pre>{contextLines(ctx)}</pre>
-            </details>
+
           </>
         )}
       </div>
@@ -172,14 +140,14 @@ export function ReportBugForm({
 }
 
 /** The quiet line at the bottom of the board. */
-export function ReportBug({ ctx }: { ctx: BugContext }) {
+export function ReportBug() {
   const [open, setOpen] = useState(false);
   return (
     <>
       <p className="report-bug">
         <button onClick={() => setOpen(true)}>Caught a bug? Capture it.</button>
       </p>
-      {open && <ReportBugForm ctx={ctx} onClose={() => setOpen(false)} />}
+      {open && <ReportBugForm onClose={() => setOpen(false)} />}
     </>
   );
 }

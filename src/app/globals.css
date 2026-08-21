@@ -1310,35 +1310,6 @@ body {
 .bug-modal .tools {
   margin-top: 14px;
 }
-/* Available without being part of the task. */
-.bug-ctx {
-  margin-top: 16px;
-  /* Machine text, so the mono face the app uses for it everywhere else —
-     at a size someone can actually read, since the whole point of the line
-     is that the diagnostics are inspectable rather than hidden. */
-  font-family: var(--font-mono), monospace;
-  font-size: 12.5px;
-  letter-spacing: 0.02em;
-  color: var(--muted);
-}
-.bug-ctx summary {
-  cursor: pointer;
-  opacity: 0.75;
-}
-.bug-ctx summary:hover {
-  opacity: 1;
-}
-.bug-ctx pre {
-  margin: 8px 0 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--card);
-  font-family: var(--font-mono), monospace;
-  font-size: 11.5px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
 .bug-err {
   margin: 10px 0 0;
   font-size: 12.5px;

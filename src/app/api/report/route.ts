@@ -9,6 +9,13 @@ import { rateLimit } from "@/lib/limiter";
  * for anyone who already has an account and a nuisance for everyone else.
  * This posts the issue on their behalf.
  *
+ * Nothing rides along with the report but the words the person wrote. An
+ * earlier version attached screen, window size, browser and board counts;
+ * none of it was note content, but a board count is still a fact about
+ * someone's board and a user-agent is still a fingerprint. An app that
+ * promises your thinking stays yours does not get to make quiet exceptions
+ * for its own convenience.
+ *
  * The token never reaches the browser. It lives in the environment, is used
  * here, and is never echoed back — not in the response, not in a log line.
  * Give it the smallest possible shape: a fine-grained token, this one
@@ -32,13 +39,11 @@ const REPO = process.env.CAPTURE_ISSUE_REPO || "glebbogachev00/capture";
 /** Bodies are small by nature; this only stops someone pasting a novel. */
 const MAX = 4000;
 
-const Body = z.object({
-  what: z.string().trim().min(1).max(MAX),
-  expected: z.string().trim().max(MAX).optional(),
-  /* Counts and environment, gathered by the client and shown to the person
-     before they send. Never note content. */
-  context: z.string().trim().max(1000).optional(),
-});
+/* Only the words they wrote. The route used to take a "context" blob of
+   screen, window size, browser and board counts; it does not any more, and
+   it will not accept one — an endpoint that quietly tolerates extra fields
+   is how they creep back. */
+const Body = z.object({ what: z.string().trim().min(1).max(MAX) }).strict();
 
 /** A title has to fit on one line in a list of issues. */
 function titleFrom(what: string): string {
@@ -69,18 +74,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "bad request" }, { status: 400 });
   }
 
-  const parts = ["### What happened", "", body.what];
-  if (body.expected) parts.push("", "### What you expected instead", "", body.expected);
-  if (body.context) {
-    parts.push(
-      "",
-      "---",
-      "",
-      "<sub>Sent from the app — counts only, no note content.</sub>",
-      "",
-      body.context
-    );
-  }
+  const parts = [body.what, "", "<sub>Sent from the app.</sub>"];
 
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/issues`, {
