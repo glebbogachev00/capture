@@ -1254,31 +1254,6 @@ body {
   opacity: 0.5;
 }
 
-/* Sits on the meta line with the date, in the width that line already has
-   spare — so a one-tap copy costs the text column nothing. */
-.meta-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  border: 1px solid var(--rule);
-  background: none;
-  color: var(--muted);
-  border-radius: 20px;
-  padding: 1px 8px 1px 6px;
-  font: inherit;
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-.meta-copy:hover {
-  color: var(--ink);
-  border-color: var(--ink);
-}
-.meta-copy svg {
-  flex: none;
-}
-
 /* Bottom of everything. Quiet enough to ignore for months, obvious the
    moment you are looking for someone to complain to. */
 .report-bug {
