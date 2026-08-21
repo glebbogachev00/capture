@@ -1275,53 +1275,76 @@ body {
   border-bottom-color: var(--ink);
 }
 
-/* The form. Two boxes and a send — filing a bug should cost less than
-   deciding not to. */
+/* The form. One box and a send.
+   The field carries no border of its own: a rectangle drawn inside a
+   rectangle is what made this look like paperwork. It sits on the card
+   colour instead, the same way the capture box does, so the thing you
+   type into is defined by its ground rather than by a line around it. */
 .bug-modal {
   text-align: left;
+  padding: 20px;
+}
+.bug-modal .discard-title {
+  margin-bottom: 14px;
 }
 .bug-field {
   width: 100%;
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--rule);
-  border-radius: 10px;
-  background: var(--paper);
+  display: block;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--card);
   color: var(--ink);
-  /* Explicit, not inherited: inside a modal `font: inherit` picks up the
-     display serif, and every other box you type into in this app is sans. */
   font-family: var(--font-sans), system-ui, sans-serif;
-  font-size: 14.5px;
-  line-height: 1.5;
-  resize: vertical;
+  font-size: 15px;
+  line-height: 1.55;
+  resize: none;
+}
+.bug-field::placeholder {
+  color: var(--muted);
 }
 .bug-field:focus {
-  outline: none;
-  border-color: var(--ink);
+  outline: 1px solid var(--rule);
+  outline-offset: 0;
 }
-.bug-field-small {
-  font-size: 13.5px;
+.bug-modal .tools {
+  margin-top: 14px;
 }
-/* Shown rather than collected — folded away, never hidden. */
+/* Available without being part of the task. */
 .bug-ctx {
-  margin-top: 12px;
-  font-size: 12px;
+  margin-top: 16px;
+  /* Machine text, so the mono face the app uses for it everywhere else —
+     at a size someone can actually read, since the whole point of the line
+     is that the diagnostics are inspectable rather than hidden. */
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
   color: var(--muted);
 }
 .bug-ctx summary {
   cursor: pointer;
+  opacity: 0.75;
+}
+.bug-ctx summary:hover {
+  opacity: 1;
 }
 .bug-ctx pre {
   margin: 8px 0 0;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 8px;
-  background: var(--paper);
+  background: var(--card);
   font-family: var(--font-mono), monospace;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
 }
+.bug-err {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: #8a2f2f;
+}
+
 /* The app's green, and the sans face the buttons beside it use.
    .capture-btn takes `font: inherit`, which inside a modal picks up the
    display serif — right on the capture box, wrong next to "Never mind". */

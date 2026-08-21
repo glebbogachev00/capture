@@ -51,20 +51,8 @@ function contextLines(ctx: BugContext): string {
 }
 
 /** The old path, still the fallback: GitHub, pre-filled, in a new tab. */
-function githubUrl(what: string, expected: string, ctx: BugContext): string {
-  const body = [
-    "### What happened",
-    "",
-    what,
-    "",
-    "### What you expected instead",
-    "",
-    expected,
-    "",
-    "---",
-    "",
-    contextLines(ctx),
-  ].join("\n");
+function githubUrl(what: string, ctx: BugContext): string {
+  const body = [what, "", "---", "", contextLines(ctx)].join("\n");
   return `${REPO}/issues/new?body=${encodeURIComponent(body)}`;
 }
 
@@ -76,7 +64,6 @@ export function ReportBugForm({
   onClose: () => void;
 }) {
   const [what, setWhat] = useState("");
-  const [expected, setExpected] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ number?: number; url?: string } | null>(
     null
@@ -93,7 +80,6 @@ export function ReportBugForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           what: what.trim(),
-          expected: expected.trim() || undefined,
           context: contextLines(ctx),
         }),
       });
@@ -104,7 +90,7 @@ export function ReportBugForm({
       /* 501 means no token is configured — not this person's problem, so
          hand them the pre-filled page rather than an apology. */
       if (res.status === 501) {
-        window.open(githubUrl(what, expected, ctx), "_blank", "noreferrer");
+        window.open(githubUrl(what, ctx), "_blank", "noreferrer");
         onClose();
         return;
       }
@@ -146,29 +132,18 @@ export function ReportBugForm({
         ) : (
           <>
             <p className="discard-title">Caught a bug?</p>
-            <p className="discard-hint">
-              No title needed, no category. Say what happened.
-            </p>
+            {/* One box, like the rest of the app. The split into "what
+                happened" and "what you expected" was form-thinking: two
+                rectangles to fill in, when the placeholder asks for both in
+                a sentence and most people write one anyway. */}
             <textarea
               className="bug-field"
-              rows={4}
+              rows={5}
               autoFocus
               placeholder="It did this, and I expected…"
               value={what}
               onChange={(e) => setWhat(e.target.value)}
             />
-            <textarea
-              className="bug-field bug-field-small"
-              rows={2}
-              placeholder="What should have happened (optional)"
-              value={expected}
-              onChange={(e) => setExpected(e.target.value)}
-            />
-            {/* Shown rather than collected. Counts, never content. */}
-            <details className="bug-ctx">
-              <summary>What gets sent with it</summary>
-              <pre>{contextLines(ctx)}</pre>
-            </details>
             {!!err && <p className="bug-err">{err}</p>}
             <div className="tools">
               <button
@@ -182,6 +157,12 @@ export function ReportBugForm({
                 Never mind
               </button>
             </div>
+            {/* Shown rather than collected — under the buttons, where it is
+                available without being part of the task. */}
+            <details className="bug-ctx">
+              <summary>what gets sent with it</summary>
+              <pre>{contextLines(ctx)}</pre>
+            </details>
           </>
         )}
       </div>
