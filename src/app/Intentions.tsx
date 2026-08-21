@@ -15,6 +15,7 @@ import { Copy, X, MoreHorizontal } from "lucide-react";
 import { type Intention, type Principle, fmt, pad } from "@/lib/model";
 import type { LearnedRule } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
+import { ReportBugForm } from "@/components/ReportBug";
 import type { CaptureEntry } from "@/lib/ledger";
 import {
   busiestDay,
@@ -629,6 +630,7 @@ export function SettingsScreen({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [showPrinciples, setShowPrinciples] = useState(false);
+  const [reporting, setReporting] = useState(false);
 
   return (
     <div>
@@ -781,6 +783,25 @@ export function SettingsScreen({
           </button>
         </div>
       </div>
+      )}
+
+      {/* The bottom-of-the-board line is the door you find when something
+          has just gone wrong; this is the one you go looking for later,
+          when you have finally had enough of it. Same form either way. */}
+      <div className="int-block">
+        <h4 className="int-label">Caught a bug?</h4>
+        <p className="int-note">
+          Say what happened. No GitHub account needed.
+        </p>
+        <button className="ghost" onClick={() => setReporting(true)}>
+          Report a bug
+        </button>
+      </div>
+      {reporting && (
+        <ReportBugForm
+          ctx={{ screen: "settings", ...counts }}
+          onClose={() => setReporting(false)}
+        />
       )}
 
       <div className="int-block">
