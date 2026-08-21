@@ -300,3 +300,40 @@ describe("applySorted — a picture that arrives with a task", () => {
     expect(landed).toContain("Kitchen renovation");
   });
 });
+
+describe("applySorted — a capture that is both a task and thinking", () => {
+  it("calls a thread it just made a new thread, not a layer", () => {
+    /* "A layer on X" describes a history that does not exist when the
+       thread was created by this very capture, and reads as though the
+       capture joined something already under way. */
+    const { landed } = applySorted(
+      sorted({
+        kind: "both",
+        title: "Pricing",
+        threadName: "Pricing the new tier",
+        actions: ["Fix the signup bug"],
+      }),
+      [],
+      500,
+      base()
+    );
+    expect(landed).toContain("a new thread");
+    expect(landed).not.toContain("a layer on");
+  });
+
+  it("calls it a layer when the thread was already there", () => {
+    const board = base({ threads: [thread("t1", "Pricing the new tier")] });
+    const { landed } = applySorted(
+      sorted({
+        kind: "both",
+        title: "Pricing",
+        threadId: "t1",
+        actions: ["Fix the signup bug"],
+      }),
+      [],
+      500,
+      board
+    );
+    expect(landed).toContain("a layer on Pricing the new tier");
+  });
+});

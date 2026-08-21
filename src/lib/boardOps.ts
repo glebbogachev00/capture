@@ -195,8 +195,13 @@ export function applySorted(
       targetId: homeId,
       source: { kind: "thread", id: homeId, fragId: bothFrag.id },
       landedIds: [...items.map((i) => i.id), homeId],
+      /* A layer is something added to a thread that was already there. A
+         thread this capture just created has no layers yet — calling its
+         first fragment "a layer on X" describes a history that does not
+         exist, and reads as though the capture joined something. */
       landed:
-        count(items.length, "action") + " · a layer on " + homeName,
+        count(items.length, "action") +
+        (home ? " · a layer on " + homeName : " · a new thread — " + homeName),
     };
   }
 
