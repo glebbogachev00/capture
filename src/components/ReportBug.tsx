@@ -172,7 +172,7 @@ export function ReportBugForm({
             {!!err && <p className="bug-err">{err}</p>}
             <div className="tools">
               <button
-                className="capture-btn"
+                className="bug-send"
                 onClick={send}
                 disabled={!what.trim() || busy}
               >

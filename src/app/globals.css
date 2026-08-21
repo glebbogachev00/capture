@@ -1288,7 +1288,9 @@ body {
   border-radius: 10px;
   background: var(--paper);
   color: var(--ink);
-  font: inherit;
+  /* Explicit, not inherited: inside a modal `font: inherit` picks up the
+     display serif, and every other box you type into in this app is sans. */
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 14.5px;
   line-height: 1.5;
   resize: vertical;
@@ -1320,6 +1322,32 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* The app's green, and the sans face the buttons beside it use.
+   .capture-btn takes `font: inherit`, which inside a modal picks up the
+   display serif — right on the capture box, wrong next to "Never mind". */
+.bug-send {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0 16px;
+  min-height: 40px;
+  border-radius: 10px;
+  touch-action: manipulation;
+  transition: 0.15s;
+}
+.bug-send:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.bug-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .bug-err {
   margin: 10px 0 0;
   font-size: 12.5px;
