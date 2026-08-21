@@ -1254,6 +1254,27 @@ body {
   opacity: 0.5;
 }
 
+/* Bottom of everything. Quiet enough to ignore for months, obvious the
+   moment you are looking for someone to complain to. */
+.report-bug {
+  margin: 34px 0 8px;
+  text-align: center;
+  font-size: 12.5px;
+}
+.report-bug a {
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--rule);
+  padding-bottom: 1px;
+}
+.report-bug a:hover {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+.report-bug span {
+  margin-right: 3px;
+}
+
 /* inline editing */
 .act-edit {
   width: 100%;

@@ -89,6 +89,39 @@ export function shareIntention(i: Intention): Shareable {
   };
 }
 
+/**
+ * One action, on its way somewhere else — usually an assistant.
+ *
+ * The task alone is often useless to hand over: "Fix heat map bug" tells a
+ * model nothing, while the sentence it was distilled from says what is
+ * actually wrong. So the original rides along whenever it said more than
+ * the card does, and the deadline comes too, since a date is the first
+ * thing anybody asks about a task.
+ *
+ * Plain text, no heading. This gets pasted into a chat box, not a
+ * document, and a markdown title in a prompt is noise.
+ */
+export function shareAction(a: Action): Shareable {
+  const lines = [a.text];
+  if (a.due) lines.push(`Due: ${shortDate(a.due)}`);
+  /* `src` is the raw capture. It only earns its place when it carries
+     something the action text lost — a re-worded one-liner would just be
+     the same sentence twice.
+
+     Compared on letters and digits alone, because the sorter routinely
+     returns the capture with a full stop added: "Buy running clothes" and
+     "Buy running clothes." are not two pieces of information, and the
+     first version of this pasted both. */
+  const bare = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const raw = (a.src || "").trim();
+  if (raw && bare(raw) !== bare(a.text)) lines.push("", "Context:", raw);
+  return {
+    title: a.text,
+    text: lines.join("\n"),
+    summary: "Action",
+  };
+}
+
 export function shareActions(actions: Action[], now: number): Shareable {
   const lines = [`# Open actions (${actions.length})`, ""];
   for (const a of actions) {

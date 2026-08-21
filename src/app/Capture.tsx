@@ -48,8 +48,9 @@ import {
   SettingsScreen,
 } from "./Intentions";
 import { OrganizeScreen } from "./Organize";
-import { shareIntention, shareThread } from "@/lib/share";
+import { shareAction, shareIntention, shareThread } from "@/lib/share";
 import { useBoard } from "@/hooks/useBoard";
+import { ReportBug } from "@/components/ReportBug";
 import { groupActions } from "@/lib/group";
 import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
@@ -358,6 +359,7 @@ export function Capture() {
       onMakeIntention={() =>
         makeIntention(a.src || a.text, a.id)
       }
+      onCopy={() => copyWhole(shareAction(a))}
       onOpenShot={
         a.shot
           ? () => {
@@ -991,6 +993,25 @@ export function Capture() {
         ))}
       </div>
 
+      {/* Last thing on the page, under every note — where you end up when
+          something has already gone wrong and you want to tell someone. */}
+      <ReportBug
+        ctx={{
+          screen: intention
+            ? "intention"
+            : thread
+              ? "thread"
+              : showOrganize
+                ? "tidy"
+                : searching
+                  ? "search"
+                  : tab,
+          actions: data.actions.length,
+          threads: data.threads.length,
+          intentions: data.intentions.length,
+        }}
+      />
+
       {editing && (
         <Markup
           src={editing.src}
@@ -1135,6 +1156,7 @@ function Row({
   onEditText,
   onResort,
   onMakeIntention,
+  onCopy,
   onOpenShot,
   busy,
 }: {
@@ -1153,6 +1175,7 @@ function Row({
   onEditText: (text: string) => void;
   onResort: () => void;
   onMakeIntention: () => void;
+  onCopy: () => void;
   /** Present only when a picture came in with this capture. */
   onOpenShot?: () => void;
   busy: boolean;
@@ -1248,6 +1271,14 @@ function Row({
           <div className="row-actions">
             <button className="ghost" onClick={() => setEditing(true)}>
               Edit
+            </button>
+            {/* Handing a task to an assistant is the common reason to want
+                one of these as text, so it copies the wording plus whatever
+                the original capture said that the card does not. Lives in
+                this menu rather than on the row: every action would carry a
+                button that most actions never need. */}
+            <button className="ghost" onClick={onCopy}>
+              Copy
             </button>
             {a.unsorted && (
               <button className="ghost" onClick={onResort} disabled={busy}>
