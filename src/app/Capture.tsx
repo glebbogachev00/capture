@@ -1259,6 +1259,26 @@ function Row({
               picture
             </button>
           )}
+          {/* Copying is a grab-and-go move — usually to hand the task to an
+              assistant — so burying it behind the menu with the deliberate,
+              rare things was wrong. It sits here rather than beside the
+              shelf pill because this line has width going spare, and that
+              cluster does not: a third control there would narrow the text
+              on every row, including the ones nobody ever copies. */}
+          {!faded && (
+            <button
+              className="meta-copy"
+              onClick={onCopy}
+              aria-label="Copy this action"
+              title="Copy — with the deadline and what you originally said"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                <rect x="9" y="9" width="12" height="12" rx="2" />
+                <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+              </svg>
+              copy
+            </button>
+          )}
           {a.unsorted && <span className="raw">unsorted</span>}
           {faded && (
             <span>
@@ -1271,14 +1291,6 @@ function Row({
           <div className="row-actions">
             <button className="ghost" onClick={() => setEditing(true)}>
               Edit
-            </button>
-            {/* Handing a task to an assistant is the common reason to want
-                one of these as text, so it copies the wording plus whatever
-                the original capture said that the card does not. Lives in
-                this menu rather than on the row: every action would carry a
-                button that most actions never need. */}
-            <button className="ghost" onClick={onCopy}>
-              Copy
             </button>
             {a.unsorted && (
               <button className="ghost" onClick={onResort} disabled={busy}>

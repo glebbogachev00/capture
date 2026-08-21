@@ -62,7 +62,7 @@ export function ReportBug({ ctx }: { ctx: BugContext }) {
   return (
     <p className="report-bug">
       <a href={href} target="_blank" rel="noreferrer">
-        <span aria-hidden="true">🐛</span> Caught a bug? Capture it.
+        Caught a bug? Capture it.
       </a>
     </p>
   );
