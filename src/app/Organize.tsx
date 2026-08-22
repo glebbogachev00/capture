@@ -231,7 +231,7 @@ export function OrganizeScreen({
               {proposals.length === 1 ? "suggestion" : "suggestions"}?
             </p>
             <p className="discard-hint">
-              Duplicates get removed, notes move to the thread they belong
+              Duplicates get removed, fragments move to the thread they belong
               with, and tasks lift out as actions — all automatically, in one
               go. Each change is applied on its own, so keep anything
               you&apos;re not sure about.

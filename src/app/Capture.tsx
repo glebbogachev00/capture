@@ -649,7 +649,7 @@ export function Capture() {
                     className="misfiled-btn"
                     onClick={() => void sortAgainAs(k)}
                   >
-                    {k === "action" ? "An action" : k === "thread" ? "A note" : "An intention"}
+                    {k === "action" ? "An action" : k === "thread" ? "A thread" : "An intention"}
                   </button>
                 ))}
               <button
@@ -1137,7 +1137,7 @@ function SearchResults({
                   className="frag-hit"
                   key={f.id}
                   onClick={() => onOpenThread(thread.id, f.id)}
-                  title="Jump to this note"
+                  title="Jump to this fragment"
                 >
                   <span className="frag-hit-date">{fmt(f.at)}</span>
                   {f.text}

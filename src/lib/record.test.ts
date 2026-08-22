@@ -1,14 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CaptureEntry } from "./ledger";
-import type { HeatCell } from "./record";
-import {
-  busiestDay,
-  heatGrid,
-  monthLabels,
-  recentCaptures,
-  recordRun,
-  recordStats,
-} from "./record";
+import { caughtWords, heatGrid, monthLabels, recentCaptures, recordStats } from "./record";
 
 const DAY = 24 * 60 * 60 * 1000;
 /* A fixed local noon keeps day bucketing away from midnight edges. */
@@ -86,17 +78,6 @@ describe("monthLabels", () => {
   });
 });
 
-describe("busiestDay", () => {
-  it("finds the fullest day, or null on an empty grid", () => {
-    const ledger = [
-      entry(NOON, "action"),
-      ...[1, 2, 3].map((i) => entry(NOON - DAY + i, "thread" as const)),
-    ];
-    const best = busiestDay(heatGrid(ledger, NOON, 12));
-    expect(best).toMatchObject({ day: "2026-08-11", count: 3 });
-    expect(busiestDay(heatGrid([], NOON, 12))).toBeNull();
-  });
-});
 
 describe("recentCaptures", () => {
   const e = (over: Partial<CaptureEntry>): CaptureEntry => ({
@@ -138,76 +119,40 @@ describe("recentCaptures", () => {
   });
 });
 
-describe("recordRun — how steadily, not just when", () => {
-  const cell = (day: string, count: number): HeatCell => ({
-    day,
-    count,
-    level: count === 0 ? 0 : 1,
+
+describe("caughtWords — the one line under the grid", () => {
+  const said = (text: string, at = 1000): CaptureEntry => ({
+    id: "c" + at + text.length,
+    at,
+    raw: text,
+    clean: text,
+    kind: "action",
+    source: "typed",
+    targetId: "t",
   });
 
-  it("counts marked days and the longest unbroken run", () => {
-    /* Laid out as two columns of seven, the way the grid stores them. */
-    const grid: HeatCell[][] = [
-      [
-        cell("2026-06-01", 1),
-        cell("2026-06-02", 2),
-        cell("2026-06-03", 0),
-        cell("2026-06-04", 1),
-        cell("2026-06-05", 1),
-        cell("2026-06-06", 1),
-        cell("2026-06-07", 0),
-      ],
-      [
-        cell("2026-06-08", 3),
-        cell("2026-06-09", 0),
-        cell("2026-06-10", 0),
-        cell("2026-06-11", 0),
-        cell("2026-06-12", 0),
-        cell("2026-06-13", 0),
-        cell("2026-06-14", 0),
-      ],
-    ];
-    expect(recordRun(grid)).toEqual({ marked: 6, longest: 3 });
+  it("stays quiet below the first rung", () => {
+    /* "Seven words, about a postcard" is a joke at nobody. */
+    expect(caughtWords([said("out of cold brew again")])).toBeNull();
   });
 
-  it("lets a run cross a column boundary", () => {
-    /* Columns are a layout choice; a streak does not end because the week
-       did. Sunday into Monday is one run of two. */
-    const grid: HeatCell[][] = [
-      [
-        cell("2026-06-01", 0),
-        cell("2026-06-02", 0),
-        cell("2026-06-03", 0),
-        cell("2026-06-04", 0),
-        cell("2026-06-05", 0),
-        cell("2026-06-06", 0),
-        cell("2026-06-07", 1),
-      ],
-      [
-        cell("2026-06-08", 1),
-        cell("2026-06-09", 0),
-        cell("2026-06-10", 0),
-        cell("2026-06-11", 0),
-        cell("2026-06-12", 0),
-        cell("2026-06-13", 0),
-        cell("2026-06-14", 0),
-      ],
-    ];
-    expect(recordRun(grid)).toEqual({ marked: 2, longest: 2 });
+  it("counts what was said, not what the engine made of it", () => {
+    const many = Array.from({ length: 60 }, (_, i) =>
+      said("this is a capture of exactly eight words here", i)
+    );
+    const out = caughtWords(many)!;
+    expect(out.words).toBeGreaterThanOrEqual(480);
+    expect(out.like).toBe("an email nobody asked for");
   });
 
-  it("says nothing happened on an empty grid", () => {
-    const grid: HeatCell[][] = [
-      [
-        cell("2026-06-01", 0),
-        cell("2026-06-02", 0),
-        cell("2026-06-03", 0),
-        cell("2026-06-04", 0),
-        cell("2026-06-05", 0),
-        cell("2026-06-06", 0),
-        cell("2026-06-07", 0),
-      ],
-    ];
-    expect(recordRun(grid)).toEqual({ marked: 0, longest: 0 });
+  it("rounds — a comparison, not a measurement", () => {
+    const many = Array.from({ length: 500 }, (_, i) => said("one two three four five six", i));
+    const out = caughtWords(many)!;
+    expect(out.words % 100).toBe(0);
+  });
+
+  it("keeps climbing past the last rung", () => {
+    const huge = Array.from({ length: 400 }, (_, i) => said("word ".repeat(200), i));
+    expect(caughtWords(huge)!.like).toBe("a novel");
   });
 });

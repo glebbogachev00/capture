@@ -123,50 +123,6 @@ export function monthLabels(grid: HeatCell[][]): string[] {
   });
 }
 
-/** The fullest day on the grid, or null when every day is empty. */
-export function busiestDay(grid: HeatCell[][]): HeatCell | null {
-  let best: HeatCell | null = null;
-  for (const cell of grid.flat()) {
-    if (cell.count > (best?.count ?? 0)) best = cell;
-  }
-  return best;
-}
-
-export type RecordRun = {
-  /** Days on the grid with at least one capture. */
-  marked: number;
-  /** The longest unbroken stretch of marked days. */
-  longest: number;
-};
-
-/**
- * How much of the grid is filled, and the longest run without a gap.
- *
- * The grid answers "when"; this answers "how steadily", which is the part
- * worth being a little pleased about. Days are read in calendar order, so
- * a run crosses column boundaries — the columns are a layout, not a week
- * the streak should care about.
- */
-export function recordRun(grid: HeatCell[][]): RecordRun {
-  const days = grid
-    .flat()
-    .slice()
-    .sort((a, b) => a.day.localeCompare(b.day));
-  let marked = 0;
-  let longest = 0;
-  let run = 0;
-  for (const cell of days) {
-    if (cell.count > 0) {
-      marked++;
-      run++;
-      if (run > longest) longest = run;
-    } else {
-      run = 0;
-    }
-  }
-  return { marked, longest };
-}
-
 /**
  * The last `weeks` weeks as columns of seven days, oldest column first,
  * ending today. Rolling weeks rather than calendar-aligned ones: the grid
@@ -195,4 +151,54 @@ export function heatGrid(
     grid.push(col);
   }
   return grid;
+}
+
+
+/**
+ * One line under the grid, and it has to earn being read.
+ *
+ * It used to be two: "the last twelve weeks, day by day — fullest on
+ * August 6, 21 said" and "16 days marked · longest run 13 in a row". Five
+ * numbers and a date. Nobody reads five numbers under a picture that has
+ * already shown them the shape of their weeks.
+ *
+ * So: one comparison. The trick is the one that makes an abstract total
+ * legible — turn the count into something a person can picture. What is
+ * counted is words, because that is the thing a person has a feel for the
+ * size of, and it comes from what they actually said, not from what the
+ * engine made of it.
+ */
+const SIZES: [number, string][] = [
+  [120, "a postcard"],
+  [400, "a long text message"],
+  [1200, "an email nobody asked for"],
+  [3000, "a wedding speech"],
+  [8000, "a short story"],
+  [20000, "a very long essay"],
+  [45000, "a novella"],
+];
+
+export type CaughtWords = { words: number; like: string } | null;
+
+/** Words caught, and the familiar thing they add up to. Null below the
+    first rung — "seven words, about a postcard" is a joke at nobody. */
+export function caughtWords(ledger: CaptureEntry[]): CaughtWords {
+  let words = 0;
+  for (const e of ledger) {
+    const said = (e.raw || e.clean || "").trim();
+    if (said) words += said.split(/\s+/).length;
+  }
+  if (words < SIZES[0][0]) return null;
+  let like = "a novel";
+  for (const [max, name] of SIZES) {
+    if (words < max) {
+      like = name;
+      break;
+    }
+  }
+  /* Two significant figures: "about 4,200" is a comparison, "4,237" is a
+     measurement, and this line is not a measurement. */
+  const round =
+    words >= 1000 ? Math.round(words / 100) * 100 : Math.round(words / 10) * 10;
+  return { words: round, like };
 }

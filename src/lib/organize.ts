@@ -391,7 +391,7 @@ export function scanBoard(
           sourceFragId: f.id,
           targetId: dup.threadId,
           targetName: NAME(dup.threadName),
-          reason: `a note there already says "${phraseAsWritten(phrase, f.text)}"`,
+          reason: `a fragment there already says "${phraseAsWritten(phrase, f.text)}"`,
           score: 85,
           origin: "local",
         });

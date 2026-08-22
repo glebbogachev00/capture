@@ -19,9 +19,8 @@ import { ReportBugForm } from "@/components/ReportBug";
 import { PLAYGROUND } from "@/lib/playground";
 import type { CaptureEntry } from "@/lib/ledger";
 import {
-  busiestDay,
   heatGrid,
-  recordRun,
+  caughtWords,
   monthLabels,
   recentCaptures,
   recordStats,
@@ -442,8 +441,7 @@ export function RecordScreen({
   const stats = recordStats(ledger);
   const grid = heatGrid(ledger, now);
   const months = monthLabels(grid);
-  const busiest = busiestDay(grid);
-  const run = recordRun(grid);
+  const caught = caughtWords(ledger);
   const dayName = (day: string) =>
     new Date(day + "T12:00:00").toLocaleDateString(undefined, {
       month: "long",
@@ -513,20 +511,14 @@ export function RecordScreen({
             </div>
           </div>
 
+          {/* One line, not five numbers. The grid has already shown the
+              shape of the weeks; this says how much of it there is, in
+              something a person can picture. */}
           <p className="record-caption">
-            the last twelve weeks, day by day
-            {busiest && busiest.count > 1
-              ? ` — fullest on ${dayName(busiest.day)}, ${busiest.count} said`
-              : ""}
+            {caught
+              ? `about ${caught.words.toLocaleString()} words caught — ${caught.like}`
+              : "the last twelve weeks, day by day"}
           </p>
-          {/* A second line only when there is something to be pleased about:
-              a run of one day is just a day, and a grid with nothing on it
-              should stay quiet rather than congratulate an empty week. */}
-          {run.longest > 1 && (
-            <p className="record-caption record-run">
-              {run.marked} days marked · longest run {run.longest} in a row
-            </p>
-          )}
 
           {/* The evidence. What landed is shown first, because that is what
               you live with; what you actually said sits under it, and only
