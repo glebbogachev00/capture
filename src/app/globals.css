@@ -1347,6 +1347,24 @@ body {
   font-size: 12.5px;
   color: #8a2f2f;
 }
+/* The playground's one line. Quiet, dismissible, above everything. */
+.playground-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 9px 12px;
+  border: 1px dashed var(--rule);
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.playground-note span { flex: 1; }
+.playground-note a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.playground-note button { flex: none; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+.playground-note button:hover { color: var(--ink); }
+
 /* inline editing */
 .act-edit {
   width: 100%;

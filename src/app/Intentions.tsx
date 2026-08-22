@@ -16,6 +16,7 @@ import { type Intention, type Principle, fmt, pad } from "@/lib/model";
 import type { LearnedRule } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { ReportBugForm } from "@/components/ReportBug";
+import { PLAYGROUND } from "@/lib/playground";
 import type { CaptureEntry } from "@/lib/ledger";
 import {
   busiestDay,
@@ -666,30 +667,32 @@ export function SettingsScreen({
         </div>
       </div>
 
-      <div className="int-block">
-        <h4 className="int-label">Keep devices in step</h4>
-        <p className="int-note">
-          Automatic, both ways. If two devices change the same thing, the
-          newer edit wins.
-        </p>
-        <div className="int-add">
-          <span
-            className={
-              "sync-dot" + (sync ? (sync.ok ? " on" : " bad") : "")
-            }
-          />
-          <span className="cap-hint" style={{ flex: 1 }}>
-            {sync
-              ? sync.ok
-                ? "Synced " + fmt(sync.at) + "."
-                : sync.note + "."
-              : "This device hasn't reached the hub yet."}
-          </span>
-          <button className="ghost" onClick={onSyncNow}>
-            Sync now
-          </button>
+      {!PLAYGROUND && (
+        <div className="int-block">
+          <h4 className="int-label">Keep devices in step</h4>
+          <p className="int-note">
+            Automatic, both ways. If two devices change the same thing, the
+            newer edit wins.
+          </p>
+          <div className="int-add">
+            <span
+              className={
+                "sync-dot" + (sync ? (sync.ok ? " on" : " bad") : "")
+              }
+            />
+            <span className="cap-hint" style={{ flex: 1 }}>
+              {sync
+                ? sync.ok
+                  ? "Synced " + fmt(sync.at) + "."
+                  : sync.note + "."
+                : "This device hasn't reached the hub yet."}
+            </span>
+            <button className="ghost" onClick={onSyncNow}>
+              Sync now
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="int-block">
         <h4 className="int-label">Restore a capture backup</h4>

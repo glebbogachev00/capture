@@ -51,6 +51,8 @@ import { OrganizeScreen } from "./Organize";
 import { shareAction, shareIntention, shareThread } from "@/lib/share";
 import { useBoard } from "@/hooks/useBoard";
 import { ReportBug } from "@/components/ReportBug";
+import { PlaygroundNotice } from "@/components/PlaygroundNotice";
+import { PLAYGROUND } from "@/lib/playground";
 import { groupActions } from "@/lib/group";
 import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
@@ -376,6 +378,7 @@ export function Capture() {
   return (
     <div className="capture-root">
       <div className="capture-wrap">
+        {PLAYGROUND && <PlaygroundNotice />}
         <div className="capture-head">
           <button
             className="capture-mark"
@@ -392,27 +395,29 @@ export function Capture() {
             >
               {live.length} open · {data.threads.length} threads
             </button>
-            <button
-              className={
-                "icon-btn sync-btn" +
-                (sync ? (sync.ok ? " synced" : " sync-bad") : "")
-              }
-              onClick={() => void syncNow()}
-              aria-label="Sync now"
-              title={
-                sync
-                  ? sync.ok
-                    ? "Synced " + fmt(sync.at) + " — tap to sync now"
-                    : (sync.note || "Hub unreachable") + " — tap to retry"
-                  : "Sync this device with the hub"
-              }
-            >
-              <RefreshCw
-                key={sync?.ok ? sync.at : 0}
-                size={18}
-                strokeWidth={1.7}
-              />
-            </button>
+            {!PLAYGROUND && (
+              <button
+                className={
+                  "icon-btn sync-btn" +
+                  (sync ? (sync.ok ? " synced" : " sync-bad") : "")
+                }
+                onClick={() => void syncNow()}
+                aria-label="Sync now"
+                title={
+                  sync
+                    ? sync.ok
+                      ? "Synced " + fmt(sync.at) + " — tap to sync now"
+                      : (sync.note || "Hub unreachable") + " — tap to retry"
+                    : "Sync this device with the hub"
+                }
+              >
+                <RefreshCw
+                  key={sync?.ok ? sync.at : 0}
+                  size={18}
+                  strokeWidth={1.7}
+                />
+              </button>
+            )}
             {!showSettings && !draft && (
               <button
                 className="icon-btn"
@@ -553,7 +558,7 @@ export function Capture() {
               hidden
               onChange={(e) => addFiles(e.target.files)}
             />
-            {canDictate && (
+            {canDictate && !PLAYGROUND && (
               <button
                 className={"icon-btn" + (listening ? " live" : "")}
                 onClick={toggleMic}
@@ -564,13 +569,15 @@ export function Capture() {
               </button>
             )}
             <div className="cap-hint">
-              {transcribing
-                ? "transcribing…"
-                : listening
-                  ? "listening — tap the mic again when you're done"
-                  : canDictate
-                    ? "tap the mic to dictate"
-                    : "tap the mic key on your keyboard to dictate"}
+              {PLAYGROUND
+                ? "say it messy — it gets sorted"
+                : transcribing
+                  ? "transcribing…"
+                  : listening
+                    ? "listening — tap the mic again when you're done"
+                    : canDictate
+                      ? "tap the mic to dictate"
+                      : "tap the mic key on your keyboard to dictate"}
             </div>
             <button
               className="icon-btn"

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { PLAYGROUND, isClosedInPlayground } from "@/lib/playground";
 import { AUTH_COOKIE, isValidSession } from "@/lib/auth";
 
 /** Paths that must stay reachable without the session cookie. */
@@ -23,6 +24,12 @@ function isPublic(pathname: string): boolean {
 }
 
 export async function proxy(request: NextRequest) {
+  /* Playground first, before the password gate it runs without: the routes
+     that reach past the browser are refused for everyone, so a hand-built
+     request gets the same answer the hidden buttons would. */
+  if (PLAYGROUND && isClosedInPlayground(request.nextUrl.pathname)) {
+    return NextResponse.json({ error: "not available in the playground" }, { status: 404 });
+  }
   const password = process.env.APP_PASSWORD;
   // No password configured — the gate is off entirely.
   if (!password) return NextResponse.next();

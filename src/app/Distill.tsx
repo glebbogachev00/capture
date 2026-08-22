@@ -24,6 +24,7 @@ import { AudioLines, Keyboard, Mic } from "lucide-react";
 import type { DistillResult, DistillSession } from "@/lib/distill";
 import { type ShelfLife, SHELF } from "@/lib/model";
 import { useVoiceConversation } from "@/hooks/useVoiceConversation";
+import { PLAYGROUND } from "@/lib/playground";
 
 /* A seed beats a blank box: one tap drops a real thought in the box. */
 const STARTERS = [
@@ -244,23 +245,26 @@ export function DistillView({
             )}
             {/* Voice is the mic's sibling, not the same thing — dictation
                 drops words into the box, Voice starts a spoken conversation
-                that answers aloud. The waveform glyph keeps the two apart. */}
-            <button
-              className="icon-btn"
-              onClick={() => {
-                setMode("talk");
-                convo.start();
-              }}
-              disabled={!convo.canDictate || !voice.supported}
-              aria-label="Voice — a spoken conversation"
-              title={
-                convo.canDictate && voice.supported
-                  ? "Voice — speak and it answers aloud"
-                  : "Voice isn't supported in this browser"
-              }
-            >
-              <AudioLines size={18} strokeWidth={1.7} />
-            </button>
+                that answers aloud. The waveform glyph keeps the two apart.
+                Hidden in the playground: it speaks through Kokoro on the Mac. */}
+            {!PLAYGROUND && (
+              <button
+                className="icon-btn"
+                onClick={() => {
+                  setMode("talk");
+                  convo.start();
+                }}
+                disabled={!convo.canDictate || !voice.supported}
+                aria-label="Voice — a spoken conversation"
+                title={
+                  convo.canDictate && voice.supported
+                    ? "Voice — speak and it answers aloud"
+                    : "Voice isn't supported in this browser"
+                }
+              >
+                <AudioLines size={18} strokeWidth={1.7} />
+              </button>
+            )}
             <div className="cap-hint">
               {canDictate
                 ? "or tap the mic key on your keyboard"
