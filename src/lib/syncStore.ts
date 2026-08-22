@@ -113,6 +113,17 @@ function locked<T>(fn: () => Promise<T>): Promise<T> {
 export function getSync(now = Date.now()): Promise<SyncStore> {
   return locked(async () => {
     if (memory && now - memory.at < FRESH_MS) return memory.state;
+    /* Stale but not necessarily wrong. A store that can say its version
+       cheaply is asked just that: if nothing moved, memory is fresh again
+       for the price of a few bytes, and the document is not re-read. */
+    const store = hubStore();
+    if (memory && memory.version !== null && store.peek) {
+      const version = await store.peek(KEY);
+      if (version === memory.version) {
+        memory = { ...memory, at: now };
+        return memory.state;
+      }
+    }
     return (await read(now)).state;
   });
 }
@@ -127,7 +138,7 @@ export function pushSync(client: SyncState): Promise<SyncStore> {
         client
       );
       const next: SyncStore = { ...merged, rev: state.rev + 1 };
-      let written = false;
+      let written: { version: string | null } | false = false;
       try {
         written = await hubStore().write(KEY, JSON.stringify(next), { version });
       } catch (error) {
@@ -137,10 +148,11 @@ export function pushSync(client: SyncState): Promise<SyncStore> {
         throw error;
       }
       if (written) {
-        /* Confirmed by the store, so it may be served. No version: a write
-           does not return one, and a guess must never back a compare-and-
-           swap — the next push reads for real. */
-        memory = { state: next, version: null, at: Date.now() };
+        /* Confirmed by the store, so it may be served. The version is kept
+           only when the store said it (Redis does; Blob and disk give null)
+           — a guess must never back a compare-and-swap, and a push with no
+           version in memory reads for real. */
+        memory = { state: next, version: written.version, at: Date.now() };
         return next;
       }
       /* Someone merged first. Round again, on top of theirs. */

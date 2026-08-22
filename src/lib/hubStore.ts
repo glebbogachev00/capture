@@ -10,11 +10,22 @@
  * looked like it worked), and photos never crossed between devices at all,
  * because the photo hub had no such accident to fall back on.
  *
- * So the bytes go through a store. Two backends, chosen by what the host
- * actually offers:
+ * So the bytes go through a store. Three backends, chosen by what the host
+ * actually offers and by what is being stored:
  *
- *   BLOB_READ_WRITE_TOKEN set  →  Vercel Blob
- *   otherwise                  →  $SYNC_DATA_DIR (or `.data/`) on disk
+ *   the board (sync.json)
+ *     UPSTASH_REDIS_REST_URL set  →  Redis (hubRedis.ts)
+ *     else BLOB_READ_WRITE_TOKEN  →  Vercel Blob
+ *     otherwise                   →  $SYNC_DATA_DIR (or `.data/`) on disk
+ *   pictures (img/…)
+ *     BLOB_READ_WRITE_TOKEN set   →  Vercel Blob
+ *     otherwise                   →  disk
+ *
+ * The board and the pictures are split on purpose. Blob is a file store
+ * metered by the month, and two devices polling the board every few
+ * seconds got the store suspended; a key-value store is what a polled
+ * document wants. Pictures are fetched once per device and cached, which
+ * is exactly what a file store is for.
  *
  * Self-hosting on the Mac is unchanged and needs no token. Nothing is public:
  * the board is a person's notes and the photos are their photos, so every
@@ -30,6 +41,8 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { Redis } from "@upstash/redis";
+import { redisEnv, redisStore, type RedisLike } from "./hubRedis";
 
 /** A stored value and the version to quote back on a conditional write. */
 export type StoredValue = { body: string; version: string | null };
@@ -38,8 +51,15 @@ export type StoredValue = { body: string; version: string | null };
     nothing at all (`version: null`). Omitted means "just write it". */
 export type WriteExpectation = { version: string | null };
 
+/** A write that went through, and the version it produced when the store
+    can say (Redis can; Blob and disk cannot). */
+export type Written = { version: string | null };
+
 export type HubStore = {
   read(key: string): Promise<StoredValue | null>;
+  /** The current version alone, without the body — what a poll needs.
+      Optional: only a store where the version is cheap to read offers it. */
+  peek?(key: string): Promise<string | null>;
   /** False when the expectation no longer holds — the caller re-reads and
       tries again. Any other failure throws, because a hub that cannot
       store must not report success. */
@@ -47,7 +67,7 @@ export type HubStore = {
     key: string,
     body: string,
     expect?: WriteExpectation
-  ): Promise<boolean>;
+  ): Promise<Written | false>;
   exists(key: string): Promise<boolean>;
 };
 
@@ -73,7 +93,7 @@ function fileStore(): HubStore {
       const tmp = file + ".tmp";
       await fs.writeFile(tmp, body, "utf8");
       await fs.rename(tmp, file);
-      return true;
+      return { version: null };
     },
     async exists(key) {
       try {
@@ -136,7 +156,7 @@ function blobStore(): HubStore {
           addRandomSuffix: false,
           ...guard,
         });
-        return true;
+        return { version: null };
       } catch (error) {
         if (error instanceof BlobPreconditionFailedError) return false;
         /* allowOverwrite:false against a blob that now exists — another
@@ -162,16 +182,50 @@ export function usingBlob(): boolean {
   return !!process.env.BLOB_READ_WRITE_TOKEN;
 }
 
-let cached: HubStore | null = null;
-let cachedForBlob: boolean | null = null;
+/** True when the board has a Redis to live in. */
+export function usingRedis(): boolean {
+  return !!redisEnv();
+}
+
+let files: HubStore | null = null;
+let filesForBlob: boolean | null = null;
+let redis: HubStore | null = null;
+let router: HubStore | null = null;
+
+/** Where files go: Blob when the host gave us one, disk otherwise. */
+function fileBackend(): HubStore {
+  const blob = usingBlob();
+  if (!files || filesForBlob !== blob) {
+    files = blob ? blobStore() : fileStore();
+    filesForBlob = blob;
+  }
+  return files;
+}
+
+/** Pictures are files; everything else is the board. */
+const isPicture = (key: string) => key.startsWith("img/");
 
 /** The store this deployment should use. Re-resolved if the environment
     changes under it, which only really happens in tests. */
 export function hubStore(): HubStore {
-  const blob = usingBlob();
-  if (!cached || cachedForBlob !== blob) {
-    cached = blob ? blobStore() : fileStore();
-    cachedForBlob = blob;
+  const env = redisEnv();
+  if (!env) return fileBackend();
+  if (!redis) {
+    const client = new Redis({ url: env.url, token: env.token });
+    redis = redisStore(client as unknown as RedisLike);
   }
-  return cached;
+  if (!router) {
+    const r = redis;
+    router = {
+      read: (key) => (isPicture(key) ? fileBackend().read(key) : r.read(key)),
+      peek: (key) => (isPicture(key) ? Promise.resolve(null) : r.peek!(key)),
+      write: (key, body, expect) =>
+        isPicture(key)
+          ? fileBackend().write(key, body, expect)
+          : r.write(key, body, expect),
+      exists: (key) =>
+        isPicture(key) ? fileBackend().exists(key) : r.exists(key),
+    };
+  }
+  return router;
 }

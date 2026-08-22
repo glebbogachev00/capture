@@ -41,8 +41,9 @@ function fakeStore() {
         const seen = cur ? String(cur.version) : null;
         if (expect.version !== seen) return false;
       }
-      docs.set(key, { body, version: (cur?.version ?? 0) + 1 });
-      return true;
+      const version = (cur?.version ?? 0) + 1;
+      docs.set(key, { body, version });
+      return { version: String(version) };
     },
     async exists(key) {
       return docs.has(key);
@@ -210,5 +211,49 @@ describe("syncStore — a pull does not cost a store read", () => {
     const before = reads;
     await getSync(Date.now());
     expect(reads).toBe(before + 1);
+  });
+});
+
+describe("syncStore — a store that can say its version is only asked that", () => {
+  /* Redis returns the new revision on write and can read it alone, so a
+     stale memory is re-validated for a few bytes instead of the whole
+     document. Blob and disk cannot, and fall back to the full read. */
+  let reads = 0;
+  let peeks = 0;
+  const realRead = fake.store.read;
+
+  beforeEach(() => {
+    fake.docs.clear();
+    fake.lose(0);
+    _forgetHub();
+    reads = 0;
+    peeks = 0;
+    fake.store.read = async (key) => {
+      reads++;
+      return realRead(key);
+    };
+    fake.store.peek = async (key) => {
+      peeks++;
+      const doc = fake.docs.get(key);
+      return doc ? String(doc.version) : null;
+    };
+  });
+
+  it("re-validates stale memory with a peek, not a read", async () => {
+    await pushSync({ board: board(["A"]), tombstones: [] });
+    const t0 = Date.now();
+    await getSync(t0 + FRESH_MS + 1);
+    expect(peeks).toBe(1);
+    expect(reads).toBe(1); // the push's own read, and no other
+  });
+
+  it("reads the document once the peek says it moved", async () => {
+    await pushSync({ board: board(["A"]), tombstones: [] });
+    /* Another instance wrote: bump the version behind memory's back. */
+    const doc = fake.docs.get("sync.json")!;
+    fake.docs.set("sync.json", { ...doc, version: doc.version + 1 });
+    await getSync(Date.now() + FRESH_MS + 1);
+    expect(peeks).toBe(1);
+    expect(reads).toBe(2);
   });
 });
