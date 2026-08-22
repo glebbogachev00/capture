@@ -85,7 +85,7 @@ git clone https://github.com/glebbogachev00/capture.git
 cd capture
 npm install
 cp .env.example .env.local
-# add at least one model key to .env.local, then:
+# open .env.local, uncomment GROQ_API_KEY= and paste a key (free at console.groq.com), then:
 npm run dev
 ```
 
