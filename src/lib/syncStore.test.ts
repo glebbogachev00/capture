@@ -66,7 +66,7 @@ vi.mock("./hubStore", () => ({
   usingBlob: () => false,
 }));
 
-const { getSync, pushSync } = await import("./syncStore");
+const { getSync, pushSync, _forgetHub, FRESH_MS } = await import("./syncStore");
 
 /* Ids derive from the name: two boards naming different threads must be two
    different threads, or the merge rightly collapses them into one. */
@@ -137,5 +137,78 @@ describe("syncStore", () => {
       pushSync({ board: board(["Espresso"]), tombstones: [] })
     ).rejects.toThrow();
     boom.mockRestore();
+  });
+});
+
+
+describe("syncStore — a pull does not cost a store read", () => {
+  /* Why this matters: the blob store got suspended. Two devices polling
+     every ten seconds, each poll a full document download, was ~17,000
+     reads a day for a board that had not changed. */
+  let reads = 0;
+  const realRead = fake.store.read;
+
+  beforeEach(() => {
+    fake.docs.clear();
+    fake.lose(0);
+    _forgetHub();
+    reads = 0;
+    fake.store.read = async (key) => {
+      reads++;
+      return realRead(key);
+    };
+  });
+
+  it("answers repeated pulls from memory while fresh", async () => {
+    await pushSync({ board: board(["A"]), tombstones: [] });
+    /* Real clock: the push stamped memory with Date.now(). */
+    const t0 = Date.now();
+    await getSync(t0);
+    await getSync(t0 + 10_000);
+    await getSync(t0 + 20_000);
+    /* The push's own read is the only one. The pushed state is served
+       from memory because the store confirmed the write. */
+    expect(reads).toBe(1);
+  });
+
+  it("asks the store again once memory is stale", async () => {
+    await pushSync({ board: board(["A"]), tombstones: [] });
+    const t0 = Date.now();
+    await getSync(t0);
+    await getSync(t0 + FRESH_MS + 1);
+    expect(reads).toBe(2);
+  });
+
+  it("a push always reads, because compare-and-swap needs the live version", async () => {
+    await pushSync({ board: board(["A"]), tombstones: [] });
+    await pushSync({ board: board(["B"]), tombstones: [] });
+    /* Two pushes, two reads — memory holds no version after a write, and
+       a guess must never back a conditional write. */
+    expect(reads).toBe(2);
+  });
+
+  it("serves what another instance would see: the merged result, not the request", async () => {
+    await pushSync({ board: board(["A"]), tombstones: [] });
+    const out = await pushSync({ board: board(["B"]), tombstones: [] });
+    const pulled = await getSync(Date.now());
+    expect(pulled.rev).toBe(out.rev);
+    expect(pulled.board.threads.map((t) => t.name).sort()).toEqual(["A", "B"]);
+  });
+
+  it("forgets everything when the store refuses a write", async () => {
+    await pushSync({ board: board(["A"]), tombstones: [] });
+    const realWrite = fake.store.write;
+    fake.store.write = async () => {
+      throw new Error("This store has been suspended.");
+    };
+    await expect(
+      pushSync({ board: board(["B"]), tombstones: [] })
+    ).rejects.toThrow("suspended");
+    fake.store.write = realWrite;
+    /* The next pull must ask the store, not repeat a memory that may no
+       longer be true. */
+    const before = reads;
+    await getSync(Date.now());
+    expect(reads).toBe(before + 1);
   });
 });

@@ -76,6 +76,7 @@ import {
   type SortKind,
 } from "@/lib/refiled";
 import { expiryFor, parseDue } from "@/lib/due";
+import { PLAYGROUND, playgroundError } from "@/lib/playground";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
@@ -126,7 +127,7 @@ const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 const reasonOf = (error: unknown) =>
   error instanceof SortError && error.message
-    ? error.message
+    ? (playgroundError(error.message) as string)
     : "The sort didn't go through.";
 
 /* SortResult, LandedSource, Suggestion, applySorted and computeSuggestion now
@@ -341,6 +342,8 @@ export function useBoard(now: number) {
 
   /** Send our state to the hub and adopt its merged answer. */
   const pushNow = useCallback(async () => {
+    /* Playground: no hub. See lib/playground.ts for why this is a hard stop. */
+    if (PLAYGROUND) return;
     if (syncing.current) return;
     syncing.current = true;
     try {
@@ -384,6 +387,7 @@ export function useBoard(now: number) {
 
   /** Coalesce bursts of edits into one push a beat after the last one. */
   const schedulePush = useCallback(() => {
+    if (PLAYGROUND) return;
     if (pushTimer.current !== null) return;
     pushTimer.current = setTimeout(() => {
       pushTimer.current = null;
@@ -397,6 +401,7 @@ export function useBoard(now: number) {
    * either way, so the header dot shows a live hub even when nothing moved.
    */
   const pullNow = useCallback(async (): Promise<boolean> => {
+    if (PLAYGROUND) return false;
     try {
       const res = await fetch(
         hubRev.current === null ? "/api/sync" : `/api/sync?rev=${hubRev.current}`
@@ -461,6 +466,7 @@ export function useBoard(now: number) {
 
   /** Manual "sync now": bring the other device's changes in, then push ours up. */
   const syncNow = useCallback(async () => {
+    if (PLAYGROUND) return;
     if (pushTimer.current !== null) {
       clearTimeout(pushTimer.current);
       pushTimer.current = null;
@@ -799,7 +805,7 @@ export function useBoard(now: number) {
      replaces, so two devices editing at once converge instead of clobbering.
      Offline is fine — the next commit just keeps everything local. */
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || PLAYGROUND) return;
     /* eslint-disable-next-line react-hooks/set-state-in-effect -- the
        canonical subscribe-to-external-system effect: every setState inside
        pullNow happens after a network await, never synchronously. */
@@ -815,18 +821,43 @@ export function useBoard(now: number) {
        Browsers throttle background tabs, which suits us — idle tabs poll less.
        Skip polling entirely when the device reports no connectivity — saves
        battery on mobile and avoids spurious sync errors when the Mac is off. */
-    let pollId: ReturnType<typeof setInterval> | null = null;
+    /* Thirty seconds, not ten, and nothing at all while the tab is hidden.
+       Ten-second polls from two devices were 17,000 hub reads a day for a
+       board that mostly had not changed, and the blob store got suspended
+       for it. A change made on the other device now shows within half a
+       minute of looking, which is the only time it matters.
+
+       A failed pull doubles the wait, up to five minutes: a hub that is down
+       does not need to be asked again in thirty seconds. */
+    const POLL_MS = 30_000;
+    const POLL_MAX_MS = 5 * 60_000;
+    let pollId: ReturnType<typeof setTimeout> | null = null;
+    let wait = POLL_MS;
+    const tick = async () => {
+      pollId = null;
+      const ok = await pullNow();
+      wait = ok ? POLL_MS : Math.min(wait * 2, POLL_MAX_MS);
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        pollId = setTimeout(() => void tick(), wait);
+      }
+    };
     const startPoll = () => {
       if (pollId !== null) return;
-      pollId = setInterval(() => void pullNow(), 10_000);
+      wait = POLL_MS;
+      pollId = setTimeout(() => void tick(), wait);
     };
     const stopPoll = () => {
       if (pollId === null) return;
-      clearInterval(pollId);
+      clearTimeout(pollId);
       pollId = null;
     };
     const onOnline = () => { void pullNow(); startPoll(); };
     const onOffline = () => stopPoll();
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") stopPoll();
+      else startPoll();
+    };
+    document.addEventListener("visibilitychange", onHidden);
     if (navigator.onLine) startPoll();
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
@@ -835,6 +866,7 @@ export function useBoard(now: number) {
       window.removeEventListener("focus", onVisible);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
+      document.removeEventListener("visibilitychange", onHidden);
       stopPoll();
     };
   }, [loaded, pullNow]);

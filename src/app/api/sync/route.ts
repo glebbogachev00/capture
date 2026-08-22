@@ -50,7 +50,20 @@ export async function GET(request: Request) {
       { status: 429, headers: { "Retry-After": String(gateResult.retryAfterSec) } }
     );
   }
-  const stored = await getSync();
+  let stored;
+  try {
+    stored = await getSync();
+  } catch (error) {
+    /* The store could not be read. Say it in the log in words — the stack
+       Next prints for an unhandled throw is how a suspended blob store went
+       unnamed for an evening — and give the device the same honest answer a
+       failed push gets. */
+    console.error(
+      "sync read failed:",
+      error instanceof Error ? error.message : error
+    );
+    return NextResponse.json({ error: hubUnavailable() }, { status: 503 });
+  }
   /* A poll that already knows this revision gets a two-field answer instead
      of the whole board — the client polls every 10s, and almost every poll
      finds nothing new. Any mismatch (including a reset hub) falls through

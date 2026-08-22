@@ -18,11 +18,24 @@
  *     so, re-reads, and merges on top of the winner. Nothing either side
  *     sent is lost, because the merge is a union.
  *
- * Deliberately NOT cached in memory. The old cache was set before the write
- * that was supposed to persist it, which is why a host that could not write
- * a byte still looked like a working hub: the board lived in one instance's
- * memory, and whether a device saw its own push come back was down to which
- * instance answered.
+ * Cached in memory — carefully, because the first cache here was a bug. It
+ * was set BEFORE the write that was supposed to persist it, so a host that
+ * could not write a byte still looked like a working hub: the board lived in
+ * one instance's memory, and whether a device saw its own push come back
+ * depended on which instance answered.
+ *
+ * This cache holds only what the store has actually confirmed: the last
+ * state READ from it, or the last state it accepted a WRITE of. It is set
+ * after the write succeeds, never before, and a failed write clears it.
+ *
+ * Why cache at all: the blob store got suspended. Each device polled every
+ * ten seconds and every poll downloaded the entire document — about 17,000
+ * reads and 3 GB a day for two devices that changed nothing — until Vercel
+ * switched the store off. A pull is now answered from memory for up to a
+ * minute; only a push, which needs the live version for its compare-and-
+ * swap, always reads the store. Across two instances that means one may
+ * answer "unchanged" up to a minute after the other accepted a write, which
+ * is a delay, not a loss: the write itself always went through the store.
  */
 
 import { EMPTY, hydrate } from "./model";
@@ -43,26 +56,50 @@ let queue: Promise<unknown> = Promise.resolve();
 
 const empty = (): SyncStore => ({ rev: 0, board: EMPTY, tombstones: [] });
 
-/** Read the stored state, hydrating a missing or unparseable document to
-    empty, along with the version to quote back on the write. */
-async function read(): Promise<{ state: SyncStore; version: string | null }> {
+/** How long a pull may be answered from memory before the store is asked
+    again. Long enough to collapse a device's polls into one real read;
+    short enough that a write on another instance shows within a minute. */
+export const FRESH_MS = 60_000;
+
+/** What the store last confirmed, and when. `version` is kept only when it
+    came from a read — a write does not hand one back, and a push must never
+    compare-and-swap against a guess. */
+let memory: { state: SyncStore; version: string | null; at: number } | null =
+  null;
+
+/** Tests only: forget what the store said. */
+export function _forgetHub(): void {
+  memory = null;
+}
+
+/** Read the stored state FROM THE STORE, hydrating a missing or
+    unparseable document to empty, along with the version to quote back on
+    the write. Every call here is a real read; remember what came back. */
+async function read(
+  now = Date.now()
+): Promise<{ state: SyncStore; version: string | null }> {
   const stored = await hubStore().read(KEY);
-  if (!stored) return { state: empty(), version: null };
-  try {
-    const parsed = JSON.parse(stored.body) as Partial<SyncStore>;
-    return {
-      state: {
-        rev: parsed.rev ?? 0,
-        board: hydrate(parsed.board),
-        tombstones: Array.isArray(parsed.tombstones) ? parsed.tombstones : [],
-      },
-      version: stored.version,
-    };
-  } catch {
-    /* Unreadable: treat as empty, but keep the version so the write that
-       replaces it is still conditional on what we actually saw. */
-    return { state: empty(), version: stored.version };
+  let out: { state: SyncStore; version: string | null };
+  if (!stored) out = { state: empty(), version: null };
+  else {
+    try {
+      const parsed = JSON.parse(stored.body) as Partial<SyncStore>;
+      out = {
+        state: {
+          rev: parsed.rev ?? 0,
+          board: hydrate(parsed.board),
+          tombstones: Array.isArray(parsed.tombstones) ? parsed.tombstones : [],
+        },
+        version: stored.version,
+      };
+    } catch {
+      /* Unreadable: treat as empty, but keep the version so the write that
+         replaces it is still conditional on what we actually saw. */
+      out = { state: empty(), version: stored.version };
+    }
   }
+  memory = { ...out, at: now };
+  return out;
 }
 
 /** Serialise every read-modify-write so concurrent pushes can't interleave. */
@@ -72,9 +109,12 @@ function locked<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-/** The stored state, for a pull. */
-export function getSync(): Promise<SyncStore> {
-  return locked(async () => (await read()).state);
+/** The stored state, for a pull — from memory while it is fresh. */
+export function getSync(now = Date.now()): Promise<SyncStore> {
+  return locked(async () => {
+    if (memory && now - memory.at < FRESH_MS) return memory.state;
+    return (await read(now)).state;
+  });
 }
 
 /** Merge an incoming client state into the hub and persist the result. */
@@ -87,11 +127,25 @@ export function pushSync(client: SyncState): Promise<SyncStore> {
         client
       );
       const next: SyncStore = { ...merged, rev: state.rev + 1 };
-      if (await hubStore().write(KEY, JSON.stringify(next), { version })) {
+      let written = false;
+      try {
+        written = await hubStore().write(KEY, JSON.stringify(next), { version });
+      } catch (error) {
+        /* The store refused. Whatever memory held is now suspect — the next
+           pull must ask the store, not repeat what it said before. */
+        memory = null;
+        throw error;
+      }
+      if (written) {
+        /* Confirmed by the store, so it may be served. No version: a write
+           does not return one, and a guess must never back a compare-and-
+           swap — the next push reads for real. */
+        memory = { state: next, version: null, at: Date.now() };
         return next;
       }
       /* Someone merged first. Round again, on top of theirs. */
     }
+    memory = null;
     throw new Error("the hub was being written to too often to settle");
   });
 }
