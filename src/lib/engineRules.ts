@@ -37,6 +37,14 @@ export const DUE_RULE =
  */
 export const ROUTING_RULE =
   "\nChoosing a thread — read this before you set threadId:\n" +
+  "- FIRST, a series. If the capture immediately before this one landed " +
+  "minutes ago and this is the same kind of thing — another draft in a set, " +
+  "the next entry in a log, another paste of the same shape — then this one " +
+  "goes on the thread that one opened or joined. That holds even when the " +
+  "thread is named after the app and even when the two drafts are about " +
+  "different things: the person is building a set, not changing subject, " +
+  "and three drafts in three threads is a pile. Only when this is NOT a " +
+  "continuation do the tests below apply.\n" +
   "- A thread fits when the capture is ABOUT the same subject and would " +
   "genuinely be read alongside what is already in it. That is the only test.\n" +
   "- Words in common are not a reason. A capture that merely uses a word " +

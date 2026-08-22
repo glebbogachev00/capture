@@ -76,6 +76,7 @@ import {
   type SortKind,
 } from "@/lib/refiled";
 import { expiryFor, parseDue } from "@/lib/due";
+import { seriesFor } from "@/lib/series";
 import { PLAYGROUND, playgroundError } from "@/lib/playground";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
@@ -943,9 +944,23 @@ export function useBoard(now: number) {
     // compact rather than the whole 500-entry ledger.
     const threadName = (id: string) =>
       latest.current.threads.find((t) => t.id === id)?.name || "";
+    /* The capture just before this one, if it went to a thread — the only
+       thing a series can continue. */
+    const prev = (latest.current.ledger ?? []).find(
+      (e) => (e.kind === "thread" || e.kind === "both") && e.targetId
+    );
+    const series = prev
+      ? seriesFor(raw, {
+          raw: prev.raw,
+          at: prev.at,
+          threadId: prev.targetId,
+          threadName: threadName(prev.targetId),
+        })
+      : null;
     const recent = (latest.current.ledger ?? []).slice(0, 30).map((e) => ({
       raw: e.raw.length > 120 ? e.raw.slice(0, 120) : e.raw,
       kind: e.kind,
+      at: e.at,
       target:
         e.kind === "thread" || e.kind === "both" ? threadName(e.targetId) : "",
     }));
@@ -964,6 +979,7 @@ export function useBoard(now: number) {
         raw,
         threads: known,
         recent,
+        series: series ?? undefined,
         force,
         rules,
         imgs: imgSrc ? [imgSrc] : undefined,

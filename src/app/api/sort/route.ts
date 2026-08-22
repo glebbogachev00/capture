@@ -50,7 +50,20 @@ const Recent = z.object({
   raw: z.string(),
   kind: z.string(),
   target: z.string(),
+  /** When it was captured. Minutes-ago is the signal that tells a series
+      of pastes apart from a change of subject. */
+  at: z.number().optional(),
 });
+
+/** "3 min ago", "2 h ago", "4 d ago" — or nothing, for old history. */
+function ago(at: number | undefined, now: number): string {
+  if (!at) return "";
+  const m = Math.max(0, Math.round((now - at) / 60_000));
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h} h ago`;
+  return `${Math.round(h / 24)} d ago`;
+}
 
 const Body = z.object({
   raw: z.string(),
@@ -59,6 +72,11 @@ const Body = z.object({
   ),
   /** How this person has filed their recent captures — pattern context. */
   recent: z.array(Recent).max(40).optional(),
+  /** The set this capture plausibly continues, decided by the client from
+      shape and timing (lib/series.ts). A named default, not an order. */
+  series: z
+    .object({ threadId: z.string(), threadName: z.string(), minutesAgo: z.number() })
+    .optional(),
   /** Learned filing preferences (bounded, clearable, advisory). The client
       sends the rule sentences it derived from the correction ledger. */
   rules: z.array(z.string()).max(5).optional(),
@@ -108,15 +126,30 @@ async function captionImage(dataUrl: string): Promise<string | null> {
     prompt. Empty string when there is no history to show. */
 function recentContext(recent: z.infer<typeof Recent>[] | undefined) {
   if (!recent?.length) return "";
+  const now = Date.now();
   const lines = recent
     .slice(0, 20)
     .map((r) => {
       const said = r.raw.length > 90 ? r.raw.slice(0, 90) + "…" : r.raw;
       const where = r.target ? ` (${r.target})` : "";
-      return `- "${said}" → ${r.kind}${where}`;
+      const when = ago(r.at, now);
+      return `- "${said}" → ${r.kind}${where}${when ? `, ${when}` : ""}`;
     })
     .join("\n");
+  /* The capture immediately before this one gets its own sentence when it
+     is fresh: a series is decided by what just happened, and a line buried
+     in a list of twenty is not what just happened. */
+  const last = recent[0];
+  const lastAge = last?.at ? now - last.at : Infinity;
+  const previous =
+    last && lastAge < 30 * 60_000 && last.target
+      ? `\nThe capture immediately before this one, ${ago(last.at, now)}, was ` +
+        `"${last.raw.length > 90 ? last.raw.slice(0, 90) + "…" : last.raw}" and it ` +
+        `went to the thread "${last.target}". If this capture is the same kind ` +
+        `of thing, it goes there too.\n`
+      : "";
   return (
+    previous +
     "\nHow this person has recently filed captures — match their patterns and " +
     "route into an existing thread when this clearly belongs with one:\n" +
     lines +
@@ -138,13 +171,28 @@ function rulesContext(rules: z.infer<typeof Body>["rules"]) {
   );
 }
 
+/** The series, said plainly and last — the thing the model reads right
+    before it decides, with the id it should use already in hand. */
+function seriesContext(series: z.infer<typeof Body>["series"]) {
+  if (!series) return "";
+  return (
+    `\nTHIS IS PROBABLY THE NEXT ONE IN A SET. The capture ${series.minutesAgo} ` +
+    `minute${series.minutesAgo === 1 ? "" : "s"} ago had the same shape as this ` +
+    `one and went to the thread "${series.threadName}" (threadId "${series.threadId}"). ` +
+    `Unless this is clearly a different kind of thing, set threadId to ` +
+    `"${series.threadId}" — even if the two are about different subjects, and ` +
+    `even though that thread is named after the app. A set belongs together.\n`
+  );
+}
+
 function prompt(
   raw: string,
   threads: z.infer<typeof Body>["threads"],
   force?: "action" | "thread" | "intention",
   recent?: z.infer<typeof Recent>[],
   rules?: z.infer<typeof Body>["rules"]
-) {
+,
+  series?: z.infer<typeof Body>["series"]) {
   if (force === "action") {
     return (
       todayLine() +
@@ -175,6 +223,7 @@ function prompt(
       (threads.length ? JSON.stringify(threads) : "(none yet)") +
       "\n" +
       ROUTING_RULE +
+      seriesContext(series) +
       "\nSet clean to the excerpt tidied up, and title to at most six words."
     );
   }
@@ -202,6 +251,7 @@ function prompt(
     ROUTING_RULE +
     recentContext(recent) +
     rulesContext(rules) +
+    seriesContext(series) +
     '\nRaw capture:\n"""' +
     (raw || "(image only)") +
     '"""\n\n' +
@@ -269,7 +319,7 @@ export async function POST(request: Request) {
         // wait out the backoff.
         maxRetries: 0,
         schema: Sorted,
-        prompt: prompt(raw, body.threads, body.force, body.recent, body.rules),
+        prompt: prompt(raw, body.threads, body.force, body.recent, body.rules, body.series),
         providerOptions: tier.providerOptions,
       });
       return object;
@@ -290,6 +340,22 @@ export async function POST(request: Request) {
     } else if (body.force === "action") {
       kind = "action";
       threadId = null;
+      threadName = null;
+    }
+    /* A series is decided, not suggested. The client saw a capture of the
+       same shape land on a thread minutes ago (lib/series.ts); told this in
+       the prompt, the model still opened a fresh thread a third of the time,
+       because the new draft's SUBJECT is vivid and a set is not a subject.
+       So when the model wanted a new thread for something that is thread
+       material, the set wins. The model keeps two vetoes: the kind (a task
+       pasted after a post is still an action), and a DIFFERENT existing
+       thread, which means it found a better home than the set. */
+    if (
+      body.series &&
+      (kind === "thread" || kind === "both") &&
+      !threadId
+    ) {
+      threadId = body.series.threadId;
       threadName = null;
     }
     // Collapse a self-contradicting "both" (no task, or no thinking) to the
