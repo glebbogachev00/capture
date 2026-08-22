@@ -70,18 +70,29 @@ import {
     board — a view preference that survives reloads on this device. */
 const GROUP_VIEW_KEY = "capture:groupView:v1";
 
-/** The sentence offered on an empty board.
-    Deliberately messy — that it does not need tidying first is half the
-    point — and deliberately a builder's sentence, because a shipping task
-    tangled up with an unresolved decision is the shape of thought this is
-    for. It also demonstrates the distinction the whole app rests on: the
-    task can be closed, the thinking cannot, so they are kept differently.
-    Pinned: run through the live sorter eight times, it produced one action
-    and one thread every time. That is the only thing the copy beside it
-    claims — not the wording, and not the thread's name, both of which
-    vary. Change the sentence and the claim has to be re-earned. */
-const TRY_IT =
-  "uh fix the signup bug before friday and i keep going back and forth on usage based pricing vs seats";
+/**
+ * The sentence offered on each empty tab.
+ *
+ * Deliberately messy — that it does not need tidying first is half the
+ * point — and deliberately a builder's sentence, because that is who this
+ * is for. Each one is PINNED: it was run through the live sorter until it
+ * produced the same kind every time, and the two lines under it claim only
+ * that shape — never the wording, never the thread's name, both of which
+ * vary. Change a sentence and its claim has to be re-earned.
+ *
+ *   actions    8/8 → one action and one thread (it holds both kinds, which
+ *              is also the distinction the whole app rests on)
+ *   threads    6/6 → thread
+ *   intentions 6/6 → intention
+ */
+const TRY = {
+  actions:
+    "uh fix the signup bug before friday and i keep going back and forth on usage based pricing vs seats",
+  threads:
+    "been thinking the onboarding is too long, people drop at the third screen but i don't know what to cut",
+  intentions:
+    "from now on i ship the rough version first and fix it in public",
+} as const;
 
 /** How long a ticked action shows itself done before it leaves. Long enough
     to read as a finish, short enough that nobody waits on it. */
@@ -875,10 +886,10 @@ export function Capture() {
                         shape, never the wording or the thread's name. */}
                     <button
                       className="try-line"
-                      onClick={() => setText(TRY_IT)}
+                      onClick={() => setText(TRY.actions)}
                       disabled={!!busy}
                     >
-                      “{TRY_IT}”
+                      “{TRY.actions}”
                     </button>
                     <ul className="try-list">
                       <li>the bug becomes an action, with a shelf life</li>
@@ -932,6 +943,17 @@ export function Capture() {
                   <div className="empty">
                     <p className="big">Nothing accumulating yet.</p>
                     <p>Threads never expire. They just get deeper.</p>
+                    <button
+                      className="try-line"
+                      onClick={() => setText(TRY.threads)}
+                      disabled={!!busy}
+                    >
+                      “{TRY.threads}”
+                    </button>
+                    <ul className="try-list">
+                      <li>nothing to close, so it keeps — as a thread</li>
+                      <li>“where this stands” gets written underneath it</li>
+                    </ul>
                   </div>
                 )}
                 {active.map((t) => (
@@ -972,6 +994,17 @@ export function Capture() {
                   <div className="empty">
                     <p className="big">Nothing declared yet.</p>
                     <p>Not a goal. The state you are choosing to inhabit.</p>
+                    <button
+                      className="try-line"
+                      onClick={() => setText(TRY.intentions)}
+                      disabled={!!busy}
+                    >
+                      “{TRY.intentions}”
+                    </button>
+                    <ul className="try-list">
+                      <li>written as already true, with what pulls against it named</li>
+                      <li>you read it before it lands — nothing is saved unread</li>
+                    </ul>
                   </div>
                 )}
                 {data.intentions.map((i) => (
