@@ -295,6 +295,10 @@ export function useBoard(now: number) {
   const [misfiled, setMisfiled] = useState<{
     text: string;
     wrong: SortKind;
+    /* The thread it landed in, when it landed in one. Right kind, wrong
+       home is a different mistake from the wrong kind, and the strip can
+       only offer to fix it if it knows which thread to move away from. */
+    thread?: { id: string; name: string };
   } | null>(null);
 
   /** The hub revision this device last saw, so a poll can ask "anything
@@ -546,6 +550,16 @@ export function useBoard(now: number) {
     /* "both" is not a kind anyone can pick, so there is nothing to ask. */
     const wrongKind: SortKind | null =
       undoneEntry && undoneEntry.kind !== "both" ? undoneEntry.kind : null;
+    /* Which thread it went to, read from the board as it stands NOW —
+       before the restore below removes it. A capture that opened a thread
+       of its own is the commonest version of this mistake, and that thread
+       exists nowhere else by the time the question is asked. */
+    const landedIn =
+      undoneEntry &&
+      (undoneEntry.kind === "thread" || undoneEntry.kind === "both") &&
+      undoneEntry.targetId
+        ? latest.current.threads.find((t) => t.id === undoneEntry.targetId)
+        : undefined;
     /* The complaint is worth recording even if the question goes
        unanswered: it has no rule attached, so it can never become a
        learned rule on its own, but the record shows the engine was wrong
@@ -564,11 +578,13 @@ export function useBoard(now: number) {
     latest.current = learned;
     setData(learned);
     tombstones.current = nextTombstones;
-    if (wrongKind)
+    if (wrongKind) {
       setMisfiled({
         text: undoneEntry!.raw || undoneEntry!.clean,
         wrong: wrongKind,
+        thread: landedIn ? { id: landedIn.id, name: landedIn.name } : undefined,
       });
+    }
     try {
       await set(KEY, JSON.stringify(learned));
       await set(TOMBSTONE_KEY, JSON.stringify(nextTombstones));
@@ -666,6 +682,60 @@ export function useBoard(now: number) {
        this says why that was the right shape for it. */
     if (m) {
       setNotice(SHAPE_NOTE[right]);
+      setTimeout(() => setNotice(null), 6000);
+    }
+  };
+
+  /**
+   * "Another thread" — the answer when the kind was right and the home
+   * was wrong.
+   *
+   * Undo asks what KIND it should have been, which is no help at all when
+   * the kind was right: a post draft that belongs in "Capture X posts" and
+   * landed in "Capture." is a thread either way, and tapping "a thread"
+   * would just file it wrong again. Moving the fragment by hand does teach
+   * — that is the refile rule — but it is two more steps in another screen,
+   * and nobody takes them.
+   *
+   * So the strip offers the threads instead, and picking one both files it
+   * there and writes the lesson the manual move would have written. The
+   * capture still goes through the sorter, so it is cleaned and recorded
+   * like any other; only the destination is taken out of the model's hands.
+   */
+  const sortAgainIntoThread = async (threadId: string) => {
+    const m = misfiled;
+    setMisfiled(null);
+    const home = latest.current.threads.find((t) => t.id === threadId);
+    if (m && home) {
+      const rule = refileRule(
+        m.text,
+        home.name,
+        [home.name, home.summary, ...home.frags.map((f) => f.text)].join(" ")
+      );
+      if (rule) {
+        /* Answered strength: they were asked outright and picked a thread,
+           which is the same kind of evidence as answering the kind. */
+        const learned = withCorrection(latest.current, {
+          id: uid(),
+          at: stamp(),
+          proposalKind: "undone",
+          accepted: true,
+          context: m.text.slice(0, 160),
+          rule,
+        });
+        latest.current = learned;
+        setData(learned);
+        try {
+          await set(KEY, JSON.stringify(learned));
+        } catch {
+          /* disk hiccup; the next commit writes it */
+        }
+      }
+      if (!text.trim()) setText(m.text);
+    }
+    await submit(false, "thread", m?.text, threadId);
+    if (home) {
+      setNotice(`Filed in ${home.name}. It will remember.`);
       setTimeout(() => setNotice(null), 6000);
     }
   };
@@ -1260,7 +1330,11 @@ export function useBoard(now: number) {
     pinned?: SortKind,
     /* The words to sort, when the caller holds them and the box may not
        yet — a re-sort after undo runs a tick before the draft is back. */
-    override?: string
+    override?: string,
+    /* The thread the person picked by hand. Unlike the series hint, this
+       is not a default the model may talk itself out of: they were asked
+       and they answered, so it is applied to whatever comes back. */
+    pinnedThread?: string
   ) => {
     const raw = (override ?? text).trim();
     /* A leading command pins the destination: the command word is
@@ -1323,11 +1397,14 @@ export function useBoard(now: number) {
         return;
       }
 
-      const out = await requestSort(
+      const sorted = await requestSort(
         payload || "(image only)",
         force,
         pics[0]?.src
       );
+      const out = pinnedThread
+        ? { ...sorted, threadId: pinnedThread, threadName: null }
+        : sorted;
 
       // An intention is declared rather than filed, so it takes a second
       // pass through its own engine and stops at a review step instead of
@@ -3325,6 +3402,7 @@ export function useBoard(now: number) {
     undo,
     misfiled,
     sortAgainAs,
+    sortAgainIntoThread,
     dismissMisfiled: () => setMisfiled(null),
     learnedRules,
     clearRule,

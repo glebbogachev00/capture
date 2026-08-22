@@ -48,17 +48,21 @@ describe("refileRule — what the fix teaches", () => {
     expect(b).toBe(c);
   });
 
-  it("falls back to one word when the home shares nothing yet", () => {
-    const rule = refileRule("the espresso grinder burrs are worn", "Kitchen renovation", "counters and cabinets");
-    expect(rule).toContain('belong in "Kitchen renovation"');
-    /* One word only — a longer fallback would vary with the sentence and
-       split the rule again. */
-    expect(rule).toMatch(/^Captures about "\w+" belong/);
+  it("writes nothing when the home shares no subject yet", () => {
+    /* This used to fall back to the capture's first content word, on the
+       theory that a home which does not mention the subject yet still
+       teaches something. It does not: the fallback produced rules anchored
+       on whatever word happened to come first, and a rule anchored on a
+       meaningless word fires on the wrong capture later. The move still
+       happens; only the invented lesson is gone. */
+    expect(
+      refileRule("the espresso grinder burrs are worn", "Kitchen renovation", "counters and cabinets")
+    ).toBeNull();
   });
 
-  it("a one-word fallback is still stable across phrasings", () => {
-    const a = refileRule("the espresso machine is leaking", "Repairs", "things to fix");
-    const b = refileRule("espresso everywhere, it leaked again", "Repairs", "things to fix");
+  it("a shared subject is stable across phrasings", () => {
+    const a = refileRule("the espresso machine is leaking", "Repairs", "the espresso machine needs looking at");
+    const b = refileRule("espresso everywhere, the machine leaked again", "Repairs", "the espresso machine needs looking at");
     expect(a).toBe(b);
   });
 
@@ -134,5 +138,35 @@ describe("a command is weaker evidence than an answered undo", () => {
     });
     expect(deriveRules([commanded(1000)], [], 2000)).toHaveLength(0);
     expect(deriveRules([commanded(1000), commanded(1100)], [], 2000)).toHaveLength(1);
+  });
+});
+
+describe("refileRule — a subject, or no rule at all", () => {
+  it("names the subject the capture and its new home share", () => {
+    expect(
+      refileRule(
+        "the espresso machine grinder keeps drifting",
+        "Kitchen Equipment",
+        "Kitchen Equipment espresso machine settings overview"
+      )
+    ).toBe('Captures about "espresso machine" belong in "Kitchen Equipment"');
+  });
+
+  it("writes nothing when the two share no subject", () => {
+    /* A post draft moved into a thread of post drafts shares no words with
+       it — the thing they have in common is their shape, which the series
+       rule handles. Inventing a subject here produced 'Captures about
+       "mark" belong in "Capture X posts"' from "Tue — mark-done". */
+    expect(
+      refileRule(
+        "Tue — mark-done\n\nI had a list of 400 things and finished maybe 30.",
+        "Capture X posts",
+        "Capture X posts Mon — capture-two-places Tuesday 11pm I say to myself"
+      )
+    ).toBeNull();
+  });
+
+  it("still writes nothing without a home to name", () => {
+    expect(refileRule("anything at all", "   ", "some thread text")).toBeNull();
   });
 });

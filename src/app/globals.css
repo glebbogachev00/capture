@@ -1197,6 +1197,14 @@ body {
 .misfiled-btn:hover {
   border-color: var(--ink);
 }
+/* The thread list, inside the strip rather than over it: the question is
+   already open and a modal on top of a question is one surface too many. */
+.misfiled-picker {
+  width: 100%;
+  margin-top: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
 .misfiled-skip {
   color: var(--muted);
   padding: 6px 9px;

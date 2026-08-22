@@ -83,11 +83,14 @@ function canonicalSubject(captureText: string, threadText: string): string {
   }
   if (shared.length) return shared.join(" ");
 
-  /* Nothing in common: the move was about something the home does not say
-     yet. One word only — the most distinctive the capture has — because a
-     longer fallback phrase would vary with the sentence around it and split
-     the rule again. */
-  return contentWords(captureText)[0] || "";
+  /* Nothing in common, so there is no subject to name. This used to fall
+     back to the capture's first content word, which produced rules like
+     'Captures about "mark" belong in "Capture X posts"' from a draft
+     titled "Tue — mark-done": a lesson anchored on a word that means
+     nothing, of exactly the kind the sorter was taught this week to stop
+     trusting. Better to move the fragment and learn nothing than to write
+     a rule that will fire on the wrong capture later. */
+  return "";
 }
 
 /** The kinds a capture can be sorted into, for the undo lesson. */

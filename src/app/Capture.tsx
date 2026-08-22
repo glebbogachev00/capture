@@ -114,6 +114,8 @@ export function Capture() {
      wand button only appears when the scan has found something worth
      reviewing — a clean board keeps the header to sync / share / settings. */
   const [showOrganize, setShowOrganize] = useState(false);
+  /* The undo question, second step: which thread it should have gone to. */
+  const [pickingThread, setPickingThread] = useState(false);
   /* The record opens from the masthead count — the line that is always on
      screen becomes the door to what it summarises. */
   const [showRecord, setShowRecord] = useState(false);
@@ -245,6 +247,7 @@ export function Capture() {
     canUndo,
     misfiled,
     sortAgainAs,
+    sortAgainIntoThread,
     dismissMisfiled,
     undo,
     learnedRules,
@@ -639,27 +642,75 @@ export function Capture() {
             No typing, and no obligation: dismissing is a tap too. */}
         {misfiled && (
           <div className="misfiled">
-            <span className="misfiled-q">Then what was it?</span>
-            <div className="misfiled-opts">
-              {(["action", "thread", "intention"] as const)
-                .filter((k) => k !== misfiled.wrong)
-                .map((k) => (
+            {pickingThread ? (
+              <>
+                <span className="misfiled-q">Which thread?</span>
+                <div className="picker misfiled-picker">
+                  {data.threads
+                    .filter((t) => t.id !== misfiled.thread?.id)
+                    .map((t) => (
+                      <button
+                        key={t.id}
+                        className="picker-row"
+                        onClick={() => {
+                          setPickingThread(false);
+                          void sortAgainIntoThread(t.id);
+                        }}
+                      >
+                        <span className="picker-name">{t.name}</span>
+                        <span className="picker-meta">
+                          {t.frags.length} layer{t.frags.length === 1 ? "" : "s"}
+                        </span>
+                      </button>
+                    ))}
                   <button
-                    key={k}
-                    className="misfiled-btn"
-                    onClick={() => void sortAgainAs(k)}
+                    className="ghost"
+                    onClick={() => setPickingThread(false)}
                   >
-                    {k === "action" ? "An action" : k === "thread" ? "A thread" : "An intention"}
+                    Back
                   </button>
-                ))}
-              <button
-                className="misfiled-btn misfiled-skip"
-                onClick={dismissMisfiled}
-                aria-label="Never mind"
-              >
-                ×
-              </button>
-            </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="misfiled-q">Then what was it?</span>
+                <div className="misfiled-opts">
+                  {(["action", "thread", "intention"] as const)
+                    .filter((k) => k !== misfiled.wrong)
+                    .map((k) => (
+                      <button
+                        key={k}
+                        className="misfiled-btn"
+                        onClick={() => void sortAgainAs(k)}
+                      >
+                        {k === "action"
+                          ? "An action"
+                          : k === "thread"
+                            ? "A thread"
+                            : "An intention"}
+                      </button>
+                    ))}
+                  {/* Right kind, wrong home. Only offered when it landed in
+                      a thread and there is another one to move it to —
+                      otherwise the answer is one of the kinds above. */}
+                  {!!misfiled.thread && data.threads.length > 1 && (
+                    <button
+                      className="misfiled-btn"
+                      onClick={() => setPickingThread(true)}
+                    >
+                      Another thread
+                    </button>
+                  )}
+                  <button
+                    className="misfiled-btn misfiled-skip"
+                    onClick={dismissMisfiled}
+                    aria-label="Never mind"
+                  >
+                    ×
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
         {suggestion && (
