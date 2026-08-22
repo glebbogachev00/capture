@@ -176,14 +176,19 @@ function rulesContext(rules: z.infer<typeof Body>["rules"]) {
 function seriesContext(series: z.infer<typeof Body>["series"]) {
   if (!series) return "";
   return (
-    `\nTHIS IS PROBABLY THE NEXT ONE IN A SET. The capture ${series.minutesAgo} ` +
+    `\nTHIS MAY BE THE NEXT ONE IN A SET. The capture ${series.minutesAgo} ` +
     `minute${series.minutesAgo === 1 ? "" : "s"} ago had the same shape as this ` +
-    `one and went to the thread "${series.threadName}" (threadId "${series.threadId}"). ` +
-    `Unless this is clearly a different kind of thing, set threadId to ` +
-    `"${series.threadId}" — even if the two are about different subjects, and ` +
-    `even though that thread is named after the app. A set belongs together.\n`
+    `one and went to the thread "${series.threadName}" (threadId "${series.threadId}").\n` +
+    `This says NOTHING about the kind. Decide the kind on its own merits ` +
+    `first: a task pasted after a draft is still an action, and a state they ` +
+    `are declaring about themselves is still an intention. Only if the kind ` +
+    `turns out to be "thread" or "both" does the set matter — and then set ` +
+    `threadId to "${series.threadId}", even if the two are about different ` +
+    `subjects and even though that thread is named after the app, because a ` +
+    `set belongs together.\n`
   );
 }
+
 
 function prompt(
   raw: string,
