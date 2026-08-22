@@ -83,6 +83,10 @@ async function sessionCookie() {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    /* A server with no password configured (the isolated demo server on
+       :3100) answers 400 "auth not configured" — that is the gate being
+       off, not a failed login. */
+    if (res.status === 400 && /not configured/i.test(body.error || "")) return null;
     throw new Error(`login ${res.status}: ${body.error || res.statusText}`);
   }
   const setCookie = res.headers.get("set-cookie");

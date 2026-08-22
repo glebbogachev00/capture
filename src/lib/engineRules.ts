@@ -54,7 +54,10 @@ export const ROUTING_RULE =
   "subject test like any other.\n" +
   "- Threads named after the app, the tool, or the act of writing notes are " +
   "about THAT subject. A capture is not about capturing simply because it " +
-  "was captured.\n" +
+  "was captured — but a capture that genuinely IS about building the app " +
+  "(its sorting engine, its board, its sync, a bug in it) belongs in that " +
+  "thread exactly as any other subject would. The caution is against the " +
+  "word, not the subject.\n" +
   "- When no thread genuinely fits, set threadId to null and invent a short " +
   "threadName. A new thread is cheap and honest; a wrong one buries the note " +
   "where it will not be found again.\n";
