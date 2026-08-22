@@ -13,19 +13,15 @@
  * So the bytes go through a store. Three backends, chosen by what the host
  * actually offers and by what is being stored:
  *
- *   the board (sync.json)
- *     UPSTASH_REDIS_REST_URL set  →  Redis (hubRedis.ts)
- *     else BLOB_READ_WRITE_TOKEN  →  Vercel Blob
- *     otherwise                   →  $SYNC_DATA_DIR (or `.data/`) on disk
- *   pictures (img/…)
- *     BLOB_READ_WRITE_TOKEN set   →  Vercel Blob
- *     otherwise                   →  disk
+ *   UPSTASH_REDIS_REST_URL set  →  Redis (hubRedis.ts), board and pictures
+ *   else BLOB_READ_WRITE_TOKEN  →  Vercel Blob
+ *   otherwise                   →  $SYNC_DATA_DIR (or `.data/`) on disk
  *
- * The board and the pictures are split on purpose. Blob is a file store
- * metered by the month, and two devices polling the board every few
- * seconds got the store suspended; a key-value store is what a polled
- * document wants. Pictures are fetched once per device and cached, which
- * is exactly what a file store is for.
+ * Why Redis holds the pictures too: a shrunk photo is a ~300 KB string,
+ * fetched once per device and then cached in the browser, so a key-value
+ * store is fine for it — and one free service beats a second one whose
+ * quota already suspended the hub once. Blob stays as the file backend
+ * for anyone deploying without Redis.
  *
  * Self-hosting on the Mac is unchanged and needs no token. Nothing is public:
  * the board is a person's notes and the photos are their photos, so every
@@ -190,9 +186,8 @@ export function usingRedis(): boolean {
 let files: HubStore | null = null;
 let filesForBlob: boolean | null = null;
 let redis: HubStore | null = null;
-let router: HubStore | null = null;
 
-/** Where files go: Blob when the host gave us one, disk otherwise. */
+/** Where bytes go without Redis: Blob when the host gave us one, else disk. */
 function fileBackend(): HubStore {
   const blob = usingBlob();
   if (!files || filesForBlob !== blob) {
@@ -201,9 +196,6 @@ function fileBackend(): HubStore {
   }
   return files;
 }
-
-/** Pictures are files; everything else is the board. */
-const isPicture = (key: string) => key.startsWith("img/");
 
 /** The store this deployment should use. Re-resolved if the environment
     changes under it, which only really happens in tests. */
@@ -214,18 +206,5 @@ export function hubStore(): HubStore {
     const client = new Redis({ url: env.url, token: env.token });
     redis = redisStore(client as unknown as RedisLike);
   }
-  if (!router) {
-    const r = redis;
-    router = {
-      read: (key) => (isPicture(key) ? fileBackend().read(key) : r.read(key)),
-      peek: (key) => (isPicture(key) ? Promise.resolve(null) : r.peek!(key)),
-      write: (key, body, expect) =>
-        isPicture(key)
-          ? fileBackend().write(key, body, expect)
-          : r.write(key, body, expect),
-      exists: (key) =>
-        isPicture(key) ? fileBackend().exists(key) : r.exists(key),
-    };
-  }
-  return router;
+  return redis;
 }
