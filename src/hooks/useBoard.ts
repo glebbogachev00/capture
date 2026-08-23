@@ -77,6 +77,7 @@ import {
 } from "@/lib/refiled";
 import { expiryFor, parseDue } from "@/lib/due";
 import { seriesFor } from "@/lib/series";
+import { createPoller } from "@/lib/poll";
 import { PLAYGROUND, playgroundError } from "@/lib/playground";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
@@ -136,6 +137,24 @@ const reasonOf = (error: unknown) =>
 
 /** The ledger entry `after` has that `before` does not — the one a capture
     just wrote, found before any merge can put someone else's beside it. */
+function boardIds(b: Board): Set<string> {
+  const s = new Set<string>();
+  for (const a of b.actions) s.add(a.id);
+  for (const t of b.threads) {
+    s.add(t.id);
+    for (const f of t.frags) s.add(f.id);
+  }
+  for (const i of b.intentions) s.add(i.id);
+  for (const p of b.principles) s.add(p.id);
+  return s;
+}
+
+/** The ids `after` has that `before` does not — what one capture created. */
+function newIds(before: Board, after: Board): Set<string> {
+  const had = boardIds(before);
+  return new Set([...boardIds(after)].filter((id) => !had.has(id)));
+}
+
 function newLedgerId(before: Board, after: Board): string | undefined {
   return (after.ledger ?? []).find(
     (e) => !(before.ledger ?? []).some((x) => x.id === e.id)
@@ -294,6 +313,10 @@ export function useBoard(now: number) {
     picIds?: string[];
     /** The ledger entry this capture wrote — the one Undo asks about. */
     ledgerId?: string;
+    /** Every id this capture created. Undo takes back these and only
+        these: anything that arrived from another device in between — the
+        push reply and the poll both merge — is not the capture's. */
+    addedIds?: Set<string>;
   } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
 
@@ -520,36 +543,67 @@ export function useBoard(now: number) {
          comes back with a fresh updatedAt, so it out-ages the tombstone the
          capture itself pushed for it. */
     const now = Date.now();
-    const added = stampChanges(latest.current, snap.board, now).tombstones;
     const bump = <T extends { updatedAt?: number }>(x: T): T => ({
       ...x,
       updatedAt: now,
     });
     const had = (list: { id: string }[], id: string) =>
       list.some((x) => x.id === id);
+    /* Only what THIS capture created goes. The board as it stands may also
+       hold what another device captured in the meantime — the push reply
+       at 1.2s and every poll merge the hub in — and diffing the snapshot
+       against the board would tombstone that too: an undo here deleting
+       a capture made there. Items the snapshot lacks and the capture did
+       not create are kept, and the tombstones are computed afterwards
+       from a board that still has them. */
+    const mine = snap.addedIds ?? new Set<string>();
+    const foreign = <T extends { id: string }>(live: T[], snapped: T[]) =>
+      live.filter((x) => !mine.has(x.id) && !had(snapped, x.id));
     const board: Board = {
-      actions: snap.board.actions.map((a) =>
-        had(latest.current.actions, a.id) ? a : bump(a)
+      actions: [
+        ...foreign(latest.current.actions, snap.board.actions),
+        ...snap.board.actions.map((a) =>
+          had(latest.current.actions, a.id) ? a : bump(a)
+        ),
+      ],
+      threads: [
+        ...foreign(latest.current.threads, snap.board.threads),
+        ...snap.board.threads.map((t) => {
+          const live = latest.current.threads.find((x) => x.id === t.id);
+          if (!live) return { ...bump(t), frags: t.frags.map(bump) };
+          return {
+            ...t,
+            frags: [
+              ...t.frags.map((f) => (had(live.frags, f.id) ? f : bump(f))),
+              ...foreign(live.frags, t.frags),
+            ],
+          };
+        }),
+      ],
+      intentions: [
+        ...foreign(latest.current.intentions, snap.board.intentions),
+        ...snap.board.intentions.map((i) =>
+          had(latest.current.intentions, i.id) ? i : bump(i)
+        ),
+      ],
+      principles: [
+        ...snap.board.principles.map((p) =>
+          had(latest.current.principles, p.id) ? p : bump(p)
+        ),
+        ...foreign(latest.current.principles, snap.board.principles),
+      ],
+      /* History is append-only and keyed by id: the other device's entries
+         stay, and only this capture's own entry is taken out. */
+      ledger: mergeLedgers(
+        snap.board.ledger ?? [],
+        (latest.current.ledger ?? []).filter((e) => e.id !== snap.ledgerId)
       ),
-      threads: snap.board.threads.map((t) => {
-        const live = latest.current.threads.find((x) => x.id === t.id);
-        if (!live) return { ...bump(t), frags: t.frags.map(bump) };
-        return {
-          ...t,
-          frags: t.frags.map((f) =>
-            had(live.frags, f.id) ? f : bump(f)
-          ),
-        };
-      }),
-      intentions: snap.board.intentions.map((i) =>
-        had(latest.current.intentions, i.id) ? i : bump(i)
+      corrections: mergeCorrections(
+        snap.board.corrections ?? [],
+        latest.current.corrections ?? []
       ),
-      principles: snap.board.principles.map((p) =>
-        had(latest.current.principles, p.id) ? p : bump(p)
-      ),
-      ledger: snap.board.ledger,
-      corrections: snap.board.corrections,
     };
+    const added = stampChanges(latest.current, board, now).tombstones;
 
     /* The capture being undone: the one ledger entry the snapshot does not
        have. It carries both halves of the question — what was said, and
@@ -921,37 +975,12 @@ export function useBoard(now: number) {
 
        A failed pull doubles the wait, up to five minutes: a hub that is down
        does not need to be asked again in thirty seconds. */
-    const POLL_MS = 30_000;
-    const POLL_MAX_MS = 5 * 60_000;
-    let pollId: ReturnType<typeof setTimeout> | null = null;
-    /* One chain at a time. The timer id is null while a pull is in flight,
-       so it cannot say whether a chain exists; `alive` can. A chain that
-       was stopped mid-pull ends when the pull returns. */
-    let alive = false;
-    let wait = POLL_MS;
-    const tick = async () => {
-      pollId = null;
-      const ok = await pullNow();
-      if (!alive) return;
-      wait = ok ? POLL_MS : Math.min(wait * 2, POLL_MAX_MS);
-      if (document.visibilityState === "visible" && navigator.onLine) {
-        pollId = setTimeout(() => void tick(), wait);
-      } else {
-        alive = false;
-      }
-    };
-    const startPoll = () => {
-      if (alive) return;
-      alive = true;
-      wait = POLL_MS;
-      pollId = setTimeout(() => void tick(), wait);
-    };
-    const stopPoll = () => {
-      alive = false;
-      if (pollId === null) return;
-      clearTimeout(pollId);
-      pollId = null;
-    };
+    const poller = createPoller({
+      pull: pullNow,
+      active: () => document.visibilityState === "visible" && navigator.onLine,
+    });
+    const startPoll = poller.start;
+    const stopPoll = poller.stop;
     const onOnline = () => { void pullNow(); startPoll(); };
     const onOffline = () => stopPoll();
     const onHidden = () => {
@@ -1263,6 +1292,7 @@ export function useBoard(now: number) {
       text,
       picIds: pics.map((p) => p.id),
       ledgerId: newLedgerId(latest.current, next),
+      addedIds: newIds(latest.current, next),
     };
     setCanUndo(true);
     await commit(next);
@@ -1305,6 +1335,7 @@ export function useBoard(now: number) {
         tombstones: tombstones.current,
         text: a.src || a.text,
         ledgerId: newLedgerId(latest.current, next),
+      addedIds: newIds(latest.current, next),
       };
       setCanUndo(true);
       await commit(next);
@@ -1506,6 +1537,7 @@ export function useBoard(now: number) {
         text,
         picIds: pics.map((p) => p.id),
         ledgerId: newLedgerId(latest.current, recorded),
+      addedIds: newIds(latest.current, recorded),
       };
       setCanUndo(true);
       await commit(recorded);

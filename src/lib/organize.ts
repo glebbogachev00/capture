@@ -616,3 +616,22 @@ export function scanBoard(
     .slice(0, MEDIUM_CAP);
   return [...high, ...medium];
 }
+
+/**
+ * Which rows the Tidy screen shows: the sure things, with the rest behind
+ * one tap — unless there are no sure things, in which case hiding the
+ * only findings would leave a screen with a toggle and nothing else. The
+ * staleness questions are always medium, so a board whose only findings
+ * are those shows them outright.
+ */
+export function splitProposals(
+  proposals: OrganizeProposal[],
+  showMore: boolean
+): { shown: OrganizeProposal[]; medium: OrganizeProposal[] } {
+  const high = proposals.filter((p) => p.confidence === "high");
+  if (!high.length) return { shown: proposals, medium: [] };
+  return {
+    shown: showMore ? proposals : high,
+    medium: proposals.filter((p) => p.confidence === "medium"),
+  };
+}

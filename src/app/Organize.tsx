@@ -29,6 +29,7 @@
 
 import { useState } from "react";
 import type { OrganizeKind, OrganizeProposal } from "@/lib/organize";
+import { splitProposals } from "@/lib/organize";
 
 const YES_LABEL: Record<OrganizeKind, string> = {
   dup_action: "Delete",
@@ -122,16 +123,10 @@ export function OrganizeScreen({
 }) {
   const [showMore, setShowMore] = useState(false);
   const [showApprove, setShowApprove] = useState(false);
-  const high = proposals.filter((p) => p.confidence === "high");
-  /* Behind the tap only when there is something in front of it: a screen
-     whose only findings are the staleness questions shows them outright. */
-  const medium = high.length
-    ? proposals.filter((p) => p.confidence === "medium")
-    : [];
   /* Sure things first, the rest behind one tap. There are no per-kind
      headings any more: each row says its own verb, so a heading over it
      could only repeat the row in different words. */
-  const shown = showMore || !high.length ? proposals : high;
+  const { shown, medium } = splitProposals(proposals, showMore);
 
   return (
     <div>

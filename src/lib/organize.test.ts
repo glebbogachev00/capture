@@ -455,3 +455,21 @@ describe("scanBoard — dismissal and determinism", () => {
     expect(out.every((p) => p.confidence === "high")).toBe(true);
   });
 });
+
+describe("what the Tidy screen shows", () => {
+  const p = (id: string, confidence: "high" | "medium") =>
+    ({ id, confidence }) as unknown as import("./organize").OrganizeProposal;
+  it("sure things first, the rest behind a tap", async () => {
+    const { splitProposals } = await import("./organize");
+    const out = splitProposals([p("a", "high"), p("b", "medium")], false);
+    expect(out.shown.map((x) => x.id)).toEqual(["a"]);
+    expect(out.medium.map((x) => x.id)).toEqual(["b"]);
+    expect(splitProposals([p("a", "high"), p("b", "medium")], true).shown).toHaveLength(2);
+  });
+  it("shows medium-only findings outright, with no toggle", async () => {
+    const { splitProposals } = await import("./organize");
+    const out = splitProposals([p("b", "medium")], false);
+    expect(out.shown.map((x) => x.id)).toEqual(["b"]);
+    expect(out.medium).toEqual([]);
+  });
+});
