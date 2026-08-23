@@ -57,6 +57,9 @@ export type ProposalKind =
   | "extract_action"
   | "combine_fragments"
   | "refresh_summary"
+  /** The thread named its next move under "Where this stands" and the
+      person took it. */
+  | "next_step"
   | "related_suggestion"
   /** The sorter filed a capture and the user moved it straight back out —
       an unprompted correction, with the right answer attached. The only

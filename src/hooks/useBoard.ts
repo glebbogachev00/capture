@@ -1128,20 +1128,28 @@ export function useBoard(now: number) {
   /* applySorted moved to @/lib/boardOps (pure, unit-tested). */
 
   /** Ask the server to rewrite a thread's summary. Throws SortError. */
-  const requestSummary = async (name: string, frags: Frag[]) => {
+  const requestSummary = async (
+    name: string,
+    frags: Frag[]
+  ): Promise<{ summary: string; next: string | null }> => {
     const res = await fetch("/api/summarize", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name,
         frags: frags.map((f) => ({ at: f.at, text: f.text })),
+        open: latest.current.actions
+          .filter((a) => !a.done)
+          .slice(0, 30)
+          .map((a) => a.text),
       }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new SortError(body.error);
     }
-    return res.json();
+    const out = await res.json();
+    return { summary: out.summary, next: out.next ?? null };
   };
 
   /** Rewrite a thread's "Where this stands" from its current fragments. */
@@ -1151,11 +1159,11 @@ export function useBoard(now: number) {
     setBusy("Updating what this thread says now");
     let result = board;
     try {
-      const { summary } = await requestSummary(target.name, target.frags);
+      const { summary, next } = await requestSummary(target.name, target.frags);
       result = {
         ...board,
         threads: board.threads.map((t) =>
-          t.id === threadId ? { ...t, summary } : t
+          t.id === threadId ? { ...t, summary, next } : t
         ),
       };
       await commit(result);
@@ -1176,13 +1184,13 @@ export function useBoard(now: number) {
     setErr("");
     setBusy("Updating what this thread says now");
     try {
-      const { summary } = await requestSummary(target.name, target.frags);
+      const { summary, next } = await requestSummary(target.name, target.frags);
       await commit(
         noteCorrection(
           {
             ...latest.current,
             threads: latest.current.threads.map((t) =>
-              t.id === threadId ? { ...t, summary } : t
+              t.id === threadId ? { ...t, summary, next } : t
             ),
           },
           {
@@ -2425,6 +2433,69 @@ export function useBoard(now: number) {
    * source, but a thread is a record of thinking and lifting the sentence out
    * would leave a hole in it.
    */
+  /**
+   * "Next: …" under a thread's summary, taken.
+   *
+   * The step goes through the sorter like any capture — cleaned, given a
+   * shelf life, recorded — and the thread stops offering it. Taking it is
+   * a signal worth keeping: the record shows the board named a move and
+   * the person agreed.
+   */
+  const takeNext = async (threadId: string) => {
+    const thread = latest.current.threads.find((t) => t.id === threadId);
+    const step = thread?.next;
+    if (!thread || !step) return;
+    setErr("");
+    setBusy("Adding the step");
+    try {
+      const out = await requestSort(step, "action");
+      const span = SHELF[(out.shelfLife || "keep") as ShelfLife] ?? null;
+      const action: Action = {
+        id: uid(),
+        text: out.actions?.[0] || out.title || step,
+        done: false,
+        at: stamp(),
+        src: step,
+        imgs: [],
+        shelf: (out.shelfLife || "keep") as ShelfLife,
+        expires: span ? stamp() + span : null,
+      };
+      await commit(
+        noteCorrection(
+          {
+            ...latest.current,
+            actions: [action, ...latest.current.actions],
+            threads: latest.current.threads.map((t) =>
+              t.id === threadId ? { ...t, next: null, nextDismissed: step } : t
+            ),
+          },
+          {
+            proposalKind: "next_step",
+            accepted: true,
+            context: step.slice(0, 120),
+          }
+        )
+      );
+      setNotice("Added to your actions.");
+      setTimeout(() => setNotice(null), 5000);
+    } catch (error) {
+      setErr(reasonOf(error) + " Nothing was added.");
+    }
+    setBusy(null);
+  };
+
+  /** Not now: the step stays hidden until the thread names a different one. */
+  const dismissNext = async (threadId: string) => {
+    const thread = latest.current.threads.find((t) => t.id === threadId);
+    if (!thread?.next) return;
+    await commit({
+      ...latest.current,
+      threads: latest.current.threads.map((t) =>
+        t.id === threadId ? { ...t, nextDismissed: t.next ?? undefined } : t
+      ),
+    });
+  };
+
   const extractAction = async (threadId: string, fragId: string) => {
     const frag = latest.current.threads
       .find((t) => t.id === threadId)
@@ -3448,6 +3519,8 @@ export function useBoard(now: number) {
     copyFragment,
     copyWhole,
     extractAction,
+    takeNext,
+    dismissNext,
     deleteThread,
     mergeThreads,
     expandIntention,

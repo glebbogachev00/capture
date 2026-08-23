@@ -89,6 +89,13 @@ export type Thread = {
       "img:<id>". Display only — it never touches the summary or the
       fragments. See lib/cover.ts. */
   cover?: string;
+  /** The one concrete thing to do next, read off the fragments with the
+      summary; null or absent when the thread is thinking, not doing. Shown
+      under "Where this stands", one tap to make it an action. */
+  next?: string | null;
+  /** The step they waved away — it stays away until the thread moves and
+      the summary names a different one. */
+  nextDismissed?: string;
   updatedAt?: number;
 };
 

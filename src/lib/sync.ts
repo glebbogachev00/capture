@@ -285,7 +285,11 @@ export function stampChanges(
        the laptop. */
     if (
       p &&
-      (p.name !== t.name || p.summary !== t.summary || p.cover !== t.cover)
+      (p.name !== t.name ||
+        p.summary !== t.summary ||
+        p.cover !== t.cover ||
+        (p.next ?? null) !== (t.next ?? null) ||
+        p.nextDismissed !== t.nextDismissed)
     )
       changed = true;
     const frags = t.frags.map((f) => {

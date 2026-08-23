@@ -210,6 +210,8 @@ export function Capture() {
     copyFragment,
     copyWhole,
     extractAction,
+    takeNext,
+    dismissNext,
     deleteThread,
     mergeThreads,
     saveDraft,
@@ -858,6 +860,8 @@ export function Capture() {
             onCopyThread={() => copyWhole(shareThread(thread))}
             onCopyFrag={(fragId) => copyFragment(thread.id, fragId)}
             onExtractAction={(fragId) => extractAction(thread.id, fragId)}
+            onTakeNext={() => takeNext(thread.id)}
+            onDismissNext={() => dismissNext(thread.id)}
             busy={!!busy}
           />
         ) : (
@@ -1544,6 +1548,8 @@ function ThreadView({
   onCopyThread,
   onCopyFrag,
   onExtractAction,
+  onTakeNext,
+  onDismissNext,
   busy,
 }: {
   thread: Thread;
@@ -1562,6 +1568,8 @@ function ThreadView({
   onCopyThread: () => void;
   onCopyFrag: (fragId: string) => void;
   onExtractAction: (fragId: string) => void;
+  onTakeNext: () => void;
+  onDismissNext: () => void;
   busy: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
@@ -1791,6 +1799,30 @@ function ThreadView({
         <div className="state">
           <h4>Where this stands</h4>
           <p>{thread.summary}</p>
+          {/* The move, if the thread has one. One line, one tap: it
+              becomes an action through the usual sorter. Waved away, it
+              stays away until the summary names a different step. */}
+          {thread.next && thread.next !== thread.nextDismissed && (
+            <div className="next-step">
+              <span className="next-label">Next</span>
+              <button
+                className="next-take"
+                onClick={onTakeNext}
+                disabled={busy}
+                title="Add this to your actions"
+              >
+                {thread.next}
+              </button>
+              <button
+                className="next-dismiss"
+                onClick={onDismissNext}
+                aria-label="Not now"
+                title="Not now"
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
       )}
 

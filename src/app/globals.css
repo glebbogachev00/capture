@@ -2967,3 +2967,58 @@ body {
     grid-column: 1;
   }
 }
+
+/* The next step under "Where this stands": a line, not a card. */
+.next-step {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.next-label {
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  flex: none;
+}
+.next-take {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 3px;
+}
+.next-take:hover:not(:disabled) {
+  text-decoration-color: var(--accent);
+}
+.next-take:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.next-dismiss {
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  align-self: center;
+}
+.next-dismiss:hover {
+  color: var(--ink);
+}
