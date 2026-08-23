@@ -134,6 +134,14 @@ const reasonOf = (error: unknown) =>
 /* SortResult, LandedSource, Suggestion, applySorted and computeSuggestion now
    live in @/lib/boardOps — the pure board logic, testable without React. */
 
+/** The ledger entry `after` has that `before` does not — the one a capture
+    just wrote, found before any merge can put someone else's beside it. */
+function newLedgerId(before: Board, after: Board): string | undefined {
+  return (after.ledger ?? []).find(
+    (e) => !(before.ledger ?? []).some((x) => x.id === e.id)
+  )?.id;
+}
+
 export function useBoard(now: number) {
   /* ------------------------------ state ------------------------------ */
   const [data, setData] = useState<Board>(EMPTY);
@@ -284,6 +292,8 @@ export function useBoard(now: number) {
     tombstones: Tombstone[];
     text?: string;
     picIds?: string[];
+    /** The ledger entry this capture wrote — the one Undo asks about. */
+    ledgerId?: string;
   } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
 
@@ -544,9 +554,11 @@ export function useBoard(now: number) {
     /* The capture being undone: the one ledger entry the snapshot does not
        have. It carries both halves of the question — what was said, and
        what the sorter decided it was. */
-    const undoneEntry = latest.current.ledger.find(
-      (e) => !snap.board.ledger.some((x) => x.id === e.id)
-    );
+    const undoneEntry = snap.ledgerId
+      ? latest.current.ledger.find((e) => e.id === snap.ledgerId)
+      : latest.current.ledger.find(
+          (e) => !snap.board.ledger.some((x) => x.id === e.id)
+        );
     /* "both" is not a kind anyone can pick, so there is nothing to ask. */
     const wrongKind: SortKind | null =
       undoneEntry && undoneEntry.kind !== "both" ? undoneEntry.kind : null;
@@ -653,15 +665,18 @@ export function useBoard(now: number) {
   const sortAgainAs = async (right: SortKind) => {
     const m = misfiled;
     setMisfiled(null);
+    /* The box may have been edited since Undo put the words back; what is
+       re-sorted and what the lesson cites is the draft as it stands. */
+    const words = text.trim() || m?.text || "";
     if (m) {
-      const rule = undoRule(m.text, m.wrong, right);
+      const rule = undoRule(words, m.wrong, right);
       if (rule) {
         const learned = withCorrection(latest.current, {
           id: uid(),
           at: stamp(),
           proposalKind: "undone",
           accepted: true,
-          context: m.text.slice(0, 160),
+          context: words.slice(0, 160),
           rule,
         });
         latest.current = learned;
@@ -677,7 +692,7 @@ export function useBoard(now: number) {
          still right here. */
       if (!text.trim()) setText(m.text);
     }
-    await submit(false, right, m?.text);
+    await submit(false, right, words || undefined);
     /* After the capture lands, not before — the banner says where it went,
        this says why that was the right shape for it. */
     if (m) {
@@ -706,9 +721,11 @@ export function useBoard(now: number) {
     const m = misfiled;
     setMisfiled(null);
     const home = latest.current.threads.find((t) => t.id === threadId);
+    const words = text.trim() || m?.text || "";
+    let rule: ReturnType<typeof refileRule> = null;
     if (m && home) {
-      const rule = refileRule(
-        m.text,
+      rule = refileRule(
+        words,
         home.name,
         [home.name, home.summary, ...home.frags.map((f) => f.text)].join(" ")
       );
@@ -720,7 +737,7 @@ export function useBoard(now: number) {
           at: stamp(),
           proposalKind: "undone",
           accepted: true,
-          context: m.text.slice(0, 160),
+          context: words.slice(0, 160),
           rule,
         });
         latest.current = learned;
@@ -733,9 +750,13 @@ export function useBoard(now: number) {
       }
       if (!text.trim()) setText(m.text);
     }
-    await submit(false, "thread", m?.text, threadId);
+    await submit(false, "thread", words || undefined, threadId);
     if (home) {
-      setNotice(`Filed in ${home.name}. It will remember.`);
+      /* "It will remember" only when a rule was actually written: with no
+         shared subject there is nothing to remember by. */
+      setNotice(
+        rule ? `Filed in ${home.name}. It will remember.` : `Filed in ${home.name}.`
+      );
       setTimeout(() => setNotice(null), 6000);
     }
   };
@@ -903,21 +924,30 @@ export function useBoard(now: number) {
     const POLL_MS = 30_000;
     const POLL_MAX_MS = 5 * 60_000;
     let pollId: ReturnType<typeof setTimeout> | null = null;
+    /* One chain at a time. The timer id is null while a pull is in flight,
+       so it cannot say whether a chain exists; `alive` can. A chain that
+       was stopped mid-pull ends when the pull returns. */
+    let alive = false;
     let wait = POLL_MS;
     const tick = async () => {
       pollId = null;
       const ok = await pullNow();
+      if (!alive) return;
       wait = ok ? POLL_MS : Math.min(wait * 2, POLL_MAX_MS);
       if (document.visibilityState === "visible" && navigator.onLine) {
         pollId = setTimeout(() => void tick(), wait);
+      } else {
+        alive = false;
       }
     };
     const startPoll = () => {
-      if (pollId !== null) return;
+      if (alive) return;
+      alive = true;
       wait = POLL_MS;
       pollId = setTimeout(() => void tick(), wait);
     };
     const stopPoll = () => {
+      alive = false;
       if (pollId === null) return;
       clearTimeout(pollId);
       pollId = null;
@@ -1017,7 +1047,10 @@ export function useBoard(now: number) {
     /* The capture just before this one, if it went to a thread — the only
        thing a series can continue. */
     const prev = (latest.current.ledger ?? []).find(
-      (e) => (e.kind === "thread" || e.kind === "both") && e.targetId
+      (e) =>
+        (e.kind === "thread" || e.kind === "both") &&
+        e.targetId &&
+        latest.current.threads.some((t) => t.id === e.targetId)
     );
     const series = prev
       ? seriesFor(raw, {
@@ -1229,6 +1262,7 @@ export function useBoard(now: number) {
       tombstones: tombstones.current,
       text,
       picIds: pics.map((p) => p.id),
+      ledgerId: newLedgerId(latest.current, next),
     };
     setCanUndo(true);
     await commit(next);
@@ -1270,6 +1304,7 @@ export function useBoard(now: number) {
         board: latest.current,
         tombstones: tombstones.current,
         text: a.src || a.text,
+        ledgerId: newLedgerId(latest.current, next),
       };
       setCanUndo(true);
       await commit(next);
@@ -1470,6 +1505,7 @@ export function useBoard(now: number) {
         tombstones: tombstones.current,
         text,
         picIds: pics.map((p) => p.id),
+        ledgerId: newLedgerId(latest.current, recorded),
       };
       setCanUndo(true);
       await commit(recorded);
@@ -2742,6 +2778,24 @@ export function useBoard(now: number) {
           )
         );
       }
+      /* What the restore brought back may have been deleted here since the
+         backup was taken, and commit re-applies tombstones. Stamp the
+         returned items fresh so they out-age those tombstones — on this
+         device and, once pushed, on the hub — the same way Undo does. */
+      const now = Date.now();
+      const fresh = <T extends { id: string; updatedAt?: number }>(
+        before: T[],
+        after: T[]
+      ) =>
+        after.map((x) =>
+          before.some((y) => y.id === x.id) ? x : { ...x, updatedAt: now }
+        );
+      result.board = {
+        ...result.board,
+        actions: fresh(latest.current.actions, result.board.actions),
+        threads: fresh(latest.current.threads, result.board.threads),
+        intentions: fresh(latest.current.intentions, result.board.intentions),
+      };
       const added =
         result.actions +
         result.threads +

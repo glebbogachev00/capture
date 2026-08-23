@@ -360,7 +360,8 @@ export async function POST(request: Request) {
     if (
       body.series &&
       (kind === "thread" || kind === "both") &&
-      !threadId
+      !threadId &&
+      body.threads.some((t) => t.id === body.series!.threadId)
     ) {
       threadId = body.series.threadId;
       threadName = null;

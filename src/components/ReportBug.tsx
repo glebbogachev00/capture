@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { PLAYGROUND } from "@/lib/playground";
 
 /**
  * Caught a bug? Capture it.
@@ -62,7 +63,7 @@ export function ReportBugForm({ onClose }: { onClose: () => void }) {
       }
       /* 501 means no token is configured — not this person's problem, so
          hand them the pre-filled page rather than an apology. */
-      if (res.status === 501) {
+      if (res.status === 501 || (PLAYGROUND && res.status === 404)) {
         window.open(githubUrl(what), "_blank", "noreferrer");
         onClose();
         return;

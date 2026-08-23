@@ -276,12 +276,19 @@ export function Capture() {
   } | null>(null);
   const groupAsked = useRef<string>("");
   const liveKey = useMemo(() => live.map((a) => a.id).join(","), [live]);
+  /* The effect below keys on the SET of actions, not the array identity:
+     every commit rebuilds the array, and cancelling the request on each
+     one threw the groups away whenever a background write landed. */
+  const liveRef = useRef(live);
+  useEffect(() => {
+    liveRef.current = live;
+  }, [live]);
 
   useEffect(() => {
     if (!groupView) return;
     /* Word grouping already answers a short list, and a model call on two
        rows is waste. */
-    if (live.length < 3) return;
+    if (liveRef.current.length < 3) return;
     if (groupAsked.current === liveKey) return;
     groupAsked.current = liveKey;
     let cancelled = false;
@@ -291,7 +298,7 @@ export function Capture() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            actions: live.map((a) => ({ id: a.id, text: a.text })),
+            actions: liveRef.current.map((a) => ({ id: a.id, text: a.text })),
           }),
         });
         if (!res.ok) return;
@@ -305,7 +312,7 @@ export function Capture() {
     return () => {
       cancelled = true;
     };
-  }, [groupView, liveKey, live]);
+  }, [groupView, liveKey]);
 
   /* The model's groups when they belong to this exact list and it found
      something; the word lens otherwise. Never a blend of the two — a pile
@@ -377,7 +384,10 @@ export function Capture() {
       }
       onCopy={() => copyWhole(shareAction(a))}
       onOpenShot={
-        a.shot
+        a.shot &&
+        data.threads
+          .find((t) => t.id === a.shot!.threadId)
+          ?.frags.some((f) => f.id === a.shot!.fragId)
           ? () => {
               setTab("threads");
               setOpen(a.shot!.threadId);
