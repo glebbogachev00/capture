@@ -1358,20 +1358,50 @@ body {
 /* The playground's one line. Quiet, dismissible, above everything. */
 .playground-note {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 14px;
-  padding: 9px 12px;
-  border: 1px dashed var(--rule);
-  border-radius: 10px;
-  font-size: 12.5px;
-  line-height: 1.5;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 18px 0 22px;
+  padding: 14px 16px 14px 18px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--muted);
 }
-.playground-note span { flex: 1; }
-.playground-note a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
-.playground-note button { flex: none; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 4px; }
-.playground-note button:hover { color: var(--ink); }
+.playground-note span {
+  flex: 1;
+}
+.playground-note a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 1px;
+  /* The link moves as one piece — a call to action split across two lines
+     reads as two half-sentences. */
+  white-space: nowrap;
+}
+.playground-note a:hover {
+  color: var(--ink);
+}
+.playground-note button {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin: -4px -6px 0 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.playground-note button:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
 
 /* inline editing */
 .act-edit {

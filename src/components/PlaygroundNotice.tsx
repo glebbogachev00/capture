@@ -42,7 +42,7 @@ export function PlaygroundNotice() {
   return (
     <p className="playground-note">
       <span>
-        This is a playground. Your board lives in this browser only.{" "}
+        This is a playground — your board lives in this browser only.{" "}
         <a href={QUICKSTART_URL} target="_blank" rel="noreferrer">
           Run Capture yourself
         </a>{" "}
