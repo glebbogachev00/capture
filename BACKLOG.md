@@ -6,6 +6,44 @@ The authoritative build plan — the sprint list with per-sprint status — live
 [specs/capture-deepseek-sprints.md](specs/capture-deepseek-sprints.md). The struck
 sections below are the shipped features; the open items are what's left.
 
+## Found while testing and recording — 2026-08-23
+
+Things that surfaced during the full test sweep and the Retake session. None
+shipped as fixes yet; listed so they are not lost.
+
+- **Learned rules are honoured by Groq, mostly ignored by the Mistral
+  fallback.** With the rule *Captures about "thinking repainting" are an
+  action, not a thread* in the prompt, "thinking about replacing the hallway
+  light" sorted as an action in-app via Groq (2/2) and as a thread via
+  Mistral (4/4 on `/api/sort`). Since bursts push every device onto Mistral,
+  the "it learns" promise is tier-dependent. Options: put rules in a stronger
+  position/format in the prompt, or apply a matched rule server-side the way
+  the series override is applied (the rule names a kind; the code can force
+  it when the capture shares the rule's subject words).
+- **A hub wipe cannot clear corrections a client still holds.** Since
+  `commit()` union-merges the ledger and corrections, any open tab
+  re-uploads its copy after `wipe-board.mjs` empties the hub. Bit the demo
+  twice (a stale *"mark" belong in "Capture X posts"* rule from an old
+  board, then the hallway rule from my own tab). Tombstoning is per item
+  and has no notion of a correction. Needs either correction tombstones or
+  a board epoch the wipe bumps so clients drop history older than it.
+- **The sorter filed an X-post draft into the pricing thread** (the draft
+  mentioned nothing about pricing; only one thread existed). Tidy did not
+  flag it afterwards either — a fragment that shares no subject with its
+  thread is exactly what Tidy should catch.
+- **The Record says "since August 22" for a board started on the 23rd** —
+  a day-boundary off-by-one, probably UTC vs local.
+- **"it-learns" demo premise eroded**: the sorter now files "out of cold
+  brew" and "try the new bakery" as actions unprompted, so a clean
+  kind-misfile on a simple sentence is hard to stage. Good problem; the
+  realistic mistake today is the *wrong thread*, and that is the demo to
+  record once the refile rule is reliable across tiers (see first item).
+- **Undone captures stay in the Record twice** — the original entry comes
+  back from the hub and the re-sort adds its own. By design (the record is
+  append-only), but the Record could fold the pair.
+
+---
+
 ## ~~Voice — talk to it like a person~~ Built
 
 The app sorts what you *write*. This was the next kind: what you *say*.
