@@ -37,6 +37,9 @@ export type CaptureEntry = {
       the evidence, so a bad transcription can never be the only record. */
   transcript?: string;
   imgs?: string[];
+  /** Undone after it landed. The entry stays — the record is what was
+      said — but it is counted out and shown folded. */
+  undone?: boolean;
 };
 
 /**
@@ -117,7 +120,13 @@ export function mergeLedgers(
   b: CaptureEntry[]
 ): CaptureEntry[] {
   const byId = new Map<string, CaptureEntry>();
-  for (const e of [...a, ...b]) if (e?.id) byId.set(e.id, e);
+  for (const e of [...a, ...b]) {
+    if (!e?.id) continue;
+    /* Undone is a fact once true: whichever copy arrives later, the flag
+       is kept, so the hub's older copy cannot quietly un-undo it. */
+    const prev = byId.get(e.id);
+    byId.set(e.id, prev?.undone && !e.undone ? { ...e, undone: true } : e);
+  }
   return [...byId.values()]
     .sort((x, y) => y.at - x.at || (x.id < y.id ? 1 : -1))
     .slice(0, LEDGER_CAP);

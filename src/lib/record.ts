@@ -32,6 +32,8 @@ export function recordStats(ledger: CaptureEntry[]): RecordStats {
   };
   for (const e of ledger) {
     if (stats.since === null || e.at < stats.since) stats.since = e.at;
+    /* An undone capture was said, but became nothing. */
+    if (e.undone) continue;
     /* "both" filed an action AND joined a thread — count it in each. */
     if (e.kind === "action" || e.kind === "both") stats.actions++;
     if (e.kind === "thread" || e.kind === "both") stats.threads++;
@@ -57,6 +59,8 @@ export type RecordEntry = {
   filed: string;
   kind: CaptureEntry["kind"];
   differs: boolean;
+  /** Undone after it landed — shown, but folded. */
+  undone: boolean;
 };
 
 /** Compare the way a reader would: case, spacing and trailing punctuation
@@ -81,6 +85,7 @@ export function recentCaptures(
         said,
         filed,
         kind: e.kind,
+        undone: !!e.undone,
         differs: !!said && !!filed && normalise(said) !== normalise(filed),
       };
     });

@@ -132,16 +132,24 @@ function mergeThreads(a: Thread[], b: Thread[]): Thread[] {
 
 /** Merge two boards. Pure and deterministic. */
 export function mergeBoards(a: Board, b: Board): Board {
+  /* History is union-merged, so the only way to start it over is an epoch:
+     the side that was started over later wins, and the other side's
+     history is dropped rather than merged back in. */
+  const ea = a.historyEpoch ?? 0;
+  const eb = b.historyEpoch ?? 0;
+  const ha = ea >= eb ? a : { ledger: [], corrections: [] };
+  const hb = eb >= ea ? b : { ledger: [], corrections: [] };
   return {
+    historyEpoch: Math.max(ea, eb),
     actions: mergeList(a.actions, b.actions, (x, y) => y.at - x.at),
     threads: mergeThreads(a.threads, b.threads),
     intentions: mergeList(a.intentions, b.intentions, (x, y) => y.at - x.at),
     principles: mergeList(a.principles, b.principles),
     /* Ledger entries never change, so the merge is a plain union. The `??`
        guards boards built before the field existed. */
-    ledger: mergeLedgers(a.ledger ?? [], b.ledger ?? []),
+    ledger: mergeLedgers(ha.ledger ?? [], hb.ledger ?? []),
     /* Same for corrections — append-only records, union by id. */
-    corrections: mergeCorrections(a.corrections ?? [], b.corrections ?? []),
+    corrections: mergeCorrections(ha.corrections ?? [], hb.corrections ?? []),
   };
 }
 
@@ -155,6 +163,7 @@ export function applyTombstones(board: Board, tombstones: Tombstone[]): Board {
     return !!tb && tb.deletedAt >= updatedAt;
   };
   return {
+    ...board,
     actions: board.actions.filter((a) => !gone("action", a.id, ts(a))),
     threads: board.threads
       .filter((t) => !gone("thread", t.id, ts(t)))
@@ -329,6 +338,7 @@ export function stampChanges(
 
   return {
     board: {
+      ...next,
       actions,
       threads,
       intentions,

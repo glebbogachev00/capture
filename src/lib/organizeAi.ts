@@ -129,6 +129,7 @@ const VERBS: Record<OrganizeKind, string> = {
   dup_fragment: "Drop duplicate",
   fold_action: "Fold in",
   move_fragment: "Move",
+  split_fragment: "Split out",
   extract_action: "Extract",
   merge_fragments: "Merge",
   /* Deterministic only — the model is never asked about it, and the

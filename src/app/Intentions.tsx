@@ -528,7 +528,7 @@ export function RecordScreen({
           </div>
           <ul className="record-log">
             {recentCaptures(ledger).map((e) => (
-              <li key={e.id}>
+              <li key={e.id} className={e.undone ? "record-undone" : undefined}>
                 <p className="record-filed">{e.filed || e.said}</p>
                 {e.differs && (
                   <p className="record-said">
@@ -536,7 +536,8 @@ export function RecordScreen({
                   </p>
                 )}
                 <p className="record-meta">
-                  {e.kind} · {fmt(e.at)}
+                  {e.kind} · {e.undone && "undone · "}
+                  {fmt(e.at)}
                 </p>
               </li>
             ))}

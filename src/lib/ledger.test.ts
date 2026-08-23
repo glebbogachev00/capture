@@ -232,3 +232,13 @@ describe("restoreBackup", () => {
     expect(merged.corrections.map((c) => c.id).sort()).toEqual(["c1", "c2"]);
   });
 });
+
+describe("undone is a fact once true", () => {
+  it("survives a merge with an older copy that lacks the flag", async () => {
+    const { mergeLedgers } = await import("./ledger");
+    const e = { id: "x", at: 1, raw: "r", clean: "c", kind: "action", source: "typed", targetId: "" } as import("./ledger").CaptureEntry;
+    const flagged = { ...e, undone: true };
+    expect(mergeLedgers([flagged], [e])[0].undone).toBe(true);
+    expect(mergeLedgers([e], [flagged])[0].undone).toBe(true);
+  });
+});

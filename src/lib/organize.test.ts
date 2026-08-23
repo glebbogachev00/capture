@@ -473,3 +473,46 @@ describe("what the Tidy screen shows", () => {
     expect(out.medium).toEqual([]);
   });
 });
+
+describe("a stranger in a thread", () => {
+  it("asks to split out a note that shares nothing with its thread", async () => {
+    const { scanBoard } = await import("./organize");
+    const b: Board = {
+      ...EMPTY,
+      threads: [
+        {
+          id: "t1",
+          name: "Pricing model considerations",
+          summary: "Seats are simpler to explain. I have built a board that sorts what I say and the list writes itself.",
+          frags: [
+            { id: "f1", at: 1, text: "pricing: seats are simpler to explain but usage-based feels fairer to small teams and I do not want to punish growth" },
+            { id: "f2", at: 2, text: "X post draft: I stopped keeping a todo list. I built a board that sorts what I say, and the list writes itself. Day forty." },
+          ],
+        } as Thread,
+      ],
+    };
+    const out = scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "split_fragment");
+    expect(out).toHaveLength(1);
+    expect(out[0].sourceFragId).toBe("f2");
+    expect(out[0].confidence).toBe("medium");
+  });
+
+  it("leaves a note that shares its thread's subject", async () => {
+    const { scanBoard } = await import("./organize");
+    const b: Board = {
+      ...EMPTY,
+      threads: [
+        {
+          id: "t1",
+          name: "Pricing model considerations",
+          summary: "",
+          frags: [
+            { id: "f1", at: 1, text: "seats are simpler to explain but usage-based feels fairer to small teams" },
+            { id: "f2", at: 2, text: "talked to two small teams today, both would rather pay per seat and know the bill up front" },
+          ],
+        } as Thread,
+      ],
+    };
+    expect(scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "split_fragment")).toEqual([]);
+  });
+});

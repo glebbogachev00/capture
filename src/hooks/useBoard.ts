@@ -596,7 +596,9 @@ export function useBoard(now: number) {
          stay, and only this capture's own entry is taken out. */
       ledger: mergeLedgers(
         snap.board.ledger ?? [],
-        (latest.current.ledger ?? []).filter((e) => e.id !== snap.ledgerId)
+        (latest.current.ledger ?? []).map((e) =>
+          e.id === snap.ledgerId ? { ...e, undone: true } : e
+        )
       ),
       corrections: mergeCorrections(
         snap.board.corrections ?? [],
@@ -1890,6 +1892,16 @@ export function useBoard(now: number) {
           accepted: true,
           context: `moved a note into ${p.targetName}`,
           rule: `Move notes into "${p.targetName}"`,
+        })
+      );
+      return true;
+    } else if (p.kind === "split_fragment") {
+      await moveFragToNew(p.sourceThreadId!, p.sourceFragId!);
+      await commit(
+        noteCorrection(latest.current, {
+          proposalKind: "related_suggestion",
+          accepted: true,
+          context: `split a note out of ${p.targetName}`,
         })
       );
       return true;

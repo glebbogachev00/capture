@@ -153,6 +153,12 @@ export type Board = {
       user accepted, dismissed, renamed, or corrected — the signal a bounded
       personal model will learn from. Same sync semantics as the ledger. */
   corrections: CorrectionEntry[];
+  /** When the history was last started over. The ledger and corrections
+      are append-only and union-merged, which means no single copy can ever
+      empty them: a wiped hub got its history straight back from the first
+      tab that synced. A wipe bumps this instead; on merge, the side with
+      the older epoch drops its history. Absent means zero. */
+  historyEpoch?: number;
 };
 
 /** The engine principles intent shipped with, carried over unchanged. */
@@ -219,6 +225,7 @@ export function hydrate(raw: Partial<Board> | null | undefined): Board {
     ledger: (raw?.ledger ?? []).filter(
       (e) => e && typeof e.id === "string" && typeof e.at === "number"
     ),
+    historyEpoch: typeof raw?.historyEpoch === "number" ? raw.historyEpoch : 0,
     corrections: (raw?.corrections ?? []).filter(
       (e) =>
         e &&

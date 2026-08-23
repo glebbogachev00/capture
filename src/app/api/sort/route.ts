@@ -1,5 +1,6 @@
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
+import { applyRules } from "@/lib/ruleMatch";
 import { explain } from "@/lib/aiError";
 import { captionPrompt, mergeCaption, tidyCaption } from "@/lib/caption";
 import { clientIp } from "@/lib/clientIp";
@@ -336,6 +337,31 @@ export async function POST(request: Request) {
        model still picks the best existing thread; only the kind and the
        actions are pinned. */
     let { kind, actions, threadId, threadName } = value;
+    /* A learned rule is applied here, not left to the model's mood. The
+       prompt offered the rules as tendencies and the fallback tier ignored
+       them; a rule the board wrote has a known shape, so when the capture
+       carries every word of its subject the rule sets the kind (and the
+       home, if it names one), and only the remaining choices are the
+       model's. A typed command still outranks a rule. */
+    const ruled = body.force ? null : applyRules(raw, body.rules, body.threads);
+    if (ruled && ruled.kind !== kind) {
+      kind = ruled.kind;
+      if (ruled.kind === "action") {
+        threadId = null;
+        threadName = null;
+        if (!actions?.length) actions = [value.title || raw];
+      } else if (ruled.kind === "intention") {
+        threadId = null;
+        threadName = null;
+        actions = [];
+      } else {
+        actions = [];
+      }
+    }
+    if (ruled?.threadId) {
+      threadId = ruled.threadId;
+      threadName = null;
+    }
     if (body.force === "thread") {
       kind = "thread";
       actions = [];

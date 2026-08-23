@@ -380,3 +380,21 @@ describe("boardSignature — what a pull compares before adopting a merge", () =
     );
   });
 });
+
+describe("starting the history over", () => {
+  it("the newer epoch drops the other side's history instead of merging it", async () => {
+    const { mergeBoards } = await import("./sync");
+    const { EMPTY } = await import("./model");
+    const entry = { id: "e1", at: 1, raw: "r", clean: "c", kind: "action", source: "typed", targetId: "" } as import("./ledger").CaptureEntry;
+    const corr = { id: "c1", at: 1, proposalKind: "undone", accepted: true, context: "x", rule: "r" } as import("./ledger").CorrectionEntry;
+    const local = { ...EMPTY, ledger: [entry], corrections: [corr] };
+    const wiped = { ...EMPTY, historyEpoch: 5 };
+    const out = mergeBoards(local, wiped);
+    expect(out.ledger).toEqual([]);
+    expect(out.corrections).toEqual([]);
+    expect(out.historyEpoch).toBe(5);
+    /* Same epoch: the union as before. */
+    const again = mergeBoards({ ...local, historyEpoch: 5 }, wiped);
+    expect(again.ledger).toHaveLength(1);
+  });
+});

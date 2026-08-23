@@ -45,6 +45,11 @@ export type OrganizeKind =
   | "dup_fragment"
   | "fold_action"
   | "move_fragment"
+  /** A note that shares nothing with the thread it sits in, and has no
+      better home on the board — give it a thread of its own. The sorter
+      put an X-post draft into a pricing thread once; Tidy said nothing,
+      because every claim it made needed a destination. */
+  | "split_fragment"
   | "extract_action"
   | "merge_fragments"
   /** Still being carried, past its moment — the "get light" claim. */
@@ -479,6 +484,54 @@ export function scanBoard(
         targetName: NAME(home.name),
         reason: `that thread already says "${phraseAsWritten(phrase, threadOwnTextById(board, home.id))}"`,
         score: 80 + phraseWords(phrase) * 10,
+        origin: "local",
+      });
+    }
+  }
+
+  /* A note that shares no content word with the rest of its thread — not
+     the name, not the other notes — and has no other thread to go to. The
+     move above needs somewhere to move it; this asks the only question
+     left: should it be its own thread? Medium: a stranger in a thread is
+     sometimes a tangent the person meant to keep there. */
+  for (const t of board.threads) {
+    if ((t.frags || []).length < 2) continue;
+    /* The thread has to have an identity to be a stranger to: at least
+       one other note that shares a word with the name. Two notes that
+       merely differ from each other are a thread finding its subject. */
+    const nameWords = new Set(contentWords(t.name));
+    const anchored = (t.frags || []).filter((x) =>
+      contentWords(x.text).some((w) => nameWords.has(w))
+    );
+    for (const f of t.frags || []) {
+      if (fragClaimed.has(f.id)) continue;
+      if (!anchored.some((x) => x.id !== f.id)) continue;
+      const own = contentWords(f.text);
+      /* A line too short to have a subject is not a stranger, it is a line. */
+      if (own.length < 6) continue;
+      /* The name and the OTHER notes — not the summary, which paraphrases
+         every note including the stranger, and would vouch for it. */
+      const others = new Set(
+        contentWords(
+          [t.name, ...(t.frags || []).filter((x) => x.id !== f.id).map((x) => x.text)].join(" ")
+        )
+      );
+      if (own.some((w) => others.has(w))) continue;
+      if (bestThreadHome(board, f.text, t.id)) continue;
+      fragClaimed.add(f.id);
+      out.push({
+        id: `split_fragment:${f.id}`,
+        kind: "split_fragment",
+        confidence: "medium",
+        verb: "Split out",
+        sourceId: t.id,
+        sourceName: NAME(f.text),
+        sourceThreadId: t.id,
+        sourceFragId: f.id,
+        targetId: t.id,
+        targetName: NAME(t.name),
+        reason: `it shares nothing with the rest of "${NAME(t.name)}"`,
+        score: 60,
         origin: "local",
       });
     }

@@ -3022,3 +3022,12 @@ body {
 .next-dismiss:hover {
   color: var(--ink);
 }
+
+/* An undone capture in the record: still there, but folded. */
+.record-log li.record-undone {
+  opacity: 0.55;
+}
+.record-log li.record-undone .record-filed {
+  text-decoration: line-through;
+  text-decoration-color: var(--muted);
+}

@@ -37,6 +37,7 @@ const YES_LABEL: Record<OrganizeKind, string> = {
   merge_fragments: "Merge",
   fold_action: "File",
   move_fragment: "Move",
+  split_fragment: "Split out",
   extract_action: "Make action",
   let_go: "Let go",
   revisit_intention: "Still true",
@@ -92,6 +93,14 @@ function Ask({ p }: { p: OrganizeProposal }) {
     return (
       <span className="org-line">
         Move <em>{p.sourceName}</em> to <em>{p.targetName}</em>
+      </span>
+    );
+  }
+  if (p.kind === "split_fragment") {
+    return (
+      <span className="org-line">
+        Give <em>{p.sourceName}</em> its own thread — it shares nothing with{" "}
+        <em>{p.targetName}</em>
       </span>
     );
   }

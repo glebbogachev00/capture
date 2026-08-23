@@ -156,3 +156,13 @@ describe("caughtWords — the one line under the grid", () => {
     expect(caughtWords(huge)!.like).toBe("a novel");
   });
 });
+
+describe("an undone capture in the record", () => {
+  it("is counted out and marked", async () => {
+    const { recordStats, recentCaptures } = await import("./record");
+    const e = (id: string, undone?: boolean) =>
+      ({ id, at: 1, raw: "r", clean: "c", kind: "action", source: "typed", targetId: "", undone }) as import("./ledger").CaptureEntry;
+    expect(recordStats([e("a"), e("b", true)]).actions).toBe(1);
+    expect(recentCaptures([e("b", true)])[0].undone).toBe(true);
+  });
+});
