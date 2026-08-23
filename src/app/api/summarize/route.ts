@@ -54,7 +54,7 @@ export async function POST(request: Request) {
           .map((f) => "[" + new Date(f.at).toDateString() + "] " + f.text)
           .join("\n\n") +
           '\n\nWrite a "Where this stands" block: 3-5 sentences of plain prose describing what this idea currently is, what\'s been settled, and what\'s still open. Write it back to them in their own register. Invent nothing.' +
-          '\n\nThen, on its own last line, write NEXT: none — unless a fragment itself names or clearly implies a concrete thing they intend to do, in which case write NEXT: followed by that one step, in their words, at most one short sentence. The default is none: most threads are thinking, not doing, and a step you would have to invent is worse than no step. Never suggest something already on their list' +
+          '\n\nThen, on its own last line, write NEXT: followed by the one concrete step the fragments point at — a decision the evidence has made, a person to write back to, a thing to send or ship — in their words, at most one short sentence, something they could do today. If the fragments point at nothing in particular, write NEXT: none; a step you would have to invent is worse than none. Never suggest something already on their list' +
           (body.open?.length ? ':\n' + body.open.map((a) => '- ' + a).join('\n') : '.') +
           '\n\nReturn only the prose and that last line.',
         providerOptions: tier.providerOptions,
