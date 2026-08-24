@@ -269,10 +269,11 @@ export function Landing() {
               </dd>
             </div>
             <div>
-              <dt>Into Claude</dt>
+              <dt>Into an agent</dt>
               <dd>
-                A thread copies out in one tap. What is readable for me turns
-                out to be readable for an agent.
+                A thread copies out in one tap, straight into Claude or
+                whatever you build with. What is readable for me turns out
+                to be readable for an agent.
               </dd>
             </div>
           </dl>

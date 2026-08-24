@@ -3111,9 +3111,12 @@ body {
   display: block;
   background: #000;
 }
+/* Full width, like every other card on the page. It was capped and
+   centred, but `.video-card { margin: 0 }` won the cascade, so it sat
+   left-aligned and a hundred pixels short of every edge beside it. One
+   column, no exceptions, and the hero video gets bigger for free. */
 .reel-hero {
-  max-width: 620px;
-  margin: 0 auto;
+  margin: 0;
 }
 .reel-hero figcaption strong {
   font-size: 16px;
@@ -3215,53 +3218,6 @@ body {
 .record-log li.record-undone .record-filed {
   text-decoration: line-through;
   text-decoration-color: var(--muted);
-}
-
-/* The three demo videos on the landing page. Three across or one
-   across, never two: an auto-fit grid at tablet widths wrapped the third
-   card into an orphan row and the section read as lopsided. */
-.site-video-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin: 14px 0;
-  align-items: stretch;
-}
-@media (max-width: 860px) {
-  .site-video-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.video-card {
-  margin: 0;
-  padding: 10px;
-}
-.video-card video {
-  width: 100%;
-  /* One box shape for all three: the first demo was recorded wider than
-     the others and rendered shorter, which threw every row out of line.
-     The recordings are a centred column, so the side crop loses only
-     empty margin. */
-  aspect-ratio: 1440 / 1230;
-  object-fit: cover;
-  border-radius: 10px;
-  display: block;
-  background: #000;
-}
-.video-card figcaption {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 10px 6px 4px;
-}
-.video-card figcaption strong {
-  font-size: 14.5px;
-  line-height: 1.35;
-}
-.video-card figcaption span {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.5;
 }
 
 /* One quiet line under a pair of buttons: the thing a stranger would
