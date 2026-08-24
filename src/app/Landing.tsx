@@ -88,6 +88,7 @@ export function Landing() {
           </Link>
           <nav className="site-nav" aria-label="Capture links">
             <a href="https://github.com/glebbogachev00/capture">GitHub</a>
+            <a href="https://ko-fi.com/banhmii">Donate</a>
                         <Link href={APP}>Open app</Link>
           </nav>
         </header>
@@ -250,11 +251,8 @@ export function Landing() {
             <Link className="capture-btn" href={APP}>
               Try it — no signup
             </Link>
-            <a
-              className="ghost site-ghost"
-              href="https://github.com/glebbogachev00/capture"
-            >
-              Run it yourself
+            <a className="ghost site-ghost" href="https://ko-fi.com/banhmii">
+              Donate
             </a>
           </div>
         </section>
