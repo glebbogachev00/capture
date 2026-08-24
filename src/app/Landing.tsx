@@ -61,12 +61,27 @@ const hidden = [
   "It shows its working where you would look for it, and nowhere else — the record, and the file you export.",
 ];
 
-const pains = [
-  "have four hundred notes and trust maybe twelve of them",
-  "use Apple Notes as a dumping ground",
-  "dictate thoughts and never listen to the recordings",
-  "hate choosing a folder before the sentence is finished",
-  "want AI help without AI ownership",
+const personas = [
+  {
+    who: "Founders and entrepreneurs",
+    line: "The day is a stream of half-thoughts — a pricing doubt, an intro to send, a line worth keeping. Say them as they pass; the board keeps the account.",
+  },
+  {
+    who: "Developers",
+    line: "The bug you spot while fixing a different one, the refactor idea mid-review. It's an action with a shelf life before you've switched windows.",
+  },
+  {
+    who: "Anyone tired of deciding",
+    line: "No folder, no tag, no \u201cis this a task or a note?\u201d before the sentence is finished. The number of filing decisions is zero.",
+  },
+  {
+    who: "People who want speed and clarity",
+    line: "One box, no ceremony — and the board stays short, because what stops mattering fades on its own.",
+  },
+  {
+    who: "People with four hundred notes",
+    line: "…who trust maybe twelve of them. Nothing lands here unsorted, so the pile never starts.",
+  },
 ];
 
 const rejects = [
@@ -97,10 +112,11 @@ export function Landing() {
           <p className="funding-kicker">Your notes app became a junk drawer</p>
           <h1>Thoughts that sort themselves.</h1>
           <p className="funding-lede site-lede">
-            Say it however it comes out. It lands as something to do,
-            something you&apos;re thinking through, or something
-            you&apos;re becoming — and when it lands wrong, you tell it
-            once.
+            Built to catch, sort, and share a thought in as few moves as it
+            can get away with. Say it however it comes out — it lands as
+            something to do, something you&apos;re thinking through, or
+            something you&apos;re becoming — and when it lands wrong, you
+            tell it once.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
@@ -145,22 +161,25 @@ export function Landing() {
           {[
             {
               src: "/demos/two-places.mp4",
+              poster: "/demos/two-places.jpg",
               title: "One sentence, two places",
               note: "A task and a question in one breath — it files both.",
             },
             {
               src: "/demos/it-learns.mp4",
+              poster: "/demos/it-learns.jpg",
               title: "It got it wrong. You told it once.",
               note: "Undo asks what it should have been. The next one lands right, unasked.",
             },
             {
               src: "/demos/next-step.mp4",
+              poster: "/demos/next-step.jpg",
               title: "It names the next move",
               note: "A thread reads its own evidence and offers the step — one tap makes it an action.",
             },
           ].map((v) => (
             <figure className="site-card video-card" key={v.src}>
-              <video controls muted playsInline preload="metadata">
+              <video controls muted playsInline preload="metadata" poster={v.poster}>
                 <source src={v.src} type="video/mp4" />
               </video>
               <figcaption>
@@ -182,14 +201,12 @@ export function Landing() {
         </section>
 
         <section className="site-card site-problem">
-          <p className="funding-card-label">As few moves as possible</p>
+          <p className="funding-card-label">The vocabulary</p>
           <h2>Fragments, not notes.</h2>
           <p>
-            Capture is built to catch, sort, and share a thought in the
-            fewest moves it can get away with — say it, and it is already
-            filed. Even the word note is out: notes are where thoughts go to
-            rot. What a thread holds are fragments — layers of thinking,
-            never pages to file.
+            Even the word note is out: notes are where thoughts go to rot.
+            What a thread holds are fragments — layers of thinking, never
+            pages to file, each one already where it belongs.
           </p>
         </section>
 
@@ -219,10 +236,12 @@ export function Landing() {
 
         <section className="site-card site-split">
           <div>
-            <p className="funding-card-label">For people who</p>
-            <ul className="funding-list">
-              {pains.map((item) => (
-                <li key={item}>{item}</li>
+            <p className="funding-card-label">Who this is for</p>
+            <ul className="funding-list persona-list">
+              {personas.map((item) => (
+                <li key={item.who}>
+                  <strong>{item.who}</strong> — {item.line}
+                </li>
               ))}
             </ul>
           </div>
