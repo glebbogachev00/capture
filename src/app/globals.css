@@ -3031,3 +3031,35 @@ body {
   text-decoration: line-through;
   text-decoration-color: var(--muted);
 }
+
+/* The three demo videos on the landing page. */
+.site-video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin: 14px 0;
+}
+.video-card {
+  margin: 0;
+  padding: 10px;
+}
+.video-card video {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+  background: #000;
+}
+.video-card figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 6px 4px;
+}
+.video-card figcaption strong {
+  font-size: 14.5px;
+}
+.video-card figcaption span {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
