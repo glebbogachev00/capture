@@ -36,8 +36,12 @@ export const TOUR_STEPS: TourStep[] = [
     id: "teach",
     title: "Now change its mind",
     body:
-      "Capture this one. When the green banner lands, press Undo — it will ask what it should have been. Pick An action: you decided, so it's a job. That answer is remembered.",
-    prefill: "thinking about repainting the hallway, maybe a warmer white",
+      "Capture this one. When the green banner lands, press Undo — it will ask what it should have been. Pick any answer; the point is that it is remembered.",
+    /* Deliberately observational: a sentence with an extractable task can
+       land as "both", and a both capture has no kind-question to ask —
+       the step's whole promise. */
+    prefill:
+      "the mornings i write first go well, the ones i start with email do not. not sure it is the writing",
   },
   {
     id: "thread",
