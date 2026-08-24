@@ -76,20 +76,18 @@ const hidden = [
 ];
 
 const personas = [
-  "Founders whose day is a stream of half-thoughts",
-  "Developers who spot bugs while fixing other bugs",
-  "Anyone tired of choosing folders and tags",
-  "People who want speed, clarity, and a short list",
-  "People with four hundred notes and twelve they trust",
+  "You notice a bug while fixing a different one",
+  "A decision keeps coming back and never gets made",
+  "You dictate on a walk and never listen back",
+  "You have hundreds of notes and trust twelve",
 ]
 
 const rejects = [
   "A dashboard",
   "A folder system",
   "A graph to stare at",
-  "A meeting notetaker",
   "A streak machine",
-  "An AI companion that talks forever",
+  "A chatbot that talks forever",
 ];
 
 export function Landing() {
@@ -111,11 +109,12 @@ export function Landing() {
           <h1>Thoughts that sort themselves.</h1>
           <p className="funding-lede site-lede">
             Built to catch and sort a thought in as few moves as it can get
-            away with. Say it messy. It lands sorted.
+            away with. Say it messy: the task lands on your list, the
+            question becomes a thread you keep.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
-              Try Capture now
+              Sort a thought
             </Link>
             <a
               className="ghost site-ghost"
@@ -189,39 +188,41 @@ export function Landing() {
             </figcaption>
           </figure>
 
-          <p className="reel-label">Two more</p>
-          <div className="reel-more">
-            {[
-              {
-                src: "/demos/it-learns.mp4",
-                poster: "/demos/it-learns.jpg",
-                title: "It got it wrong. You told it once.",
-                note: "Undo asks what it should have been. The next one lands right, unasked.",
-              },
-              {
-                src: "/demos/next-step.mp4",
-                poster: "/demos/next-step.jpg",
-                title: "It names the next move",
-                note: "A thread offers the step. One tap makes it an action.",
-              },
-            ].map((v) => (
-              <figure className="site-card video-card" key={v.src}>
-                <video
-                  controls
-                  muted
-                  playsInline
-                  preload="metadata"
-                  poster={v.poster}
-                >
-                  <source src={v.src} type="video/mp4" />
-                </video>
-                <figcaption>
-                  <strong>{v.title}</strong>
-                  <span>{v.note}</span>
-                </figcaption>
-              </figure>
-            ))}
-          </div>
+          <details className="reel-fold">
+            <summary>See two more examples</summary>
+            <div className="reel-more">
+              {[
+                {
+                  src: "/demos/it-learns.mp4",
+                  poster: "/demos/it-learns.jpg",
+                  title: "It got it wrong. You told it once.",
+                  note: "Undo asks what it should have been. The next one lands right, unasked.",
+                },
+                {
+                  src: "/demos/next-step.mp4",
+                  poster: "/demos/next-step.jpg",
+                  title: "It names the next move",
+                  note: "A thread offers the step. One tap makes it an action.",
+                },
+              ].map((v) => (
+                <figure className="site-card video-card" key={v.src}>
+                  <video
+                    controls
+                    muted
+                    playsInline
+                    preload="metadata"
+                    poster={v.poster}
+                  >
+                    <source src={v.src} type="video/mp4" />
+                  </video>
+                  <figcaption>
+                    <strong>{v.title}</strong>
+                    <span>{v.note}</span>
+                  </figcaption>
+                </figure>
+                ))}
+            </div>
+          </details>
         </section>
 
         <section className="site-card site-problem">
@@ -290,7 +291,7 @@ export function Landing() {
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
-              Try Capture now
+              Sort a thought
             </Link>
             <a className="ghost site-ghost" href="https://ko-fi.com/banhmii">
               Become a companion

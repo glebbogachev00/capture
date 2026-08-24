@@ -3277,3 +3277,33 @@ body {
   font-size: 14.5px;
   line-height: 1.5;
 }
+
+/* The two secondary demos fold away: on a phone, three stacked videos put
+   half a screen of footage between the hero and the first idea. */
+.reel-fold {
+  margin-top: 22px;
+}
+.reel-fold summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-block;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--card);
+}
+.reel-fold summary::-webkit-details-marker {
+  display: none;
+}
+.reel-fold summary:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+.reel-fold[open] summary {
+  margin-bottom: 14px;
+}
