@@ -53,6 +53,7 @@ import { actionsFromThread } from "@/lib/threadActions";
 import { useBoard } from "@/hooks/useBoard";
 import { ReportBug } from "@/components/ReportBug";
 import { PlaygroundNotice } from "@/components/PlaygroundNotice";
+import { Tour } from "@/components/Tour";
 import { PLAYGROUND } from "@/lib/playground";
 import { groupActions } from "@/lib/group";
 import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
@@ -406,6 +407,21 @@ export function Capture() {
     <div className="capture-root">
       <div className="capture-wrap">
         {PLAYGROUND && <PlaygroundNotice />}
+      {/* Only once the board has loaded: the first-sight check must see
+          the real capture count, not the empty board of a loading one. */}
+      {PLAYGROUND && loaded && (
+        <Tour
+          ctx={{
+            captures: (data.ledger ?? []).length,
+            answered: (data.corrections ?? []).filter(
+              (c) => c.proposalKind === "undone" && c.accepted
+            ).length,
+            threadOpen: !!thread,
+            recordOpen: showRecord,
+          }}
+          onPrefill={setText}
+        />
+      )}
         <div className="capture-head">
           <button
             className="capture-mark"
