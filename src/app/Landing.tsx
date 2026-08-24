@@ -248,10 +248,9 @@ export function Landing() {
           <h2>This is where the reviews usually go.</h2>
           <p>
             I do not have any yet, so here is the honest version. I built
-            Capture for myself, and four things have been built with it
-            since: this app, the tool that records its demos, a coding
-            school for young learners, and the booking flow for a private
-            jet charter.
+            it for myself at the end of July, and everything I have worked
+            on since has gone through it: this app, Retake for demo videos,
+            TechBash for young coders, and the booking flow for AvexJets.
           </p>
 
           {/* The day, in the three moments that matter. Prose made a
