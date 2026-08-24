@@ -190,11 +190,14 @@ export function applySorted(
         ];
     const homeId = home ? home.id : threads[0].id;
     const homeName = home ? home.name : threads[0].name;
+    /* The action and the layer are two halves of one capture; the action
+       remembers which thread holds the other half. */
+    const linked = items.map((i) => ({ ...i, threadId: homeId }));
     return {
-      next: { ...board, actions: [...items, ...board.actions], threads },
+      next: { ...board, actions: [...linked, ...board.actions], threads },
       targetId: homeId,
       source: { kind: "thread", id: homeId, fragId: bothFrag.id },
-      landedIds: [...items.map((i) => i.id), homeId],
+      landedIds: [...linked.map((i) => i.id), homeId],
       /* A layer is something added to a thread that was already there. A
          thread this capture just created has no layers yet — calling its
          first fragment "a layer on X" describes a history that does not

@@ -48,7 +48,8 @@ import {
   SettingsScreen,
 } from "./Intentions";
 import { OrganizeScreen } from "./Organize";
-import { shareAction, shareIntention, shareThread } from "@/lib/share";
+import { shareAction, shareIntention, shareRecord, shareThread } from "@/lib/share";
+import { actionsFromThread } from "@/lib/threadActions";
 import { useBoard } from "@/hooks/useBoard";
 import { ReportBug } from "@/components/ReportBug";
 import { PlaygroundNotice } from "@/components/PlaygroundNotice";
@@ -794,6 +795,15 @@ export function Capture() {
             onBack={() => setShowRecord(false)}
             rules={learnedRules}
             onClearRule={(key) => void clearRule(key)}
+            threads={data.threads}
+            onOpenThread={(id) => {
+              setShowRecord(false);
+              setTab("threads");
+              setOpen(id);
+            }}
+            onCopy={() =>
+              copyWhole(shareRecord(data.ledger ?? [], data.threads))
+            }
           />
         ) : showSettings ? (
           <SettingsScreen
@@ -857,7 +867,12 @@ export function Capture() {
             onSetCover={(cover) => setThreadCover(thread.id, cover)}
             onMoveFrag={(fragId, toId) => moveFrag(thread.id, fragId, toId)}
             onMoveFragToNew={(fragId) => moveFragToNew(thread.id, fragId)}
-            onCopyThread={() => copyWhole(shareThread(thread))}
+            onCopyThread={() =>
+              copyWhole(
+                shareThread(thread, actionsFromThread(data, thread.id))
+              )
+            }
+            fromActions={actionsFromThread(data, thread.id)}
             onCopyFrag={(fragId) => copyFragment(thread.id, fragId)}
             onExtractAction={(fragId) => extractAction(thread.id, fragId)}
             onTakeNext={() => takeNext(thread.id)}
@@ -1550,6 +1565,7 @@ function ThreadView({
   onExtractAction,
   onTakeNext,
   onDismissNext,
+  fromActions,
   busy,
 }: {
   thread: Thread;
@@ -1570,6 +1586,9 @@ function ThreadView({
   onExtractAction: (fragId: string) => void;
   onTakeNext: () => void;
   onDismissNext: () => void;
+  /** What this thread gave rise to — shown as one quiet line, and only
+      when there is something to show. */
+  fromActions: { open: Action[]; done: Action[] };
   busy: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
@@ -1824,6 +1843,36 @@ function ThreadView({
             </div>
           )}
         </div>
+      )}
+
+      {/* The seam, made visible: the actions this thread gave rise to. A
+          line, folded, and absent entirely for a thread that has produced
+          nothing — most threads are thinking, not spawning. */}
+      {(fromActions.open.length > 0 || fromActions.done.length > 0) && (
+        <details className="thread-from">
+          <summary>
+            {fromActions.open.length > 0
+              ? `${fromActions.open.length} open action${
+                  fromActions.open.length === 1 ? "" : "s"
+                } from this thread`
+              : `${fromActions.done.length} action${
+                  fromActions.done.length === 1 ? "" : "s"
+                } from this thread, all done`}
+            {fromActions.open.length > 0 && fromActions.done.length > 0
+              ? ` · ${fromActions.done.length} done`
+              : ""}
+          </summary>
+          <ul>
+            {fromActions.open.map((a) => (
+              <li key={a.id}>{a.text}</li>
+            ))}
+            {fromActions.done.map((a) => (
+              <li key={a.id} className="from-done">
+                {a.text}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       {[...thread.frags].reverse().map((f) => (

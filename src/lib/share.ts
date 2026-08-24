@@ -48,7 +48,10 @@ export type Shareable = {
   files?: File[];
 };
 
-export function shareThread(t: Thread): Shareable {
+export function shareThread(
+  t: Thread,
+  from?: { open: Action[]; done: Action[] }
+): Shareable {
   const dates = t.frags.map((f) => f.at);
   const lines = [`# ${t.name}`, ""];
   lines.push(
@@ -61,6 +64,14 @@ export function shareThread(t: Thread): Shareable {
   lines.push("---", "");
   for (const f of t.frags) {
     lines.push(`**${shortDate(f.at)}**`, "", f.text, "");
+  }
+  /* The actions this thread gave rise to ride along, open first: a person
+     pasting the thread into an agent is handing over where the thinking
+     stands, and the agent's first question is always "so what is next?". */
+  if (from && (from.open.length || from.done.length)) {
+    lines.push("", "## Actions from this thread", "");
+    for (const a of from.open) lines.push(`- [ ] ${a.text}`);
+    for (const a of from.done) lines.push(`- [x] ${a.text}`);
   }
   return {
     title: t.name,
@@ -243,4 +254,32 @@ export async function shareText(s: Shareable): Promise<ShareOutcome> {
   } catch {
     return "failed";
   }
+}
+
+/**
+ * The record as a document: what was said and what became of it, newest
+ * first, named destinations included — the one paste that catches an agent
+ * up on everything since last time.
+ */
+export function shareRecord(
+  ledger: import("./ledger").CaptureEntry[],
+  threads: { id: string; name: string }[],
+  limit = 30
+): Shareable {
+  const name = (id: string) => threads.find((t) => t.id === id)?.name;
+  const rows = [...ledger].sort((a, b) => b.at - a.at).slice(0, limit);
+  const lines = [`# Capture record (last ${rows.length})`, ""];
+  for (const e of rows) {
+    const said = (e.clean || e.raw || "").trim();
+    const home =
+      (e.kind === "thread" || e.kind === "both") && e.targetId
+        ? name(e.targetId)
+        : undefined;
+    lines.push(
+      `- ${shortDate(e.at)} · ${e.kind}${e.undone ? " · undone" : ""}${
+        home ? ` · in "${home}"` : ""
+      }: ${said}`
+    );
+  }
+  return { title: "Capture record", summary: `${rows.length} captures`, text: lines.join("\n") };
 }

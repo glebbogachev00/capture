@@ -429,6 +429,9 @@ export function RecordScreen({
   onBack,
   rules,
   onClearRule,
+  threads,
+  onOpenThread,
+  onCopy,
 }: {
   ledger: CaptureEntry[];
   now: number;
@@ -437,6 +440,11 @@ export function RecordScreen({
      with a way to forget it. */
   rules: LearnedRule[];
   onClearRule: (key: string) => void;
+  /** Just enough of the board to name where each capture landed. */
+  threads: { id: string; name: string }[];
+  onOpenThread: (id: string) => void;
+  /** The whole record to the clipboard, agent-readable. */
+  onCopy: () => void;
 }) {
   const stats = recordStats(ledger);
   const grid = heatGrid(ledger, now);
@@ -537,11 +545,34 @@ export function RecordScreen({
                 )}
                 <p className="record-meta">
                   {e.kind} · {e.undone && "undone · "}
+                  {(() => {
+                    /* The connection, where it exists: which thread this
+                       capture landed on, and a way to go there. A gone
+                       thread names nothing rather than a dead link. */
+                    const home = e.targetId
+                      ? threads.find((t) => t.id === e.targetId)
+                      : undefined;
+                    return home ? (
+                      <>
+                        in{" "}
+                        <button
+                          className="record-home"
+                          onClick={() => onOpenThread(home.id)}
+                        >
+                          {home.name}
+                        </button>{" "}
+                        ·{" "}
+                      </>
+                    ) : null;
+                  })()}
                   {fmt(e.at)}
                 </p>
               </li>
             ))}
           </ul>
+          <button className="ghost record-copy" onClick={onCopy}>
+            Copy the record
+          </button>
         </>
       )}
 

@@ -61,6 +61,10 @@ export type Action = {
   fadedAt?: number | null;
   /** Landed here raw because no model would answer. Can be sorted later. */
   unsorted?: boolean;
+  /** The thread this action arrived with — a "both" capture, a taken next
+      step, an extraction. The seam between the two halves of one moment,
+      kept so the thread can show what it gave rise to. */
+  threadId?: string;
   /** A picture arrived with this capture and lives on a thread fragment.
       Actions are made to be cleared away and threads are made to keep
       things, so the image is never owned by the row that will be ticked

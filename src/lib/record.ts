@@ -61,6 +61,8 @@ export type RecordEntry = {
   differs: boolean;
   /** Undone after it landed — shown, but folded. */
   undone: boolean;
+  /** The thread it landed on, when it landed on one. */
+  targetId?: string;
 };
 
 /** Compare the way a reader would: case, spacing and trailing punctuation
@@ -86,6 +88,10 @@ export function recentCaptures(
         filed,
         kind: e.kind,
         undone: !!e.undone,
+        targetId:
+          (e.kind === "thread" || e.kind === "both") && e.targetId
+            ? e.targetId
+            : undefined,
         differs: !!said && !!filed && normalise(said) !== normalise(filed),
       };
     });

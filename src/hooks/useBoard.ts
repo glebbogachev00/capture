@@ -2471,6 +2471,7 @@ export function useBoard(now: number) {
         imgs: [],
         shelf: (out.shelfLife || "keep") as ShelfLife,
         expires: span ? stamp() + span : null,
+        threadId,
       };
       await commit(
         noteCorrection(
@@ -2532,6 +2533,7 @@ export function useBoard(now: number) {
             imgs: [],
             shelf: (out.shelfLife || "keep") as ShelfLife,
             expires: span ? stamp() + span : null,
+            threadId,
           };
         }
       );

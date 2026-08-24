@@ -3393,3 +3393,60 @@ body {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* The actions a thread gave rise to: one folded line under "Where this
+   stands", in the same quiet register as the next step. */
+.thread-from {
+  margin: -10px 0 22px;
+}
+.thread-from summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-block;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.thread-from summary::-webkit-details-marker {
+  display: none;
+}
+.thread-from summary:hover {
+  color: var(--accent);
+}
+.thread-from ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 0 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.thread-from li {
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.thread-from li.from-done {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--muted);
+}
+
+/* The record's connections: the thread a capture landed on, tappable. */
+.record-meta .record-home {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.record-meta .record-home:hover {
+  color: var(--accent);
+}
+.record-copy {
+  margin-top: 14px;
+}

@@ -337,3 +337,19 @@ describe("applySorted — a capture that is both a task and thinking", () => {
     expect(landed).toContain("a layer on Pricing the new tier");
   });
 });
+
+describe("a both capture leaves the seam on its actions", () => {
+  it("stamps threadId with the thread the layer landed on", async () => {
+    const { applySorted } = await import("./boardOps");
+    const { EMPTY } = await import("./model");
+    const out = applySorted(
+      { kind: "both", clean: "c", title: "T", actions: ["do the thing"], threadId: null, threadName: "Home", shelfLife: "keep" } as never,
+      [],
+      1,
+      EMPTY
+    );
+    const action = out.next.actions[0];
+    const thread = out.next.threads[0];
+    expect(action.threadId).toBe(thread.id);
+  });
+});
