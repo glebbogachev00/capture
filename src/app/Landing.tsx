@@ -181,6 +181,18 @@ export function Landing() {
           </p>
         </section>
 
+        <section className="site-card site-problem">
+          <p className="funding-card-label">As few moves as possible</p>
+          <h2>Fragments, not notes.</h2>
+          <p>
+            Capture is built to catch, sort, and share a thought in the
+            fewest moves it can get away with — say it, and it is already
+            filed. Even the word note is out: notes are where thoughts go to
+            rot. What a thread holds are fragments — layers of thinking,
+            never pages to file.
+          </p>
+        </section>
+
         <section className="site-kind-grid" aria-label="The three kinds">
           {kinds.map((kind) => (
             <article className="site-card kind-card" key={kind.name}>
