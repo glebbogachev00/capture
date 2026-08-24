@@ -3063,11 +3063,3 @@ body {
   color: var(--muted);
   line-height: 1.5;
 }
-
-/* Personas on the landing: the name carries, the line explains. */
-.persona-list li {
-  line-height: 1.55;
-}
-.persona-list strong {
-  font-weight: 600;
-}

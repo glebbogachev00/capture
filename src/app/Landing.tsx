@@ -62,27 +62,12 @@ const hidden = [
 ];
 
 const personas = [
-  {
-    who: "Founders and entrepreneurs",
-    line: "The day is a stream of half-thoughts — a pricing doubt, an intro to send, a line worth keeping. Say them as they pass; the board keeps the account.",
-  },
-  {
-    who: "Developers",
-    line: "The bug you spot while fixing a different one, the refactor idea mid-review. It's an action with a shelf life before you've switched windows.",
-  },
-  {
-    who: "Anyone tired of deciding",
-    line: "No folder, no tag, no \u201cis this a task or a note?\u201d before the sentence is finished. The number of filing decisions is zero.",
-  },
-  {
-    who: "People who want speed and clarity",
-    line: "One box, no ceremony — and the board stays short, because what stops mattering fades on its own.",
-  },
-  {
-    who: "People with four hundred notes",
-    line: "…who trust maybe twelve of them. Nothing lands here unsorted, so the pile never starts.",
-  },
-];
+  "Founders whose day is a stream of half-thoughts",
+  "Developers who spot bugs while fixing other bugs",
+  "Anyone tired of choosing folders and tags",
+  "People who want speed, clarity, and a short list",
+  "People with four hundred notes and twelve they trust",
+]
 
 const rejects = [
   "A dashboard",
@@ -234,11 +219,9 @@ export function Landing() {
         <section className="site-card site-split">
           <div>
             <p className="funding-card-label">Who this is for</p>
-            <ul className="funding-list persona-list">
+            <ul className="funding-list">
               {personas.map((item) => (
-                <li key={item.who}>
-                  <strong>{item.who}</strong> — {item.line}
-                </li>
+                <li key={item}>{item}</li>
               ))}
             </ul>
           </div>
