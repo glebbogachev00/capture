@@ -102,7 +102,7 @@ export function Landing() {
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
-              Try it — no signup
+              Try Capture now
             </Link>
             <a
               className="ghost site-ghost"
@@ -246,13 +246,15 @@ export function Landing() {
           <p>
             It runs locally, on your own keys, and everything in it exports to
             a file you keep. Nothing here needs my server to go on existing.
+            There are no customers here, only companions — people who use the
+            thing, correct it, and keep it alive.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
-              Try it — no signup
+              Try Capture now
             </Link>
             <a className="ghost site-ghost" href="https://ko-fi.com/banhmii">
-              Donate
+              Become a companion
             </a>
           </div>
         </section>
