@@ -87,7 +87,6 @@ export function Landing() {
             capture<span>.</span>
           </Link>
           <nav className="site-nav" aria-label="Capture links">
-            <Link href="/voice">Voice</Link>
             <a href="https://github.com/glebbogachev00/capture">GitHub</a>
                         <Link href={APP}>Open app</Link>
           </nav>

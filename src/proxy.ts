@@ -7,7 +7,6 @@ const PUBLIC_PATHS = [
   "/login",
   "/about",
   "/funding",
-  "/voice",
   "/api/login",
   "/manifest.webmanifest",
   "/sw.js",
