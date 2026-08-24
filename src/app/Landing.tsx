@@ -113,10 +113,7 @@ export function Landing() {
           <h1>Thoughts that sort themselves.</h1>
           <p className="funding-lede site-lede">
             Built to catch, sort, and share a thought in as few moves as it
-            can get away with. Say it however it comes out — it lands as
-            something to do, something you&apos;re thinking through, or
-            something you&apos;re becoming — and when it lands wrong, you
-            tell it once.
+            can get away with. Say it messy. It lands sorted.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
