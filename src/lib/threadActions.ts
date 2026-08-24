@@ -1,37 +1,57 @@
-import type { Action, Board } from "./model";
+import type { Action, Board, Thread } from "./model";
+import { sharedPhrase } from "./related";
 
 /**
- * The actions a thread gave rise to.
+ * The actions that belong with a thread.
  *
- * A "both" capture files a task and a layer of thinking in one breath; a
- * taken next step turns a thread's own reading into a task; an extraction
- * lifts a task out of a note. In every case the action and the thread are
- * two halves of one moment — and until now the board forgot that the
- * moment happened. New actions carry `threadId`; for actions from before
- * the field existed, the ledger still remembers: a "both" entry names the
- * thread it landed on, and the actions it made carry the capture's cleaned
- * text as their `src`.
+ * Two ways in. Provenance: a "both" capture, a taken next step or an
+ * extraction created the action and the thread-side of the same moment,
+ * and the action carries `threadId` (older ones are recovered through the
+ * ledger's both entries). And subject: an open action that shares a real
+ * phrase — two content words or more, the same bar Tidy's fold uses — with
+ * what the thread actually says. Provenance alone looked like no
+ * intelligence at all on a board whose actions mostly predate the field;
+ * the subject match is what makes the list feel like it was read.
  */
-export function actionsFromThread(
+export function actionsForThread(
   board: Board,
-  threadId: string
+  thread: Thread
 ): { open: Action[]; done: Action[] } {
-  /* What the old ledger can vouch for: the cleaned text of every "both"
-     capture that landed on this thread. */
   const vouched = new Set<string>();
   for (const e of board.ledger ?? []) {
-    if (e.kind === "both" && e.targetId === threadId && !e.undone) {
+    if (e.kind === "both" && e.targetId === thread.id && !e.undone) {
       if (e.clean) vouched.add(e.clean.trim());
     }
   }
-  const mine = board.actions.filter(
-    (a) =>
-      a.threadId === threadId ||
-      (!a.threadId && !!a.src && vouched.has(a.src.trim()))
-  );
+  const threadText = [
+    thread.name,
+    thread.summary,
+    ...thread.frags.map((f) => f.text),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const isMine = (a: Action) =>
+    a.threadId === thread.id ||
+    (!a.threadId && !!a.src && vouched.has(a.src.trim()));
+  /* An action that names another thread as home is never borrowed. */
+  const isRelated = (a: Action) =>
+    !a.done &&
+    (!a.threadId || a.threadId === thread.id) &&
+    sharedPhrase(`${a.text} ${a.src ?? ""}`, threadText).split(" ").filter(Boolean)
+      .length >= 2;
+
   const newestFirst = (x: Action, y: Action) => y.at - x.at;
+  const seen = new Set<string>();
+  const take = (list: Action[]) =>
+    list.filter((a) => (seen.has(a.id) ? false : (seen.add(a.id), true)));
+
+  const mine = board.actions.filter(isMine);
+  const related = board.actions.filter((a) => !isMine(a) && isRelated(a));
   return {
-    open: mine.filter((a) => !a.done).sort(newestFirst),
+    open: take(
+      [...mine.filter((a) => !a.done), ...related].sort(newestFirst)
+    ),
     done: mine.filter((a) => a.done).sort(newestFirst),
   };
 }

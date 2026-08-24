@@ -49,7 +49,7 @@ import {
 } from "./Intentions";
 import { OrganizeScreen } from "./Organize";
 import { shareAction, shareIntention, shareRecord, shareThread } from "@/lib/share";
-import { actionsFromThread } from "@/lib/threadActions";
+import { actionsForThread } from "@/lib/threadActions";
 import { useBoard } from "@/hooks/useBoard";
 import { ReportBug } from "@/components/ReportBug";
 import { PlaygroundNotice } from "@/components/PlaygroundNotice";
@@ -884,11 +884,9 @@ export function Capture() {
             onMoveFrag={(fragId, toId) => moveFrag(thread.id, fragId, toId)}
             onMoveFragToNew={(fragId) => moveFragToNew(thread.id, fragId)}
             onCopyThread={() =>
-              copyWhole(
-                shareThread(thread, actionsFromThread(data, thread.id))
-              )
+              copyWhole(shareThread(thread, actionsForThread(data, thread)))
             }
-            fromActions={actionsFromThread(data, thread.id)}
+            fromActions={actionsForThread(data, thread)}
             onCopyFrag={(fragId) => copyFragment(thread.id, fragId)}
             onExtractAction={(fragId) => extractAction(thread.id, fragId)}
             onTakeNext={() => takeNext(thread.id)}
@@ -1858,38 +1856,40 @@ function ThreadView({
               </button>
             </div>
           )}
+          {/* The actions that belong with this thread — born from it, or
+              plainly about it. Same room as the summary and the next step,
+              because they are the same kind of fact: where this stands,
+              and what is on the list because of it. */}
+          {fromActions.open.length > 0 && (
+            <div className="state-actions">
+              <h4>
+                Actions
+                {fromActions.done.length > 0 &&
+                  ` · ${fromActions.done.length} done`}
+              </h4>
+              <ul>
+                {fromActions.open.map((a) => (
+                  <li key={a.id}>
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <rect
+                        x="1.5"
+                        y="1.5"
+                        width="13"
+                        height="13"
+                        rx="3.5"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      />
+                    </svg>
+                    <span>{a.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
-      {/* The seam, made visible: the actions this thread gave rise to. A
-          line, folded, and absent entirely for a thread that has produced
-          nothing — most threads are thinking, not spawning. */}
-      {(fromActions.open.length > 0 || fromActions.done.length > 0) && (
-        <details className="thread-from">
-          <summary>
-            {fromActions.open.length > 0
-              ? `${fromActions.open.length} open action${
-                  fromActions.open.length === 1 ? "" : "s"
-                } from this thread`
-              : `${fromActions.done.length} action${
-                  fromActions.done.length === 1 ? "" : "s"
-                } from this thread, all done`}
-            {fromActions.open.length > 0 && fromActions.done.length > 0
-              ? ` · ${fromActions.done.length} done`
-              : ""}
-          </summary>
-          <ul>
-            {fromActions.open.map((a) => (
-              <li key={a.id}>{a.text}</li>
-            ))}
-            {fromActions.done.map((a) => (
-              <li key={a.id} className="from-done">
-                {a.text}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
 
       {[...thread.frags].reverse().map((f) => (
         <FragView

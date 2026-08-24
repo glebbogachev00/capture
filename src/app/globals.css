@@ -3394,43 +3394,47 @@ body {
   }
 }
 
-/* The actions a thread gave rise to: one folded line under "Where this
-   stands", in the same quiet register as the next step. */
-.thread-from {
-  margin: -10px 0 22px;
+/* The actions that belong with the thread, inside "Where this stands":
+   the same h4 voice as the card's own label, and rows at reading size —
+   the folded mono line they replace was invisible. */
+.state-actions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.thread-from summary {
-  cursor: pointer;
-  list-style: none;
-  display: inline-block;
+.state-actions h4 {
+  margin: 0 0 8px;
   font-family: var(--font-mono), monospace;
+  font-weight: 500;
   font-size: 10.5px;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--muted);
-}
-.thread-from summary::-webkit-details-marker {
-  display: none;
-}
-.thread-from summary:hover {
   color: var(--accent);
 }
-.thread-from ul {
+.state-actions ul {
   list-style: none;
-  margin: 10px 0 0;
-  padding: 0 0 0 2px;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
 }
-.thread-from li {
-  font-size: 14.5px;
+.state-actions li {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.state-actions svg {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.state-actions span {
+  font-size: 15px;
   line-height: 1.5;
-}
-.thread-from li.from-done {
-  color: var(--muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--muted);
+  color: var(--ink);
 }
 
 /* The record's connections: the thread a capture landed on, tappable. */

@@ -24,7 +24,7 @@ const Sorted = z.object({
   clean: z
     .string()
     .describe(
-      "the capture rewritten so it is easy to read weeks later. Repair transcription garble, drop filler and false starts, keep their voice and every idea, and never add ideas that aren't there. Break it into short paragraphs separated by a blank line, one per distinct idea. Use '- ' bullets on their own lines wherever they are listing things. Never return one unbroken block."
+      "the capture in the person's own words, tidied — an EDIT, never a rewrite. Fix punctuation, casing and obvious transcription garble; drop pure filler (um, uh, false starts). Never swap in synonyms, never summarise, never change a number, a name or a claim, and when unsure whether a word is garble, keep it exactly as said — a wrong-looking word the person can recognise beats a fluent word they never said. Break it into short paragraphs separated by a blank line, one per distinct idea. Use '- ' bullets on their own lines wherever they are listing things. Never return one unbroken block."
     ),
   kind: z.enum(["action", "thread", "intention", "both"]),
   title: z.string().describe("max 6 words"),

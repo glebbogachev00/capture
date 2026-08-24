@@ -8,12 +8,11 @@ sections below are the shipped features; the open items are what's left.
 
 ## Open — noticed 2026-08-24
 
-- **The sorter's clean-up can distort meaning on long dictations.** Gleb
-  dictated a feature idea and the filed version invented "sixteen actions
-  per threat" — words he never said. For long spoken captures the `clean`
-  rewrite should stay much closer to the raw text (tidy punctuation,
-  never paraphrase); the record's "said" line saved the meaning this
-  time, but the filed text is what gets read later.
+- ~~The sorter's clean-up can distort meaning on long dictations~~ —
+  fixed 2026-08-25: `clean` is now an edit, never a rewrite (no synonyms,
+  no summarising, numbers/names/claims untouched, keep-when-unsure).
+  Probed: "six actions" survives, "Liza" is not corrected, real garble
+  (unpayed, to long) still gets fixed.
 
 ## ~~Found while testing and recording — 2026-08-23~~ Fixed the same day
 
