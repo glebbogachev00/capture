@@ -2900,60 +2900,112 @@ body {
 
 
 /* ---------------------------------------------------------------- about
-   The transformation block. The messy input is set in the mono face the
-   app uses for machine text, the results in the reading face — the visual
-   difference IS the claim. */
+   The transformation block: what was said on the left, what it became on
+   the right, an arrow between them. The messy input is set in the mono
+   face the app uses for machine text and the results in the reading face,
+   so the difference is visible before it is read. */
 .site-demo {
   text-align: left;
+}
+.demo-split {
+  display: grid;
+  grid-template-columns: 1fr 34px 1fr;
+  /* Stretch, not centre: both columns start at their label, so the two
+     labels sit on one line and the eye reads across. */
+  align-items: stretch;
+  gap: 4px;
+}
+.demo-said,
+.demo-landed {
+  min-width: 0;
 }
 .demo-in {
   font-family: var(--font-mono), monospace;
   font-size: 14px;
   line-height: 1.7;
   color: var(--muted);
-  margin: 6px 0 0;
+  margin: 8px 0 0;
 }
-.demo-arrow {
-  margin: 14px 0 2px;
-  color: var(--muted);
-  opacity: 0.55;
-  font-size: 18px;
+.demo-turn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 20px;
+  opacity: 0.6;
 }
 .demo-out {
   list-style: none;
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
+/* Each result is a card, because on the board it is one. */
 .demo-out li {
   display: grid;
-  grid-template-columns: 74px 1fr;
-  gap: 4px 12px;
-  align-items: baseline;
+  grid-template-columns: 18px 1fr;
+  gap: 11px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+}
+.demo-mark {
+  display: block;
+  color: var(--accent);
+  margin-top: 3px;
+}
+.demo-mark svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+.demo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 .demo-kind {
   font-family: var(--font-mono), monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent);
 }
 .demo-text {
-  font-size: 16px;
+  font-size: 15.5px;
   font-weight: 600;
   color: var(--ink);
+  line-height: 1.4;
 }
 .demo-note {
-  grid-column: 2;
   font-size: 12.5px;
   color: var(--muted);
+  line-height: 1.45;
 }
 .demo-caption {
   margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
   font-size: 13.5px;
   color: var(--muted);
+}
+@media (max-width: 720px) {
+  .demo-split {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .demo-turn {
+    justify-content: flex-start;
+    padding: 12px 0 4px;
+  }
+  .demo-turn span {
+    display: inline-block;
+    transform: rotate(90deg);
+  }
 }
 .site-quiet .funding-list {
   margin-top: 12px;
@@ -2966,6 +3018,133 @@ body {
   .demo-note {
     grid-column: 1;
   }
+}
+
+/* The next step under "Where this stands": a line, not a card. */
+.next-step {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.next-label {
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  flex: none;
+}
+.next-take {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 3px;
+}
+.next-take:hover:not(:disabled) {
+  text-decoration-color: var(--accent);
+}
+.next-take:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.next-dismiss {
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  align-self: center;
+}
+.next-dismiss:hover {
+  color: var(--ink);
+}
+
+/* An undone capture in the record: still there, but folded. */
+.record-log li.record-undone {
+  opacity: 0.55;
+}
+.record-log li.record-undone .record-filed {
+  text-decoration: line-through;
+  text-decoration-color: var(--muted);
+}
+
+/* The demo reel: one take at a size worth watching, then the other two.
+   The recordings are a centred app column in a near-square frame, so a
+   three-across grid made each one too small to read the interface in. */
+.demo-reel {
+  margin: 14px 0;
+}
+.video-card {
+  margin: 0;
+  padding: 10px;
+}
+.video-card video {
+  width: 100%;
+  /* One box shape for all of them: the first demo was recorded wider than
+     the others and rendered shorter, which threw the row out of line. The
+     side crop loses only empty margin. */
+  aspect-ratio: 1440 / 1230;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+  background: #000;
+}
+.reel-hero {
+  max-width: 620px;
+  margin: 0 auto;
+}
+.reel-hero figcaption strong {
+  font-size: 16px;
+}
+.reel-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 26px 0 10px;
+}
+.reel-more {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+@media (max-width: 720px) {
+  .reel-more {
+    grid-template-columns: 1fr;
+  }
+}
+.video-card figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 6px 4px;
+}
+.video-card figcaption strong {
+  font-size: 14.5px;
+  line-height: 1.35;
+}
+.video-card figcaption span {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 /* The next step under "Where this stands": a line, not a card. */
@@ -3076,5 +3255,18 @@ body {
 .video-card figcaption span {
   font-size: 13px;
   color: var(--muted);
+  line-height: 1.5;
+}
+
+/* One quiet line under a pair of buttons: the thing a stranger would
+   otherwise have to click to find out. */
+.site-cue {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.site-condition {
+  margin: 8px 0 2px;
+  font-size: 14.5px;
   line-height: 1.5;
 }

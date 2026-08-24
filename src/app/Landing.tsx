@@ -29,11 +29,25 @@ const DEMO_OUT = [
     kind: "Action",
     text: "Fix the signup bug before Friday",
     note: "closes, and fades if it stops mattering",
+    /* The same marks the board uses: an empty box for a thing to close,
+       stacked layers for a thing that grows. Recognition does the work a
+       paragraph of explanation was doing. */
+    mark: (
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="13" height="13" rx="3.5" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
   },
   {
     kind: "Thread",
     text: "Pricing model decision",
     note: "keeps, and the summary stays current",
+    mark: (
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M2 5.5 8 2.5l6 3-6 3-6-3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="m2 10.5 6 3 6-3" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      </svg>
+    ),
   },
 ];
 
@@ -88,7 +102,6 @@ export function Landing() {
           </Link>
           <nav className="site-nav" aria-label="Capture links">
             <a href="https://github.com/glebbogachev00/capture">GitHub</a>
-            <a href="https://ko-fi.com/banhmii">Donate</a>
                         <Link href={APP}>Open app</Link>
           </nav>
         </header>
@@ -97,8 +110,8 @@ export function Landing() {
           <p className="funding-kicker">Your notes app became a junk drawer</p>
           <h1>Thoughts that sort themselves.</h1>
           <p className="funding-lede site-lede">
-            Built to catch, sort, and share a thought in as few moves as it
-            can get away with. Say it messy. It lands sorted.
+            Built to catch and sort a thought in as few moves as it can get
+            away with. Say it messy. It lands sorted.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
@@ -111,65 +124,104 @@ export function Landing() {
               View source
             </a>
           </div>
+          {PLAYGROUND && (
+            <p className="site-cue">
+              No account. The board you make stays in this browser.
+            </p>
+          )}
         </section>
 
         {/* The transformation is the product, so it is the first object on
-            the page — above the cards, above any explanation. */}
+            the page. Side by side, not stacked: the whole claim is that the
+            left turns into the right, and a reader should see that before
+            reading a word of it. */}
         <section className="site-card site-demo" aria-label="What it does">
-          <p className="funding-card-label">You say</p>
-          <p className="demo-in">“{DEMO_IN}”</p>
-          <p className="demo-arrow" aria-hidden="true">
-            ↓
-          </p>
-          <p className="funding-card-label">It lands as</p>
-          <ul className="demo-out">
-            {DEMO_OUT.map((row) => (
-              <li key={row.kind}>
-                <span className="demo-kind">{row.kind}</span>
-                <span className="demo-text">{row.text}</span>
-                <span className="demo-note">{row.note}</span>
-              </li>
-            ))}
-          </ul>
+          <div className="demo-split">
+            <div className="demo-said">
+              <p className="funding-card-label">You say</p>
+              <p className="demo-in">“{DEMO_IN}”</p>
+            </div>
+            <div className="demo-turn" aria-hidden="true">
+              <span>→</span>
+            </div>
+            <div className="demo-landed">
+              <p className="funding-card-label">It lands as</p>
+              <ul className="demo-out">
+                {DEMO_OUT.map((row) => (
+                  <li key={row.kind}>
+                    <span className="demo-mark">{row.mark}</span>
+                    <span className="demo-body">
+                      <span className="demo-kind">{row.kind}</span>
+                      <span className="demo-text">{row.text}</span>
+                      <span className="demo-note">{row.note}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
           <p className="demo-caption">
             One sentence, two different species of thing. You did not have to
             decide which, or tidy it first, or pick a folder.
           </p>
         </section>
 
-        {/* Thirty seconds each, recorded against the real sorter — the same
-            walkthroughs re-record themselves when the app changes. */}
-        <section className="site-video-grid" aria-label="Watch it work">
-          {[
-            {
-              src: "/demos/two-places.mp4",
-              poster: "/demos/two-places.jpg",
-              title: "One sentence, two places",
-              note: "A task and a question in one breath — it files both.",
-            },
-            {
-              src: "/demos/it-learns.mp4",
-              poster: "/demos/it-learns.jpg",
-              title: "It got it wrong. You told it once.",
-              note: "Undo asks what it should have been. The next one lands right, unasked.",
-            },
-            {
-              src: "/demos/next-step.mp4",
-              poster: "/demos/next-step.jpg",
-              title: "It names the next move",
-              note: "A thread reads its own evidence and offers the step — one tap makes it an action.",
-            },
-          ].map((v) => (
-            <figure className="site-card video-card" key={v.src}>
-              <video controls muted playsInline preload="metadata" poster={v.poster}>
-                <source src={v.src} type="video/mp4" />
-              </video>
-              <figcaption>
-                <strong>{v.title}</strong>
-                <span>{v.note}</span>
-              </figcaption>
-            </figure>
-          ))}
+        {/* One demo at a size worth watching, then the other two. Three
+            equal tiles made every one of them too small to read the app in,
+            which is the only thing they are for. */}
+        <section className="demo-reel" aria-label="Watch it work">
+          <figure className="site-card video-card reel-hero">
+            <video
+              controls
+              muted
+              playsInline
+              preload="metadata"
+              poster="/demos/two-places.jpg"
+            >
+              <source src="/demos/two-places.mp4" type="video/mp4" />
+            </video>
+            <figcaption>
+              <strong>One sentence, two places</strong>
+              <span>
+                A task and a question in one breath. It files both, and you
+                never chose which was which. 25 seconds, no sound.
+              </span>
+            </figcaption>
+          </figure>
+
+          <p className="reel-label">Two more</p>
+          <div className="reel-more">
+            {[
+              {
+                src: "/demos/it-learns.mp4",
+                poster: "/demos/it-learns.jpg",
+                title: "It got it wrong. You told it once.",
+                note: "Undo asks what it should have been. The next one lands right, unasked.",
+              },
+              {
+                src: "/demos/next-step.mp4",
+                poster: "/demos/next-step.jpg",
+                title: "It names the next move",
+                note: "A thread reads its own evidence and offers the step. One tap makes it an action.",
+              },
+            ].map((v) => (
+              <figure className="site-card video-card" key={v.src}>
+                <video
+                  controls
+                  muted
+                  playsInline
+                  preload="metadata"
+                  poster={v.poster}
+                >
+                  <source src={v.src} type="video/mp4" />
+                </video>
+                <figcaption>
+                  <strong>{v.title}</strong>
+                  <span>{v.note}</span>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
         </section>
 
         <section className="site-card site-problem">
@@ -178,17 +230,9 @@ export function Landing() {
           <p>
             Say it messy. Paste the fragment. Dictate the half-thought at a
             traffic light. Most tools want a clean prompt; this one is built
-            for the sentence you actually produce.
-          </p>
-        </section>
-
-        <section className="site-card site-problem">
-          <p className="funding-card-label">The vocabulary</p>
-          <h2>Fragments, not notes.</h2>
-          <p>
-            Even the word note is out: notes are where thoughts go to rot.
-            What a thread holds are fragments — layers of thinking, never
-            pages to file, each one already where it belongs.
+            for the sentence you actually produce. That is also why nothing
+            here is called a note: notes are where thoughts go to rot. A
+            thread holds fragments, each one already where it belongs.
           </p>
         </section>
 
@@ -219,6 +263,10 @@ export function Landing() {
         <section className="site-card site-split">
           <div>
             <p className="funding-card-label">Who this is for</p>
+            <p className="site-condition">
+              People whose thoughts arrive before they are ready to be
+              organised.
+            </p>
             <ul className="funding-list">
               {personas.map((item) => (
                 <li key={item}>{item}</li>
@@ -239,15 +287,12 @@ export function Landing() {
 
         <section className="site-card site-proof">
           <p className="funding-card-label">Yours</p>
-          <h2>
-            Your thinking system should not disappear because someone
-            else&apos;s startup does.
-          </h2>
+          <h2>Your thinking stays yours.</h2>
           <p>
             It runs locally, on your own keys, and everything in it exports to
-            a file you keep. Nothing here needs my server to go on existing.
-            There are no customers here, only companions — people who use the
-            thing, correct it, and keep it alive.
+            a file you keep. The product can disappear. Your thinking does
+            not. There are no customers here, only companions: people who use
+            the thing, correct it, and keep it alive.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
@@ -257,6 +302,7 @@ export function Landing() {
               Become a companion
             </a>
           </div>
+          <p className="site-cue">A one-off on Ko-fi. Nothing is locked.</p>
         </section>
       </div>
     </main>
