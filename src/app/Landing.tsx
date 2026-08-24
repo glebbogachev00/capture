@@ -252,6 +252,45 @@ export function Landing() {
             since.
           </p>
 
+          {/* Four links, because a link is checkable and a sentence is
+              not. The label is first person and says only what is true: he
+              used it on these. It does not claim they run on Capture, and
+              there are no logos — a stranger can click, or not. */}
+          <div className="note-rail">
+            <p className="funding-card-label">What I have used it on</p>
+            <ul>
+              {[
+                {
+                  name: "Capture",
+                  gloss: "this app, in the open",
+                  href: "https://github.com/glebbogachev00/capture",
+                },
+                {
+                  name: "Retake",
+                  gloss: "recorded the videos above",
+                  href: "https://github.com/glebbogachev00/retake",
+                },
+                {
+                  name: "TechBash",
+                  gloss: "a coding school for kids",
+                  href: "https://bash.techtutor.academy/preview",
+                },
+                {
+                  name: "AvexJets",
+                  gloss: "a charter booking flow",
+                  href: "https://www.avex-jets.com/",
+                },
+              ].map((x) => (
+                <li key={x.name}>
+                  <a href={x.href} target="_blank" rel="noreferrer">
+                    {x.name}
+                  </a>
+                  <span>{x.gloss}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
           {/* The day, in the three moments that matter. Prose made a
               reader work for what a glance can give them. */}
           <dl className="note-beats">
