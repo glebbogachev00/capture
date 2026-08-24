@@ -3307,3 +3307,27 @@ body {
 .reel-fold[open] summary {
   margin-bottom: 14px;
 }
+
+/* The maker's note: the one section on the page written by a person about
+   their own days, so it is set apart and signed. */
+.site-note h2 {
+  margin-bottom: 12px;
+}
+.site-card p.site-note-claim {
+  margin: 14px 0 0;
+  font-size: 16px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.site-card p + p:not(.funding-card-label):not(.site-note-claim):not(.site-sign) {
+  margin-top: 12px;
+}
+.site-card p.site-sign {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}

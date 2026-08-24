@@ -225,6 +225,35 @@ export function Landing() {
           </details>
         </section>
 
+        {/* The only proof on the page about a person rather than the
+            software. It opens by naming the convention it is breaking,
+            because a maker's note that dressed itself up as a stranger's
+            review would be worth less than nothing. */}
+        <section className="site-card site-note" aria-label="From the maker">
+          <p className="funding-card-label">From the person who made it</p>
+          <h2>This is where the reviews usually go.</h2>
+          <p>
+            I do not have any yet, so here is the honest version. I built
+            Capture for myself and I use it every day.
+          </p>
+          <p>
+            Ideas arrive when I am out walking. I say them into the box
+            unformed, and by the time I am home the tasks are on a list I
+            actually close and the thinking has gathered into threads. Four
+            projects have been built this way, including this app and the
+            tool that records its demos.
+          </p>
+          <p>
+            A thread copies out in one tap, so I paste the whole thing into
+            Claude and keep going. What is readable for me turns out to be
+            readable for an agent.
+          </p>
+          <p className="site-note-claim">
+            It cleared my head, and a clear head builds faster.
+          </p>
+          <p className="site-sign">Gleb, who made it and uses it most</p>
+        </section>
+
         <section className="site-card site-problem">
           <p className="funding-card-label">The point</p>
           <h2>It works best when you don&apos;t perform clarity.</h2>
