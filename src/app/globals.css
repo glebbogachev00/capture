@@ -3032,12 +3032,20 @@ body {
   text-decoration-color: var(--muted);
 }
 
-/* The three demo videos on the landing page. */
+/* The three demo videos on the landing page. Three across or one
+   across, never two: an auto-fit grid at tablet widths wrapped the third
+   card into an orphan row and the section read as lopsided. */
 .site-video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 14px;
   margin: 14px 0;
+  align-items: stretch;
+}
+@media (max-width: 860px) {
+  .site-video-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .video-card {
   margin: 0;
@@ -3045,6 +3053,12 @@ body {
 }
 .video-card video {
   width: 100%;
+  /* One box shape for all three: the first demo was recorded wider than
+     the others and rendered shorter, which threw every row out of line.
+     The recordings are a centred column, so the side crop loses only
+     empty margin. */
+  aspect-ratio: 1440 / 1230;
+  object-fit: cover;
   border-radius: 10px;
   display: block;
   background: #000;
@@ -3057,6 +3071,7 @@ body {
 }
 .video-card figcaption strong {
   font-size: 14.5px;
+  line-height: 1.35;
 }
 .video-card figcaption span {
   font-size: 13px;
