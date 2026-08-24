@@ -248,8 +248,10 @@ export function Landing() {
           <h2>This is where the reviews usually go.</h2>
           <p>
             I do not have any yet, so here is the honest version. I built
-            Capture for myself, and four projects have come out of it since,
-            including this app and the tool that records its demos.
+            Capture for myself, and four things have been built with it
+            since: this app, the tool that records its demos, a coding
+            school for young learners, and the booking flow for a private
+            jet charter.
           </p>
 
           {/* The day, in the three moments that matter. Prose made a
