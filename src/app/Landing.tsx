@@ -227,31 +227,57 @@ export function Landing() {
 
         {/* The only proof on the page about a person rather than the
             software. It opens by naming the convention it is breaking,
-            because a maker's note that dressed itself up as a stranger's
-            review would be worth less than nothing. */}
+            because a maker's note dressed up as a stranger's review would
+            be worth less than nothing. The face goes first, so a reader
+            knows a person is talking before reading a word of it. */}
         <section className="site-card site-note" aria-label="From the maker">
-          <p className="funding-card-label">From the person who made it</p>
+          <div className="note-who">
+            {/* Plain img, not next/image: 128px of JPEG that never changes
+                and is decorative, so an optimiser would only add a round
+                trip and a transformation bill. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/gleb.jpg" alt="" width={44} height={44} />
+            <span>
+              <span className="funding-card-label">
+                From the person who made it
+              </span>
+              <span className="note-name">Gleb, who uses it most</span>
+            </span>
+          </div>
+
           <h2>This is where the reviews usually go.</h2>
           <p>
             I do not have any yet, so here is the honest version. I built
-            Capture for myself and I use it every day.
+            Capture for myself, and four projects have come out of it since,
+            including this app and the tool that records its demos.
           </p>
-          <p>
-            Ideas arrive when I am out walking. I say them into the box
-            unformed, and by the time I am home the tasks are on a list I
-            actually close and the thinking has gathered into threads. Four
-            projects have been built this way, including this app and the
-            tool that records its demos.
-          </p>
-          <p>
-            A thread copies out in one tap, so I paste the whole thing into
-            Claude and keep going. What is readable for me turns out to be
-            readable for an agent.
-          </p>
+
+          {/* The day, in the three moments that matter. Prose made a
+              reader work for what a glance can give them. */}
+          <dl className="note-beats">
+            <div>
+              <dt>On a walk</dt>
+              <dd>Ideas arrive when I am out. I say them into the box unformed.</dd>
+            </div>
+            <div>
+              <dt>Back home</dt>
+              <dd>
+                The tasks are on a list I actually close. The thinking has
+                gathered into threads.
+              </dd>
+            </div>
+            <div>
+              <dt>Into Claude</dt>
+              <dd>
+                A thread copies out in one tap. What is readable for me turns
+                out to be readable for an agent.
+              </dd>
+            </div>
+          </dl>
+
           <p className="site-note-claim">
             It cleared my head, and a clear head builds faster.
           </p>
-          <p className="site-sign">Gleb, who made it and uses it most</p>
         </section>
 
         <section className="site-card site-problem">

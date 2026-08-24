@@ -3326,8 +3326,71 @@ body {
   margin: 16px 0 0;
   padding-top: 14px;
   border-top: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-family: var(--font-mono), monospace;
   font-size: 11.5px;
   letter-spacing: 0.04em;
   color: var(--muted);
+}
+.note-who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.note-who img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+.note-who > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.note-who .funding-card-label {
+  margin: 0;
+}
+.note-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+/* The day in three beats: a label you can skim, a line you can read. */
+.note-beats {
+  margin: 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.note-beats > div {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+}
+.note-beats dt {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.note-beats dd {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+@media (max-width: 600px) {
+  .note-beats > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
 }
