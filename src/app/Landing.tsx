@@ -94,13 +94,13 @@ export function Landing() {
         </header>
 
         <section className="site-hero">
-          <p className="funding-kicker">Notes, before they rot</p>
-          <h1>The capture box that sorts itself.</h1>
+          <p className="funding-kicker">Your notes app became a junk drawer</p>
+          <h1>Thoughts that sort themselves.</h1>
           <p className="funding-lede site-lede">
-            Things to do, things you&apos;re thinking through, things
-            you&apos;re becoming. Say it however it comes out — it lands as
-            an action, a thread, or an intention, and when it lands wrong
-            you tell it once. It learns.
+            Say it however it comes out. It lands as something to do,
+            something you&apos;re thinking through, or something
+            you&apos;re becoming — and when it lands wrong, you tell it
+            once.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>

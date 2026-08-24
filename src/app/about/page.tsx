@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Landing } from "@/app/Landing";
 
 export const metadata: Metadata = {
-  title: "capture · notes, before they rot",
+  title: "capture · thoughts that sort themselves",
   description:
-    "Your notes app became a junk drawer. Capture catches the thought before it becomes a pile — say it messy, it comes back with a shape.",
+    "Say it however it comes out. It lands as something to do, something you're thinking through, or something you're becoming — and when it lands wrong, you tell it once.",
 };
 
 export default function AboutPage() {
