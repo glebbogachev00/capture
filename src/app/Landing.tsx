@@ -248,10 +248,8 @@ export function Landing() {
           <h2>This is where the reviews usually go.</h2>
           <p>
             I do not have any yet, so here is the honest version. I built
-            it for myself at the end of July, and everything I have worked
-            on since has gone through it: this app, the tool that recorded
-            the videos above, a coding school for kids, and the booking
-            flow for a private jet charter.
+            it for myself at the end of July, and I have used it every day
+            since.
           </p>
 
           {/* The day, in the three moments that matter. Prose made a
