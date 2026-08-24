@@ -182,7 +182,7 @@ export function Landing() {
             <figcaption>
               <strong>One sentence, two places</strong>
               <span>
-                A task and a question in one breath. It files both. 25
+                A task and a question in one breath. It files both. 14
                 seconds, no sound.
               </span>
             </figcaption>
