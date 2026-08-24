@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="capture">
+  <rect width="512" height="512" fill="#2F5D3F"/>
+  <!--
+    The sediment motif from the thread cards: fragments settling, each layer
+    a little more solid than the one above it. Kept inside the centre 60% so
+    a maskable crop can't clip it.
+  -->
+  <g fill="#EDEFE8">
+    <rect x="136" y="134" width="240" height="28" rx="14" opacity="0.38"/>
+    <rect x="136" y="188" width="164" height="28" rx="14" opacity="0.52"/>
+    <rect x="136" y="242" width="216" height="28" rx="14" opacity="0.66"/>
+    <rect x="136" y="296" width="128" height="28" rx="14" opacity="0.8"/>
+    <rect x="136" y="350" width="192" height="28" rx="14"/>
+  </g>
+</svg>

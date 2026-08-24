@@ -170,12 +170,16 @@ export function Landing() {
             which is the only thing they are for. */}
         <section className="demo-reel" aria-label="Watch it work">
           <figure className="site-card video-card reel-hero">
+            {/* Its own shape, not a shared box: this take is 1920x1180 and
+                the other two are 1440x1230, so one forced ratio cropped a
+                quarter of the width off whichever did not match. */}
             <video
               controls
               muted
               playsInline
               preload="metadata"
               poster="/demos/two-places.jpg"
+              style={{ aspectRatio: "1440 / 1180" }}
             >
               <source src="/demos/two-places.mp4" type="video/mp4" />
             </video>
@@ -212,6 +216,7 @@ export function Landing() {
                     playsInline
                     preload="metadata"
                     poster={v.poster}
+                    style={{ aspectRatio: "1440 / 1230" }}
                   >
                     <source src={v.src} type="video/mp4" />
                   </video>

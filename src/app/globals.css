@@ -3102,11 +3102,10 @@ body {
 }
 .video-card video {
   width: 100%;
-  /* One box shape for all of them: the first demo was recorded wider than
-     the others and rendered shorter, which threw the row out of line. The
-     side crop loses only empty margin. */
-  aspect-ratio: 1440 / 1230;
-  object-fit: cover;
+  /* No shared aspect box. Each video declares its own ratio inline, so a
+     frame is never cropped to fit a shape it was not recorded in; the two
+     in the pair below share a shape and still line up. */
+  height: auto;
   border-radius: 10px;
   display: block;
   background: #000;
