@@ -268,7 +268,7 @@ export function Landing() {
               </dd>
             </div>
             <div>
-              <dt>Into an agent</dt>
+              <dt>To an agent</dt>
               <dd>
                 A thread copies out in one tap, straight into Claude or
                 whatever you build with. What is readable for me turns out
