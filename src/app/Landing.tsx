@@ -55,24 +55,24 @@ const kinds = [
   {
     name: "Actions",
     label: "Mayflies",
-    copy: "They exist to be closed. Each one gets a shelf life, and if it stops mattering it fades on its own. The list keeps itself honest.",
+    copy: "They exist to be closed. Each one gets a shelf life, and fades on its own if it stops mattering.",
   },
   {
     name: "Threads",
     label: "Sediment",
-    copy: "An idea rarely arrives whole. Each fragment adds a layer, and the thread keeps a current account of where the thinking stands.",
+    copy: "An idea rarely arrives whole. Each fragment adds a layer, and the summary stays current.",
   },
   {
     name: "Intentions",
     label: "Standing decisions",
-    copy: "Not goals. No checkbox, no due date — a state you are choosing to inhabit. Every couple of months it asks whether you still mean it.",
+    copy: "Not goals. No checkbox, no due date. Every couple of months it asks whether you still mean it.",
   },
 ];
 
 const hidden = [
-  "It learns when you correct it. Undo a capture and it asks what it should have been; answer once and the sorter carries that.",
+  "It learns when you correct it. Answer once and the sorter carries it.",
   "It proposes only when there is a decision. No graph of what it knows, no dashboard of what it noticed.",
-  "It shows its working where you would look for it, and nowhere else — the record, and the file you export.",
+  "It shows its working in the record and in the file you export.",
 ];
 
 const personas = [
@@ -183,8 +183,8 @@ export function Landing() {
             <figcaption>
               <strong>One sentence, two places</strong>
               <span>
-                A task and a question in one breath. It files both, and you
-                never chose which was which. 25 seconds, no sound.
+                A task and a question in one breath. It files both. 25
+                seconds, no sound.
               </span>
             </figcaption>
           </figure>
@@ -202,7 +202,7 @@ export function Landing() {
                 src: "/demos/next-step.mp4",
                 poster: "/demos/next-step.jpg",
                 title: "It names the next move",
-                note: "A thread reads its own evidence and offers the step. One tap makes it an action.",
+                note: "A thread offers the step. One tap makes it an action.",
               },
             ].map((v) => (
               <figure className="site-card video-card" key={v.src}>
@@ -228,11 +228,8 @@ export function Landing() {
           <p className="funding-card-label">The point</p>
           <h2>It works best when you don&apos;t perform clarity.</h2>
           <p>
-            Say it messy. Paste the fragment. Dictate the half-thought at a
-            traffic light. Most tools want a clean prompt; this one is built
-            for the sentence you actually produce. That is also why nothing
-            here is called a note: notes are where thoughts go to rot. A
-            thread holds fragments, each one already where it belongs.
+            Most tools want a clean prompt. This one is built for the
+            sentence you actually produce. Nothing here is called a note.
           </p>
         </section>
 
@@ -250,8 +247,7 @@ export function Landing() {
           <p className="funding-card-label">The sorting layer</p>
           <h2>The app is quiet because the sorting is not.</h2>
           <p>
-            Capture is closer to a subconscious layer than a dashboard: it
-            notices, files, fades and learns without narrating any of it.
+            It notices, files, fades and learns without narrating any of it.
           </p>
           <ul className="funding-list">
             {hidden.map((item) => (
@@ -265,7 +261,7 @@ export function Landing() {
             <p className="funding-card-label">Who this is for</p>
             <p className="site-condition">
               People whose thoughts arrive before they are ready to be
-              organised.
+              filed.
             </p>
             <ul className="funding-list">
               {personas.map((item) => (
@@ -289,10 +285,8 @@ export function Landing() {
           <p className="funding-card-label">Yours</p>
           <h2>Your thinking stays yours.</h2>
           <p>
-            It runs locally, on your own keys, and everything in it exports to
-            a file you keep. The product can disappear. Your thinking does
-            not. There are no customers here, only companions: people who use
-            the thing, correct it, and keep it alive.
+            It runs locally, on your own keys, and exports to a file you
+            keep. The product can disappear. Your thinking does not.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
@@ -302,7 +296,10 @@ export function Landing() {
               Become a companion
             </a>
           </div>
-          <p className="site-cue">A one-off on Ko-fi. Nothing is locked.</p>
+          <p className="site-cue">
+            No customers here, only companions. A one-off on Ko-fi, and
+            nothing is locked either way.
+          </p>
         </section>
       </div>
     </main>

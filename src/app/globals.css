@@ -2936,11 +2936,11 @@ body {
 }
 .demo-out {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 /* Each result is a card, because on the board it is one. */
 .demo-out li {
@@ -2948,7 +2948,7 @@ body {
   grid-template-columns: 18px 1fr;
   gap: 11px;
   align-items: start;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-radius: 11px;
   background: var(--accent-soft);
 }
@@ -2986,12 +2986,18 @@ body {
   color: var(--muted);
   line-height: 1.45;
 }
-.demo-caption {
-  margin: 18px 0 0;
-  padding-top: 14px;
+/* Written as `.site-card p.x` on purpose: `.site-card p:not(...)` above
+   sets margin 0 and outranks a bare class, which is why these lines were
+   sitting flush against whatever came before them. */
+.site-card p.demo-caption {
+  margin: 26px 0 0;
+  padding-top: 18px;
   border-top: 1px solid var(--rule);
   font-size: 13.5px;
   color: var(--muted);
+}
+.site-demo {
+  padding: 22px;
 }
 @media (max-width: 720px) {
   .demo-split {
@@ -3260,13 +3266,14 @@ body {
 
 /* One quiet line under a pair of buttons: the thing a stranger would
    otherwise have to click to find out. */
-.site-cue {
-  margin: 12px 0 0;
+.site-cue,
+.site-card p.site-cue {
+  margin: 16px 0 0;
   font-size: 12.5px;
   color: var(--muted);
 }
-.site-condition {
-  margin: 8px 0 2px;
+.site-card p.site-condition {
+  margin: 0 0 14px;
   font-size: 14.5px;
   line-height: 1.5;
 }
