@@ -14,6 +14,28 @@ sections below are the shipped features; the open items are what's left.
   Probed: "six actions" survives, "Liza" is not corrected, real garble
   (unpayed, to long) still gets fixed.
 
+## What the correction engine can and cannot learn — 2026-08-25
+
+Three deliberately hard pairs: a capture the sorter files one way and a
+person means the other, then the same kind of thought in different words.
+
+- **Two of three transfer perfectly.** A hedged decision about cancelling a
+  membership and a plan to repaint both wrote a usable rule and flipped
+  their siblings 3/3, forced in code rather than suggested.
+- **The engine learns subjects, not shapes — and that is the ceiling.**
+  "should i finally sort out the recycling schedule" corrected to a thread
+  wrote `Captures about "finally recycling"`, which cannot fire on "should
+  i finally sort out the parking permit": different subject, same shape.
+  A person correcting that is teaching something the vocabulary cannot
+  hold — "a question like this is really a chore". Every rule is a pair of
+  nouns, so nothing about phrasing, mood or grammar is expressible. That
+  is the honest limit of the current design, and the reason a correction
+  sometimes seems not to take: it took, about a subject you did not mean.
+- ~~Filler adverbs reach rule subjects~~ Fixed: "finally", "eventually",
+  "definitely", "honestly" and "literally" join the hedges in GENERIC.
+
+---
+
 ## Found by trying to break it — 2026-08-25
 
 Six deliberately hard captures put through the live sorter, three runs each

@@ -101,6 +101,10 @@ const GENERIC = new Set([
   "thoughts", "maybe", "perhaps", "probably", "possibly", "really",
   "whether", "should", "could", "would", "might", "kinda", "sorta",
   "guess", "guessing", "unsure", "considering", "consider",
+  /* Filler adverbs that survive every filter and then get written into a
+     learned rule as though they were the subject: an undo produced
+     `Captures about "finally recycling"`, half of which is nothing. */
+  "finally", "eventually", "definitely", "honestly", "literally",
 ]);
 
 /** Lowercased tokens of a text — the unit of matching. Exact token equality
