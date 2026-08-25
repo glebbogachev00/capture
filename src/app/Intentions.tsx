@@ -471,6 +471,28 @@ export function RecordScreen({
         The record
       </div>
 
+      {/* The record as version control: the primary copy is the diff
+          when one exists, so a daily paste stays small however big
+          the board grows. Everything is always one tap away. */}
+      {ledger.length > 0 && (
+        <div className="record-copy-row">
+        {copyNewLabel && onCopyNew ? (
+          <>
+            <button className="ghost record-copy" onClick={onCopyNew}>
+              {copyNewLabel}
+            </button>
+            <button className="ghost record-copy" onClick={onCopy}>
+              Copy everything
+            </button>
+          </>
+        ) : (
+          <button className="ghost record-copy" onClick={onCopy}>
+            Copy the record
+          </button>
+          )}
+        </div>
+      )}
+
       {!ledger.length ? (
         <div className="empty">
           <p className="big">Nothing on the record yet.</p>
@@ -576,25 +598,6 @@ export function RecordScreen({
               </li>
             ))}
           </ul>
-          {/* The record as version control: the primary copy is the diff
-              when one exists, so a daily paste stays small however big
-              the board grows. Everything is always one tap away. */}
-          <div className="record-copy-row">
-            {copyNewLabel && onCopyNew ? (
-              <>
-                <button className="ghost record-copy" onClick={onCopyNew}>
-                  {copyNewLabel}
-                </button>
-                <button className="ghost record-copy" onClick={onCopy}>
-                  Copy everything
-                </button>
-              </>
-            ) : (
-              <button className="ghost record-copy" onClick={onCopy}>
-                Copy the record
-              </button>
-            )}
-          </div>
         </>
       )}
 

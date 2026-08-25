@@ -3518,9 +3518,12 @@ body {
   color: var(--ink);
 }
 
-/* Two ways to copy the record, side by side. */
+/* Two ways to copy the record, side by side under the title — pinned to
+   the top, because the list below only ever grows and a button at its
+   tail sinks out of sight. */
 .record-copy-row {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  margin: 2px 0 20px;
 }
