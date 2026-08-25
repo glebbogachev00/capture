@@ -14,6 +14,36 @@ sections below are the shipped features; the open items are what's left.
   Probed: "six actions" survives, "Liza" is not corrected, real garble
   (unpayed, to long) still gets fixed.
 
+## Found by trying to break it — 2026-08-25
+
+Six deliberately hard captures put through the live sorter, three runs each
+on the unstable ones. Two behaved better than expected and one fails in a
+way that matters.
+
+- **A capture holding three kinds loses two of them, unreliably.** "call the
+  dentist, and i keep wondering whether we price by seat, and from now on i
+  write before email" sorted as `both` once (keeping the dentist task) and
+  as a plain `thread` twice — the task and the intention simply gone from
+  the board. The same shape with only two kinds is stable: task-plus-
+  thinking returned `both` 3/3. So the failure is not "both" being weak, it
+  is that there is no shape for three, and when the model cannot fit the
+  capture it drops the parts that do not fit rather than saying so. The
+  landing page's whole claim is that one sentence can land in two places;
+  a sentence with three things in it silently becomes one. Worth either an
+  intention field on `both`, or a rule that a capture whose parts do not
+  fit the schema keeps everything and asks.
+- **Meta-captures now route correctly.** A bug report that named a different
+  thread's subject ("it filed a note that was clearly about pricing into
+  the bugs thread") went to Bugs, not Pricing — the routing fix from
+  0f9085f holding under the exact case that motivated it.
+- **A negated instruction is read as a conditional task, not inverted.**
+  "do not send the invoice to maya yet, we agreed to wait until the
+  contract is signed" became "Send the invoice to Maya after the contract
+  is signed". Defensible, arguably better than filing the negation, but
+  worth knowing it rewrites rather than refuses.
+
+---
+
 ## Found while filming the full tour — 2026-08-25
 
 - **Tidy lists the same proposal twice.** The capture-full take shows two
