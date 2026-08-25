@@ -13,7 +13,7 @@
 import { useRef, useState } from "react";
 import { Copy, X, MoreHorizontal } from "lucide-react";
 import { type Intention, type Principle, fmt, pad } from "@/lib/model";
-import { snapshotDay, snapshotLabel } from "@/lib/snapshots";
+import { snapshotLabel } from "@/lib/snapshots";
 import type { LearnedRule } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { ReportBugForm } from "@/components/ReportBug";
@@ -424,8 +424,6 @@ function sinceLine(stats: ReturnType<typeof recordStats>): string {
  * an empty day is a pale cell, never a broken chain. Opened from the
  * masthead count — the one line that is always on screen.
  */
-const dayOf = (at: number) => snapshotDay(at);
-
 export function RecordScreen({
   ledger,
   now,
@@ -434,7 +432,6 @@ export function RecordScreen({
   onClearRule,
   threads,
   onOpenThread,
-  handover,
 }: {
   ledger: CaptureEntry[];
   now: number;
@@ -446,8 +443,6 @@ export function RecordScreen({
   /** Just enough of the board to name where each capture landed. */
   threads: { id: string; name: string }[];
   onOpenThread: (id: string) => void;
-  /** What the header's share would send from here, said out loud. */
-  handover: { since: number | null; isDelta: boolean };
 }) {
   const stats = recordStats(ledger);
   const grid = heatGrid(ledger, now);
@@ -468,18 +463,6 @@ export function RecordScreen({
         The record
       </div>
 
-      {/* The share button is the way out of here, and what it sends
-          changes with what you have already sent. Saying so beats letting
-          someone work it out from a paste. */}
-      {ledger.length > 0 && (
-        <p className="record-handover">
-          {!handover.since
-            ? "Share hands this to an agent: the whole board this first time, then only what is new."
-            : handover.isDelta
-              ? `Share hands over what is new since ${snapshotLabel(dayOf(handover.since))}.`
-              : `Nothing new since ${snapshotLabel(dayOf(handover.since))}. The whole board is in Settings if an agent needs it cold.`}
-        </p>
-      )}
 
 
       {!ledger.length ? (

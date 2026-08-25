@@ -179,7 +179,6 @@ export function Capture() {
     showSettings,
     showRecord,
     setShowRecord,
-    handover,
     stampRecordCopy,
     setShowSettings,
     ioNote,
@@ -471,7 +470,9 @@ export function Capture() {
               <button
                 className="icon-btn"
                 onClick={doShare}
-                disabled={!shareable}
+                /* On the record the button stays live even with nothing
+                   new: tapping it is how you find out. */
+                disabled={!shareable && !showRecord}
                 aria-label={
                   shareable ? "Share " + shareable.title : "Nothing to share"
                 }
@@ -818,7 +819,6 @@ export function Capture() {
             rules={learnedRules}
             onClearRule={(key) => void clearRule(key)}
             threads={data.threads}
-            handover={handover}
             onOpenThread={(id) => {
               setShowRecord(false);
               setTab("threads");

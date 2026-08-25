@@ -2863,7 +2863,21 @@ export function useBoard(now: number) {
      text tells the story, the pictures go along with it. The bytes come from
      IndexedDB, so they are fetched only at the moment of sharing. */
   const doShare = async () => {
-    if (!shareable) return;
+    if (!shareable) {
+      /* On the record, nothing to share means nothing NEW to share, and a
+         button that does nothing when tapped is indistinguishable from a
+         broken one. Say it, once, where it was asked. */
+      if (showRecord && recordCopiedAt) {
+        setNotice(
+          `Nothing new since ${new Date(recordCopiedAt).toLocaleDateString(
+            undefined,
+            { day: "numeric", month: "short" }
+          )}. The whole board is in Settings.`
+        );
+        setTimeout(() => setNotice(null), 4000);
+      }
+      return;
+    }
     const files: File[] = [];
     if (shareable.imgIds?.length) {
       for (const id of shareable.imgIds.slice(0, 4)) {
@@ -3624,12 +3638,6 @@ export function useBoard(now: number) {
     showRecord,
     setShowRecord,
     stampRecordCopy,
-    /* What sharing this screen would send right now, so the record can
-       say it instead of leaving the person to guess from the result. */
-    handover: {
-      since: recordCopiedAt,
-      isDelta: Boolean(recordCopiedAt && shareRecordSince(data, recordCopiedAt)),
-    },
     setShowSettings,
     ioNote,
     setIoNote,

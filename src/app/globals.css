@@ -3478,12 +3478,6 @@ body {
 
 /* What the share button would send from the record, said before you press
    it — and the days this device can roll back to. */
-.record-handover {
-  margin: 2px 0 20px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
 .snap-row {
   display: flex;
   flex-wrap: wrap;
