@@ -124,6 +124,8 @@ const FORGOTTEN_RULES_KEY = "capture:forgotten-rules";
    dismissed pair stays dismissed, like a cleared rule. Device-local on
    purpose (v1): the proposal ids embed item ids that are stable per device. */
 const ORGANIZE_DISMISSED_KEY = "capture:organize-dismissed";
+/** When the record last went out to an agent. Per device, never synced. */
+const RECORD_COPIED_KEY = "capture:record-copied:v1";
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
@@ -193,6 +195,29 @@ export function useBoard(now: number) {
   const [openIntention, setOpenIntention] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRecord, setShowRecord] = useState(false);
+  /* When the record last went out, per device: what this browser's person
+     already handed their agent is a fact about this browser, so it never
+     syncs. Re-read whenever the record opens. */
+  const [recordCopiedAt, setRecordCopiedAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (!showRecord) return;
+    try {
+      const raw = localStorage.getItem(RECORD_COPIED_KEY);
+      setRecordCopiedAt(raw ? Number(raw) : null);
+    } catch {
+      setRecordCopiedAt(null);
+    }
+  }, [showRecord]);
+  const stampRecordCopy = () => {
+    const at = Date.now();
+    setRecordCopiedAt(at);
+    try {
+      localStorage.setItem(RECORD_COPIED_KEY, String(at));
+    } catch {
+      /* private mode: every copy is a full copy */
+    }
+  };
   const [ioNote, setIoNote] = useState<IoNote>(null);
   const [editing, setEditing] = useState<{ id: string; src: string } | null>(null);
   const [shelfFor, setShelfFor] = useState<string | null>(null);
@@ -2782,14 +2807,16 @@ export function useBoard(now: number) {
     () =>
       shareableFor(
         data,
-        openIntention
-          ? { kind: "intention", id: openIntention }
-          : open
-            ? { kind: "thread", id: open }
-            : { kind: "tab", tab },
+        showRecord
+          ? { kind: "record", since: recordCopiedAt }
+          : openIntention
+            ? { kind: "intention", id: openIntention }
+            : open
+              ? { kind: "thread", id: open }
+              : { kind: "tab", tab },
         now
       ),
-    [data, openIntention, open, tab, now]
+    [data, showRecord, recordCopiedAt, openIntention, open, tab, now]
   );
 
   /* A thread share carries its photos as real files in the OS sheet — the
@@ -2820,6 +2847,8 @@ export function useBoard(now: number) {
       files: files.length ? files : undefined,
     });
     if (outcome === "cancelled") return;
+    /* The record going out is the thing the next diff measures from. */
+    if (showRecord) stampRecordCopy();
     setNotice(
       outcome === "shared"
         ? `Shared — ${shareable.summary}.`
@@ -3494,6 +3523,9 @@ export function useBoard(now: number) {
     draft,
     setDraft,
     showSettings,
+    showRecord,
+    setShowRecord,
+    stampRecordCopy,
     setShowSettings,
     ioNote,
     setIoNote,

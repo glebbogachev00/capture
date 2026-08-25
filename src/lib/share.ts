@@ -185,9 +185,16 @@ export function shareableFor(
   view:
     | { kind: "thread"; id: string }
     | { kind: "intention"; id: string }
-    | { kind: "tab"; tab: "actions" | "threads" | "intentions" },
+    | { kind: "tab"; tab: "actions" | "threads" | "intentions" }
+    /* The record shares itself: what is new since the last time it went
+       out, or the whole board the first time. */
+    | { kind: "record"; since: number | null },
   now: number
 ): Shareable | null {
+  if (view.kind === "record") {
+    const delta = view.since ? shareRecordSince(board, view.since) : null;
+    return delta ?? shareRecord(board);
+  }
   if (view.kind === "thread") {
     const t = board.threads.find((x) => x.id === view.id);
     /* The same document the thread's own Copy produces: the standing, and
