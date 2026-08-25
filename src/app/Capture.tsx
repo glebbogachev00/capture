@@ -818,7 +818,7 @@ export function Capture() {
               setOpen(id);
             }}
             onCopy={() =>
-              copyWhole(shareRecord(data.ledger ?? [], data.threads))
+              copyWhole(shareRecord(data))
             }
           />
         ) : showSettings ? (

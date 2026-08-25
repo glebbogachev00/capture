@@ -6,6 +6,7 @@ import {
   left,
   pad,
 } from "./model";
+import { actionsForThread } from "./threadActions";
 
 /**
  * Turning what is on screen into text someone else can read.
@@ -146,14 +147,15 @@ export function shareActions(actions: Action[], now: number): Shareable {
   };
 }
 
-export function shareThreadList(threads: Thread[]): Shareable {
+export function shareThreadList(threads: Thread[], board?: Board): Shareable {
   const lines = [`# Threads (${threads.length})`, ""];
   for (const t of threads) {
     const last = t.frags.at(-1);
+    const open = board ? actionsForThread(board, t).open.length : 0;
     lines.push(
       `- **${t.name}** — ${t.frags.length} fragment${t.frags.length === 1 ? "" : "s"}${
-        last ? ", last " + shortDate(last.at) : ""
-      }`
+        open ? `, ${open} open action${open === 1 ? "" : "s"}` : ""
+      }${last ? ", last " + shortDate(last.at) : ""}`
     );
     const gist = t.summary || last?.text || "";
     if (gist) lines.push(`  ${gist.split("\n")[0].slice(0, 160)}`);
@@ -188,7 +190,9 @@ export function shareableFor(
 ): Shareable | null {
   if (view.kind === "thread") {
     const t = board.threads.find((x) => x.id === view.id);
-    return t ? shareThread(t) : null;
+    /* The same document the thread's own Copy produces: the standing, and
+       the actions that belong with it. Two doors, one paste. */
+    return t ? shareThread(t, actionsForThread(board, t)) : null;
   }
   if (view.kind === "intention") {
     const i = board.intentions.find((x) => x.id === view.id);
@@ -199,7 +203,9 @@ export function shareableFor(
     return open.length ? shareActions(open, now) : null;
   }
   if (view.tab === "threads") {
-    return board.threads.length ? shareThreadList(board.threads) : null;
+    return board.threads.length
+      ? shareThreadList(board.threads, board)
+      : null;
   }
   return board.intentions.length ? shareIntentionList(board.intentions) : null;
 }
@@ -257,29 +263,71 @@ export async function shareText(s: Shareable): Promise<ShareOutcome> {
 }
 
 /**
- * The record as a document: what was said and what became of it, newest
- * first, named destinations included — the one paste that catches an agent
- * up on everything since last time.
+ * The record as a document an agent can pick up cold.
+ *
+ * A flat timeline made the reader reassemble the projects; this hands
+ * them over assembled. Every thread travels as a connected unit — its
+ * name, where it stands, the next move it named, and the actions that
+ * belong with it — then the actions attached to nothing, then the recent
+ * captures as the tail so the temporal record is still there. One paste
+ * is the whole state of the board.
  */
-export function shareRecord(
-  ledger: import("./ledger").CaptureEntry[],
-  threads: { id: string; name: string }[],
-  limit = 30
-): Shareable {
-  const name = (id: string) => threads.find((t) => t.id === id)?.name;
-  const rows = [...ledger].sort((a, b) => b.at - a.at).slice(0, limit);
-  const lines = [`# Capture record (last ${rows.length})`, ""];
-  for (const e of rows) {
-    const said = (e.clean || e.raw || "").trim();
-    const home =
-      (e.kind === "thread" || e.kind === "both") && e.targetId
-        ? name(e.targetId)
-        : undefined;
-    lines.push(
-      `- ${shortDate(e.at)} · ${e.kind}${e.undone ? " · undone" : ""}${
-        home ? ` · in "${home}"` : ""
-      }: ${said}`
-    );
+export function shareRecord(board: Board, recentLimit = 15): Shareable {
+  const lines: string[] = ["# Capture board", ""];
+
+  if (board.threads.length) {
+    lines.push("## Threads");
+    const claimed = new Set<string>();
+    for (const t of board.threads) {
+      lines.push("", `### ${t.name}`);
+      if (t.summary) lines.push("", t.summary);
+      if (t.next) lines.push("", `Next: ${t.next}`);
+      const acts = actionsForThread(board, t);
+      for (const a of [...acts.open, ...acts.done]) claimed.add(a.id);
+      if (acts.open.length || acts.done.length) {
+        lines.push("");
+        for (const a of acts.open) lines.push(`- [ ] ${a.text}`);
+        for (const a of acts.done) lines.push(`- [x] ${a.text}`);
+      }
+    }
+    const loose = board.actions.filter((a) => !a.done && !claimed.has(a.id));
+    if (loose.length) {
+      lines.push("", "## Actions attached to nothing", "");
+      for (const a of loose) lines.push(`- [ ] ${a.text}`);
+    }
+  } else {
+    const open = board.actions.filter((a) => !a.done);
+    if (open.length) {
+      lines.push("## Open actions", "");
+      for (const a of open) lines.push(`- [ ] ${a.text}`);
+    }
   }
-  return { title: "Capture record", summary: `${rows.length} captures`, text: lines.join("\n") };
+
+  const rows = [...(board.ledger ?? [])]
+    .sort((a, b) => b.at - a.at)
+    .slice(0, recentLimit);
+  if (rows.length) {
+    const name = (id: string) => board.threads.find((t) => t.id === id)?.name;
+    lines.push("", `## Recent captures (last ${rows.length})`, "");
+    for (const e of rows) {
+      const said = (e.clean || e.raw || "").trim();
+      const home =
+        (e.kind === "thread" || e.kind === "both") && e.targetId
+          ? name(e.targetId)
+          : undefined;
+      lines.push(
+        `- ${shortDate(e.at)} · ${e.kind}${e.undone ? " · undone" : ""}${
+          home ? ` · in "${home}"` : ""
+        }: ${said}`
+      );
+    }
+  }
+
+  return {
+    title: "Capture board",
+    summary: `${board.threads.length} threads · ${
+      board.actions.filter((a) => !a.done).length
+    } open actions`,
+    text: lines.join("\n"),
+  };
 }

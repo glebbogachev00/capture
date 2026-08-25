@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Action } from "./model";
-import { shareAction } from "./share";
+import type { Action, Board } from "./model";
+import { EMPTY } from "./model";
+import { shareAction, shareableFor } from "./share";
 describe("shareAction — one task, on its way to an assistant", () => {
   const act = (over: Partial<Action> = {}): Action => ({
     id: "a1",
@@ -57,22 +58,78 @@ describe("a thread travels with its actions", () => {
   });
 });
 
-describe("the record as a document", () => {
-  it("names destinations, marks undone, caps the rows", async () => {
+describe("the record as a document an agent can pick up cold", () => {
+  it("assembles threads with their standing, next step and actions", async () => {
     const { shareRecord } = await import("./share");
+    const { EMPTY } = await import("./model");
+    const board = {
+      ...EMPTY,
+      threads: [
+        {
+          id: "t1",
+          name: "Pricing model decisions",
+          summary: "Seats or usage-based pricing for small teams.",
+          next: "Draft the seats-only page.",
+          frags: [{ id: "f1", at: 1, text: "seats vs usage" }],
+        },
+      ],
+      actions: [
+        { id: "a1", text: "Draft the usage-based pricing page", done: false, at: 2, imgs: [], shelf: "keep", expires: null },
+        { id: "a2", text: "Water the plants", done: false, at: 1, imgs: [], shelf: "keep", expires: null },
+      ],
+      ledger: [
+        { id: "e1", at: 3, raw: "r", clean: "still torn on pricing", kind: "thread", source: "typed", targetId: "t1" },
+      ],
+    } as import("./model").Board;
+    const out = shareRecord(board);
+    const i = (needle: string) => out.text.indexOf(needle);
+    expect(i("### Pricing model decisions")).toBeGreaterThan(-1);
+    expect(i("Next: Draft the seats-only page.")).toBeGreaterThan(i("Seats or usage-based"));
+    /* The subject-matched action rides with its thread… */
+    expect(i("- [ ] Draft the usage-based pricing page")).toBeGreaterThan(i("### Pricing"));
+    /* …and the unrelated one lands in the loose section. */
+    expect(i("- [ ] Water the plants")).toBeGreaterThan(i("Actions attached to nothing"));
+    expect(i('in "Pricing model decisions": still torn on pricing')).toBeGreaterThan(i("Recent captures"));
+  });
+
+  it("marks undone captures and caps the tail", async () => {
+    const { shareRecord } = await import("./share");
+    const { EMPTY } = await import("./model");
     const e = (id: string, over: object) =>
       ({ id, at: 1, raw: "r", clean: "c", kind: "action", source: "typed", targetId: "", ...over }) as import("./ledger").CaptureEntry;
     const out = shareRecord(
-      [
-        e("1", { kind: "both", targetId: "t1", clean: "fix the bug", at: 3 }),
-        e("2", { undone: true, clean: "oops", at: 2 }),
-        e("3", { clean: "old", at: 1 }),
-      ],
-      [{ id: "t1", name: "Pricing" }],
-      2
+      { ...EMPTY, ledger: [e("1", { undone: true, clean: "oops", at: 2 }), e("2", { clean: "old", at: 1 })] } as import("./model").Board,
+      1
     );
-    expect(out.text).toContain('in "Pricing": fix the bug');
     expect(out.text).toContain("undone");
     expect(out.text).not.toContain("old");
+  });
+});
+
+describe("the header share carries the connections too", () => {
+  const board = () =>
+    ({
+      ...EMPTY,
+      threads: [
+        {
+          id: "t1",
+          name: "Pricing model decisions",
+          summary: "Seats or usage-based pricing.",
+          frags: [{ id: "f1", at: 1, text: "seats vs usage" }],
+        },
+      ],
+      actions: [
+        { id: "a1", text: "Draft the usage-based pricing page", done: false, at: 2, imgs: [], shelf: "keep", expires: null },
+      ],
+    }) as Board;
+
+  it("an open thread shares its actions, like its own Copy does", () => {
+    const out = shareableFor(board(), { kind: "thread", id: "t1" }, 10);
+    expect(out?.text).toContain("Draft the usage-based pricing page");
+  });
+
+  it("the threads tab counts each thread's open actions", () => {
+    const out = shareableFor(board(), { kind: "tab", tab: "threads" }, 10);
+    expect(out?.text).toContain("1 open action");
   });
 });
