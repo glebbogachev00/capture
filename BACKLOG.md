@@ -14,6 +14,23 @@ sections below are the shipped features; the open items are what's left.
   Probed: "six actions" survives, "Liza" is not corrected, real garble
   (unpayed, to long) still gets fixed.
 
+## Found while filming the full tour — 2026-08-25
+
+- **Tidy lists the same proposal twice.** The capture-full take shows two
+  identical rows: "Move *Fix the signup bug before Friday…* to Launch
+  notes", one under the other, both AI-badged. Either the cached model
+  reading is being merged with a fresh one, or a proposal is present in
+  both the AI list and the local scan and nothing dedupes across the two
+  before render. Visible in `outputs/capture-full/stills/06-tidy.png`.
+- **A model proposal reasoned its way to the wrong thread.** Same row: it
+  says the fragment "is a task, not a pricing discussion, and belongs in
+  the Launch notes thread" — but Launch notes is not about tasks either.
+  The reasoning is sound up to the last clause and then picks a thread
+  because it is the only other one. A proposal with nowhere good to go
+  should be no proposal.
+
+---
+
 ## ~~Found while recording — 2026-08-25~~ Two fixed, one open
 
 - ~~**Hedge words count as subjects.**~~ Fixed: the hedges are in GENERIC.
