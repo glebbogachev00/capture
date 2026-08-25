@@ -547,13 +547,14 @@ export function useBoard(now: number) {
       setSync({ ok: true, at: stamp() });
       // Only push if something actually changed — avoids a redundant round
       // trip on every pull when the board is already in sync.
-      if (changed) {
-        /* Whatever just arrived may point at photos this device has never
-           seen. Fetch them in the background so the pictures catch up with
-           the words. */
-        void reconcileImages(merged.board);
-        schedulePush();
-      }
+      /* Every successful pull, not only the ones that changed something.
+         A photo that failed to fetch leaves the words in sync and the
+         picture missing — and boardSignature knows nothing about images, so
+         the merge reads as unchanged from then on and the fetch was never
+         retried. The device kept the text and lost the photograph, for
+         good. Reconciling is a no-op for images it already holds. */
+      void reconcileImages(merged.board);
+      if (changed) schedulePush();
       return changed;
     } catch {
       /* hub unreachable; local state stands */
@@ -1226,7 +1227,18 @@ export function useBoard(now: number) {
     setBusy("Updating what this thread says now");
     let result = board;
     try {
-      const { summary, next } = await requestSummary(target.name, target.frags);
+      /* One retry, because the failure is invisible and permanent: a
+         rate-limited summarise left "where this stands" and the next step
+         describing a thread two layers ago, with nothing on screen to say
+         so and nothing to trigger another attempt until the next capture
+         happened to land here. */
+      const { summary, next } = await requestSummary(
+        target.name,
+        target.frags
+      ).catch(async () => {
+        await new Promise((r) => setTimeout(r, 1200));
+        return requestSummary(target.name, target.frags);
+      });
       result = {
         ...board,
         threads: board.threads.map((t) =>

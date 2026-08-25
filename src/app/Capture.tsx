@@ -315,6 +315,13 @@ export function Capture() {
     groupAsked.current = liveKey;
     let cancelled = false;
     (async () => {
+      /* Marked as asked before the call so two renders cannot both fire it,
+         and un-marked if it fails: a rate-limited model call used to burn
+         the key for that exact set of actions, and since the key only moves
+         when the actions do, grouping stayed dead until something was
+         captured or closed. Toggling the lens off and on could not revive
+         it. */
+      let ok = false;
       try {
         const res = await fetch("/api/group", {
           method: "POST",
@@ -325,10 +332,13 @@ export function Capture() {
         });
         if (!res.ok) return;
         const out = (await res.json()) as { groups?: RawAiGroup[] };
+        ok = true;
         if (cancelled) return;
         setAiGroups({ key: liveKey, groups: out.groups ?? [] });
       } catch {
         /* The lens is a bonus layer: word grouping is already on screen. */
+      } finally {
+        if (!ok && groupAsked.current === liveKey) groupAsked.current = "";
       }
     })();
     return () => {
