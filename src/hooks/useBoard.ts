@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stamp } from "@/lib/clock";
-import { get, set } from "@/lib/storage";
+import { del, get, keys, set } from "@/lib/storage";
 import {
   type Action,
   type Board,
@@ -41,6 +41,14 @@ import {
 } from "@/lib/model";
 import { importIntentBackup } from "@/lib/importIntent";
 import {
+  expiredDays,
+  snapshotDay,
+  snapshotDays,
+  snapshotKey,
+  snapshotLabel,
+  worthSnapshotting,
+} from "@/lib/snapshots";
+import {
   type DistillResult,
   type DistillSession,
   DISTILL_KEY,
@@ -58,7 +66,12 @@ import {
   readJsonFile,
   restoreBackup,
 } from "@/lib/backup";
-import { copyToClipboard, shareText, shareableFor } from "@/lib/share";
+import {
+  copyToClipboard,
+  shareText,
+  shareRecordSince,
+  shareableFor,
+} from "@/lib/share";
 import { search } from "@/lib/search";
 import {
   byRecency,
@@ -136,6 +149,28 @@ const reasonOf = (error: unknown) =>
 
 /* SortResult, LandedSource, Suggestion, applySorted and computeSuggestion now
    live in @/lib/boardOps — the pure board logic, testable without React. */
+
+/**
+ * Keep today's rollback, drop the ones past the week.
+ *
+ * Failures are swallowed on purpose: a snapshot that cannot be written is
+ * a shame, and an app that will not open because of it is a disaster.
+ */
+async function keepDailySnapshot(board: Board): Promise<void> {
+  if (!worthSnapshotting(board)) return;
+  try {
+    const today = snapshotKey(snapshotDay(Date.now()));
+    const existing = await keys();
+    if (!existing.includes(today)) {
+      await set(today, JSON.stringify(board));
+    }
+    for (const day of expiredDays(snapshotDays([...existing, today]))) {
+      await del(snapshotKey(day));
+    }
+  } catch {
+    /* out of quota, private mode, storage locked: never block the board */
+  }
+}
 
 /** The ledger entry `after` has that `before` does not — the one a capture
     just wrote, found before any merge can put someone else's beside it. */
@@ -922,6 +957,11 @@ export function useBoard(now: number) {
         /* first run */
       }
       if (quarantined) setCorrupt(true);
+      /* A day's first look at the board is the last moment it is certainly
+         the board the person left: before the sweep fades anything and
+         before the first pull merges the hub in. Snapshot here or the copy
+         is already downstream of whatever went wrong. */
+      void keepDailySnapshot(d);
       const { next, faded, cleared } = await sweep(d);
       setData(next);
       latest.current = next;
@@ -2892,6 +2932,64 @@ export function useBoard(now: number) {
     }
   };
 
+  /** The days this device can roll back to, newest first. */
+  const listSnapshots = async (): Promise<string[]> => {
+    try {
+      return snapshotDays(await keys());
+    } catch {
+      return [];
+    }
+  };
+
+  /**
+   * Roll the board back to a day's copy.
+   *
+   * Additive, exactly like a file restore: what is here stays, what the
+   * snapshot has and the board lost comes back stamped fresh so it
+   * out-ages any tombstone still carrying the deletion. A rollback that
+   * could remove things would be a new way to lose work.
+   */
+  const restoreSnapshot = async (day: string) => {
+    setIoNote(null);
+    try {
+      const raw = await get(snapshotKey(day));
+      if (!raw) throw new Error("That day is not on this device any more.");
+      const snap = hydrate(JSON.parse(raw));
+      const result = restoreBackup(
+        { app: "capture", version: 2, board: snap },
+        latest.current
+      );
+      const at = Date.now();
+      const fresh = <T extends { id: string; updatedAt?: number }>(
+        before: T[],
+        after: T[]
+      ) =>
+        after.map((x) =>
+          before.some((y) => y.id === x.id) ? x : { ...x, updatedAt: at }
+        );
+      const board: Board = {
+        ...result.board,
+        actions: fresh(latest.current.actions, result.board.actions),
+        threads: fresh(latest.current.threads, result.board.threads),
+        intentions: fresh(latest.current.intentions, result.board.intentions),
+      };
+      const added =
+        result.actions + result.threads + result.intentions + result.principles;
+      await commit(board);
+      setIoNote({
+        text: added
+          ? `Brought back ${count(result.actions, "action")}, ${count(result.threads, "thread")} and ${count(result.intentions, "intention")} from ${snapshotLabel(day)}.`
+          : `Nothing was missing — ${snapshotLabel(day)} is already on the board.`,
+        ok: true,
+      });
+    } catch (error) {
+      setIoNote({
+        text: error instanceof Error ? error.message : "That snapshot wouldn't open.",
+        ok: false,
+      });
+    }
+  };
+
   const restoreFromFile = async (file: File) => {
     setIoNote(null);
     try {
@@ -3526,6 +3624,12 @@ export function useBoard(now: number) {
     showRecord,
     setShowRecord,
     stampRecordCopy,
+    /* What sharing this screen would send right now, so the record can
+       say it instead of leaving the person to guess from the result. */
+    handover: {
+      since: recordCopiedAt,
+      isDelta: Boolean(recordCopiedAt && shareRecordSince(data, recordCopiedAt)),
+    },
     setShowSettings,
     ioNote,
     setIoNote,
@@ -3599,6 +3703,8 @@ export function useBoard(now: number) {
     discardDistill,
     exportBoard,
     restoreFromFile,
+    listSnapshots,
+    restoreSnapshot,
     importBackup,
     doShare,
     sync,

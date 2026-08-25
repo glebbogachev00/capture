@@ -192,8 +192,11 @@ export function shareableFor(
   now: number
 ): Shareable | null {
   if (view.kind === "record") {
-    const delta = view.since ? shareRecordSince(board, view.since) : null;
-    return delta ?? shareRecord(board);
+    /* One rule, so the button is never a surprise: it sends what an agent
+       has not seen. Everything the first time, the increment after that,
+       and nothing when there is nothing — a second full board is a paste
+       nobody wanted. The whole board on purpose lives in Settings. */
+    return view.since ? shareRecordSince(board, view.since) : shareRecord(board);
   }
   if (view.kind === "thread") {
     const t = board.threads.find((x) => x.id === view.id);

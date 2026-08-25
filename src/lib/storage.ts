@@ -56,3 +56,9 @@ export async function set(key: string, value: string): Promise<void> {
 export async function del(key: string): Promise<void> {
   await run("readwrite", (s) => s.delete(key));
 }
+
+/** Every key in the store. Used to find the daily snapshots. */
+export async function keys(): Promise<string[]> {
+  const all = await run<IDBValidKey[]>("readonly", (s) => s.getAllKeys());
+  return (all ?? []).map(String);
+}

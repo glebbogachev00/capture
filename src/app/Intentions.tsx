@@ -13,6 +13,7 @@
 import { useRef, useState } from "react";
 import { Copy, X, MoreHorizontal } from "lucide-react";
 import { type Intention, type Principle, fmt, pad } from "@/lib/model";
+import { snapshotDay, snapshotLabel } from "@/lib/snapshots";
 import type { LearnedRule } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { ReportBugForm } from "@/components/ReportBug";
@@ -423,6 +424,8 @@ function sinceLine(stats: ReturnType<typeof recordStats>): string {
  * an empty day is a pale cell, never a broken chain. Opened from the
  * masthead count — the one line that is always on screen.
  */
+const dayOf = (at: number) => snapshotDay(at);
+
 export function RecordScreen({
   ledger,
   now,
@@ -431,6 +434,7 @@ export function RecordScreen({
   onClearRule,
   threads,
   onOpenThread,
+  handover,
 }: {
   ledger: CaptureEntry[];
   now: number;
@@ -442,6 +446,8 @@ export function RecordScreen({
   /** Just enough of the board to name where each capture landed. */
   threads: { id: string; name: string }[];
   onOpenThread: (id: string) => void;
+  /** What the header's share would send from here, said out loud. */
+  handover: { since: number | null; isDelta: boolean };
 }) {
   const stats = recordStats(ledger);
   const grid = heatGrid(ledger, now);
@@ -461,6 +467,19 @@ export function RecordScreen({
       <div className="tname" style={{ fontSize: 26, marginBottom: 10 }}>
         The record
       </div>
+
+      {/* The share button is the way out of here, and what it sends
+          changes with what you have already sent. Saying so beats letting
+          someone work it out from a paste. */}
+      {ledger.length > 0 && (
+        <p className="record-handover">
+          {!handover.since
+            ? "Share hands this to an agent: the whole board this first time, then only what is new."
+            : handover.isDelta
+              ? `Share hands over what is new since ${snapshotLabel(dayOf(handover.since))}.`
+              : `Nothing new since ${snapshotLabel(dayOf(handover.since))}. The whole board is in Settings if an agent needs it cold.`}
+        </p>
+      )}
 
 
       {!ledger.length ? (
@@ -620,6 +639,9 @@ export function SettingsScreen({
   onDelete,
   onExport,
   onRestore,
+  snapshotDaysList,
+  onRestoreSnapshot,
+  onCopyBoard,
   onImportIntent,
   onLogout,
   ioNote,
@@ -636,6 +658,11 @@ export function SettingsScreen({
   onDelete: (id: string) => void;
   onExport: () => void;
   onRestore: (file: File) => void;
+  /** The days this device kept a copy of the board, newest first. */
+  snapshotDaysList: string[];
+  onRestoreSnapshot: (day: string) => void;
+  /** The cold start: everything, for an agent that knows nothing. */
+  onCopyBoard: () => void;
   onImportIntent: (file: File) => void;
   onLogout: () => void;
   ioNote: IoNote;
@@ -712,6 +739,47 @@ export function SettingsScreen({
           </div>
         </div>
       )}
+
+      {/* The rollback sync cannot give you: the hub mirrors this board,
+          damage included, so a copy from before the damage has to live
+          here. Written once a day, seven kept. */}
+      {snapshotDaysList.length > 0 && (
+        <div className="int-block">
+          <h4 className="int-label">Go back a day</h4>
+          <p className="int-note">
+            This device keeps a copy of the board from each of the last
+            {" "}
+            {snapshotDaysList.length === 1
+              ? "day"
+              : `${snapshotDaysList.length} days`}
+            . Restoring adds back what is missing; it never removes
+            anything.
+          </p>
+          <div className="snap-row">
+            {snapshotDaysList.map((day) => (
+              <button
+                key={day}
+                className="ghost snap-day"
+                onClick={() => onRestoreSnapshot(day)}
+              >
+                {snapshotLabel(day)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="int-block">
+        <h4 className="int-label">Hand the whole board to an agent</h4>
+        <p className="int-note">
+          Every thread with where it stands and the actions that belong
+          with it. The record hands over only what is new; this is the
+          cold start.
+        </p>
+        <button className="ghost" onClick={onCopyBoard}>
+          Copy the whole board
+        </button>
+      </div>
 
       <div className="int-block">
         <h4 className="int-label">Restore a capture backup</h4>

@@ -48,7 +48,12 @@ import {
   SettingsScreen,
 } from "./Intentions";
 import { OrganizeScreen } from "./Organize";
-import { shareAction, shareIntention, shareThread } from "@/lib/share";
+import {
+  shareAction,
+  shareIntention,
+  shareRecord,
+  shareThread,
+} from "@/lib/share";
 import { actionsForThread } from "@/lib/threadActions";
 import { useBoard } from "@/hooks/useBoard";
 import { ReportBug } from "@/components/ReportBug";
@@ -174,6 +179,8 @@ export function Capture() {
     showSettings,
     showRecord,
     setShowRecord,
+    handover,
+    stampRecordCopy,
     setShowSettings,
     ioNote,
     setIoNote,
@@ -245,6 +252,8 @@ export function Capture() {
     discardDistill,
     exportBoard,
     restoreFromFile,
+    listSnapshots,
+    restoreSnapshot,
     importBackup,
     doShare,
     sync,
@@ -258,6 +267,14 @@ export function Capture() {
     learnedRules,
     clearRule,
   } = useBoard(now);
+
+  /* The rollback days, read when Settings opens — a list this short is
+     cheaper to re-read than to keep in sync with every write. */
+  const [snapDays, setSnapDays] = useState<string[]>([]);
+  useEffect(() => {
+    if (!showSettings) return;
+    void listSnapshots().then(setSnapDays);
+  }, [showSettings, listSnapshots]);
 
 
   /* Strong claims light the badge; the button itself only exists when the
@@ -801,6 +818,7 @@ export function Capture() {
             rules={learnedRules}
             onClearRule={(key) => void clearRule(key)}
             threads={data.threads}
+            handover={handover}
             onOpenThread={(id) => {
               setShowRecord(false);
               setTab("threads");
@@ -824,6 +842,12 @@ export function Capture() {
             onDelete={deletePrinciple}
             onExport={exportBoard}
             onRestore={restoreFromFile}
+            onCopyBoard={() => {
+              copyWhole(shareRecord(data));
+              stampRecordCopy();
+            }}
+            snapshotDaysList={snapDays}
+            onRestoreSnapshot={(day) => void restoreSnapshot(day)}
             onImportIntent={importBackup}
             onLogout={logout}
             ioNote={ioNote}
