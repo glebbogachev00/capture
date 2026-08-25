@@ -2471,6 +2471,88 @@ body {
   margin: 0 0 12px;
 }
 
+/* Sponsor page: Capture owns the argument; Ko-fi is only the payment rail. */
+.sponsor-hero h1 {
+  max-width: 620px;
+  line-height: 1;
+}
+.sponsor-checkout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: stretch;
+}
+.sponsor-checkout-grid .funding-card {
+  margin-bottom: 0;
+}
+.sponsor-promise {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.sponsor-promise .funding-rule-text {
+  color: var(--ink);
+}
+.sponsor-note {
+  margin-top: 22px !important;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.sponsor-action-card {
+  display: flex;
+  flex-direction: column;
+}
+.sponsor-action-card h2 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-variation-settings: "SOFT" 35;
+  margin: 0 0 12px;
+}
+.sponsor-action-card .site-actions {
+  margin-top: auto;
+  padding-top: 24px;
+}
+.sponsor-fallback {
+  margin-top: 14px !important;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.sponsor-reasons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.sponsor-reasons .funding-card {
+  margin-bottom: 0;
+}
+.sponsor-reasons h2,
+.sponsor-close h2 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  font-variation-settings: "SOFT" 35;
+  margin: 0 0 10px;
+}
+.sponsor-reasons p {
+  font-size: 14px;
+  line-height: 1.48;
+}
+.sponsor-close {
+  margin-top: 12px;
+}
+@media (max-width: 720px) {
+  .sponsor-checkout-grid,
+  .sponsor-reasons {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* public one-page site */
 .site-page {
   padding-bottom: 64px;
@@ -2499,6 +2581,15 @@ body {
 }
 .site-hero {
   padding: 64px 0 30px;
+}
+.hero-demo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  margin-top: 32px;
+  border-radius: 12px;
+  background: var(--card);
 }
 .voice-hero {
   padding-bottom: 36px;

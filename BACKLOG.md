@@ -14,9 +14,12 @@ sections below are the shipped features; the open items are what's left.
   Probed: "six actions" survives, "Liza" is not corrected, real garble
   (unpayed, to long) still gets fixed.
 
-## Found while recording — 2026-08-25
+## ~~Found while recording — 2026-08-25~~ Two fixed, one open
 
-- **Hedge words count as subjects.** `contentWords` filters stopwords and
+- ~~**Hedge words count as subjects.**~~ Fixed: the hedges are in GENERIC.
+  The gym line now writes `Captures about "cancel membership"`, and a
+  capture that is only hedges teaches nothing at all (`undoRule` → null),
+  which is the honest outcome. Original report: `contentWords` filters stopwords and
   anything under four letters, but not deliberation hedges, so "wondering",
   "whether", "thinking", "maybe", "probably", "really" all read as topic.
   Two consequences, both seen on camera: an answered undo wrote the rule
@@ -26,7 +29,12 @@ sections below are the shipped features; the open items are what's left.
   whether"*. Fix: add the hedges to GENERIC. Note the knock-on — with
   hedges gone, some captures will produce no rule at all, which is correct
   (nothing was learned) but means `undoRule` returns null more often.
-- **The rule-writer and the duplicate-checker share one bar.** Both use a
+- ~~**The rule-writer and the duplicate-checker share one bar.**~~ Fixed,
+  but not by moving the shared bar: Tidy's two-word duplicates are
+  deliberate and rated medium behind a tap, and six tests said so. The
+  fault was the capture-time banner making that same weak claim loudly,
+  inline, with no tier — so `bestActionDuplicate` takes a minimum-phrase
+  argument and the banner asks for three words. Original report: Both use a
   two-content-word shared phrase, so any pair similar enough to prove a
   learned rule is also similar enough to be flagged as a duplicate. On the
   `it-learns` take the payoff frame carries a "Remove duplicate?" banner

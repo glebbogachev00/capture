@@ -64,6 +64,7 @@ export default function FundingPage() {
           </Link>
           <nav className="site-nav" aria-label="Capture links">
             <Link href="/about">About</Link>
+            <Link href="/sponsor">Sponsor</Link>
             <a href="https://github.com/glebbogachev00/capture">GitHub</a>
             <Link href="/">Open app</Link>
           </nav>

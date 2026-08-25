@@ -128,6 +128,16 @@ export function Landing() {
               No account. The board you make stays in this browser.
             </p>
           )}
+          <video
+            className="hero-demo"
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            poster="/demos/capture-hero.jpg"
+          >
+            <source src="/demos/capture-hero.mp4" type="video/mp4" />
+          </video>
         </section>
 
         {/* The transformation is the product, so it is the first object on
@@ -170,16 +180,13 @@ export function Landing() {
             which is the only thing they are for. */}
         <section className="demo-reel" aria-label="Watch it work">
           <figure className="site-card video-card reel-hero">
-            {/* Its own shape, not a shared box: this take is 1920x1180 and
-                the other two are 1440x1230, so one forced ratio cropped a
-                quarter of the width off whichever did not match. */}
             <video
               controls
               muted
               playsInline
               preload="metadata"
               poster="/demos/two-places.jpg"
-              style={{ aspectRatio: "1440 / 1180" }}
+              style={{ aspectRatio: "16 / 9" }}
             >
               <source src="/demos/two-places.mp4" type="video/mp4" />
             </video>
@@ -393,13 +400,12 @@ export function Landing() {
             <Link className="capture-btn" href={APP}>
               Sort a thought
             </Link>
-            <a className="ghost site-ghost" href="https://ko-fi.com/banhmii">
-              Become a companion
-            </a>
+            <Link className="ghost site-ghost" href="/sponsor">
+              Sponsor Capture
+            </Link>
           </div>
           <p className="site-cue">
-            No customers here, only companions. A one-off on Ko-fi, and
-            nothing is locked either way.
+            Sponsor once or regularly. The full thinking system stays free.
           </p>
         </section>
       </div>

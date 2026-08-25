@@ -353,3 +353,39 @@ describe("a both capture leaves the seam on its actions", () => {
     expect(action.threadId).toBe(thread.id);
   });
 });
+
+describe("the duplicate banner costs more than a turn of phrase", () => {
+  const act = (id: string, text: string) =>
+    ({ id, text, done: false, at: 1, imgs: [], shelf: "keep", expires: null }) as Board["actions"][number];
+
+  it("stays quiet on a two-word overlap and speaks on three", async () => {
+    const { computeSuggestion } = await import("./boardOps");
+    const { EMPTY } = await import("./model");
+    const two: Board = {
+      ...EMPTY,
+      actions: [act("new", "Cancel the newsletter subscription"), act("old", "Cancel the gym subscription")],
+    };
+    expect(
+      computeSuggestion(two, "Cancel the newsletter subscription", {
+        kind: "action",
+        id: "new",
+      })?.kind
+    ).not.toBe("duplicate");
+
+    /* Three content words in a row — "gym" is three letters and never
+       counts, which is why the pair above only ever shared two. */
+    const three: Board = {
+      ...EMPTY,
+      actions: [
+        act("new", "Cancel the newsletter subscription tomorrow"),
+        act("old", "Cancel the newsletter subscription"),
+      ],
+    };
+    expect(
+      computeSuggestion(three, "Cancel the newsletter subscription tomorrow", {
+        kind: "action",
+        id: "new",
+      })?.kind
+    ).toBe("duplicate");
+  });
+});

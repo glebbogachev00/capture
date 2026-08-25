@@ -91,6 +91,16 @@ const GENERIC = new Set([
   "involved", "include", "includes", "included", "including",
   "currently", "presently", "overall", "basically", "essentially",
   "actually", "search", "searches", "searched", "searchable",
+  /* Deliberation hedges. They pass every other filter — long enough, not
+     stopwords — and then read as though they were the subject: an
+     answered undo wrote the rule `Captures about "wondering whether" are
+     an action`, which is a rule about nothing and fires on any hedged
+     capture. The same words made the duplicate check offer to merge two
+     unrelated captures because "both mention wondering whether". */
+  "wondering", "wonder", "wondered", "thinking", "think", "thought",
+  "thoughts", "maybe", "perhaps", "probably", "possibly", "really",
+  "whether", "should", "could", "would", "might", "kinda", "sorta",
+  "guess", "guessing", "unsure", "considering", "consider",
 ]);
 
 /** Lowercased tokens of a text — the unit of matching. Exact token equality
@@ -325,10 +335,20 @@ export function bestThreadHome(
 export function bestActionDuplicate(
   board: Board,
   text: string,
-  excludeId?: string
+  excludeId?: string,
+  /* How much overlap the claim costs. Tidy asks for one word and rates
+     what it finds — a two-word hit is medium and sits behind a tap. The
+     banner that interrupts a capture cannot be that cheap: it asserts
+     "this duplicates X" with no tier at all, and at two words it fired on
+     captures that merely shared a turn of phrase. Worse, a learned rule
+     needs exactly two shared words, so the pair that proved a rule was
+     always also accused of being a copy of itself. */
+  minPhraseWords = 1
 ): RelatedItem | null {
   const hit = hitsFor(board, text, excludeId).find(
-    (h) => h.kind === "action" && h.phrase
+    (h) =>
+      h.kind === "action" &&
+      (h.phrase?.split(" ").length ?? 0) >= minPhraseWords
   );
   if (!hit) return null;
   return { kind: "action", id: hit.id, name: hit.name, reason: hit.reason };

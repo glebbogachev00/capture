@@ -307,7 +307,7 @@ export function computeSuggestion(
        reported as its own duplicate. The counterpart must also be live:
        re-capturing a task that is already fading away is a refresh, not a
        duplicate. */
-    const dup = bestActionDuplicate(board, text, source.id);
+    const dup = bestActionDuplicate(board, text, source.id, 3);
     const dupLive = dup && !board.actions.find((a) => a.id === dup.id)?.faded;
     if (dup && dupLive) {
       return {
