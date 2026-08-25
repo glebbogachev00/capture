@@ -163,6 +163,7 @@ export function Capture() {
     organize,
     organizeAiStatus,
     runOrganize,
+    tidyHint,
     acceptOrganize,
     acceptOrganizeAll,
     dismissOrganize,
@@ -280,6 +281,9 @@ export function Capture() {
      scan found anything at all. Medium ones sit behind "Show more" inside
      the screen, so the header stays quiet on a clean board. */
   const highOrganize = (organize ?? []).filter((p) => p.confidence === "high");
+  /* Before Tidy has been opened there is no reading to count, so the badge
+     falls back to what the free local scan already knows. */
+  const tidyCount = organize ? highOrganize.length : tidyHint;
 
   /* The grouped lens over live actions — plain-text matching, no model call,
      recomputed only when the list itself changes. This is what shows the
@@ -507,8 +511,8 @@ export function Capture() {
                 setShowOrganize(true);
               }}
               aria-label={
-                (organize ?? []).length > 0
-                  ? `Tidy — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`
+                tidyCount > 0
+                  ? `Tidy — ${tidyCount} ${tidyCount === 1 ? "suggestion" : "suggestions"} to review`
                   : "Tidy — scan the board for things worth changing"
               }
               title={
@@ -520,8 +524,8 @@ export function Capture() {
               }
             >
               <BrushCleaning size={18} strokeWidth={1.7} />
-              {highOrganize.length > 0 && (
-                <span className="organize-badge">{highOrganize.length}</span>
+              {tidyCount > 0 && (
+                <span className="organize-badge">{tidyCount}</span>
               )}
             </button>
             <button

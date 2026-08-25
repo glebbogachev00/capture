@@ -116,6 +116,7 @@ import {
 } from "@/lib/ledger";
 import { deriveRules, type LearnedRule } from "@/lib/rules";
 import {
+  scanBoard,
   scanStale,
   threadHoldsNote,
   type OrganizeProposal,
@@ -1780,6 +1781,24 @@ export function useBoard(now: number) {
    * spent, network), the local scan stands and the screen notes that the
    * semantic pass is offline.
    */
+  /**
+   * What the local scan finds without being asked.
+   *
+   * The badge used to be counted from `organize`, which stays null until
+   * the Tidy button is pressed — so the number that exists to prompt the
+   * tap only appeared after the tap. The board scan costs nothing (no
+   * model, pure string work over the board), so it can run on its own and
+   * the button can carry a real number. The model pass stays behind the
+   * tap, where it is paid for deliberately.
+   */
+  const tidyHint = useMemo(
+    () =>
+      scanBoard(data, dismissedOrganize.current, now).filter(
+        (p) => p.confidence === "high"
+      ).length,
+    [data, now]
+  );
+
   const runOrganize = async () => {
     /* The local scan is shown immediately; the AI results merge in when
        they arrive. Both are read from the LATEST board at their moment, so
@@ -3617,6 +3636,7 @@ export function useBoard(now: number) {
     organize,
     organizeAiStatus,
     runOrganize,
+    tidyHint,
     acceptOrganize,
     acceptOrganizeAll,
     dismissOrganize,

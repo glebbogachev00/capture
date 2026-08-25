@@ -78,3 +78,25 @@ describe("after a partial restore", () => {
     expect(actionsForThread(b, thread()).open.map((a) => a.id)).toEqual(["a1"]);
   });
 });
+
+describe("one telling word is enough", () => {
+  it("claims an action that shares a rare word, but not a common one", async () => {
+    const { actionsForThread } = await import("./threadActions");
+    const { EMPTY } = await import("./model");
+    const b = {
+      ...EMPTY,
+      threads: [thread()],
+      actions: [
+        action("rare", { text: "Email the underwriters about the quote" }),
+        action("common", { text: "Review the pricing deck" }),
+      ],
+    } as Board;
+    /* "underwriters" appears nowhere else; "pricing" is all over the board. */
+    const t = {
+      ...thread(),
+      summary: "Underwriters want the pricing model settled before pricing the tier.",
+    };
+    const open = actionsForThread({ ...b, threads: [t] }, t).open.map((a) => a.id);
+    expect(open).toContain("rare");
+  });
+});

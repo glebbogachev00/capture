@@ -1,5 +1,5 @@
 import type { Action, Board, Thread } from "./model";
-import { sharedPhrase } from "./related";
+import { contentWords, sharedPhrase } from "./related";
 
 /**
  * The actions that belong with a thread.
@@ -43,12 +43,41 @@ export function actionsForThread(
   const isMine = (a: Action) =>
     homed(a) === thread.id ||
     (!homed(a) && !!a.src && vouched.has(a.src.trim()));
+  /* How common each word is across the whole board. A two-word run is a
+     strong signal but a rare one: on a real board of bug reports and
+     project threads, an action and the thread it belongs to often share a
+     single telling word and nothing else, and demanding a run meant the
+     list came up empty exactly where it should have been useful. So one
+     shared word counts too — as long as the board says that word is not
+     everywhere. */
+  const freq = new Map<string, number>();
+  for (const w of contentWords(
+    [
+      ...board.actions.map((a) => `${a.text} ${a.src ?? ""}`),
+      ...board.threads.map(
+        (t) =>
+          `${t.name} ${t.summary} ${t.frags.map((f) => f.text).join(" ")}`
+      ),
+    ].join(" ")
+  ))
+    freq.set(w, (freq.get(w) ?? 0) + 1);
+  const items =
+    board.actions.length + board.threads.length + board.intentions.length;
+  const common = Math.max(3, Math.floor(items / 4));
+  const threadWords = new Set(contentWords(threadText));
+
   /* An action that names another living thread as home is never borrowed. */
-  const isRelated = (a: Action) =>
-    !a.done &&
-    !homed(a) &&
-    sharedPhrase(`${a.text} ${a.src ?? ""}`, threadText).split(" ").filter(Boolean)
-      .length >= 2;
+  const isRelated = (a: Action) => {
+    if (a.done || homed(a)) return false;
+    const mine = contentWords(`${a.text} ${a.src ?? ""}`);
+    const run = sharedPhrase(`${a.text} ${a.src ?? ""}`, threadText)
+      .split(" ")
+      .filter(Boolean);
+    if (run.length >= 2) return true;
+    return mine.some(
+      (w) => threadWords.has(w) && (freq.get(w) ?? 0) <= common
+    );
+  };
 
   const newestFirst = (x: Action, y: Action) => y.at - x.at;
   const seen = new Set<string>();
