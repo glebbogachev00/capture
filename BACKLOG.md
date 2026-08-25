@@ -20,7 +20,15 @@ Six deliberately hard captures put through the live sorter, three runs each
 on the unstable ones. Two behaved better than expected and one fails in a
 way that matters.
 
-- **A capture holding three kinds loses two of them, unreliably.** "call the
+- ~~**A capture holding three kinds loses two of them, unreliably.**~~
+  Fixed: the sort prompt now names the failure rather than only describing
+  the two-kind case — there is no shape for three, and the mistake to
+  avoid is quietly picking one and dropping the rest. A capture holding a
+  task and anything else must come back as `both`, with every task in
+  `actions` and the whole of the rest in `clean`. Measured after: the
+  three-kind sentence 3/3 `both` with the task kept, where it had been
+  1/3; a task buried in rambling 3/3; the two-kind control unchanged at
+  3/3. Original report: "call the
   dentist, and i keep wondering whether we price by seat, and from now on i
   write before email" sorted as `both` once (keeping the dentist task) and
   as a plain `thread` twice — the task and the intention simply gone from
