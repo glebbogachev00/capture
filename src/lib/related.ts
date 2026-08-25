@@ -233,9 +233,21 @@ function hitsFor(board: Board, text: string, excludeId?: string): Hit[] {
   const consider = (otherText: string): Signal | null => {
     const otherWords = contentWords(otherText);
     const phrase = longestSharedRun(targetWords, otherWords);
-    if (phrase)
+    const runWords = phrase ? phrase.split(" ") : [];
+    /* A run of one word is not a phrase — it used to score 101 and skip the
+       rarity gate below, so the commonest word on the board could out-rank
+       every real signal. Length is evidence in its own right: three words in
+       a row is a quotation, and stays a signal however common the words are
+       (on a three-item board, three copies of one task make every word look
+       common). A two-word run is the weakest thing still worth calling a
+       phrase, so it has to be distinctive to count. */
+    if (
+      runWords.length >= 3 ||
+      (runWords.length === 2 &&
+        runWords.some((w) => (counts.get(w) || 0) <= maxShare))
+    )
       return {
-        score: 100 + phrase.split(" ").length,
+        score: 100 + runWords.length,
         reason: `both mention "${phrase}"`,
         phrase,
       };

@@ -341,6 +341,18 @@ export function computeSuggestion(
       };
     }
   }
+  /* Never second-guess a home the sorter chose on purpose. When a capture
+     lands in a thread that already existed, a model with the whole board in
+     front of it picked that thread; offering to move it elsewhere on the
+     strength of a shared phrase is a string match overruling a judgement.
+     That is how a bug report mentioning "banking info" was told it belonged
+     with the Banking Info thread instead of the Bugs one it had just been
+     filed into. A brand-new thread (its only fragment is this capture) is
+     different: the sorter found no home, so proposing one is help. */
+  if (source.kind === "thread") {
+    const landed = board.threads.find((t) => t.id === source.id);
+    if ((landed?.frags?.length ?? 0) > 1) return null;
+  }
   const hit = bestThreadHome(board, text, source.id);
   if (!hit) return null;
   if (source.kind === "action") {

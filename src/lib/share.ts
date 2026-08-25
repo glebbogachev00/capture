@@ -192,11 +192,14 @@ export function shareableFor(
   now: number
 ): Shareable | null {
   if (view.kind === "record") {
-    /* One rule, so the button is never a surprise: it sends what an agent
-       has not seen. Everything the first time, the increment after that,
-       and nothing when there is nothing — a second full board is a paste
-       nobody wanted. The whole board on purpose lives in Settings. */
-    return view.since ? shareRecordSince(board, view.since) : shareRecord(board);
+    /* Send the increment when there is one, the whole board when there is
+       not. It used to send nothing at all in that second case, which reads
+       as a broken button: the record plainly holds a hundred captures, and
+       the app answers "nothing new" — technically about the last handover,
+       and useless as an answer to "give me the record". Redundant text is
+       cheaper than a dead control. */
+    const delta = view.since ? shareRecordSince(board, view.since) : null;
+    return delta ?? shareRecord(board);
   }
   if (view.kind === "thread") {
     const t = board.threads.find((x) => x.id === view.id);
