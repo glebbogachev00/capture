@@ -40,6 +40,7 @@ import {
   uid,
 } from "@/lib/model";
 import { importIntentBackup } from "@/lib/importIntent";
+import { threadBriefs } from "@/lib/threadBrief";
 import {
   expiredDays,
   snapshotDay,
@@ -1131,11 +1132,7 @@ export function useBoard(now: number) {
        the capture by what it shows rather than as "(image only)". */
     imgSrc?: string
   ) => {
-    const known = latest.current.threads.map((t) => ({
-      id: t.id,
-      name: t.name,
-      about: t.summary?.slice(0, 160) || "",
-    }));
+    const known = threadBriefs(latest.current.threads);
     // A bounded slice of filing history, so the engine files the way this
     // person files and routes into the thread they'd choose. Kept small on
     // purpose — every capture pays for this context, so it stays recent and
@@ -3358,11 +3355,7 @@ export function useBoard(now: number) {
           /* The same thread context the sorter gets, so a conversation can
              continue a subject already on the board instead of starting a
              second thread about it. */
-          threads: latest.current.threads.map((t) => ({
-            id: t.id,
-            name: t.name,
-            about: t.summary?.slice(0, 160) || "",
-          })),
+          threads: threadBriefs(latest.current.threads),
         }),
       });
       if (!res.ok) {
