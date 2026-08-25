@@ -293,13 +293,17 @@ body {
 }
 
 /* A group's header: the shared phrase that folded these actions together. */
+/* A group heading has to read as structure, not as another quiet line:
+   the accent and the space above it are what separate one pile from the
+   next. The leftovers keep the muted voice — they are not a subject. */
 .group-label {
   font-family: var(--font-mono), monospace;
-  font-size: 11.5px;
+  font-size: 12px;
+  font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--muted);
-  margin: 18px 0 2px;
+  color: var(--accent);
+  margin: 26px 0 6px;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -308,6 +312,12 @@ body {
   content: "";
   flex: 1;
   height: 1px;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.group-label.rest {
+  color: var(--muted);
+}
+.group-label.rest:after {
   background: var(--rule);
 }
 .group-note {

@@ -16,6 +16,7 @@ describe("the actions that belong with a thread", () => {
   it("links by provenance, splits open from done, excludes other threads", () => {
     const b: Board = {
       ...EMPTY,
+      threads: [thread(), { ...thread(), id: "t2", name: "Other" }],
       actions: [
         action("a", { threadId: "t1" }),
         action("b", { threadId: "t1", done: true }),
@@ -30,6 +31,7 @@ describe("the actions that belong with a thread", () => {
   it("recovers pre-field actions through the ledger's both entries", () => {
     const b: Board = {
       ...EMPTY,
+      threads: [thread()],
       actions: [action("a", { src: "ship the fix" })],
       ledger: [entry({ id: "e1", clean: "ship the fix", targetId: "t1" })],
     };
@@ -39,6 +41,7 @@ describe("the actions that belong with a thread", () => {
   it("borrows an open action that shares the thread's subject", () => {
     const b: Board = {
       ...EMPTY,
+      threads: [thread(), { ...thread(), id: "t2", name: "Other" }],
       actions: [
         action("subject", { text: "Draft the usage-based pricing page" }),
         action("oneword", { text: "Fix the pricing typo in the footer" }),
@@ -54,9 +57,24 @@ describe("the actions that belong with a thread", () => {
   it("an undone capture vouches for nothing", () => {
     const b: Board = {
       ...EMPTY,
+      threads: [thread()],
       actions: [action("a", { src: "ship the fix" })],
       ledger: [entry({ id: "e1", clean: "ship the fix", targetId: "t1", undone: true })],
     };
     expect(actionsForThread(b, thread()).open).toEqual([]);
+  });
+});
+
+describe("after a partial restore", () => {
+  it("an action naming a thread that did not come across is still claimable", async () => {
+    const { actionsForThread } = await import("./threadActions");
+    const { EMPTY } = await import("./model");
+    const b = {
+      ...EMPTY,
+      actions: [
+        { id: "a1", text: "Draft the usage-based pricing page", done: false, at: 1, imgs: [], shelf: "keep", expires: null, threadId: "gone" },
+      ],
+    } as Board;
+    expect(actionsForThread(b, thread()).open.map((a) => a.id)).toEqual(["a1"]);
   });
 });

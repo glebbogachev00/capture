@@ -31,13 +31,22 @@ export function actionsForThread(
     .filter(Boolean)
     .join(" ");
 
+  /* A restore can bring an action across without the thread it named —
+     its own thread already existed here, or was never in the backup. A
+     link that resolves to nothing is not a link, so the action is free to
+     be claimed by subject like any unattached one. */
+  const homed = (a: Action) =>
+    a.threadId && board.threads.some((t) => t.id === a.threadId)
+      ? a.threadId
+      : undefined;
+
   const isMine = (a: Action) =>
-    a.threadId === thread.id ||
-    (!a.threadId && !!a.src && vouched.has(a.src.trim()));
-  /* An action that names another thread as home is never borrowed. */
+    homed(a) === thread.id ||
+    (!homed(a) && !!a.src && vouched.has(a.src.trim()));
+  /* An action that names another living thread as home is never borrowed. */
   const isRelated = (a: Action) =>
     !a.done &&
-    (!a.threadId || a.threadId === thread.id) &&
+    !homed(a) &&
     sharedPhrase(`${a.text} ${a.src ?? ""}`, threadText).split(" ").filter(Boolean)
       .length >= 2;
 

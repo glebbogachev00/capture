@@ -993,7 +993,7 @@ export function Capture() {
                       </div>
                     ))}
                     {!!grouped.groups.length && !!grouped.rest.length && (
-                      <div className="group-label">
+                      <div className="group-label rest">
                         everything else · {grouped.rest.length}
                       </div>
                     )}
