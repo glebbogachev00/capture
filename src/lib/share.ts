@@ -263,6 +263,84 @@ export async function shareText(s: Shareable): Promise<ShareOutcome> {
 }
 
 /**
+ * What moved since the last copy — the record as a diff, not a clone.
+ *
+ * Gleb's frame: the record is version control for the board. A thread
+ * share is a full checkout of one project; pasting it every day re-sends
+ * text the agent already holds and pays for it again. This emits only the
+ * threads that moved since the stamp (each still as its whole current
+ * unit — state, not edits), the actions that appeared attached to
+ * nothing, and the captures made since. Returns null when nothing moved,
+ * so the button can say so instead of copying an empty ritual.
+ */
+export function shareRecordSince(board: Board, since: number): Shareable | null {
+  const movedThread = (t: Thread) =>
+    (t.updatedAt ?? 0) > since || t.frags.some((f) => f.at > since);
+  const moved = board.threads.filter(movedThread);
+
+  const claimed = new Set<string>();
+  for (const t of moved)
+    for (const a of [
+      ...actionsForThread(board, t).open,
+      ...actionsForThread(board, t).done,
+    ])
+      claimed.add(a.id);
+  const loose = board.actions.filter(
+    (a) => !a.done && a.at > since && !claimed.has(a.id)
+  );
+  const rows = [...(board.ledger ?? [])]
+    .filter((e) => e.at > since)
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 50);
+
+  if (!moved.length && !loose.length && !rows.length) return null;
+
+  const lines: string[] = [
+    `# Capture board — new since ${shortDate(since)}`,
+    "",
+  ];
+  if (moved.length) {
+    lines.push("## Threads that moved");
+    for (const t of moved) {
+      lines.push("", `### ${t.name}`);
+      if (t.summary) lines.push("", t.summary);
+      if (t.next) lines.push("", `Next: ${t.next}`);
+      const acts = actionsForThread(board, t);
+      if (acts.open.length || acts.done.length) {
+        lines.push("");
+        for (const a of acts.open) lines.push(`- [ ] ${a.text}`);
+        for (const a of acts.done) lines.push(`- [x] ${a.text}`);
+      }
+    }
+  }
+  if (loose.length) {
+    lines.push("", "## New actions attached to nothing", "");
+    for (const a of loose) lines.push(`- [ ] ${a.text}`);
+  }
+  if (rows.length) {
+    const name = (id: string) => board.threads.find((t) => t.id === id)?.name;
+    lines.push("", `## Captures since (${rows.length})`, "");
+    for (const e of rows) {
+      const said = (e.clean || e.raw || "").trim();
+      const home =
+        (e.kind === "thread" || e.kind === "both") && e.targetId
+          ? name(e.targetId)
+          : undefined;
+      lines.push(
+        `- ${shortDate(e.at)} · ${e.kind}${e.undone ? " · undone" : ""}${
+          home ? ` · in "${home}"` : ""
+        }: ${said}`
+      );
+    }
+  }
+  return {
+    title: "What's new",
+    summary: `${moved.length} threads moved · ${rows.length} captures`,
+    text: lines.join("\n"),
+  };
+}
+
+/**
  * The record as a document an agent can pick up cold.
  *
  * A flat timeline made the reader reassemble the projects; this hands

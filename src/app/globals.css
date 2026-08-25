@@ -3517,3 +3517,10 @@ body {
 .tour-skip:hover {
   color: var(--ink);
 }
+
+/* Two ways to copy the record, side by side. */
+.record-copy-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}

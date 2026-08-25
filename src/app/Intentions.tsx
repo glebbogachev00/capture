@@ -432,6 +432,8 @@ export function RecordScreen({
   threads,
   onOpenThread,
   onCopy,
+  copyNewLabel,
+  onCopyNew,
 }: {
   ledger: CaptureEntry[];
   now: number;
@@ -445,6 +447,10 @@ export function RecordScreen({
   onOpenThread: (id: string) => void;
   /** The whole record to the clipboard, agent-readable. */
   onCopy: () => void;
+  /** The diff copy: label like "Copy what's new since Aug 24", or null
+      when there is no stamp yet or nothing moved. */
+  copyNewLabel?: string | null;
+  onCopyNew?: () => void;
 }) {
   const stats = recordStats(ledger);
   const grid = heatGrid(ledger, now);
@@ -570,9 +576,25 @@ export function RecordScreen({
               </li>
             ))}
           </ul>
-          <button className="ghost record-copy" onClick={onCopy}>
-            Copy the record
-          </button>
+          {/* The record as version control: the primary copy is the diff
+              when one exists, so a daily paste stays small however big
+              the board grows. Everything is always one tap away. */}
+          <div className="record-copy-row">
+            {copyNewLabel && onCopyNew ? (
+              <>
+                <button className="ghost record-copy" onClick={onCopyNew}>
+                  {copyNewLabel}
+                </button>
+                <button className="ghost record-copy" onClick={onCopy}>
+                  Copy everything
+                </button>
+              </>
+            ) : (
+              <button className="ghost record-copy" onClick={onCopy}>
+                Copy the record
+              </button>
+            )}
+          </div>
         </>
       )}
 

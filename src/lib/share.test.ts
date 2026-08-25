@@ -133,3 +133,32 @@ describe("the header share carries the connections too", () => {
     expect(out?.text).toContain("1 open action");
   });
 });
+
+describe("the record as a diff", () => {
+  it("emits only what moved, and nothing when quiet", async () => {
+    const { shareRecordSince } = await import("./share");
+    const board = {
+      ...EMPTY,
+      threads: [
+        { id: "t1", name: "Moved", summary: "s", frags: [{ id: "f1", at: 200, text: "new frag" }] },
+        { id: "t2", name: "Quiet", summary: "s", frags: [{ id: "f2", at: 50, text: "old" }] },
+      ],
+      actions: [
+        { id: "a1", text: "New loose action", done: false, at: 150, imgs: [], shelf: "keep", expires: null },
+        { id: "a2", text: "Old action", done: false, at: 10, imgs: [], shelf: "keep", expires: null },
+      ],
+      ledger: [
+        { id: "e1", at: 180, raw: "r", clean: "fresh capture", kind: "thread", source: "typed", targetId: "t1" },
+        { id: "e2", at: 20, raw: "r", clean: "stale capture", kind: "action", source: "typed", targetId: "" },
+      ],
+    } as Board;
+    const out = shareRecordSince(board, 100)!;
+    expect(out.text).toContain("### Moved");
+    expect(out.text).not.toContain("### Quiet");
+    expect(out.text).toContain("New loose action");
+    expect(out.text).not.toContain("Old action");
+    expect(out.text).toContain("fresh capture");
+    expect(out.text).not.toContain("stale capture");
+    expect(shareRecordSince(board, 1000)).toBeNull();
+  });
+});

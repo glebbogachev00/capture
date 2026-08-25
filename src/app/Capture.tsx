@@ -48,7 +48,13 @@ import {
   SettingsScreen,
 } from "./Intentions";
 import { OrganizeScreen } from "./Organize";
-import { shareAction, shareIntention, shareRecord, shareThread } from "@/lib/share";
+import {
+  shareAction,
+  shareIntention,
+  shareRecord,
+  shareRecordSince,
+  shareThread,
+} from "@/lib/share";
 import { actionsForThread } from "@/lib/threadActions";
 import { useBoard } from "@/hooks/useBoard";
 import { ReportBug } from "@/components/ReportBug";
@@ -121,6 +127,7 @@ export function Capture() {
   /* The record opens from the masthead count — the line that is always on
      screen becomes the door to what it summarises. */
   const [showRecord, setShowRecord] = useState(false);
+
 
   /* Grouped view of the Actions tab — a lens, not a structure: nothing is
      written to the board, and toggling off restores the flat list untouched.
@@ -257,6 +264,39 @@ export function Capture() {
     learnedRules,
     clearRule,
   } = useBoard(now);
+
+  /* When the record was last copied out, per device: what this browser's
+     person already pasted to their agent is a fact about this browser, so
+     it never syncs. Re-read whenever the record opens. */
+  const [copiedAt, setCopiedAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (!showRecord) return;
+    try {
+      const raw = localStorage.getItem("capture:record-copied:v1");
+      setCopiedAt(raw ? Number(raw) : null);
+    } catch {
+      setCopiedAt(null);
+    }
+  }, [showRecord]);
+  const stampRecordCopy = () => {
+    const now = Date.now();
+    setCopiedAt(now);
+    try {
+      localStorage.setItem("capture:record-copied:v1", String(now));
+    } catch {
+      /* private mode: every copy is a full copy */
+    }
+  };
+  const recordDelta = useMemo(() => {
+    if (!copiedAt) return { label: null, share: null };
+    const share = shareRecordSince(data, copiedAt);
+    if (!share) return { label: null, share: null };
+    const since = new Date(copiedAt).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+    return { label: `Copy what's new since ${since}`, share };
+  }, [copiedAt, data]);
 
   /* Strong claims light the badge; the button itself only exists when the
      scan found anything at all. Medium ones sit behind "Show more" inside
@@ -817,8 +857,18 @@ export function Capture() {
               setTab("threads");
               setOpen(id);
             }}
-            onCopy={() =>
-              copyWhole(shareRecord(data))
+            onCopy={() => {
+              copyWhole(shareRecord(data));
+              stampRecordCopy();
+            }}
+            copyNewLabel={recordDelta.label}
+            onCopyNew={
+              recordDelta.share
+                ? () => {
+                    copyWhole(recordDelta.share!);
+                    stampRecordCopy();
+                  }
+                : undefined
             }
           />
         ) : showSettings ? (
