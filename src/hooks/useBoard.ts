@@ -2872,7 +2872,7 @@ export function useBoard(now: number) {
           `Nothing new since ${new Date(recordCopiedAt).toLocaleDateString(
             undefined,
             { day: "numeric", month: "short" }
-          )}. The whole board is in Settings.`
+          )}.`
         );
         setTimeout(() => setNotice(null), 4000);
       }
