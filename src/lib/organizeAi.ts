@@ -315,8 +315,15 @@ export function mergeOrganize(
   local: OrganizeProposal[]
 ): OrganizeProposal[] {
   const seen = new Set<string>();
+  /* A fragment lives in exactly one thread, so naming its container adds
+     nothing to the identity and costs everything: when the model and the
+     local scan disagreed about which thread held it, the keys differed and
+     the same suggestion was listed twice, word for word, one under the
+     other. Identify a fragment proposal by the fragment. */
   const key = (p: OrganizeProposal) =>
-    `${p.kind}:${p.sourceId}:${p.sourceFragId ?? ""}:${p.targetId}`;
+    p.sourceFragId
+      ? `${p.kind}:frag:${p.sourceFragId}:${p.targetId}`
+      : `${p.kind}:${p.sourceId}:${p.targetId}`;
   const all = [...ai, ...local].filter((p) => {
     const k = key(p);
     if (seen.has(k)) return false;

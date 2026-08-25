@@ -506,3 +506,29 @@ describe("mergeOrganize", () => {
     expect(merged).toHaveLength(MEDIUM_CAP);
   });
 });
+
+describe("the same suggestion is never listed twice", () => {
+  it("identifies a fragment proposal by its fragment, not its container", async () => {
+    const { mergeOrganize } = await import("./organizeAi");
+    const p = (over: object) =>
+      ({
+        id: "x",
+        kind: "move_fragment",
+        confidence: "high",
+        verb: "Move",
+        sourceId: "t-a",
+        sourceFragId: "f1",
+        sourceName: "Fix the signup bug",
+        targetId: "t-launch",
+        targetName: "Launch notes",
+        reason: "r",
+        score: 1,
+        origin: "ai",
+        ...over,
+      }) as import("./organize").OrganizeProposal;
+    /* Same fragment, same destination, disagreeing only about which thread
+       currently holds it — one row, not two. */
+    const out = mergeOrganize([p({})], [p({ sourceId: "t-b", origin: "local" })]);
+    expect(out).toHaveLength(1);
+  });
+});
