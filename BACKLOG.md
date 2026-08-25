@@ -14,6 +14,34 @@ sections below are the shipped features; the open items are what's left.
   Probed: "six actions" survives, "Liza" is not corrected, real garble
   (unpayed, to long) still gets fixed.
 
+## Found while recording — 2026-08-25
+
+- **Hedge words count as subjects.** `contentWords` filters stopwords and
+  anything under four letters, but not deliberation hedges, so "wondering",
+  "whether", "thinking", "maybe", "probably", "really" all read as topic.
+  Two consequences, both seen on camera: an answered undo wrote the rule
+  *Captures about "wondering whether" are an action, not a thread* — which
+  now fires in code on any hedged capture — and the duplicate check offered
+  to merge two unrelated captures because *both mention "wondering
+  whether"*. Fix: add the hedges to GENERIC. Note the knock-on — with
+  hedges gone, some captures will produce no rule at all, which is correct
+  (nothing was learned) but means `undoRule` returns null more often.
+- **The rule-writer and the duplicate-checker share one bar.** Both use a
+  two-content-word shared phrase, so any pair similar enough to prove a
+  learned rule is also similar enough to be flagged as a duplicate. On the
+  `it-learns` take the payoff frame carries a "Remove duplicate?" banner
+  over the moment that is supposed to show the lesson working. Worth making
+  the duplicate check stricter than the rule check (three words, or a
+  rarity gate) so the two stop colliding.
+- **The sorter keeps outgrowing its own demo.** Three pinned sentence pairs
+  have died in a week — cold brew, the bakery, the hallway — because the
+  first capture now sorts correctly on the first try, leaving nothing to
+  correct. Good problem, but it means any "it got it wrong" demo needs
+  re-verifying before every recording, and the honest long-term framing may
+  be "you get the last word" rather than "it guesses wrong".
+
+---
+
 ## ~~Found while testing and recording — 2026-08-23~~ Fixed the same day
 
 - ~~Learned rules honoured by Groq, ignored by the Mistral fallback~~ — a rule
