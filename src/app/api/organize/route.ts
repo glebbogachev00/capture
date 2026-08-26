@@ -70,7 +70,17 @@ const AiProposal = z.object({
   ]),
   confidence: z.enum(["high", "medium"]),
   sourceId: z.string(),
-  sourceFragId: z.string().optional(),
+  /* Nullable, not optional. Groq's structured output requires every
+     property to appear in the schema's `required` list, and an optional
+     field is omitted from it — so Groq answered this route with a 400
+     ("must be listed in `required`: sourceFragId") on every single call
+     since the field was added, and never once with a proposal. It is not
+     retryable, so the chain fell straight through to Mistral every time
+     and, when Mistral was loaded, off the end of the chain to nothing at
+     all. That is what "Tidy found nothing" has been. A nullable field is
+     required-and-may-be-null, which every provider in the chain accepts.
+     mapAiProposals already treats a missing fragment id as absent. */
+  sourceFragId: z.string().nullable(),
   targetId: z.string(),
   reason: z.string(),
 });

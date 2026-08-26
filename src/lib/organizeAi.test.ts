@@ -532,3 +532,42 @@ describe("the same suggestion is never listed twice", () => {
     expect(out).toHaveLength(1);
   });
 });
+
+describe("a proposal with no fragment named", () => {
+  /* The route's schema sends `sourceFragId: null` rather than omitting the
+     key, because Groq rejects a response format whose properties are not
+     all listed in `required` — it answered this route with a 400 on every
+     call until the field became nullable. So null has to be as harmless
+     here as absent was. */
+  it("treats null the same as absent", () => {
+    const board = {
+      actions: [
+        { id: "a1", text: "Renew the domain before Friday", at: 1 },
+        { id: "a2", text: "Renew the domain before Friday", at: 2 },
+      ],
+      threads: [],
+      intentions: [],
+    };
+    const withNull = mapAiProposals(board as never, [
+      {
+        kind: "dup_action",
+        confidence: "high",
+        sourceId: "a2",
+        sourceFragId: null,
+        targetId: "a1",
+        reason: "Both say the same thing.",
+      } as never,
+    ]);
+    const withAbsent = mapAiProposals(board as never, [
+      {
+        kind: "dup_action",
+        confidence: "high",
+        sourceId: "a2",
+        targetId: "a1",
+        reason: "Both say the same thing.",
+      } as never,
+    ]);
+    expect(withNull).toHaveLength(withAbsent.length);
+    expect(withNull.length).toBeGreaterThan(0);
+  });
+});

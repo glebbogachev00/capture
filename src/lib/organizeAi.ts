@@ -119,7 +119,10 @@ export type RawAiProposal = {
   /** For fragment kinds: the id of the THREAD holding the fragment. */
   sourceId: string;
   /** Required for fragment kinds. */
-  sourceFragId?: string;
+  /* Null, not absent: the route's schema marks it nullable so Groq will
+     accept the response format at all. Every read below is truthiness or
+     `?? ""`, both of which already treat null as "no fragment named". */
+  sourceFragId?: string | null;
   targetId: string;
   reason: string;
 };
