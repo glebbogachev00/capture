@@ -96,6 +96,41 @@ const rejects = [
 ];
 
 export function Landing() {
+  /* The posed "you say / it lands as" card. In the wide layouts the hero's
+     second column belongs to the recording, and this drops to the slot the
+     recording used to hold, so the page keeps both and repeats neither. */
+  const demoCard = (
+        <section className="site-card site-demo" aria-label="What it does">
+          <div className="demo-split">
+            <div className="demo-said">
+              <p className="funding-card-label">You say</p>
+              <p className="demo-in">“{DEMO_IN}”</p>
+            </div>
+            <div className="demo-turn" aria-hidden="true">
+              <span>→</span>
+            </div>
+            <div className="demo-landed">
+              <p className="funding-card-label">It lands as</p>
+              <ul className="demo-out">
+                {DEMO_OUT.map((row) => (
+                  <li key={row.kind}>
+                    <span className="demo-mark">{row.mark}</span>
+                    <span className="demo-body">
+                      <span className="demo-kind">{row.kind}</span>
+                      <span className="demo-text">{row.text}</span>
+                      <span className="demo-note">{row.note}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <p className="demo-caption">
+            One sentence, two different species of thing. You did not have to
+            decide which, or tidy it first, or pick a folder.
+          </p>
+        </section>
+  );
   return (
     <main className="capture-root site-page">
       <div className="capture-wrap site-wrap">
@@ -139,65 +174,30 @@ export function Landing() {
             the page. Side by side, not stacked: the whole claim is that the
             left turns into the right, and a reader should see that before
             reading a word of it. */}
-        <section className="site-card site-demo" aria-label="What it does">
-          <div className="demo-split">
-            <div className="demo-said">
-              <p className="funding-card-label">You say</p>
-              <p className="demo-in">“{DEMO_IN}”</p>
-            </div>
-            <div className="demo-turn" aria-hidden="true">
-              <span>→</span>
-            </div>
-            <div className="demo-landed">
-              <p className="funding-card-label">It lands as</p>
-              <ul className="demo-out">
-                {DEMO_OUT.map((row) => (
-                  <li key={row.kind}>
-                    <span className="demo-mark">{row.mark}</span>
-                    <span className="demo-body">
-                      <span className="demo-kind">{row.kind}</span>
-                      <span className="demo-text">{row.text}</span>
-                      <span className="demo-note">{row.note}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <p className="demo-caption">
-            One sentence, two different species of thing. You did not have to
-            decide which, or tidy it first, or pick a folder.
-          </p>
-        </section>
+        {/* The recording, in the same card every other block sits in, and
+            with no caption under it: the caption repeated the headline.
+            It does not autoplay — the take opens on a title card, which as
+            a still is an empty rectangle, so the poster is the payoff
+            frame instead. */}
+        <div className="site-card site-demo hero-clip">
+          <video
+            controls
+            muted
+            playsInline
+            preload="metadata"
+            poster="/demos/two-places.jpg"
+            width={1440}
+            height={1000}
+          >
+            <source src="/demos/two-places.mp4" type="video/mp4" />
+          </video>
+        </div>
 
         {/* One demo at a size worth watching, then the other two. Three
             equal tiles made every one of them too small to read the app in,
             which is the only thing they are for. */}
         <section className="demo-reel" aria-label="Watch it work">
-          <figure className="site-card video-card reel-hero">
-            {/* The real pixel size of the file, not a ratio typed by hand.
-                A hand-written 16/9 outlived the recording it described and
-                the browser pillarboxed a 1440x1180 take into black bars on
-                both sides. Intrinsic dimensions cannot drift. */}
-            <video
-              controls
-              muted
-              playsInline
-              preload="metadata"
-              poster="/demos/two-places.jpg"
-              width={1440}
-              height={1180}
-            >
-              <source src="/demos/two-places.mp4" type="video/mp4" />
-            </video>
-            <figcaption>
-              <strong>One sentence, two places</strong>
-              <span>
-                A task and a question in one breath. It files both. 14
-                seconds, no sound.
-              </span>
-            </figcaption>
-          </figure>
+          {demoCard}
 
           <details className="reel-fold">
             <summary>See two more examples</summary>

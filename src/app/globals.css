@@ -3570,3 +3570,78 @@ body {
 .snap-day {
   font-size: 13px;
 }
+
+/* ---------------------- the desktop landing page ----------------------
+   The page was one 760px column at every width, so a 1440px screen showed
+   it centred with 340px of nothing on each side — the phone layout, held
+   up to a desktop. Everything below only applies once there is width to
+   use.
+   ---------------------------------------------------------------------- */
+@media (min-width: 1100px) {
+  /* One centred column, one width, all the way down.
+     A pass that gave the header 760, the hero 1320, the demo card 760 and
+     the reel 1320 again put four edges on top of each other, which is what
+     read as a mess. The hero opens big and centred; everything under it
+     lines up with it instead of stepping in and out. Below 1100 this all
+     collapses back to the single narrow column the phone gets. */
+  .site-wrap {
+    max-width: 1120px;
+  }
+  .site-wrap > .site-hero {
+    text-align: center;
+    padding-bottom: 40px;
+  }
+  .site-wrap .site-hero h1 {
+    font-size: clamp(64px, 7vw, 104px);
+    max-width: none;
+  }
+  .site-wrap .site-lede {
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 620px;
+  }
+  .site-wrap .site-actions {
+    justify-content: center;
+  }
+  /* The rows that have something to put side by side, do. */
+  .site-wrap .reel-more,
+  .site-wrap .site-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .site-wrap .site-kind-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  .site-wrap .reel-fold > summary {
+    margin-inline: auto;
+  }
+  /* One card edge; the reading measure is held by the text inside. */
+  .site-wrap .site-note p,
+  .site-wrap .site-problem p,
+  .site-wrap .site-quiet p,
+  .site-wrap .site-quiet li,
+  .site-wrap .site-proof p {
+    max-width: 68ch;
+  }
+  /* The quote sat at the top of its column while the results ran on, so
+     the card carried a hole. Both sides meet in the middle. */
+  .site-wrap .demo-split {
+    align-items: center;
+  }
+}
+
+/* The recording stands where the posed card used to. Nothing is drawn
+   around it: a box around a recording of a boxy app is a second frame. */
+.hero-clip {
+  margin: 0;
+}
+.hero-clip > video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  background: #000;
+}
