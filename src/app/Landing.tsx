@@ -209,7 +209,7 @@ export function Landing() {
             controls
             muted
             playsInline
-            preload="metadata"
+            preload="none"
             poster="/demos/two-places.jpg"
             width={1440}
             height={1000}
@@ -250,7 +250,7 @@ export function Landing() {
                     controls
                     muted
                     playsInline
-                    preload="metadata"
+                    preload="none"
                     poster={v.poster}
                     width={v.w}
                     height={v.h}
