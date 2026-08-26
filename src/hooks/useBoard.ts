@@ -2755,9 +2755,10 @@ export function useBoard(now: number) {
     };
     // This draft came from converting an action; the action only goes once
     // the intention is actually saved — discarding the draft keeps it.
+    // Its photos stay on disk: Undo below can bring the action back, and a
+    // restored action pointing at bytes we deleted is worse than a stray
+    // picture nobody references.
     if (pendingSource) {
-      const src = latest.current.actions.find((a) => a.id === pendingSource);
-      if (src) await dropImages(src.imgs);
       next = {
         ...next,
         actions: latest.current.actions.filter((a) => a.id !== pendingSource),
@@ -2765,25 +2766,41 @@ export function useBoard(now: number) {
     }
     // A capture that became this intention records itself in the ledger:
     // what was said (raw) and what it became (the reviewed wording).
-    if (intentionLedger.current) {
+    const fromCapture = intentionLedger.current;
+    if (fromCapture) {
       next = withLedger(next, {
         id: uid(),
         at,
-        raw: intentionLedger.current.raw,
+        raw: fromCapture.raw,
         clean: draft.expandedIntention,
         kind: "intention",
-        source: intentionLedger.current.source,
+        source: fromCapture.source,
         targetId: intention.id,
-        modelVia: intentionLedger.current.via,
+        modelVia: fromCapture.via,
       });
       intentionLedger.current = null;
     }
+    /* Saving is the first commit on this path. The capture fork threw the
+       snapshot away because a draft can just be discarded — but the moment
+       the intention is on the board, discarding is no longer on offer and
+       Undo is the only way back, exactly as it is for an action or a
+       thread. The words return to the capture box only when they came from
+       it; a converted action returns as the action itself. */
+    captureSnapshot.current = {
+      board: latest.current,
+      tombstones: tombstones.current,
+      text: fromCapture ? draft.rawInput : undefined,
+      ledgerId: newLedgerId(latest.current, next),
+      addedIds: newIds(latest.current, next),
+    };
+    setCanUndo(true);
     await commit(next);
     setDraft(null);
     setPendingSource(null);
     setTab("intentions");
-    setNotice("Intention " + pad(intention.number) + " set.");
-    setTimeout(() => setNotice(null), 4500);
+    setLanded("Intention " + pad(intention.number));
+    setLandedIds([]);
+    setTimeout(() => setLanded(null), 4500);
   };
 
   /** Close the intention draft without saving; the source action stays put. */
