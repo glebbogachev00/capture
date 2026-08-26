@@ -213,6 +213,14 @@ export function useBoard(now: number) {
      the words that were filed — evidence, not a second copy to manage. */
   const [transcript, setTranscript] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  /* Work that is genuinely in the background. `busy` disables the capture
+     box, which is right while a sentence is being sorted — the person is
+     waiting for it to land. It is wrong for the summary rewrite that
+     follows: the capture is already on the board and on screen, and
+     holding the box through a second model call meant the next thought
+     had to wait for a paragraph nobody was reading. Live, that measured
+     at thirty-five seconds. */
+  const [summarising, setSummarising] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [landed, setLanded] = useState<string | null>(null);
   /* What the last capture created, so the board can wash those rows once —
@@ -1223,7 +1231,7 @@ export function useBoard(now: number) {
   const regenerate = async (board: Board, threadId: string): Promise<Board> => {
     const target = board.threads.find((t) => t.id === threadId);
     if (!target?.frags.length) return board;
-    setBusy("Updating what this thread says now");
+    setSummarising("Updating what this thread says now");
     let result = board;
     try {
       /* One retry, because the failure is invisible and permanent: a
@@ -1238,9 +1246,16 @@ export function useBoard(now: number) {
         await new Promise((r) => setTimeout(r, 1200));
         return requestSummary(target.name, target.frags);
       });
+      /* The LATEST board, not the one this call started with. While the
+         summary was being written the person may have captured again, and
+         committing the snapshot this function was handed would take that
+         capture back off the board. Nothing else here reads `board`. */
+      if (!latest.current.threads.some((t) => t.id === threadId)) {
+        return latest.current;
+      }
       result = {
-        ...board,
-        threads: board.threads.map((t) =>
+        ...latest.current,
+        threads: latest.current.threads.map((t) =>
           t.id === threadId ? { ...t, summary, next } : t
         ),
       };
@@ -1248,7 +1263,7 @@ export function useBoard(now: number) {
     } catch {
       /* the fragments are saved; the summary can lag */
     }
-    setBusy(null);
+    setSummarising(null);
     return result;
   };
 
@@ -1635,7 +1650,9 @@ export function useBoard(now: number) {
       setSuggestion(
         force ? null : computeSuggestion(filed, out.clean, source)
       );
-      if (targetId) await regenerate(filed, targetId);
+      /* Not awaited. The capture has landed, the banner is up, and the box
+         is free for the next thought; the summary catches up behind it. */
+      if (targetId) void regenerate(filed, targetId);
     } catch (error) {
       await saveUnsorted(raw, imgIds, at, reasonOf(error), dictated);
     }
@@ -3721,6 +3738,7 @@ export function useBoard(now: number) {
     err,
     landed,
     landedIds,
+    summarising,
     suggestion,
     acceptSuggestion,
     dismissSuggestion,

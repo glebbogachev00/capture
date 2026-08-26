@@ -3794,3 +3794,9 @@ body {
   border-top: 0;
   padding-top: 0;
 }
+
+/* Background work, said quietly. It reads like the busy line because it is
+   the same kind of message, but nothing is disabled underneath it. */
+.status-quiet {
+  opacity: 0.62;
+}

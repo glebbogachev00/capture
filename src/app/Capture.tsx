@@ -157,6 +157,7 @@ export function Capture() {
     err,
     landed,
     landedIds,
+    summarising,
     suggestion,
     acceptSuggestion,
     dismissSuggestion,
@@ -669,6 +670,15 @@ export function Capture() {
           <div className="status">
             <span className="pulse" />
             {busy}…
+          </div>
+        )}
+        {/* The same note, but for work that is not in anyone's way. It says
+            what is happening without the capture box going dead, because
+            the capture it follows has already landed. */}
+        {!busy && summarising && (
+          <div className="status status-quiet">
+            <span className="pulse" />
+            {summarising}…
           </div>
         )}
         {err && <div className="err">{err}</div>}
