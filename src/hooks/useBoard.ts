@@ -188,6 +188,12 @@ function boardIds(b: Board): Set<string> {
   return s;
 }
 
+/* How long the board must sit still before the tidy cache is warmed, and
+   the floor between two warms. Module scope so the effect's deps stay
+   honest. */
+const WARM_STILL_MS = 25_000;
+const WARM_MIN_GAP_MS = 5 * 60_000;
+
 /** The ids `after` has that `before` does not — what one capture created. */
 function newIds(before: Board, after: Board): Set<string> {
   const had = boardIds(before);
@@ -1796,6 +1802,66 @@ export function useBoard(now: number) {
     [data, now]
   );
 
+  /** One in-flight warm at a time, and the clock since the last one. */
+  const warming = useRef(false);
+  const lastWarm = useRef(0);
+
+  /**
+   * Fetch the model's tidy pass into the cache without showing anything.
+   *
+   * The badge is a free local scan, so it appears the instant something is
+   * worth looking at — and then tapping it started a cold model call over
+   * the whole board and made the person wait ten to twenty seconds for
+   * work that had not begun. The badge was promising a result that did not
+   * exist yet.
+   *
+   * This does the same request `runOrganize` would, and writes only
+   * `organizeRead.current`. No state is set, so the rule above holds: the
+   * badge does not churn, and an open review is never rewritten under the
+   * reader. When the tap comes, the signature matches and the cached read
+   * is served instantly.
+   *
+   * It is deliberately stingy, because a warm spends the same quota a tap
+   * would and spends it even if the tap never comes:
+   *   - only when the local scan already found something (the badge is up);
+   *   - only after the board has been still for a while, which is when a
+   *     person is between captures and might actually look;
+   *   - at most once every few minutes, so a busy capture session does not
+   *     buy a reading per sentence;
+   *   - never with a review open, and never on the playground, where the
+   *     visitor is spending someone else's quota.
+   */
+  const warmOrganize = useCallback(async () => {
+    if (PLAYGROUND || warming.current) return;
+    const sig = boardSignature(latest.current, []);
+    if (organizeRead.current?.sig === sig) return;
+    warming.current = true;
+    lastWarm.current = Date.now();
+    try {
+      const res = await fetch("/api/organize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(compactBoard(latest.current)),
+      });
+      if (!res.ok) return;
+      const out = (await res.json()) as { proposals?: RawAiProposal[] };
+      const ai = mapAiProposals(
+        compactBoard(latest.current),
+        out.proposals ?? []
+      );
+      /* Against the board as it is NOW, not as it was when the request
+         left — a capture mid-flight must invalidate this, not inherit it. */
+      const after = boardSignature(latest.current, []);
+      if (after !== sig) return;
+      aiOrganize.current = ai;
+      organizeRead.current = { sig, ai };
+    } catch {
+      /* A warm that fails costs nothing: the tap falls back to asking. */
+    } finally {
+      warming.current = false;
+    }
+  }, []);
+
   const runOrganize = async () => {
     /* The local scan is shown immediately; the AI results merge in when
        they arrive. Both are read from the LATEST board at their moment, so
@@ -1859,6 +1925,21 @@ export function useBoard(now: number) {
       setOrganizeAiStatus("offline");
     }
   };
+
+  /* The warm runs on a lull, not on a change: 25 seconds of a still board,
+     and no more than one every five minutes. The timer resets on every
+     board change, so a capture session never triggers it — only the pause
+     afterwards does, which is the moment someone might glance at Tidy. */
+  useEffect(() => {
+    if (PLAYGROUND) return;
+    if (tidyHint < 1) return;
+    /* A review is open; leave the cache alone until it is closed. */
+    if (organize !== null) return;
+    const since = Date.now() - lastWarm.current;
+    const wait = Math.max(WARM_STILL_MS, WARM_MIN_GAP_MS - since);
+    const t = setTimeout(() => void warmOrganize(), wait);
+    return () => clearTimeout(t);
+  }, [tidyHint, data, organize, warmOrganize]);
 
   /* No automatic re-scan on board changes — by design. A live scan would
      make the badge (and an open review) churn as the board shifts under
