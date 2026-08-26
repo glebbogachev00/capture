@@ -95,6 +95,31 @@ const rejects = [
   "A chatbot that talks forever",
 ];
 
+/** A page-level signpost. Every heading on this page lived inside a card,
+    all at one size, so the page had no sections — just a stack of boxes a
+    reader had to work out for themselves. This sits on the background,
+    above the cards, and says what the next stretch is for.
+
+    `id` is a hook for ordering, not something anyone sees: numbering the
+    sections turned a page into a manual, and the titles already say where
+    you are. */
+function Movement({
+  id,
+  title,
+  gloss,
+}: {
+  id: string;
+  title: string;
+  gloss?: string;
+}) {
+  return (
+    <div className="movement" data-move={id}>
+      <h2>{title}</h2>
+      {gloss && <p>{gloss}</p>}
+    </div>
+  );
+}
+
 export function Landing() {
   /* The posed "you say / it lands as" card. In the wide layouts the hero's
      second column belongs to the recording, and this drops to the slot the
@@ -247,6 +272,11 @@ export function Landing() {
             because a maker's note dressed up as a stranger's review would
             be worth less than nothing. The face goes first, so a reader
             knows a person is talking before reading a word of it. */}
+        <Movement
+            id="04"
+            title="Who built it, and on what"
+            gloss="No reviews yet. Here is the honest version instead."
+          />
         <section className="site-card site-note" aria-label="From the maker">
           <div className="note-who">
             {/* Plain img, not next/image: 128px of JPEG that never changes
@@ -266,7 +296,8 @@ export function Landing() {
           <p>
             I do not have any yet, so here is the honest version. I built
             it for myself at the end of July, and I have used it every day
-            since.
+            since. The four below are not customers — they are the work I
+            was carrying while I used it.
           </p>
 
           {/* Four links, because a link is checkable and a sentence is
@@ -307,9 +338,17 @@ export function Landing() {
               ))}
             </ul>
           </div>
+        </section>
 
-          {/* The day, in the three moments that matter. Prose made a
-              reader work for what a glance can give them. */}
+        {/* Two ideas were sharing one card under a heading that named only
+            the first: who built it, and then how a day with it actually
+            goes. A reader could not tell what the second half was for. */}
+        <Movement
+          id="04b"
+          title="How a day with it goes"
+          gloss="Three moments. The same sentence, travelling."
+        />
+        <section className="site-card site-day">
           <dl className="note-beats">
             <div>
               <dt>On a walk</dt>
@@ -346,6 +385,11 @@ export function Landing() {
           </p>
         </section>
 
+        <Movement
+            id="02"
+            title="Three kinds of thing"
+            gloss="Everything you say becomes one of these, and you never pick which one."
+          />
         <section className="site-kind-grid" aria-label="The three kinds">
           {kinds.map((kind) => (
             <article className="site-card kind-card" key={kind.name}>
@@ -369,6 +413,11 @@ export function Landing() {
           </ul>
         </section>
 
+        <Movement
+            id="03"
+            title="Who it is for, and what it refuses"
+            gloss="Two short lists. The second one is why the first one works."
+          />
         <section className="site-card site-split">
           <div>
             <p className="funding-card-label">Who this is for</p>
@@ -394,6 +443,10 @@ export function Landing() {
           </div>
         </section>
 
+        <Movement
+            id="05"
+            title="Yours to keep"
+          />
         <section className="site-card site-proof">
           <p className="funding-card-label">Yours</p>
           <h2>Your thinking stays yours.</h2>

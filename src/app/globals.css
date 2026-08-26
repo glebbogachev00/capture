@@ -2636,9 +2636,17 @@ body {
 }
 .site-kind-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Three fixed columns were being held at every width, so on a phone each
+     card was about 130px wide and the headings clipped mid-word. They
+     stack until there is room for them to sit side by side. */
+  grid-template-columns: 1fr;
   gap: 12px;
   margin-bottom: 12px;
+}
+@media (min-width: 760px) {
+  .site-kind-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 .site-kind-grid .site-card {
   margin-bottom: 0;
@@ -3589,7 +3597,7 @@ body {
   }
   .site-wrap > .site-hero {
     text-align: center;
-    padding-bottom: 40px;
+    padding-bottom: 26px;
   }
   .site-wrap .site-hero h1 {
     font-size: clamp(64px, 7vw, 104px);
@@ -3600,7 +3608,9 @@ body {
     margin-right: auto;
     max-width: 620px;
   }
-  .site-wrap .site-actions {
+  /* Only the hero's. The rule was unscoped, so the closing call to action
+     sat centred under a left-aligned paragraph. */
+  .site-wrap > .site-hero .site-actions {
     justify-content: center;
   }
   /* The rows that have something to put side by side, do. */
@@ -3644,4 +3654,143 @@ body {
   height: auto;
   border-radius: 12px;
   background: #000;
+}
+
+/* 4 — the level the page never had.
+   A signpost belongs to the page, not to a card: it sits on the ground,
+   in the display face, bigger than anything in the boxes under it, with
+   a number so a reader knows how far through they are and that there is
+   an end. The cards stop being a flat list and become the contents of a
+   section. */
+.movement {
+  margin: 40px 0 16px;
+}
+.movement h2 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+.movement p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15.5px;
+  max-width: 56ch;
+}
+@media (min-width: 1100px) {
+  .movement {
+    margin: 56px 0 20px;
+    text-align: center;
+  }
+  .movement p {
+    margin-inline: auto;
+  }
+  .movement h2 {
+    font-size: 40px;
+  }
+}
+
+/* The order the argument wants, which is not the order the page grew in.
+   Show it working, say what it makes, say what it refuses, then who built
+   it and that it is yours. The maker's note had drifted to just after the
+   demo, where it interrupts the explanation with a biography. Flex order
+   moves it without moving the markup.
+
+   Targeted by data-move, not :nth-of-type — the signposts are divs among
+   other divs, so nth-of-type counted the wrong siblings and hung every
+   heading over the wrong section. */
+.site-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.site-wrap > .site-head       { order: 0; }
+.site-wrap > .site-hero       { order: 1; }
+.site-wrap > .hero-clip       { order: 3; }
+.site-wrap > .demo-reel       { order: 4; }
+.site-wrap > .site-problem    { order: 5; }
+.site-wrap > [data-move="02"] { order: 6; }
+.site-wrap > .site-kind-grid  { order: 7; }
+.site-wrap > .site-quiet      { order: 8; }
+.site-wrap > [data-move="03"] { order: 9; }
+.site-wrap > .site-split      { order: 10; }
+.site-wrap > [data-move="04"] { order: 11; }
+.site-wrap > .site-note       { order: 12; }
+.site-wrap > [data-move="04b"]{ order: 13; }
+.site-wrap > .site-day        { order: 14; }
+.site-wrap > [data-move="05"] { order: 15; }
+.site-wrap > .site-proof      { order: 16; }
+
+/* Polish, once the sections exist.
+
+   A signpost that says "Yours to keep" over a card whose kicker says
+   "YOURS" and whose heading says "Your thinking stays yours" is one idea
+   wearing three labels. The card keeps its body; the signpost above is
+   its heading now. Same for the closing block's kicker. */
+.site-wrap .site-proof > .funding-card-label,
+.site-wrap .site-proof > h2 {
+  display: none;
+}
+/* The gloss was jammed under a 40px serif line and read as a caption of
+   the title rather than a sentence to a reader. */
+.movement h2 {
+  margin-bottom: 10px;
+}
+.movement p {
+  font-size: 16px;
+  line-height: 1.55;
+}
+@media (min-width: 1100px) {
+  .movement p {
+    font-size: 17px;
+  }
+  /* The card under a signpost belongs to it. Pulling it up closes the gap
+     that made every section look like two unrelated things. */
+  .site-wrap .movement + * {
+    margin-top: 0;
+  }
+}
+
+/* The closing block said its own sentence twice — once as the signpost
+   gloss, once as the card under it — and the card's paragraph was centred
+   at full width, so it broke with an orphan line. The signpost carries the
+   title, the card carries the sentence, and the sentence gets a measure
+   that breaks evenly. */
+/* Left, like every other card on the page. Centring only this one made
+   the last section look like it belonged to a different site. The
+   signposts are the centred thing; the cards under them are not. */
+.site-wrap .site-proof p {
+  max-width: 52ch;
+}
+
+/* The four projects stay a grid. Setting them inline was meant to drop a
+   layout pattern from an overloaded card, and it ran the names and their
+   glosses together into one long smear. The card is short now that the
+   day beats are their own section, so the grid costs nothing and each
+   project reads as one thing. */
+
+/* The closing section is centred, unlike the cards above it. It is two
+   lines and a button — a sign-off, not a block of content — and hard
+   against the left edge under a centred heading it looked abandoned. */
+.site-wrap .site-proof,
+.site-wrap .site-proof p {
+  text-align: center;
+}
+.site-wrap .site-proof p {
+  max-width: 52ch;
+  margin-inline: auto;
+}
+.site-wrap .site-proof .site-actions {
+  justify-content: center;
+}
+
+/* The day beats, now their own section rather than a second half nobody
+   knew they were reading. Same card treatment as everything else. */
+.site-day .note-beats {
+  margin-top: 0;
+}
+.site-day .note-beats > div:first-child {
+  border-top: 0;
+  padding-top: 0;
 }
