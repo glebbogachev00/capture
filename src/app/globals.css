@@ -2582,15 +2582,6 @@ body {
 .site-hero {
   padding: 64px 0 30px;
 }
-.hero-demo {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 9;
-  margin-top: 32px;
-  border-radius: 12px;
-  background: var(--card);
-}
 .voice-hero {
   padding-bottom: 36px;
 }
@@ -3203,9 +3194,10 @@ body {
 }
 .video-card video {
   width: 100%;
-  /* No shared aspect box. Each video declares its own ratio inline, so a
-     frame is never cropped to fit a shape it was not recorded in; the two
-     in the pair below share a shape and still line up. */
+  /* No shared aspect box, and no ratio written by hand either — each
+     video carries its file's real width/height attributes, so the frame
+     is the shape it was recorded in and cannot drift when a take is
+     re-recorded at another size. */
   height: auto;
   border-radius: 10px;
   display: block;

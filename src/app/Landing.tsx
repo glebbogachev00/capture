@@ -128,16 +128,6 @@ export function Landing() {
               No account. The board you make stays in this browser.
             </p>
           )}
-          <video
-            className="hero-demo"
-            controls
-            muted
-            playsInline
-            preload="metadata"
-            poster="/demos/capture-hero.jpg"
-          >
-            <source src="/demos/capture-hero.mp4" type="video/mp4" />
-          </video>
         </section>
 
         {/* The transformation is the product, so it is the first object on
@@ -180,13 +170,18 @@ export function Landing() {
             which is the only thing they are for. */}
         <section className="demo-reel" aria-label="Watch it work">
           <figure className="site-card video-card reel-hero">
+            {/* The real pixel size of the file, not a ratio typed by hand.
+                A hand-written 16/9 outlived the recording it described and
+                the browser pillarboxed a 1440x1180 take into black bars on
+                both sides. Intrinsic dimensions cannot drift. */}
             <video
               controls
               muted
               playsInline
               preload="metadata"
               poster="/demos/two-places.jpg"
-              style={{ aspectRatio: "16 / 9" }}
+              width={1440}
+              height={1180}
             >
               <source src="/demos/two-places.mp4" type="video/mp4" />
             </video>
@@ -206,12 +201,16 @@ export function Landing() {
                 {
                   src: "/demos/it-learns.mp4",
                   poster: "/demos/it-learns.jpg",
+                  w: 1440,
+                  h: 1230,
                   title: "It got it wrong. You told it once.",
                   note: "Undo asks what it should have been. The next one lands right, unasked.",
                 },
                 {
                   src: "/demos/next-step.mp4",
                   poster: "/demos/next-step.jpg",
+                  w: 1440,
+                  h: 1230,
                   title: "It names the next move",
                   note: "A thread offers the step. One tap makes it an action.",
                 },
@@ -223,7 +222,8 @@ export function Landing() {
                     playsInline
                     preload="metadata"
                     poster={v.poster}
-                    style={{ aspectRatio: "1440 / 1230" }}
+                    width={v.w}
+                    height={v.h}
                   >
                     <source src={v.src} type="video/mp4" />
                   </video>
