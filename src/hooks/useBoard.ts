@@ -41,6 +41,7 @@ import {
 } from "@/lib/model";
 import { importIntentBackup } from "@/lib/importIntent";
 import { threadBriefs } from "@/lib/threadBrief";
+import { warmDelay } from "@/lib/tidyWarm";
 import {
   expiredDays,
   snapshotDay,
@@ -187,12 +188,6 @@ function boardIds(b: Board): Set<string> {
   for (const p of b.principles) s.add(p.id);
   return s;
 }
-
-/* How long the board must sit still before the tidy cache is warmed, and
-   the floor between two warms. Module scope so the effect's deps stay
-   honest. */
-const WARM_STILL_MS = 25_000;
-const WARM_MIN_GAP_MS = 5 * 60_000;
 
 /** The ids `after` has that `before` does not — what one capture created. */
 function newIds(before: Board, after: Board): Set<string> {
@@ -1926,17 +1921,22 @@ export function useBoard(now: number) {
     }
   };
 
-  /* The warm runs on a lull, not on a change: 25 seconds of a still board,
-     and no more than one every five minutes. The timer resets on every
-     board change, so a capture session never triggers it — only the pause
-     afterwards does, which is the moment someone might glance at Tidy. */
+  /* The warm runs on a lull, not on a change: the timer restarts on every
+     board change, so a capture session never reaches the end of it and
+     only the pause afterwards does. Every reason not to warm lives in
+     warmDelay, where it can be argued with in a test. */
   useEffect(() => {
-    if (PLAYGROUND) return;
-    if (tidyHint < 1) return;
-    /* A review is open; leave the cache alone until it is closed. */
-    if (organize !== null) return;
-    const since = Date.now() - lastWarm.current;
-    const wait = Math.max(WARM_STILL_MS, WARM_MIN_GAP_MS - since);
+    const wait = warmDelay({
+      playground: PLAYGROUND,
+      hint: tidyHint,
+      reviewOpen: organize !== null,
+      sig: boardSignature(latest.current, []),
+      cachedSig: organizeRead.current?.sig ?? null,
+      inFlight: warming.current,
+      lastWarmAt: lastWarm.current,
+      now: Date.now(),
+    });
+    if (wait === null) return;
     const t = setTimeout(() => void warmOrganize(), wait);
     return () => clearTimeout(t);
   }, [tidyHint, data, organize, warmOrganize]);
