@@ -2086,7 +2086,7 @@ function FragView({
               of the bug, the receipt, the whiteboard. Attaching one used to
               be possible only in the second the note was written. */}
           <label className="ghost frag-pic">
-            Add a picture
+            Add an image
             <input
               type="file"
               accept="image/*"

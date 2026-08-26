@@ -1806,9 +1806,16 @@ export function useBoard(now: number) {
    * the button can carry a real number. The model pass stays behind the
    * tap, where it is paid for deliberately.
    */
+  /* scanStale, not scanBoard. scanBoard finds everything the word matcher
+     can claim — duplicates, merges — and scanStale is the subset the review
+     screen actually shows (let_go and revisit_intention; the note on
+     scanStale says why the rest was taken off that screen). Counting the
+     wider one made the badge promise things the panel could never display:
+     "2 to tidy", tap, nothing to tidy. A badge may under-count, because the
+     model pass adds rows the tap pays for — it must never over-count. */
   const tidyHint = useMemo(
     () =>
-      scanBoard(data, dismissedOrganize.current, now).filter(
+      scanStale(data, dismissedOrganize.current, now).filter(
         (p) => p.confidence === "high"
       ).length,
     [data, now]
