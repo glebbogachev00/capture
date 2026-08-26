@@ -3800,3 +3800,12 @@ body {
 .status-quiet {
   opacity: 0.62;
 }
+
+/* The note's own picture picker. A label wrapping a file input, styled as
+   the ghost button it sits beside — the input itself is never shown. */
+.frag-pic {
+  cursor: pointer;
+}
+.frag-pic input {
+  display: none;
+}

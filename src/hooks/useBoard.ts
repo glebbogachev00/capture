@@ -1814,6 +1814,17 @@ export function useBoard(now: number) {
     [data, now]
   );
 
+  /** Leaving the review. `organize` held the last reading for the whole
+      session, and the warm treats a non-null reading as "a review is open,
+      do not touch the cache" — so after one Tidy the warm never ran again
+      and every tap after the first was cold. Closing the panel clears it;
+      the badge falls back to the free local scan, which is what it shows
+      before the first tap anyway. */
+  const closeOrganize = useCallback(() => {
+    setOrganize(null);
+    setOrganizeAiStatus("idle");
+  }, []);
+
   /** One in-flight warm at a time, and the clock since the last one. */
   const warming = useRef(false);
   const lastWarm = useRef(0);
@@ -2420,6 +2431,50 @@ export function useBoard(now: number) {
         }
       )
     );
+  };
+
+  /**
+   * Add pictures to a note that already exists.
+   *
+   * A photo could only ever be attached at the moment of capture, which is
+   * the one moment you often do not have it — the screenshot arrives after
+   * the thought. The bytes go to IndexedDB under a fresh id and the note
+   * keeps the id, exactly as a captured photo does, so everything
+   * downstream already works: the thread view reads them by id,
+   * reconcileImages uploads and re-fetches them on sync, and a backup
+   * carries them.
+   */
+  const addFragImages = async (
+    threadId: string,
+    fragId: string,
+    srcs: string[]
+  ) => {
+    if (!srcs.length) return;
+    const ids: string[] = [];
+    for (const src of srcs) {
+      const id = uid();
+      try {
+        await set(IMG(id), src);
+        ids.push(id);
+      } catch {
+        /* out of disk — skip this one rather than lose the note */
+      }
+    }
+    if (!ids.length) return;
+    const next = {
+      ...latest.current,
+      threads: latest.current.threads.map((t) =>
+        t.id === threadId
+          ? {
+              ...t,
+              frags: t.frags.map((f) =>
+                f.id === fragId ? { ...f, imgs: [...(f.imgs || []), ...ids] } : f
+              ),
+            }
+          : t
+      ),
+    };
+    await commit(next);
   };
 
   const editFrag = async (threadId: string, fragId: string, text: string) => {
@@ -3745,6 +3800,7 @@ export function useBoard(now: number) {
     organize,
     organizeAiStatus,
     runOrganize,
+    closeOrganize,
     tidyHint,
     acceptOrganize,
     acceptOrganizeAll,
@@ -3798,6 +3854,7 @@ export function useBoard(now: number) {
     renameThread,
     setThreadCover,
     editFrag,
+    addFragImages,
     deleteFrag,
     moveFrag,
     moveFragToNew,

@@ -164,6 +164,7 @@ export function Capture() {
     organize,
     organizeAiStatus,
     runOrganize,
+    closeOrganize,
     tidyHint,
     acceptOrganize,
     acceptOrganizeAll,
@@ -215,6 +216,7 @@ export function Capture() {
     renameThread,
     setThreadCover,
     editFrag,
+    addFragImages,
     deleteFrag,
     moveFrag,
     moveFragToNew,
@@ -830,7 +832,10 @@ export function Capture() {
           <OrganizeScreen
             proposals={organize ?? []}
             aiStatus={organizeAiStatus}
-            onBack={() => setShowOrganize(false)}
+            onBack={() => {
+              setShowOrganize(false);
+              closeOrganize();
+            }}
             onAccept={(id) => void acceptOrganize(id)}
             onDismiss={(id) => dismissOrganize(id)}
             onApproveAll={() => void acceptOrganizeAll()}
@@ -923,6 +928,23 @@ export function Capture() {
             fromActions={actionsForThread(data, thread)}
             onCopyFrag={(fragId) => copyFragment(thread.id, fragId)}
             onExtractAction={(fragId) => extractAction(thread.id, fragId)}
+            onAddFragImages={(fragId, files) => {
+              /* Shrunk first, exactly like a photo picked at capture: a
+                 phone shot is ~15MB as a data URL, and IndexedDB and the
+                 backups both carry these. Unreadable files are skipped
+                 rather than saved broken. */
+              void Promise.all(
+                [...(files || [])].slice(0, 4).map((file) =>
+                  shrinkFile(file).catch(() => null)
+                )
+              ).then((out) =>
+                addFragImages(
+                  thread.id,
+                  fragId,
+                  out.filter((v): v is string => !!v)
+                )
+              );
+            }}
             onTakeNext={() => takeNext(thread.id)}
             onDismissNext={() => dismissNext(thread.id)}
             busy={!!busy}
@@ -1611,6 +1633,7 @@ function ThreadView({
   onCopyThread,
   onCopyFrag,
   onExtractAction,
+  onAddFragImages,
   onTakeNext,
   onDismissNext,
   fromActions,
@@ -1632,6 +1655,7 @@ function ThreadView({
   onCopyThread: () => void;
   onCopyFrag: (fragId: string) => void;
   onExtractAction: (fragId: string) => void;
+  onAddFragImages: (fragId: string, files: FileList | null) => void;
   onTakeNext: () => void;
   onDismissNext: () => void;
   /** What this thread gave rise to — shown as one quiet line, and only
@@ -1938,6 +1962,7 @@ function ThreadView({
           onMoveToNew={() => onMoveFragToNew(f.id)}
           onCopy={() => onCopyFrag(f.id)}
           onExtract={() => onExtractAction(f.id)}
+          onAddImages={(files) => onAddFragImages(f.id, files)}
         />
       ))}
     </div>
@@ -1954,6 +1979,7 @@ function FragView({
   onMoveToNew,
   onCopy,
   onExtract,
+  onAddImages,
   busy,
 }: {
   f: Frag;
@@ -1965,6 +1991,7 @@ function FragView({
   onMoveToNew: () => void;
   onCopy: () => void;
   onExtract: () => void;
+  onAddImages: (files: FileList | null) => void;
   busy: boolean;
 }) {
   const [srcs, setSrcs] = useState<string[]>([]);
@@ -2055,6 +2082,22 @@ function FragView({
           <button className="ghost" onClick={onExtract} disabled={busy}>
             Make an action
           </button>
+          {/* A photo usually turns up after the thought does — a screenshot
+              of the bug, the receipt, the whiteboard. Attaching one used to
+              be possible only in the second the note was written. */}
+          <label className="ghost frag-pic">
+            Add a picture
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => {
+                onAddImages(e.target.files);
+                e.target.value = "";
+                setMore(false);
+              }}
+            />
+          </label>
           <button
             className="ghost"
             onClick={() => {
