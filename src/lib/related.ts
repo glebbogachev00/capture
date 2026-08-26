@@ -105,11 +105,57 @@ const GENERIC = new Set([
      learned rule as though they were the subject: an undo produced
      `Captures about "finally recycling"`, half of which is nothing. */
   "finally", "eventually", "definitely", "honestly", "literally",
+  /* A verdict about a thing is not the thing. Two captures that both say
+     something "needs improvement" share a judgement, not a subject — and
+     the phrase is long enough and rare enough to pass every other gate. */
+  "improve", "improves", "improved", "improving", "improvement",
+  "improvements",
 ]);
 
 /** Lowercased tokens of a text — the unit of matching. Exact token equality
     only: "text" can never match inside "context". */
 const tokens = (s: string) => s.toLowerCase().match(/[a-z][a-z0-9']*/g) || [];
+
+/**
+ * Ordinary inflections of a word, tested only for list membership.
+ *
+ * The lists above name a word once and were expected to cover it — but
+ * "need" was on STOP while "needs" was not, so "needs improvement" read as
+ * a subject two captures shared, and the board offered to merge an action
+ * into a thread over a phrase that says nothing about either. Every list
+ * entry was one plural away from the same hole. Membership is asked of the
+ * stems too, so naming a word filters the word.
+ *
+ * Never changes the word quoted back in a reason — only whether it counts.
+ */
+function stems(w: string): string[] {
+  const out = [w];
+  if (w.endsWith("ies") && w.length > 4) out.push(w.slice(0, -3) + "y");
+  if (w.endsWith("es") && w.length > 3) out.push(w.slice(0, -2));
+  if (w.endsWith("s") && !w.endsWith("ss")) out.push(w.slice(0, -1));
+  if (w.endsWith("ing") && w.length > 5) {
+    const base = w.slice(0, -3);
+    out.push(base, base + "e");
+  }
+  if (w.endsWith("ed") && w.length > 4) {
+    const base = w.slice(0, -2);
+    out.push(base, base + "e");
+  }
+  return out;
+}
+
+/** Is this word one the matcher should ignore?
+ *
+ * Inflections are resolved against STOP only. STOP is a closed grammatical
+ * class — a connector or everyday verb is exactly as empty in every form,
+ * so naming it once names all of them. GENERIC is a hand-tuned list of
+ * words that happen to be everywhere on THIS board, and widening it by
+ * stem was measurably too broad: it swallowed "copying", which cost the
+ * duplicate check a real match between two near-identical notes. Those
+ * forms are enumerated deliberately, so they are matched as written.
+ */
+const ignored = (w: string) =>
+  GENERIC.has(w) || stems(w).some((s) => STOP.has(s));
 
 
 function itemText(a: Action): string {
@@ -374,9 +420,7 @@ export function bestActionDuplicate(
     board-wide scan can count rarity across the whole board with the exact
     same token rules the connections use. */
 export function contentWords(s: string): string[] {
-  return tokens(s).filter(
-    (w) => w.length >= 4 && !STOP.has(w) && !GENERIC.has(w)
-  );
+  return tokens(s).filter((w) => w.length >= 4 && !ignored(w));
 }
 
 /** The longest shared run of content words between two plain texts, or

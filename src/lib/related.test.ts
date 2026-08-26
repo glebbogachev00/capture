@@ -37,6 +37,49 @@ function board(a: {
   };
 }
 
+describe("a verdict is not a subject", () => {
+  /* From the phone, on the real board: an action was offered a home in a
+     thread called "Capture." because 'both mention "needs improvement"'.
+     Neither word was filtered — STOP held "need" but not "needs", and the
+     improve family was absent — so the pair read as a two-word subject
+     rare enough to clear every gate. */
+  it("does not connect two notes over 'needs improvement'", () => {
+    const b = board({
+      threads: [
+        thread("t1", "Capture.", [
+          "The sorting in capture needs improvement.",
+        ]),
+      ],
+    });
+    expect(sharedPhrase(
+      "The onboarding flow needs improvement.",
+      "The sorting in capture needs improvement."
+    )).toBe("");
+    expect(bestThreadHome(b, "The onboarding flow needs improvement.")).toBeNull();
+  });
+
+  it("filters an inflection of a stopword, not just the listed form", () => {
+    // "need" was on STOP and "needs" was not; every entry had the hole.
+    expect(sharedPhrase("needs a rewrite", "needs a rewrite")).toBe("");
+    expect(sharedPhrase("wanted a rewrite", "wanted a rewrite")).toBe("");
+  });
+
+  it("has the whole improve family, in every form it gets said", () => {
+    for (const w of ["improve", "improves", "improved", "improving",
+                     "improvement", "improvements"])
+      expect(sharedPhrase(`the flow ${w} daily`, `the sort ${w} daily`)).toBe("");
+  });
+
+  it("still hears a real shared subject in the same sentence shape", () => {
+    expect(
+      sharedPhrase(
+        "The espresso machine needs improvement.",
+        "Ordered gaskets for the espresso machine."
+      )
+    ).toBe("espresso machine");
+  });
+});
+
 describe("bestThreadHome", () => {
   it("names the thread a phrase clearly belongs with", () => {
     const b = board({
