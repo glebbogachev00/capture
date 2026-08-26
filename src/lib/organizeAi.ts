@@ -288,7 +288,11 @@ export function mapAiProposals(
       sourceId: dupSource,
       sourceName: NAME(sourceName),
       sourceThreadId: FRAGMENT_KINDS.has(p.kind) ? dupSource : undefined,
-      sourceFragId: FRAGMENT_KINDS.has(p.kind) ? p.sourceFragId : undefined,
+      /* The wire value may be null (the schema is nullable so Groq accepts
+         it); the proposal type says absent. Same meaning, one shape. */
+      sourceFragId: FRAGMENT_KINDS.has(p.kind)
+        ? p.sourceFragId ?? undefined
+        : undefined,
       targetId: homeId,
       targetName: NAME(targetName),
       reason: CLIP(p.reason, 200),
