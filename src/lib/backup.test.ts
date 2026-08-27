@@ -169,3 +169,33 @@ describe("restoreBackup", () => {
     expect(b.images).toEqual({ "img-9": "data:image/jpeg;base64,BBBB" });
   });
 });
+
+describe("a backup carries thread covers", () => {
+  /* It did not. exportBoard walked actions and fragments and forgot
+     `thread.cover`, so 8 of the 26 image references in a real 2026-08-27
+     export had no bytes behind them — and all 8 were covers. Restore that
+     file and every cover is gone. The sync path had already been fixed for
+     this exact case; the export had its own copy of the walk. */
+  it("counts a cover as a referenced image", async () => {
+    const { referencedImageIds } = await import("./imgSync");
+    const board = {
+      actions: [],
+      threads: [
+        {
+          id: "t1",
+          name: "Design language creation",
+          summary: "",
+          cover: "img:cover-1",
+          frags: [{ id: "f1", at: 1, text: "a note", imgs: ["frag-1"] }],
+        },
+      ],
+      intentions: [],
+      principles: [],
+      ledger: [],
+      corrections: [],
+    };
+    const ids = referencedImageIds(board as never);
+    expect(ids).toContain("frag-1");
+    expect(ids).toContain("cover-1");
+  });
+});

@@ -3112,10 +3112,14 @@ export function useBoard(now: number) {
   const exportBoard = async () => {
     try {
       const b = latest.current;
-      const ids = new Set<string>();
-      for (const a of b.actions) for (const i of a.imgs || []) ids.add(i);
-      for (const t of b.threads)
-        for (const f of t.frags) for (const i of f.imgs || []) ids.add(i);
+      /* referencedImageIds, not a walk written out again here. This walked
+         actions and fragments and forgot thread covers, so every backup
+         dropped every cover: 8 of 26 references in Gleb's 2026-08-27
+         export had no bytes behind them, and all 8 were covers. The sync
+         path already had the fix — with a comment describing this exact
+         failure — and the export never got it. One function now, so the
+         two cannot disagree again. */
+      const ids = new Set<string>(referencedImageIds(b));
       const images: Record<string, string> = {};
       await Promise.all(
         [...ids].map(async (id) => {
