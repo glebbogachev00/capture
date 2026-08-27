@@ -1023,6 +1023,14 @@ body {
   border-radius: 10px;
   padding: 11px 13px;
   min-height: 48px;
+  /* Never squashed. .picker is a flex column and the misfiled variant caps
+     it at 240px, and a flex child shrinks by default — so with more threads
+     than fit, every row was compressed below the height of its own
+     contents. The border closed after the thread name and the layer count
+     fell out underneath it, onto the next row. Reported three times as
+     "the menu is visually broken", and it was: the rows keep their natural
+     height and the list scrolls, which is what the max-height was for. */
+  flex: none;
   touch-action: manipulation;
   transition: 0.15s;
 }
