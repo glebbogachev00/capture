@@ -1214,6 +1214,23 @@ body {
   margin-top: 4px;
   max-height: 240px;
   overflow-y: auto;
+  /* The thread list is already inside the misfiled strip, which is itself
+     a card: same background, same border, same radius. Nested, it read as
+     a box drawn twice, and `.picker`'s 18px bottom margin is larger than
+     the strip's 9px padding, so the inner box pushed out through the
+     bottom of the outer one. Inside the strip the picker is just a list;
+     its rows carry their own surface. */
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 0;
+  /* Nineteen threads do not fit in 240px, so the list scrolls — but it cut
+     the last row through the middle with nothing to say why. The mask
+     fades the final few pixels, which reads as "there is more" instead of
+     as a clipped box. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
 }
 .misfiled-skip {
   color: var(--muted);
