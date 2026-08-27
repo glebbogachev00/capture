@@ -65,9 +65,9 @@ describe("arrivedNote", () => {
     expect(arrivedNote({ actions: 0, frags: 0, threads: 0 })).toBeNull();
   });
 
-  it("names notes on their own", () => {
+  it("names fragments on their own", () => {
     expect(arrivedNote({ actions: 0, frags: 2, threads: 0 })).toBe(
-      "2 notes arrived from your other device."
+      "2 fragments arrived from your other device."
     );
   });
 
@@ -77,7 +77,7 @@ describe("arrivedNote", () => {
     );
   });
 
-  it("a new thread speaks for the notes inside it", () => {
+  it("a new thread speaks for the fragments inside it", () => {
     expect(arrivedNote({ actions: 0, frags: 3, threads: 1 })).toBe(
       "1 thread arrived from your other device."
     );
@@ -85,7 +85,7 @@ describe("arrivedNote", () => {
 
   it("joins two kinds with and", () => {
     expect(arrivedNote({ actions: 2, frags: 1, threads: 0 })).toBe(
-      "2 actions and 1 note arrived from your other device."
+      "2 actions and 1 fragment arrived from your other device."
     );
   });
 });

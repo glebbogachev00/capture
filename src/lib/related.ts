@@ -1,3 +1,4 @@
+import { spokenText } from "./caption";
 import type { Action, Board, Intention, Thread } from "./model";
 
 /**
@@ -158,17 +159,18 @@ const ignored = (w: string) =>
   GENERIC.has(w) || stems(w).some((s) => STOP.has(s));
 
 
+/* Every text that reaches the matcher goes through spokenText: a photo
+   caption describes a picture, and letting it claim connections meant a
+   screenshot of the board linked whatever it happened to show. */
 function itemText(a: Action): string {
-  return [a.text, a.src].filter(Boolean).join(" ");
+  return spokenText([a.text, a.src].filter(Boolean).join(" "));
 }
 function threadText(t: Thread): string {
-  return [
-    t.name,
-    t.summary,
-    ...(t.frags || []).map((f) => f.text),
-  ]
-    .filter(Boolean)
-    .join(" ");
+  return spokenText(
+    [t.name, t.summary, ...(t.frags || []).map((f) => f.text)]
+      .filter(Boolean)
+      .join(" ")
+  );
 }
 function intentionText(i: Intention): string {
   return [

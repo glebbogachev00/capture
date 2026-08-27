@@ -39,3 +39,24 @@ export function tidyCaption(text: string): string | null {
   if (!t) return null;
   return t.slice(0, 300);
 }
+
+/**
+ * The text with any attached-photo caption taken back off.
+ *
+ * A caption is a model describing a picture, and it is folded into the
+ * fragment so the sorter can file a photo by what it shows. That is right
+ * at capture time and wrong everywhere afterwards: photograph a bug on
+ * your own board and the caption quotes every item visible in the shot,
+ * so the thread you file it in ends up literally containing other
+ * actions' text — and the matcher then links them. That is how "Give the
+ * caul lilies to my girlfriend" came to sit under "Bugs, Issues and
+ * Additions": the bug report was a screenshot of the board saying so.
+ *
+ * Matching asks what the PERSON said. Search and reading still see the
+ * whole thing, caption included.
+ */
+export function spokenText(s: string): string {
+  return (s || "")
+    .replace(/\n*\(Attached photo:[^)]*\)/g, "")
+    .trim();
+}

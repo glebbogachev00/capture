@@ -1,4 +1,5 @@
 import type { Action, Board, Thread } from "./model";
+import { spokenText } from "./caption";
 import { contentWords, sharedPhrase } from "./related";
 
 /**
@@ -23,13 +24,14 @@ export function actionsForThread(
       if (e.clean) vouched.add(e.clean.trim());
     }
   }
-  const threadText = [
-    thread.name,
-    thread.summary,
-    ...thread.frags.map((f) => f.text),
-  ]
-    .filter(Boolean)
-    .join(" ");
+  /* Without the photo captions — see spokenText. A screenshot of the board
+     filed into a thread quotes other actions verbatim, and this list then
+     claimed them. */
+  const threadText = spokenText(
+    [thread.name, thread.summary, ...thread.frags.map((f) => f.text)]
+      .filter(Boolean)
+      .join(" ")
+  );
 
   /* A restore can bring an action across without the thread it named —
      its own thread already existed here, or was never in the backup. A
@@ -61,7 +63,7 @@ export function actionsForThread(
   /* An action that names another living thread as home is never borrowed. */
   const isRelated = (a: Action) => {
     if (a.done || homed(a)) return false;
-    const run = sharedPhrase(`${a.text} ${a.src ?? ""}`, threadText)
+    const run = sharedPhrase(spokenText(`${a.text} ${a.src ?? ""}`), threadText)
       .split(" ")
       .filter(Boolean);
     return run.length >= 2;
