@@ -79,24 +79,31 @@ describe("after a partial restore", () => {
   });
 });
 
-describe("one telling word is enough", () => {
-  it("claims an action that shares a rare word, but not a common one", async () => {
+describe("one telling word is not enough", () => {
+  /* This used to assert the opposite. The rule it pinned put "Give the
+     caul lilies to my girlfriend" under a thread about AI agents, because
+     that thread mentioned a girlfriend once — see threadActions.board.test
+     for the cases off the real board. A single shared word, however rare,
+     is a coincidence often enough that the list stops being trustworthy,
+     and a thread showing someone else's errand is worse than one showing
+     none. */
+  it("needs a phrase, not a rare word in common", async () => {
     const { actionsForThread } = await import("./threadActions");
     const { EMPTY } = await import("./model");
-    const b = {
-      ...EMPTY,
-      threads: [thread()],
-      actions: [
-        action("rare", { text: "Email the underwriters about the quote" }),
-        action("common", { text: "Review the pricing deck" }),
-      ],
-    } as Board;
-    /* "underwriters" appears nowhere else; "pricing" is all over the board. */
     const t = {
       ...thread(),
       summary: "Underwriters want the pricing model settled before pricing the tier.",
     };
-    const open = actionsForThread({ ...b, threads: [t] }, t).open.map((a) => a.id);
-    expect(open).toContain("rare");
+    const b = {
+      ...EMPTY,
+      threads: [t],
+      actions: [
+        action("oneWord", { text: "Email the underwriters about the quote" }),
+        action("phrase", { text: "Settle the pricing model this week" }),
+      ],
+    } as Board;
+    const open = actionsForThread(b, t).open.map((a) => a.id);
+    expect(open).not.toContain("oneWord");
+    expect(open).toContain("phrase");
   });
 });

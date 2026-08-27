@@ -43,40 +43,28 @@ export function actionsForThread(
   const isMine = (a: Action) =>
     homed(a) === thread.id ||
     (!homed(a) && !!a.src && vouched.has(a.src.trim()));
-  /* How common each word is across the whole board. A two-word run is a
-     strong signal but a rare one: on a real board of bug reports and
-     project threads, an action and the thread it belongs to often share a
-     single telling word and nothing else, and demanding a run meant the
-     list came up empty exactly where it should have been useful. So one
-     shared word counts too — as long as the board says that word is not
-     everywhere. */
-  const freq = new Map<string, number>();
-  for (const w of contentWords(
-    [
-      ...board.actions.map((a) => `${a.text} ${a.src ?? ""}`),
-      ...board.threads.map(
-        (t) =>
-          `${t.name} ${t.summary} ${t.frags.map((f) => f.text).join(" ")}`
-      ),
-    ].join(" ")
-  ))
-    freq.set(w, (freq.get(w) ?? 0) + 1);
-  const items =
-    board.actions.length + board.threads.length + board.intentions.length;
-  const common = Math.max(3, Math.floor(items / 4));
-  const threadWords = new Set(contentWords(threadText));
+  /* A shared PHRASE, never a shared word.
+     One telling word was tried and it is wrong. "Give the caul lilies to
+     my girlfriend" attached itself to a thread about AI agents, because
+     that thread mentioned ordering flowers for a girlfriend once: a single
+     incidental word, rare enough to pass, and the action was borrowed into
+     a place it had nothing to do with. The same board showed a portfolio
+     errand under a bug tracker. The rarity gate cannot save this, and it
+     got looser as the board grew, because `common` scaled with the item
+     count — the bigger the board, the more words counted as rare.
+
+     A thread that shows no actions is a small disappointment. A thread
+     that shows someone else's is the app being wrong out loud, and that
+     is the failure this list must not have. Two content words in a row,
+     the same bar Tidy's fold uses. */
 
   /* An action that names another living thread as home is never borrowed. */
   const isRelated = (a: Action) => {
     if (a.done || homed(a)) return false;
-    const mine = contentWords(`${a.text} ${a.src ?? ""}`);
     const run = sharedPhrase(`${a.text} ${a.src ?? ""}`, threadText)
       .split(" ")
       .filter(Boolean);
-    if (run.length >= 2) return true;
-    return mine.some(
-      (w) => threadWords.has(w) && (freq.get(w) ?? 0) <= common
-    );
+    return run.length >= 2;
   };
 
   const newestFirst = (x: Action, y: Action) => y.at - x.at;
