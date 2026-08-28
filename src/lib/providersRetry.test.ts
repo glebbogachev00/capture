@@ -65,3 +65,43 @@ describe("when every provider refuses", () => {
     vi.useRealTimers();
   });
 });
+
+describe("a second Groq account", () => {
+  it("sits directly behind the first, not at the back of the chain", async () => {
+    /* Rate limits are per organisation, so a spare key is a whole extra
+       allowance of the same model. Falling from Groq to Groq costs nothing;
+       falling to the next provider down cost 100% recall against 22% on one
+       measured judgement. So the spare has to be adjacent. */
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    process.env.GROQ_API_KEY_2 = "two";
+    process.env.MISTRAL_API_KEY = "m";
+    const { withFallback } = await import("./providers");
+
+    const seen: string[] = [];
+    await expect(
+      withFallback(async (tier) => {
+        seen.push(tier.name);
+        throw new Error("connection refused");
+      })
+    ).rejects.toThrow();
+    expect(seen.slice(0, 2)).toEqual(["groq", "groq-2"]);
+  });
+
+  it("changes nothing when there is only one key", async () => {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    delete process.env.GROQ_API_KEY_2;
+    process.env.MISTRAL_API_KEY = "m";
+    const { withFallback } = await import("./providers");
+
+    const seen: string[] = [];
+    await expect(
+      withFallback(async (tier) => {
+        seen.push(tier.name);
+        throw new Error("connection refused");
+      })
+    ).rejects.toThrow();
+    expect(seen).toEqual(["groq", "mistral"]);
+  });
+});

@@ -52,7 +52,12 @@ for (const t of board.threads) {
 /* Threads described exactly as the app describes them to the sorter. The
    sorter is only ever as good as this context, so the eval must use the same
    one — measuring against a richer context would flatter it. */
-const BRIEF_BUDGET = 5000;
+/* How many characters of thread description a sort may carry, in total.
+   78% of a sort request is these summaries — 2,857 tokens resent with every
+   capture to route 50 tokens of what was actually said — so this is the one
+   number worth tuning. Tuning it blind would be trading accuracy for speed
+   without knowing the rate, which is why it is a flag on the eval. */
+const BRIEF_BUDGET = Number(flag("budget", "5000"));
 const briefLimit = Math.max(
   200,
   Math.min(700, Math.floor(BRIEF_BUDGET / Math.max(board.threads.length, 1)))

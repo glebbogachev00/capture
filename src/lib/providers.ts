@@ -1,5 +1,5 @@
 import { google } from "@ai-sdk/google";
-import { groq } from "@ai-sdk/groq";
+import { createGroq, groq } from "@ai-sdk/groq";
 import { mistral } from "@ai-sdk/mistral";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
@@ -31,10 +31,25 @@ export function chain(): Tier[] {
   // is the reliable quality fallback. OpenRouter is last: its free models
   // share tight rate limits and are the least dependable, and a paid account
   // should be an explicit choice, not the default path.
+  const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
   if (process.env.GROQ_API_KEY) {
+    tiers.push({ name: "groq", model: groq(groqModel) });
+  }
+
+  /* A second Groq account, when there is one.
+ 
+     Rate limits are per organisation, so a spare key is a whole extra
+     allowance — the same model, the same quality, twice the headroom, for
+     nothing. It sits directly behind the first because falling from Groq to
+     Groq costs nothing, where falling to another provider can cost a lot:
+     on one measured judgement the next tier down managed 22% where Groq
+     managed 100%.
+ 
+     Nothing changes for a board with only one key. */
+  if (process.env.GROQ_API_KEY_2) {
     tiers.push({
-      name: "groq",
-      model: groq(process.env.GROQ_MODEL || "openai/gpt-oss-120b"),
+      name: "groq-2",
+      model: createGroq({ apiKey: process.env.GROQ_API_KEY_2 })(groqModel),
     });
   }
 
@@ -161,8 +176,16 @@ export async function withFallback<T>(
   prefer?: string
 ): Promise<{ value: T; via: string }> {
   const all = chain();
+  /* A preference moves that provider to the front and keeps everything
+     else in its usual order. Prefixes match too, so preferring "groq" also
+     brings "groq-2" forward — the spare account is the same model, and
+     falling from one Groq key to the other costs nothing, where falling to
+     a different provider can cost a great deal. */
   const tiers = prefer
-    ? [...all.filter((t) => t.name === prefer), ...all.filter((t) => t.name !== prefer)]
+    ? [
+        ...all.filter((t) => t.name === prefer || t.name.startsWith(prefer + "-")),
+        ...all.filter((t) => t.name !== prefer && !t.name.startsWith(prefer + "-")),
+      ]
     : all;
   if (!tiers.length) throw new NoProvidersError();
 
