@@ -28,7 +28,11 @@ const Sorted = z.object({
     ),
   kind: z.enum(["action", "thread", "intention", "both"]),
   title: z.string().describe("max 6 words"),
-  actions: z.array(z.string()).describe("imperative one-line items"),
+  actions: z
+    .array(z.string())
+    .describe(
+      "imperative one-line items, each readable on its own a week later with none of the capture around it — the subject goes IN the line, never left behind as \"this\" or \"that\""
+    ),
   shelfLife: z.enum(["hours", "days", "weeks", "keep"]),
   due: z
     .string()
@@ -250,6 +254,7 @@ function prompt(
       '"""\n\n' +
       'Set kind to "action". Leave the thread fields null.\n' +
       "Fill actions with 1-3 imperative one-line items — the thing to actually do, not a description of the thinking around it. If only one thing is genuinely doable, return one.\n" +
+      "Each one must stand alone: it will be read as a single line with none of the surrounding words, so put the subject INTO it. \"Have engineering handle the verification workflow\", never \"Have engineering handle this\".\n" +
       "Set clean to the excerpt tidied up, and title to at most six words.\n\n" +
       "shelfLife is how long this stays worth looking at. Judge it honestly:\n" +
       '- "hours" for something tied to today.\n' +
@@ -308,6 +313,8 @@ function prompt(
     'kind = "thread" when this is thinking, worldbuilding, an idea being developed, or material that accumulates — a subject to keep adding to, with no single thing to do. Set threadId if one clearly fits, otherwise invent a short threadName. Leave "actions" empty.\n' +
     'kind = "intention" only when they are declaring something they are calling into being about themselves or their life — a state they want to be living in, spoken as a wish, a resolve, or an aspiration. "I want to wake at 6 and actually feel rested", "I live somewhere with light", "I stop taking on work I resent". These are about how they want to be, not tasks to close or subjects to think about. Leave "actions" and the thread fields null.\n' +
     'kind = "both" when the capture carries a line of thinking the person is still turning over AND a concrete task to close — typically a deadline or a commitment to someone. Filing it as only an action throws the thinking away; filing it as only a thread buries the task. So do both: fill "actions" with the task(s), set threadId (route to an existing thread when one fits) or threadName for the thinking, and "clean" holds the thinking for the thread fragment. The tell is a capture where one part is a decision/idea/deliberation and another part is a dated or promised thing to do. Do not use "both" for pure thinking with no committed task (that is a thread), or for a plain task with no real deliberation around it (that is an action).\nA capture can hold MORE than two kinds — a task, a question being turned over, and a rule the person is setting for themselves, all in one breath. There is no shape for three, and the failure to avoid is quietly picking one and dropping the rest: a capture that plainly contains something to do must never come back as a bare thread with an empty actions list. When a capture holds a task and anything else at all, use "both", put every task in "actions", and let "clean" carry the whole of the rest — the thinking and any standing rule — so nothing the person said loses its place.\n' +
+    'Every action must stand on its own. A week from now it will be read as a single line on a list, with none of the words around it — so it has to carry its own subject. Take the context from the capture and put it IN the action: not "Have engineering handle this" but "Have engineering handle the verification workflow"; not "Create workflows" but "Create workflows so agents ship without me reviewing"; not "Fix this bug" but "Fix the mis-sorting into the wrong threads". If you cannot tell what an action refers to when you read it alone, it is not finished.\n' +
+    'This is the most common way the list goes wrong: a sentence gets chopped at its clauses and each fragment becomes an item. "Stop over building. Create workflows and have engineering handle this. Do all the verification and checks." is ONE thought about how to work — at most one action, carrying the whole of what it asks. Three stubs from three clauses is a worse answer than one complete line.\n' +
     'Do NOT choose "intention" for an ordinary errand phrased as a want ("I want to get milk" is an action), or for thinking about a topic ("been reading about sleep cycles" is a thread).\n' +
     'Before you answer "thread", run one check: did they commit to something? A person named, a day or date, a thing owed or promised — "I told Marc I would demo it on Friday", "I said I would send Jen the outline by Monday". The sentence around it can be pure deliberation and the commitment still stands: it does not stop being a promise because they were thinking out loud when they made it. If the capture holds one, the answer is "both", never "thread" — filing it as a thread loses the promise, which is the one part with a deadline on it. A date that belongs to the SUBJECT rather than to them ("the deadline for the grant is in March", "their launch is next week") is not a commitment and does not make it "both".\n' +
     'The check runs on what they SAID, never on what you would advise. An observation is not a decision: "the 4am waking seems worse after late screens" notices a pattern, it does not commit anyone to cutting screens, and turning it into "Try cutting screens before bed" invents a task they never set. Noticing what might help is thinking. If the only action you can produce is one you thought of, there is no action and the answer is "thread".\n' +
