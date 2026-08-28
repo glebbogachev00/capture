@@ -1434,18 +1434,25 @@ export function useBoard(now: number) {
       targetId = openThread.id;
       targetFragId = frag.id;
       setLanded(openThread.name + " — saved unsorted");
-    } else if (tab === "threads") {
-      const fresh: Thread = {
-        id: uid(),
-        name: body.split(/\s+/).slice(0, 5).join(" "),
-        summary: "",
-        frags: [frag],
-      };
-      next = { ...b, threads: [fresh, ...b.threads] };
-      targetId = fresh.id;
-      targetFragId = frag.id;
-      setLanded(fresh.name + " — new thread, unsorted");
     } else {
+      /* A failed sort NEVER invents a thread.
+ 
+         This used to branch on whichever tab happened to be open: standing
+         on Threads when the model did not answer minted a new thread named
+         after the first five words of what was said. So an error path made
+         a permanent structural decision about the board — and every retry
+         made another. Four attempts at one thought left four threads, and
+         undoing them left the wreckage in the record.
+ 
+         It also fed back into the thing it was breaking. The sorter routes
+         by reading thread names, so "The next issue is action" sitting on
+         the board made every later capture harder to place. A failure that
+         degrades the next attempt is the worst shape a failure can take.
+ 
+         An unsorted action is the honest holding place: flat, reversible,
+         visibly marked, and `resort` can later turn it into a thread, an
+         action or an intention — everything the invented thread offered,
+         with none of the commitment. */
       const action: Action = {
         id: uid(),
         text: body,
@@ -1459,7 +1466,10 @@ export function useBoard(now: number) {
       };
       next = { ...b, actions: [action, ...b.actions] };
       targetId = action.id;
-      setLanded("Kept unsorted");
+      /* Say where it is and that it is not lost. "Kept unsorted" told you
+         a state; this tells you where to find it and that it can still be
+         sorted once the model answers again. */
+      setLanded("Kept in Actions, unsorted — sort it when the model is back");
     }
 
     // The fallback is still a capture — the ledger records it exactly as it
