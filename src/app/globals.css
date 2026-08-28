@@ -4163,3 +4163,59 @@ body {
   background: var(--accent);
   vertical-align: 2px;
 }
+
+/* THE TIDY WAIT.
+
+   The review takes about a minute and a half now, because it reads the
+   board in paced passes on a model that can actually judge it — the fast
+   version was rejected by the provider every time and answered by the
+   weakest model in the chain. A minute of a spinner reads as broken, so
+   the wait says what it is doing instead. */
+.tidy-waiting {
+  padding: 26px 2px 8px;
+}
+.tidy-waiting-mark {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+.tidy-waiting-mark span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.25;
+  animation: tidy-pulse 1.6s ease-in-out infinite;
+}
+.tidy-waiting-mark span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.tidy-waiting-mark span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes tidy-pulse {
+  0%, 100% { opacity: 0.22; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+/* Someone who has asked for less motion gets none: the words already say
+   everything the dots do. */
+@media (prefers-reduced-motion: reduce) {
+  .tidy-waiting-mark span {
+    animation: none;
+    opacity: 0.4;
+  }
+}
+.tidy-waiting-line {
+  font-family: var(--serif, Fraunces, Georgia, serif);
+  font-size: 19px;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  max-width: 34ch;
+  text-wrap: balance;
+}
+.tidy-waiting-why {
+  margin-top: 9px;
+  font-size: 13.5px;
+  color: var(--muted);
+  max-width: 34ch;
+}

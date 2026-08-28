@@ -28,6 +28,7 @@
  */
 
 import { useState } from "react";
+import { TidyWaiting } from "./TidyWaiting";
 import type { OrganizeKind, OrganizeProposal } from "@/lib/organize";
 import { splitProposals } from "@/lib/organize";
 
@@ -151,18 +152,18 @@ export function OrganizeScreen({
       </div>
 
       {proposals.length === 0 ? (
+        aiStatus === "thinking" ? (
+          <TidyWaiting />
+        ) : (
         <p className="int-note">
-          {aiStatus === "thinking"
-            ? "Reading the board…"
-            : aiStatus === "offline"
+          {aiStatus === "offline"
               ? "The board couldn't be read just now — this pass needs the model, and it didn't answer. Try again in a moment."
               : "Nothing worth changing — the board reads clean."}
         </p>
+        )
       ) : (
         <>
-          {aiStatus === "thinking" && (
-            <p className="org-status">Reading the board…</p>
-          )}
+          {aiStatus === "thinking" && <TidyWaiting />}
           {aiStatus === "offline" && (
             <p className="org-status">
               Only what the dates alone can tell — the reading pass
