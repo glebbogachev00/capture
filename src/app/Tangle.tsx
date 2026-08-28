@@ -20,7 +20,7 @@
  */
 
 import { useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, ChevronRight, X } from "lucide-react";
 import type { TangleProposal } from "@/lib/tangle";
 
 export function TangleCallout({
@@ -37,11 +37,20 @@ export function TangleCallout({
     <div className="tangle-callout">
       <button className="tangle-callout-open" onClick={onOpen}>
         <span className="tangle-callout-label">These two keep getting mixed up</span>
+        {/* One sentence, and it is the offer rather than the evidence. The
+            first version said what had happened AND what was proposed, ran
+            to three lines above the board, and gave no sign it could be
+            opened — the only visible control was the dismiss. How many you
+            moved before is why this is here, and it belongs in the review
+            where there is room for it. */}
         <span className="tangle-callout-line">
-          You&apos;ve moved {pair.times} from {pair.fromName} to {pair.toName}.{" "}
-          {move.length} more look misplaced.
+          {move.length} {move.length === 1 ? "note" : "notes"} in{" "}
+          {pair.fromName} look like they belong in {pair.toName}
         </span>
       </button>
+      <span className="tangle-callout-go" aria-hidden="true">
+        <ChevronRight size={15} strokeWidth={2} />
+      </span>
       <button
         className="tangle-callout-x"
         onClick={onDismiss}
@@ -95,9 +104,10 @@ export function TangleReview({
         {pair.fromName} and {pair.toName}
       </div>
       <p className="int-note" style={{ marginBottom: 18 }}>
-        You&apos;ve moved {pair.times} {pair.times === 1 ? "note" : "notes"} from{" "}
-        {pair.fromName} to {pair.toName}{" "}by hand. These look like they belong
-        there too — untick anything that doesn&apos;t.{" "}
+        You&apos;ve already moved {pair.times}{" "}
+        {pair.times === 1 ? "note" : "notes"} from {pair.fromName} to{" "}
+        {pair.toName} by hand. These look like they belong there too — untick
+        anything that doesn&apos;t, then move the rest.
       </p>
 
       <div className="tangle-list">

@@ -4261,6 +4261,22 @@ body {
 .tangle-callout-line {
   font-size: 14.5px;
   line-height: 1.35;
+  /* Two lines at most. Above the board is the most expensive space in the
+     app, and this is an offer, not an explanation. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Says it opens. Without it the dismiss was the only thing that looked
+   like a control, so the offer read as a notice to be got rid of. */
+.tangle-callout-go {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding-left: 10px;
+  color: var(--accent);
+  pointer-events: none;
 }
 .tangle-callout-x {
   flex: none;
