@@ -1,6 +1,38 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  /* Pin the workspace root to this project. Next otherwise walks up looking
+     for a lockfile, finds one in a parent directory, and traces the whole of
+     that tree into the build — which both warns and risks pulling unrelated
+     files from the home directory into the output. */
+  outputFileTracingRoot: __dirname,
+  turbopack: { root: __dirname },
+  /* Keep the board out of the deployment package.
+   *
+   * hubStore builds its paths at runtime from SYNC_DATA_DIR, which the
+   * tracer cannot follow, so it falls back to assuming the route might read
+   * anything under the project root — and on a development machine that
+   * root contains the real hub. The traced manifests for /api/sync and
+   * /api/img each listed thirteen private files: the live sync.json, an
+   * older snapshot of it, and the exported ledger, corrections, actions,
+   * intentions and principles. Nothing had shipped, but a packager that
+   * honours those manifests would have bundled them.
+   *
+   * These directories hold data, never code, so nothing can legitimately
+   * need them at runtime. */
+  outputFileTracingExcludes: {
+    "**": [
+      ".data/**",
+      "CaptureVault/**",
+      "outputs/**",
+      ".next-*/**",
+      "docs/**",
+      "scripts/**",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.mp4",
+    ],
+  },
   /* A second dev server (Retake records demos against an isolated copy on
      :3100) needs its own build dir, or Next refuses to start it. */
   distDir: process.env.NEXT_DIST_DIR || ".next",

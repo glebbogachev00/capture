@@ -200,6 +200,29 @@ export function applyTombstones(board: Board, tombstones: Tombstone[]): Board {
  * Order-independent (the parts are sorted) so a merge that merely rebuilds
  * objects or re-sorts fragments does not read as a change.
  */
+/**
+ * A cheap order-independent fingerprint of a list of ids.
+ *
+ * FNV-1a over each id, summed, so the result does not depend on the order
+ * the lists happen to be in after a merge. Thirty-two bits is ample here:
+ * this decides whether to re-render a board that just merged, and the cost
+ * of a collision is one skipped adoption, not lost data.
+ */
+function hashOf(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+function idsOf(items: { id: string }[]): string {
+  let acc = 0;
+  for (const it of items) acc = (acc + parseInt(hashOf(it.id), 36)) >>> 0;
+  return acc.toString(36);
+}
+
 export function boardSignature(board: Board, tombstones: Tombstone[]): string {
   const parts: string[] = [];
   for (const a of board.actions) parts.push(`a:${a.id}:${ts(a)}`);
@@ -219,23 +242,37 @@ export function boardSignature(board: Board, tombstones: Tombstone[]): string {
      the hub without moving this signature, so the pull merged correctly and
      was then thrown away by the adoption gate below it.
 
-     These are summarised rather than listed item by item. The ledger can
-     hold thousands of entries and this runs on every poll, so the parts
-     that can actually differ are what get named:
-       - length, because every list here only grows by union;
-       - the newest id, because the ledger is capped — at the cap a new
-         entry pushes the oldest out and the length stops moving;
-       - undone ids, the one field of a ledger entry that mutates;
-       - each wrap by day and seen, the only mutable history record;
-       - the epoch, which is how history is deliberately thrown away. */
+     Each list contributes its length and a hash of its ids rather than the
+     ids themselves, because this runs on every poll and the ledger holds up
+     to LEDGER_CAP entries — a signature that pasted them all in would be
+     rebuilt, sorted and compared every ten seconds.
+
+     Length alone was not enough and the reason is worth keeping: the ledger
+     is capped, so once it is full a merged entry pushes the oldest out and
+     the count never moves. Naming only the newest id did not save it either
+     — an entry merged in from another device is usually older than the
+     newest, so both the length and the newest id can match while the
+     contents differ. The hash sees the difference wherever it falls.
+
+     The rest are named directly: undone ids, the one field of a ledger entry
+     that mutates; each wrap by day and seen, the only mutable history
+     record; and the epoch, which is how history is deliberately discarded. */
   const led = board.ledger ?? [];
-  parts.push(`L:${led.length}:${led[0]?.id ?? ""}`);
+  parts.push(`L:${led.length}:${idsOf(led)}`);
   for (const e of led) if (e.undone) parts.push(`Lu:${e.id}`);
   const cor = board.corrections ?? [];
-  parts.push(`C:${cor.length}:${cor[0]?.id ?? ""}`);
+  parts.push(`C:${cor.length}:${idsOf(cor)}`);
   const done = board.completions ?? [];
-  parts.push(`K:${done.length}:${done[done.length - 1]?.id ?? ""}`);
-  for (const w of board.wraps ?? []) parts.push(`W:${w.day}:${w.seen ? 1 : 0}`);
+  parts.push(`K:${done.length}:${idsOf(done)}`);
+  /* A wrap needs its CONTENT here, not just its day. Two devices offline
+     overnight each write their own reading of the same day; the merge picks
+     a winner deterministically, and if the signature only said "there is a
+     wrap for the 27th, unread" it read the same before and after — so the
+     gate below discarded the wrap the merge had just chosen, and the two
+     devices stayed disagreeing forever. `at` and the line are exactly what
+     the merge decides on, so they are what has to be visible here. */
+  for (const w of board.wraps ?? [])
+    parts.push(`W:${w.day}:${w.at}:${w.seen ? 1 : 0}:${hashOf(w.line ?? "")}`);
   parts.push(`E:${board.historyEpoch ?? 0}`);
 
   return parts.sort().join("|");

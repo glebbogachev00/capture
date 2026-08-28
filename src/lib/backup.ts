@@ -1,5 +1,6 @@
 import { type Board, hydrate } from "./model";
 import { mergeCorrections, mergeLedgers } from "./ledger";
+import { mergeWraps, mergeCompletions } from "./wrap";
 
 /**
  * Getting the whole board out of the device, and back in.
@@ -149,6 +150,29 @@ export function restoreBackup(parsed: unknown, board: Board): RestoreResult {
   merged.corrections = mergeCorrections(
     board.corrections ?? [],
     incoming.corrections ?? []
+  );
+  /* The rest of the history travels the same way. This is the third place
+     that has to name every Board field by hand — hydrate and the sync merge
+     are the others — and the one most easily forgotten, because a restore is
+     rare and its loss is silent: the wraps and the ticks simply are not
+     there afterwards, with nothing to say they ever were. */
+  merged.wraps = mergeWraps(board.wraps ?? [], incoming.wraps ?? []);
+  merged.completions = mergeCompletions(
+    board.completions ?? [],
+    incoming.completions ?? []
+  );
+  /* The epoch takes the later of the two, so a restore cannot make this
+     device look older than it is and lose its history at the next sync.
+
+     Unlike a sync, the history riding in on an older epoch is kept. A sync
+     drops it because nobody asked for it — it is another device catching up
+     with a wipe. A restore is the opposite: the person went and found this
+     file and chose to bring it back, and silently discarding what is in it
+     because of a wipe they may well be undoing would be the wrong reading
+     of the request. */
+  merged.historyEpoch = Math.max(
+    board.historyEpoch ?? 0,
+    incoming.historyEpoch ?? 0
   );
 
   return { board: merged, ...counts, images };

@@ -102,6 +102,17 @@ export type Thread = {
   /** The step they waved away — it stays away until the thread moves and
       the summary names a different one. */
   nextDismissed?: string;
+  /** What belongs in this thread, and what does not — written for the
+      sorter, never shown.
+   *
+   * A summary describes what a thread CONTAINS; routing needs to know what
+   * it is FOR. On a real board two threads both described themselves as
+   * being about the same app, and the sorter could not tell them apart
+   * because nothing anywhere drew the line between them. This is that line,
+   * written with the other thread names in view so it can name the
+   * boundary. Absent on threads summarised before it existed, and routing
+   * then falls back to the summary exactly as before. */
+  belongs?: string;
   updatedAt?: number;
 };
 

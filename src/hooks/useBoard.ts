@@ -16,7 +16,7 @@
  * reactive state React renders and the ref the handlers read.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { stamp } from "@/lib/clock";
 import { del, get, keys, set } from "@/lib/storage";
 import {
@@ -80,7 +80,6 @@ import {
 import {
   copyToClipboard,
   shareText,
-  shareRecordSince,
   shareableFor,
 } from "@/lib/share";
 import { search } from "@/lib/search";
@@ -103,6 +102,12 @@ import { expiryFor, parseDue } from "@/lib/due";
 import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
 import { PLAYGROUND, playgroundError } from "@/lib/playground";
+import {
+  recordCopiedAt as readRecordCopiedAt,
+  recordCopiedAtOnServer,
+  stampRecordCopied,
+  subscribeRecordCopied,
+} from "@/lib/recordCopied";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
@@ -124,10 +129,10 @@ import {
   withLedger,
   type CorrectionEntry,
   type CaptureSource,
+  markUndone,
 } from "@/lib/ledger";
 import { deriveRules, type LearnedRule } from "@/lib/rules";
 import {
-  scanBoard,
   scanStale,
   threadHoldsNote,
   type OrganizeProposal,
@@ -150,7 +155,6 @@ const FORGOTTEN_RULES_KEY = "capture:forgotten-rules";
    purpose (v1): the proposal ids embed item ids that are stable per device. */
 const ORGANIZE_DISMISSED_KEY = "capture:organize-dismissed";
 /** When the record last went out to an agent. Per device, never synced. */
-const RECORD_COPIED_KEY = "capture:record-copied:v1";
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
@@ -204,10 +208,13 @@ function newIds(before: Board, after: Board): Set<string> {
   return new Set([...boardIds(after)].filter((id) => !had.has(id)));
 }
 
-function newLedgerId(before: Board, after: Board): string | undefined {
-  return (after.ledger ?? []).find(
-    (e) => !(before.ledger ?? []).some((x) => x.id === e.id)
-  )?.id;
+/* Every ledger entry this capture wrote. A split lands in more than one
+   thread and writes one entry per destination, so undoing it has to take
+   them all back — marking only the first left the other halves counted as
+   things that still happened. */
+function newLedgerIds(before: Board, after: Board): string[] {
+  const had = new Set((before.ledger ?? []).map((e) => e.id));
+  return (after.ledger ?? []).filter((e) => !had.has(e.id)).map((e) => e.id);
 }
 
 export function useBoard(now: number) {
@@ -254,25 +261,12 @@ export function useBoard(now: number) {
   /* When the record last went out, per device: what this browser's person
      already handed their agent is a fact about this browser, so it never
      syncs. Re-read whenever the record opens. */
-  const [recordCopiedAt, setRecordCopiedAt] = useState<number | null>(null);
-  useEffect(() => {
-    if (!showRecord) return;
-    try {
-      const raw = localStorage.getItem(RECORD_COPIED_KEY);
-      setRecordCopiedAt(raw ? Number(raw) : null);
-    } catch {
-      setRecordCopiedAt(null);
-    }
-  }, [showRecord]);
-  const stampRecordCopy = () => {
-    const at = Date.now();
-    setRecordCopiedAt(at);
-    try {
-      localStorage.setItem(RECORD_COPIED_KEY, String(at));
-    } catch {
-      /* private mode: every copy is a full copy */
-    }
-  };
+  const recordCopiedAt = useSyncExternalStore(
+    subscribeRecordCopied,
+    readRecordCopiedAt,
+    recordCopiedAtOnServer
+  );
+  const stampRecordCopy = () => stampRecordCopied(Date.now());
   const [ioNote, setIoNote] = useState<IoNote>(null);
   const [editing, setEditing] = useState<{ id: string; src: string } | null>(null);
   const [shelfFor, setShelfFor] = useState<string | null>(null);
@@ -392,7 +386,7 @@ export function useBoard(now: number) {
     text?: string;
     picIds?: string[];
     /** The ledger entry this capture wrote — the one Undo asks about. */
-    ledgerId?: string;
+    ledgerIds?: string[];
     /** Every id this capture created. Undo takes back these and only
         these: anything that arrived from another device in between — the
         push reply and the poll both merge — is not the capture's. */
@@ -677,13 +671,25 @@ export function useBoard(now: number) {
          stay, and only this capture's own entry is taken out. */
       ledger: mergeLedgers(
         snap.board.ledger ?? [],
-        (latest.current.ledger ?? []).map((e) =>
-          e.id === snap.ledgerId ? { ...e, undone: true } : e
-        )
+        markUndone(latest.current.ledger ?? [], snap.ledgerIds ?? [])
       ),
       corrections: mergeCorrections(
         snap.board.corrections ?? [],
         latest.current.corrections ?? []
+      ),
+      /* Undo reverts ONE capture. It does not revert the day's reading, the
+         actions ticked since, or a history wipe — none of which the capture
+         created. Rebuilding the board without naming them dropped all three
+         silently: a single Undo destroyed every wrap and every tick receipt
+         on the device, with nothing on screen to say so. */
+      wraps: mergeWraps(snap.board.wraps ?? [], latest.current.wraps ?? []),
+      completions: mergeCompletions(
+        snap.board.completions ?? [],
+        latest.current.completions ?? []
+      ),
+      historyEpoch: Math.max(
+        snap.board.historyEpoch ?? 0,
+        latest.current.historyEpoch ?? 0
       ),
     };
     const added = stampChanges(latest.current, board, now).tombstones;
@@ -691,8 +697,8 @@ export function useBoard(now: number) {
     /* The capture being undone: the one ledger entry the snapshot does not
        have. It carries both halves of the question — what was said, and
        what the sorter decided it was. */
-    const undoneEntry = snap.ledgerId
-      ? latest.current.ledger.find((e) => e.id === snap.ledgerId)
+    const undoneEntry = snap.ledgerIds?.length
+      ? latest.current.ledger.find((e) => e.id === snap.ledgerIds![0])
       : latest.current.ledger.find(
           (e) => !snap.board.ledger.some((x) => x.id === e.id)
         );
@@ -1220,7 +1226,7 @@ export function useBoard(now: number) {
   const requestSummary = async (
     name: string,
     frags: Frag[]
-  ): Promise<{ summary: string; next: string | null }> => {
+  ): Promise<{ summary: string; next: string | null; belongs: string | null }> => {
     const res = await fetch("/api/summarize", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1231,6 +1237,12 @@ export function useBoard(now: number) {
           .filter((a) => !a.done)
           .slice(0, 30)
           .map((a) => a.text),
+        /* The neighbours, so this thread can describe its own edges. A
+           summary written alone can never say "that goes next door". */
+        siblings: latest.current.threads
+          .filter((t) => t.name !== name)
+          .slice(0, 40)
+          .map((t) => t.name),
       }),
     });
     if (!res.ok) {
@@ -1238,7 +1250,11 @@ export function useBoard(now: number) {
       throw new SortError(body.error);
     }
     const out = await res.json();
-    return { summary: out.summary, next: out.next ?? null };
+    return {
+      summary: out.summary,
+      next: out.next ?? null,
+      belongs: out.belongs ?? null,
+    };
   };
 
   /** Rewrite a thread's "Where this stands" from its current fragments. */
@@ -1253,7 +1269,7 @@ export function useBoard(now: number) {
          describing a thread two layers ago, with nothing on screen to say
          so and nothing to trigger another attempt until the next capture
          happened to land here. */
-      const { summary, next } = await requestSummary(
+      const { summary, next, belongs } = await requestSummary(
         target.name,
         target.frags
       ).catch(async () => {
@@ -1270,7 +1286,9 @@ export function useBoard(now: number) {
       result = {
         ...latest.current,
         threads: latest.current.threads.map((t) =>
-          t.id === threadId ? { ...t, summary, next } : t
+          t.id === threadId
+            ? { ...t, summary, next, ...(belongs ? { belongs } : {}) }
+            : t
         ),
       };
       await commit(result);
@@ -1406,7 +1424,7 @@ export function useBoard(now: number) {
       tombstones: tombstones.current,
       text,
       picIds: pics.map((p) => p.id),
-      ledgerId: newLedgerId(latest.current, next),
+      ledgerIds: newLedgerIds(latest.current, next),
       addedIds: newIds(latest.current, next),
     };
     setCanUndo(true);
@@ -1449,7 +1467,7 @@ export function useBoard(now: number) {
         board: latest.current,
         tombstones: tombstones.current,
         text: a.src || a.text,
-        ledgerId: newLedgerId(latest.current, next),
+        ledgerIds: newLedgerIds(latest.current, next),
       addedIds: newIds(latest.current, next),
       };
       setCanUndo(true);
@@ -1604,19 +1622,30 @@ export function useBoard(now: number) {
         return;
       }
 
-      const { next, targetId, landed, source, landedIds: fresh } = applySorted(
-        out,
-        imgIds,
-        at,
-        latest.current
-      );
+      const {
+        next,
+        targetId,
+        landed,
+        source,
+        landedIds: fresh,
+        alsoLanded,
+      } = applySorted(out, imgIds, at, latest.current);
+      /* One identity for the whole utterance, carried by every entry it
+         writes. `raw` is what was said and is the same on all of them;
+         `clean` is that destination's share. */
+      const captureId = uid();
+      const split = (alsoLanded?.length ?? 0) > 0 && !!out.primaryText?.trim();
       // The capture records itself in the ledger before it lands: what was
       // said, what it became, where it went, and which model tier sorted it.
       const filed = withLedger(next, {
         id: uid(),
+        captureId,
         at,
         raw,
-        clean: out.clean || payload,
+        /* When it split, this entry holds the primary's share — the other
+           shares have entries of their own. Keeping the whole sentence here
+           counted the same words in two places. */
+        clean: (split ? out.primaryText!.trim() : out.clean) || payload,
         kind: out.kind,
         source: sourceOf(payload, dictated, imgIds.length > 0),
         targetId:
@@ -1628,14 +1657,35 @@ export function useBoard(now: number) {
         transcript: transcript.trim() || undefined,
         imgs: imgIds.length ? imgIds : undefined,
       });
+      /* A split capture landed in more than one place, and each place needs
+         its own entry: the ledger is what Undo walks back and what the daily
+         wrap counts, so a fragment it cannot see is a fragment that silently
+         does not exist. Same raw words, same moment — only the destination
+         and the share differ. */
+      const withAll = (alsoLanded ?? []).reduce(
+        (board, piece) =>
+          withLedger(board, {
+            id: uid(),
+            captureId,
+            at,
+            raw,
+            clean: piece.text,
+            kind: "thread",
+            source: sourceOf(payload, dictated, imgIds.length > 0),
+            targetId: piece.threadId,
+            targetFragId: piece.fragId,
+            modelVia: out.via,
+          }),
+        filed
+      );
       const recorded = commandLesson
-        ? noteCorrection(filed, {
+        ? noteCorrection(withAll, {
             proposalKind: "commanded",
             accepted: true,
             context: payload.slice(0, 160),
             rule: commandLesson,
           })
-        : filed;
+        : withAll;
       setLanded(landed);
       setLandedIds(fresh);
       setTab(out.kind === "action" ? "actions" : "threads");
@@ -1651,7 +1701,7 @@ export function useBoard(now: number) {
         tombstones: tombstones.current,
         text,
         picIds: pics.map((p) => p.id),
-        ledgerId: newLedgerId(latest.current, recorded),
+        ledgerIds: newLedgerIds(latest.current, recorded),
       addedIds: newIds(latest.current, recorded),
       };
       setCanUndo(true);
@@ -1666,7 +1716,17 @@ export function useBoard(now: number) {
       );
       /* Not awaited. The capture has landed, the banner is up, and the box
          is free for the next thought; the summary catches up behind it. */
-      if (targetId) void regenerate(filed, targetId);
+      /* Every thread this capture reached, not just the first. A split left
+         the secondary thread holding a new fragment and an account of itself
+         written before that fragment arrived — so the thread said one thing
+         and contained another, and the sorter went on routing against the
+         stale description. */
+      for (const id of new Set(
+        [targetId, ...(alsoLanded ?? []).map((p) => p.threadId)].filter(
+          (v): v is string => !!v
+        )
+      ))
+        void regenerate(filed, id);
     } catch (error) {
       await saveUnsorted(raw, imgIds, at, reasonOf(error), dictated);
     }
@@ -3054,7 +3114,7 @@ export function useBoard(now: number) {
       board: latest.current,
       tombstones: tombstones.current,
       text: fromCapture ? draft.rawInput : undefined,
-      ledgerId: newLedgerId(latest.current, next),
+      ledgerIds: newLedgerIds(latest.current, next),
       addedIds: newIds(latest.current, next),
     };
     setCanUndo(true);
@@ -3797,7 +3857,12 @@ export function useBoard(now: number) {
             kind: "thread",
             source: "distill",
             targetId: thread.id,
-            targetFragId: thread.frags[0]?.id,
+            /* The fragment this distillation just inserted, not the thread's
+               first one. Pointing at `frags[0]` named whatever happened to
+               already be there — or nothing at all when the thread was new —
+               so the ledger's record of where a distillation went led back
+               to someone else's words. */
+            targetFragId: frag.id,
             modelVia: settled.via,
           }
         );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import { safeNext } from "@/lib/safeNext";
 import { useState } from "react";
 
 export function LoginForm() {
@@ -31,8 +32,10 @@ export function LoginForm() {
         body: JSON.stringify({ password: value }),
       });
       if (res.ok) {
-        // A full load so the middleware sees the new cookie.
-        window.location.href = params.get("next") || "/";
+        /* A full load so the middleware sees the new cookie — and only ever
+           to a path inside this app. `next` arrives in the URL, so anyone
+           can choose it. */
+        window.location.href = safeNext(params.get("next"));
         return;
       }
       const body = await res.json().catch(() => ({}));

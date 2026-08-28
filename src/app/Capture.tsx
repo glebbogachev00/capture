@@ -15,7 +15,7 @@
    ============================================================ */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { BrushCleaning, Check, Copy, Image as ImageIcon, Layers, MessagesSquare, Mic, ChevronRight, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
+import { BrushCleaning, Check, Copy, Image as ImageIcon, Layers, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
 
 import { DistillView } from "./Distill";

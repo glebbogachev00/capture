@@ -87,7 +87,11 @@ function entriesFor(board: Board, day: string): CaptureEntry[] {
  */
 export function dayStats(board: Board, day: string): WrapStats | null {
   const es = entriesFor(board, day);
-  if (es.length < MIN_CAPTURES) return null;
+  /* Counted as utterances too: three destinations of one split thought is
+     not three captures, and a day that thin has nothing to say about
+     itself. */
+  if (new Set(es.map((e) => e.captureId ?? e.id)).size < MIN_CAPTURES)
+    return null;
 
   const names = new Map(board.threads.map((t) => [t.id, t.name]));
   /* A capture's targetId can outlive the thread it named — merged away,
@@ -124,12 +128,17 @@ export function dayStats(board: Board, day: string): WrapStats | null {
       ? es.filter((e) => homeOf(e) === top.id).map((e) => e.at)
       : [];
 
+  /* Utterances, not destinations. A split capture writes one entry per
+     thread it reached, so counting entries counted the same sentence twice —
+     and could meet the three-capture floor on its own. */
+  const utterances = new Set(es.map((e) => e.captureId ?? e.id)).size;
+
   return {
     day,
     finished: (board.completions ?? [])
       .filter((c) => dayKey(c.at) === day)
       .map((c) => ({ text: c.text, at: c.at })),
-    said: es.length,
+    said: utterances,
     threadsMoved: threads.length,
     actionsMade: es.filter((e) => e.kind === "action" || e.kind === "both")
       .length,
@@ -191,17 +200,41 @@ export function mergeCompletions(a: Completion[], b: Completion[]): Completion[]
 }
 
 /**
+ * Which of two wraps for the same day is the one to keep.
+ *
+ * Two devices offline overnight will each write their own reading of the
+ * same day, and the model does not produce the same words twice. Keeping
+ * whichever arrived first in argument order meant each device kept its own
+ * and neither ever changed its mind: they disagreed permanently, because a
+ * merge that depends on which side you are standing on does not converge.
+ *
+ * So the winner is decided by the wraps themselves, identically on both
+ * sides: the one written first, and if they were written in the same
+ * millisecond, the one whose text sorts first. Arbitrary, but the same
+ * arbitrary answer everywhere, which is the whole requirement.
+ */
+function firstWritten(x: DayWrap, y: DayWrap): DayWrap {
+  if (x.at !== y.at) return x.at < y.at ? x : y;
+  return x.line <= y.line ? x : y;
+}
+
+/**
  * Merge two sets of wraps.
  *
- * Union by day, like the ledgers. A day is written once, so the copies
- * agree on content; where they differ it is only `seen`, and seen wins —
- * dismissing on the phone should not make it reappear on the laptop.
+ * Union by day. Where both hold the same day the tie-break above decides,
+ * and `seen` is carried from either — dismissing on the phone should not
+ * make it reappear on the laptop.
  */
 export function mergeWraps(a: DayWrap[], b: DayWrap[]): DayWrap[] {
   const by = new Map<string, DayWrap>();
   for (const w of [...(a ?? []), ...(b ?? [])]) {
     const prev = by.get(w.day);
-    by.set(w.day, prev ? { ...prev, seen: prev.seen || w.seen } : w);
+    if (!prev) {
+      by.set(w.day, w);
+      continue;
+    }
+    const keep = firstWritten(prev, w);
+    by.set(w.day, { ...keep, seen: prev.seen || w.seen });
   }
   return [...by.values()].sort((x, y) => (x.day < y.day ? -1 : 1));
 }
@@ -236,11 +269,31 @@ export function wrapRequest(board: Board, day: string, wraps: DayWrap[]) {
       returns: stats.returns.map(hm),
       finished: stats.finished.map((f) => f.text),
     },
-    captures: entriesFor(board, day).map((e) => ({
-      at: hm(e.at),
-      text: e.clean || e.raw || "",
-      where: names.get(e.targetId) ?? e.kind,
-    })),
+    /* One line per utterance. Sending every destination entry repeated the
+       secondary text to the model and made a split day look busier than it
+       was. Where it went is listed once, with all of its destinations. */
+    captures: (() => {
+      const byUtterance = new Map<string, { at: string; text: string; where: string[] }>();
+      for (const e of entriesFor(board, day)) {
+        const key = e.captureId ?? e.id;
+        const where = names.get(e.targetId) ?? e.kind;
+        const seen = byUtterance.get(key);
+        if (seen) {
+          if (!seen.where.includes(where)) seen.where.push(where);
+          continue;
+        }
+        byUtterance.set(key, {
+          at: hm(e.at),
+          text: e.raw || e.clean || "",
+          where: [where],
+        });
+      }
+      return [...byUtterance.values()].map((u) => ({
+        at: u.at,
+        text: u.text,
+        where: u.where.join(" + "),
+      }));
+    })(),
     history: wraps
       .filter((w) => w.day < day)
       .slice(-HISTORY)

@@ -99,10 +99,17 @@ export function WrapView({
   const top = threads[0]?.n || 1;
   /* A chart of eleven threads where nine of them are a single bar is not a
      chart, it is a list wearing one. Show the few that carried the day and
-     fold the rest into one honest row. */
+     fold the rest into one honest row.
+
+     Never fold a single thread away, though: a remainder row standing for
+     one thread hides a name to save no space, and gating the row on "more
+     than one left over" hid the fifth thread outright — the count above
+     said five and the chart drew four, with nothing to say where the fifth
+     had gone. So five fit, and six or more become four plus a remainder. */
   const SHOWN = 4;
-  const shown = threads.slice(0, SHOWN);
-  const rest = threads.slice(SHOWN);
+  const folding = threads.length > SHOWN + 1;
+  const shown = folding ? threads.slice(0, SHOWN) : threads;
+  const rest = folding ? threads.slice(SHOWN) : [];
   const restN = rest.reduce((n, t) => n + t.n, 0);
   /* One word each: two-word labels wrap on a phone, and a wrapped label
      shoves its own number down while its neighbours stay put, so the row
@@ -142,12 +149,14 @@ export function WrapView({
                 <div className="wrap-k wrap-bar-n">{t.n}</div>
               </div>
             ))}
-            {rest.length > 1 && (
+            {rest.length > 0 && (
               <div
                 className="wrap-bar wrap-bar-rest"
                 style={{ ["--fill" as string]: `${Math.round((restN / top) * 100)}%` }}
               >
-                <div className="wrap-bar-name">{rest.length} more, once each</div>
+                {/* Says how many and how much, never "once each" — that was
+                    a guess about counts nobody had checked. */}
+                <div className="wrap-bar-name">{rest.length} more threads</div>
                 <div className="wrap-k wrap-bar-n">{restN}</div>
               </div>
             )}

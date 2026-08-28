@@ -184,3 +184,35 @@ describe("dayStats leaves out threads it cannot name", () => {
     expect(s.threads.some((t) => t.name === "—")).toBe(false);
   });
 });
+
+describe("two devices, one day", () => {
+  const w = (day: string, at: number, line: string, seen?: boolean): DayWrap =>
+    ({ day, at, line, insights: [], tomorrow: "", seen,
+       stats: { day, said: 3, threadsMoved: 0, actionsMade: 0, intentions: 0,
+                threads: [], firstAt: 0, lastAt: 0, returns: [], finished: [] } });
+
+  it("converges — both devices keep the same wrap, whichever side they merge from", () => {
+    /* Offline overnight, each device writes its own reading of the same day.
+       Keeping whichever came first in argument order meant each kept its own
+       and neither ever changed, so they disagreed forever. */
+    const mine = w("2026-08-27", 100, "mine");
+    const theirs = w("2026-08-27", 200, "theirs");
+    const onA = mergeWraps([mine], [theirs]);
+    const onB = mergeWraps([theirs], [mine]);
+    expect(onA).toEqual(onB);
+    expect(onA[0].line).toBe("mine");
+  });
+
+  it("breaks a same-millisecond tie the same way on both devices", () => {
+    const x = w("2026-08-27", 100, "alpha");
+    const y = w("2026-08-27", 100, "beta");
+    expect(mergeWraps([x], [y])[0].line).toBe(mergeWraps([y], [x])[0].line);
+  });
+
+  it("keeps a dismissal no matter which copy wins", () => {
+    const older = w("2026-08-27", 100, "older");
+    const newerSeen = w("2026-08-27", 200, "newer", true);
+    expect(mergeWraps([older], [newerSeen])[0].seen).toBe(true);
+    expect(mergeWraps([newerSeen], [older])[0].seen).toBe(true);
+  });
+});

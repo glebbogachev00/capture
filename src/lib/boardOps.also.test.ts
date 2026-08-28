@@ -32,6 +32,7 @@ describe("a capture that is about two subjects", () => {
   it("puts each part in its own thread, and neither text in both", () => {
     const out: SortResult = {
       ...base,
+      primaryText: "Retake takes a while to render on this machine.",
       also: [
         { text: "Capture keeps mis-sorting my notes.", threadId: "t-capture" },
       ],
@@ -54,6 +55,7 @@ describe("a capture that is about two subjects", () => {
   it("opens a thread when the second subject has no home yet", () => {
     const out: SortResult = {
       ...base,
+      primaryText: "Retake takes a while to render on this machine.",
       also: [{ text: "I want a daily journal.", threadId: null, threadName: "Journal" }],
     };
     const { next } = applySorted(out, [], 1, board());
@@ -66,6 +68,7 @@ describe("a capture that is about two subjects", () => {
   it("keeps the words when the named thread has since gone", () => {
     const out: SortResult = {
       ...base,
+      primaryText: "Retake takes a while to render on this machine.",
       also: [{ text: "orphaned words", threadId: "t-deleted" }],
     };
     const { next } = applySorted(out, [], 1, board());
@@ -85,11 +88,56 @@ describe("a capture that is about two subjects", () => {
   it("everything it created is in landedIds, so Undo takes all of it back", () => {
     const out: SortResult = {
       ...base,
+      primaryText: "Retake takes a while to render on this machine.",
       also: [{ text: "second subject", threadId: null, threadName: "New" }],
     };
     const { landedIds, next } = applySorted(out, [], 1, board());
     const fresh = next.threads.find((t) => t.name === "New")!;
     expect(landedIds).toContain(fresh.id);
     expect(landedIds).toContain(fresh.frags[0].id);
+  });
+});
+
+describe("a split the model did not finish", () => {
+  /* `also` without `primaryText` means the model named the second subject but
+     never said what stays behind. Applying it anyway filed the whole capture
+     in the primary AND a copy of half of it elsewhere, leaving the person to
+     spot the duplicate. Refusing the split loses nothing. */
+  const half: SortResult = {
+    ...base,
+    clean: "Retake is slow. Also I want a daily journal.",
+    primaryText: null,
+    also: [{ text: "I want a daily journal.", threadId: null, threadName: "Journal" }],
+  };
+
+  it("files the capture once instead of duplicating half of it", () => {
+    const { next } = applySorted(half, [], 1, board());
+    const texts = next.threads.flatMap((t) => t.frags.map((f) => f.text));
+    expect(texts).toEqual(["Retake is slow. Also I want a daily journal."]);
+  });
+
+  it("opens no thread for the half it could not place", () => {
+    const before = board();
+    const { next } = applySorted(half, [], 1, before);
+    expect(next.threads).toHaveLength(before.threads.length);
+  });
+
+  it("reports no second destination for the caller to log", () => {
+    expect(applySorted(half, [], 1, board()).alsoLanded ?? []).toEqual([]);
+  });
+});
+
+describe("what the caller must record", () => {
+  it("names every destination so each gets its own ledger entry", () => {
+    const out: SortResult = {
+      ...base,
+      primaryText: "Retake takes a while to render on this machine.",
+      also: [{ text: "I want a daily journal.", threadId: null, threadName: "Journal" }],
+    };
+    const { alsoLanded } = applySorted(out, [], 1, board());
+    expect(alsoLanded).toHaveLength(1);
+    expect(alsoLanded![0].text).toBe("I want a daily journal.");
+    expect(alsoLanded![0].threadId).toBeTruthy();
+    expect(alsoLanded![0].fragId).toBeTruthy();
   });
 });

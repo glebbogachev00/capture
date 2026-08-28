@@ -68,6 +68,10 @@ export type Applied = {
       UI washes with the landed glow, so you see WHERE it went and not only
       that it went somewhere. Actions by action id, threads by thread id. */
   landedIds: string[];
+  /** Where each further subject went, so the caller can record one ledger
+      entry per destination. The ledger is what Undo and the daily wrap read
+      from, so a fragment with no entry is a fragment they cannot see. */
+  alsoLanded?: { threadId: string; fragId: string; text: string }[];
 };
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -99,20 +103,30 @@ export function applySorted(
      capture — otherwise the half that went to `also` is sitting in two
      places and the person has to notice the copy and delete it. `clean`
      itself is untouched: the ledger records what was actually said. */
-  const share =
-    (out.also?.length ?? 0) > 0 && out.primaryText?.trim()
-      ? { ...out, clean: out.primaryText.trim() }
-      : out;
-  const primary = applyPrimary(share, imgIds, at, board);
-  return foldAlso(primary, out, at);
+  /* A split is only safe when the model said what stays behind. Without
+     `primaryText` there is no way to know which words belong to the primary,
+     and filing the whole capture plus a copy of half of it is worse than not
+     splitting at all: the person has to spot the duplicate and delete it.
+     So an unusable split is refused outright rather than half-applied. */
+  const pieces = (out.also ?? []).filter((p) => p?.text?.trim());
+  const share = out.primaryText?.trim();
+  const splitting = pieces.length > 0 && !!share;
+  const sorted = splitting ? { ...out, clean: share! } : out;
+  const primary = applyPrimary(sorted, imgIds, at, board);
+  return splitting ? foldAlso(primary, pieces, at, board) : primary;
 }
 
-/** Add each further subject to its thread, opening one where none was named. */
-function foldAlso(applied: Applied, out: SortResult, at: number): Applied {
-  const pieces = (out.also ?? []).filter((p) => p?.text?.trim());
-  if (!pieces.length) return applied;
+type Piece = NonNullable<SortResult["also"]>[number];
 
+/** Add each further subject to its thread, opening one where none was named. */
+function foldAlso(
+  applied: Applied,
+  pieces: Piece[],
+  at: number,
+  original: Board
+): Applied {
   let board = applied.next;
+  const alsoLanded: Applied["alsoLanded"] = [];
   const landedIds = [...applied.landedIds];
   const names: string[] = [];
 
@@ -124,6 +138,7 @@ function foldAlso(applied: Applied, out: SortResult, at: number): Applied {
       : undefined;
     if (home) {
       names.push(home.name);
+      alsoLanded.push({ threadId: home.id, fragId: frag.id, text: frag.text });
       board = {
         ...board,
         threads: board.threads.map((t) =>
@@ -136,19 +151,22 @@ function foldAlso(applied: Applied, out: SortResult, at: number): Applied {
        than drop the words. */
     const fresh: Thread = {
       id: uid(),
-      name: piece.threadName || out.title,
+      name: piece.threadName || frag.text.slice(0, 40),
       summary: "",
       frags: [frag],
     };
     names.push(fresh.name);
     landedIds.push(fresh.id);
+    alsoLanded.push({ threadId: fresh.id, fragId: frag.id, text: frag.text });
     board = { ...board, threads: [fresh, ...board.threads] };
   }
 
+  void original;
   return {
     ...applied,
     next: board,
     landedIds,
+    alsoLanded,
     /* The banner names every place it went, because "landed somewhere" is
        exactly the doubt a split creates. */
     landed: applied.landed + names.map((n) => " · " + n).join(""),

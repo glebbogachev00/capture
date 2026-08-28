@@ -37,6 +37,16 @@ export type CaptureEntry = {
       the evidence, so a bad transcription can never be the only record. */
   transcript?: string;
   imgs?: string[];
+  /** Shared by every entry one capture wrote.
+   *
+   * A split capture files in more than one thread and records each
+   * destination, because the ledger is what Undo walks back and what the
+   * daily wrap counts. Without something tying them together, counting
+   * entries counts destinations: one sentence spoken became two things
+   * "said", and a single split capture could meet the wrap's three-capture
+   * threshold on its own. Absent on entries written before splits existed,
+   * and on every ordinary capture, where the entry is the utterance. */
+  captureId?: string;
   /** Undone after it landed. The entry stays — the record is what was
       said — but it is counted out and shown folded. */
   undone?: boolean;
@@ -177,6 +187,27 @@ export function sourceOf(
 ): CaptureSource {
   if (!raw && hasImages) return "image";
   return dictated ? "dictated" : "typed";
+}
+
+/**
+ * Mark every entry a single capture wrote as undone.
+ *
+ * One capture can write several entries: a split lands in more than one
+ * thread and records each destination, because the ledger is what Undo walks
+ * back and what the daily wrap counts. Undo used to mark only the first,
+ * which left the other halves standing as things that still happened — the
+ * fragments were gone from the board but the record said otherwise.
+ *
+ * `undone` is sticky and set, never cleared: the entry stays, because the
+ * record is what was said. Only the counting changes.
+ */
+export function markUndone(
+  ledger: CaptureEntry[],
+  ids: readonly string[]
+): CaptureEntry[] {
+  if (!ids?.length) return ledger;
+  const take = new Set(ids);
+  return ledger.map((e) => (take.has(e.id) ? { ...e, undone: true } : e));
 }
 
 /** Fold an entry into a board's ledger in one step. */

@@ -1,6 +1,6 @@
 import type { Action, Board, Thread } from "./model";
 import { spokenText } from "./caption";
-import { contentWords, sharedPhrase } from "./related";
+import { sharedPhrase } from "./related";
 
 /**
  * The actions that belong with a thread.

@@ -86,6 +86,23 @@ describe("boardSignature sees history", () => {
     expect(sig(base())).not.toBe(sig({ ...base(), historyEpoch: 7 }));
   });
 
+  it("sees a divergent history of the same length", () => {
+    /* The case length-plus-newest-id could not see. The ledger is capped, so
+       a merged entry pushes the oldest out and the count never moves; and an
+       entry from another device is usually older than the newest, so the
+       boundary id matches too. Both boards hold two entries whose newest is
+       the same, and they are still different boards. */
+    const a = { ...base(), ledger: [entry("newest", 30), entry("mine", 20)] };
+    const b = { ...base(), ledger: [entry("newest", 30), entry("theirs", 20)] };
+    expect(sig(a)).not.toBe(sig(b));
+  });
+
+  it("does not depend on the order a merge happens to leave things in", () => {
+    const a = { ...base(), ledger: [entry("e1", 10), entry("e2", 20)] };
+    const b = { ...base(), ledger: [entry("e2", 20), entry("e1", 10)] };
+    expect(sig(a)).toBe(sig(b));
+  });
+
   it("stays put when nothing changed", () => {
     const b = { ...base(), ledger: [entry("e1", 10)], completions: [{ id: "a1", text: "t", at: 2 }] };
     expect(sig(b)).toBe(sig({ ...b }));
@@ -103,6 +120,27 @@ describe("the adoption gate lets history through", () => {
     };
     const merged = mergeSync(local, remote);
     expect(merged.board.wraps).toHaveLength(1);
+    const adopted =
+      boardSignature(merged.board, merged.tombstones) !==
+      boardSignature(local.board, local.tombstones);
+    expect(adopted).toBe(true);
+  });
+
+  it("the other device's wrap for the same day survives the pull", () => {
+    /* Both devices wrote a reading of the 27th while offline. The merge
+       picks the earlier one deterministically — but when the signature said
+       only "a wrap for the 27th, unread", it read identically before and
+       after, so the gate discarded the wrap the merge had just chosen and
+       the two devices disagreed forever. */
+    const mine = dayWrap("2026-08-27");
+    const theirs = { ...dayWrap("2026-08-27"), at: 0, line: "theirs wins" };
+    const local = { board: { ...base(), wraps: [mine] }, tombstones: [] };
+    const remote = { board: { ...base(), wraps: [theirs] }, tombstones: [] };
+
+    const merged = mergeSync(local, remote);
+    expect(merged.board.wraps).toHaveLength(1);
+    expect(merged.board.wraps![0].line).toBe("theirs wins");
+
     const adopted =
       boardSignature(merged.board, merged.tombstones) !==
       boardSignature(local.board, local.tombstones);
