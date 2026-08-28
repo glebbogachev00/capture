@@ -4,6 +4,7 @@ import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { withFallback } from "@/lib/providers";
+import { preferredFor } from "@/lib/routing";
 import { splitNext } from "@/lib/nextStep";
 
 /**

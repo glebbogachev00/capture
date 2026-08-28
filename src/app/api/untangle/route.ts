@@ -3,6 +3,7 @@ import { z } from "zod";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { withFallback } from "@/lib/providers";
+import { preferredFor } from "@/lib/routing";
 
 /**
  * Which notes are sitting in the wrong one of two threads.
@@ -154,7 +155,7 @@ export async function POST(request: Request) {
         providerOptions: tier.providerOptions,
       });
       return object;
-    });
+    }, preferredFor("untangle"));
 
     /* Only ids that were actually offered. A model that invents one would
        otherwise move a note nobody was asked about. */

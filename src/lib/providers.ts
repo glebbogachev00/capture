@@ -141,9 +141,29 @@ const DEFAULT_WAIT_MS = 18_000;
 const MAX_WAIT_MS = 25_000;
 
 export async function withFallback<T>(
-  attempt: (tier: Tier) => Promise<T>
+  attempt: (tier: Tier) => Promise<T>,
+  /* Which provider should go first for this job.
+ 
+     The chain is a fallback order, so without this every request piles onto
+     the same provider and the other three allowances sit unused — one
+     account rate-limited while three are idle. Each provider has its own
+     per-minute budget, so putting different work on different providers is
+     free capacity.
+ 
+     Which job goes where is measured, not guessed. On routing, Mistral
+     scored 77% against Claude's 74% — no worse. On untangling, Mistral
+     managed 22-43% recall where Groq managed 100%. So background work that
+     nobody is waiting on goes elsewhere, and the fast provider is kept for
+     what the person is standing there for.
+ 
+     It is a preference, not a pin: if the named provider is missing or
+     refuses, the rest of the chain still answers. */
+  prefer?: string
 ): Promise<{ value: T; via: string }> {
-  const tiers = chain();
+  const all = chain();
+  const tiers = prefer
+    ? [...all.filter((t) => t.name === prefer), ...all.filter((t) => t.name !== prefer)]
+    : all;
   if (!tiers.length) throw new NoProvidersError();
 
   const round = async (): Promise<

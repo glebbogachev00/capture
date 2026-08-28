@@ -4,6 +4,7 @@ import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { withFallback } from "@/lib/providers";
+import { preferredFor } from "@/lib/routing";
 import {
   mapAiProposals,
   renderBoardForPrompt,
@@ -193,7 +194,7 @@ export async function POST(request: Request) {
         providerOptions: tier.providerOptions,
       });
       return object;
-    });
+    }, preferredFor("organize"));
     const proposals = mapAiProposals(body, value.proposals as RawAiProposal[]);
     return Response.json({ proposals, via });
   } catch (error) {

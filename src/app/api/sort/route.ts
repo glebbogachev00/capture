@@ -1,6 +1,7 @@
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { applyRules } from "@/lib/ruleMatch";
+import { preferredFor } from "@/lib/routing";
 import { explain } from "@/lib/aiError";
 import { captionPrompt, mergeCaption, tidyCaption } from "@/lib/caption";
 import { clientIp } from "@/lib/clientIp";
@@ -380,7 +381,7 @@ export async function POST(request: Request) {
         providerOptions: tier.providerOptions,
       });
       return object;
-    });
+    }, preferredFor("sort"));
     /* The user's command outranks the model: when a destination was forced,
        the answer must obey it even if the model drifted. For a thread, the
        model still picks the best existing thread; only the kind and the

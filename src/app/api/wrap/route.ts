@@ -3,6 +3,7 @@ import { z } from "zod";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { withFallback } from "@/lib/providers";
+import { preferredFor } from "@/lib/routing";
 
 /**
  * The daily wrap, in words.
@@ -186,7 +187,7 @@ export async function POST(request: Request) {
         providerOptions: tier.providerOptions,
       });
       return object;
-    });
+    }, preferredFor("wrap"));
     return Response.json({ ...value, ...clean(value), via });
   } catch {
     /* No wrap is written when no model answers. The day is still in the
