@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BrushCleaning, Check, Copy, Image as ImageIcon, Layers, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
+import { degradedNote } from "@/lib/degraded";
 import { TangleCallout, TangleReview } from "./Tangle";
 
 import { DistillView } from "./Distill";
@@ -170,6 +171,7 @@ export function Capture() {
     closeOrganize,
     wrap,
     dismissWrap,
+    degraded,
     tangle,
     acceptTangle,
     dismissTangle,
@@ -472,6 +474,17 @@ export function Capture() {
                   where days live, and this says one is waiting. */}
               {wrap && !wrap.seen && <span className="wrap-dot" />}
             </button>
+            {/* Which model is doing the work — shown only while it is not
+                the usual one. There is nothing a person can do about a rate
+                limit, so this asks for nothing and blocks nothing. It exists
+                because the alternative was weeks of the app quietly getting
+                worse with no way to know why. It names the consequence, not
+                the plumbing. */}
+            {degraded && (
+              <span className="model-note" title={degradedNote(degraded)}>
+                backup model · sorting will be rougher
+              </span>
+            )}
             {!PLAYGROUND && (
               <button
                 className={

@@ -4352,3 +4352,21 @@ body {
 .tangle-do {
   margin-top: 18px;
 }
+
+/* WHICH MODEL IS ANSWERING.
+
+   Only ever on screen while the app is running on a stand-in, and never
+   otherwise. There is nothing to do about a rate limit, so this is a state
+   and not an alert: no colour of its own, no icon, no dismiss. The point is
+   only that the person can see it, because the alternative was an app that
+   got quietly worse for weeks with no way to know why. */
+.model-note {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: default;
+}

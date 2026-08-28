@@ -102,6 +102,7 @@ import { expiryFor, parseDue } from "@/lib/due";
 import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
 import { PLAYGROUND, playgroundError } from "@/lib/playground";
+import { degradedTier, type Answered } from "@/lib/degraded";
 import {
   confusedPairs,
   tangleProposalId,
@@ -1225,7 +1226,12 @@ export function useBoard(now: number) {
       const body = await res.json().catch(() => ({}));
       throw new SortError(body.error);
     }
-    return res.json();
+    /* Every answer reports the tier that produced it. Sorting is the most
+       frequent call by far, so it is the honest sample of what the app is
+       actually running on. */
+    const out = await res.json();
+    noteVia(out?.via);
+    return out;
   };
 
   /** Fold a sorted result into a board. Shared by first capture and re-sort. */
@@ -1926,6 +1932,20 @@ export function useBoard(now: number) {
      Writing is one-shot and guarded, because a wrap is frozen once written:
      a second pass would produce different words for a day the person may
      already have read. */
+  /* Which model has been answering lately.
+ 
+     The chain falls through silently — a spent tier must not stop a capture
+     landing — but the silence was its own bug: the fastest provider allows
+     a fixed number of tokens per minute, and everything over that was
+     answered by a weaker model with nothing on screen to say so. Weeks of
+     "it randomly got worse" was a rate limit nobody could see. */
+  const [answers, setAnswers] = useState<Answered[]>([]);
+  const noteVia = useCallback((via?: string | null) => {
+    if (!via) return;
+    setAnswers((prev) => [...prev, { via, at: Date.now() }].slice(-12));
+  }, []);
+  const degraded = degradedTier(answers);
+
   const [showWrap, setShowWrap] = useState(false);
   const writingWrap = useRef(false);
   /* Days this tab has already tried. The stored wrap is the real guard, but
@@ -2208,7 +2228,8 @@ export function useBoard(now: number) {
         body: JSON.stringify(compactBoard(latest.current)),
       });
       if (!res.ok) return;
-      const out = (await res.json()) as { proposals?: RawAiProposal[] };
+      const out = (await res.json()) as { proposals?: RawAiProposal[]; via?: string };
+      noteVia(out?.via);
       const ai = mapAiProposals(
         compactBoard(latest.current),
         out.proposals ?? []
@@ -4166,6 +4187,7 @@ export function useBoard(now: number) {
     showWrap,
     setShowWrap,
     dismissWrap,
+    degraded,
     tangle,
     acceptTangle,
     dismissTangle,
