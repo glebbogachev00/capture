@@ -29,7 +29,8 @@ import {
  */
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+/* Paced passes take longer than one call by design — see THREADS_PER_PASS. */
+export const maxDuration = 300;
 
 const Body = z.object({
   /* at rides along so a duplicate can always name the newer copy — the
@@ -153,6 +154,42 @@ function promptFor(body: TidySnapshot) {
   return TIDY + renderBoardForPrompt(capped(body));
 }
 
+/* Threads carried per pass. A whole board of this shape came to roughly
+   15,000 tokens against a per-minute allowance of 8,000, so the review was
+   REJECTED by the fast model every single time and answered by the weakest
+   one in the chain — which on a comparable judgement scored 22% where the
+   fast model scored 100%. Tidy has never once run on the good model for a
+   board of any size. Five threads a pass keeps every pass comfortably
+   inside the allowance. */
+const THREADS_PER_PASS = 5;
+/* Long enough that consecutive passes do not add up past the allowance. */
+const PACE_MS = 22_000;
+
+/**
+ * The board, split into passes small enough to be accepted.
+ *
+ * The actions go in the first pass with the first threads, because folding
+ * an action into a thread needs to see both. Everything else is per-thread
+ * work — duplicates within a thread, a fragment sitting in the wrong one —
+ * so splitting by thread costs little. What IS lost is a claim spanning two
+ * threads in different passes; that is the price of the review running on a
+ * model that can actually make the judgement.
+ */
+function passes(body: TidySnapshot): TidySnapshot[] {
+  const capped_ = capped(body);
+  const out: TidySnapshot[] = [];
+  for (let i = 0; i < capped_.threads.length; i += THREADS_PER_PASS) {
+    out.push({
+      threads: capped_.threads.slice(i, i + THREADS_PER_PASS),
+      /* Actions and intentions ride with the first pass only — repeating
+         them would invite the same proposal once per pass. */
+      actions: i === 0 ? capped_.actions : [],
+      intentions: i === 0 ? capped_.intentions : [],
+    });
+  }
+  return out.length ? out : [capped_];
+}
+
 export async function POST(request: Request) {
   // The review spends real model quota; a single client can't run it in a loop.
   const gate = modelRateLimit(clientIp(request));
@@ -175,21 +212,30 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { value, via } = await withFallback(async (tier) => {
-      const { object } = await generateObject({
-        model: tier.model,
-        // A spent free tier reports "retry in 26s"; fail fast so the chain
-        // can fall through to the next provider instead of making the user
-        // wait out the backoff.
-        maxRetries: 0,
-        schema: Result,
-        system: "You are capture's tidy engine.",
-        prompt: promptFor(body),
-        providerOptions: tier.providerOptions,
+    const raw: RawAiProposal[] = [];
+    let via: string | undefined;
+    for (const [i, part] of passes(body).entries()) {
+      if (i > 0) await new Promise((r) => setTimeout(r, PACE_MS));
+      const answered = await withFallback(async (tier) => {
+        const { object } = await generateObject({
+          model: tier.model,
+          // A spent free tier reports "retry in 26s"; fail fast so the chain
+          // can fall through to the next provider instead of making the user
+          // wait out the backoff.
+          maxRetries: 0,
+          schema: Result,
+          system: "You are capture's tidy engine.",
+          prompt: promptFor(part),
+          providerOptions: tier.providerOptions,
+        });
+        return object;
       });
-      return object;
-    });
-    const proposals = mapAiProposals(body, value.proposals as RawAiProposal[]);
+      via = answered.via;
+      raw.push(...(answered.value.proposals as RawAiProposal[]));
+    }
+    /* Mapped against the WHOLE board, not the pass that produced it: a
+       proposal names ids, and the ids have to resolve against everything. */
+    const proposals = mapAiProposals(body, raw);
     return Response.json({ proposals, via });
   } catch (error) {
     console.error("organize failed", error);
