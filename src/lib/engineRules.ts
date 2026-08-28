@@ -58,9 +58,22 @@ export const ROUTING_RULE =
   "(its sorting engine, its board, its sync, a bug in it) belongs in that " +
   "thread exactly as any other subject would. The caution is against the " +
   "word, not the subject.\n" +
-  "- When no thread genuinely fits, set threadId to null and invent a short " +
-  "threadName. A new thread is cheap and honest; a wrong one buries the note " +
-  "where it will not be found again.\n" +
+  "- Before inventing anything, go through the threads above one at a time " +
+  "and ask of each: is this capture about the same SUBJECT? Same subject in " +
+  "different words still belongs there. A note about a demo you are recording belongs in the thread about that tool; a note about something "  +
+  "broken belongs in the thread that collects what is broken. Do not require " +
+  "the wording to match — require the subject to match.\n" +
+  "- Only when NO existing thread is about this subject, set threadId to null " +
+  "and invent a short threadName. A new thread is not cheap. It is the most " +
+  "expensive answer you can give: it splits a subject the person is already " +
+  "keeping in one place, and it becomes a decoy that makes every later " +
+  "capture harder to route. Measured on a real board, opening a thread when " +
+  "an existing one fitted was the single largest cause of misfiling — larger " +
+  "than every other mistake combined. \"Retake demo creation\" when \"Retake\" exists, \"Finding friction to reduce\" when \"Reducing " +
+  "friction strategy\" exists: both wrong, both for the same reason.\n" +
+  "- If you find yourself naming the new thread after words that already " +
+  "appear in an existing thread's name, that is the signal you should be " +
+  "filing into that thread instead.\n" +
   "\nWhen one capture is about TWO subjects — `also`:\n" +
   "- A person says two things in one breath more often than they say one. " +
   '"Retake is slow on my machine and Capture keeps mis-sorting" is not one ' +

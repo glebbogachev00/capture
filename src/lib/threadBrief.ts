@@ -42,6 +42,14 @@ export function threadBriefs(
   return threads.map((t) => ({
     id: t.id,
     name: t.name,
-    about: brief(t.summary, limit),
+    /* The boundary first, because it is the part that decides. A summary
+       says what the thread contains, which two threads about the same
+       subject will say almost identically; the boundary says what belongs,
+       which is the only question being asked here. Threads summarised
+       before boundaries existed have none, and fall back to the summary
+       alone exactly as before. */
+    about: t.belongs
+      ? `${t.belongs.trim()}\n\n${brief(t.summary, Math.max(MIN, limit - t.belongs.length))}`
+      : brief(t.summary, limit),
   }));
 }

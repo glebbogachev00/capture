@@ -22,6 +22,15 @@ const Body = z.object({
   frags: z.array(z.object({ at: z.number(), text: z.string() })),
   /** What is already on their list, so the step is never a repeat. */
   open: z.array(z.string()).optional(),
+  /** The other threads on the board, by name.
+   *
+   * Routing is a comparison, but every summary has been written in
+   * isolation, so no thread could ever say "that goes next door" — it had
+   * never been told next door existed. Measured on a real board, the sorter
+   * could not tell two threads apart precisely because both described
+   * themselves as being about the same app. A thread needs to know its
+   * neighbours to describe its own edges. */
+  siblings: z.array(z.string()).max(40).optional(),
 });
 
 export async function POST(request: Request) {
@@ -56,13 +65,17 @@ export async function POST(request: Request) {
           '\n\nWrite a "Where this stands" block: 3-5 sentences of plain prose describing what this idea currently is, what\'s been settled, and what\'s still open. Write it back to them in their own register. Invent nothing.' +
           '\n\nThen, on its own last line, write NEXT: followed by the one concrete step the fragments point at — a decision the evidence has made, a person to write back to, a thing to send or ship — in their words, at most one short sentence, something they could do today. If the fragments point at nothing in particular, write NEXT: none; a step you would have to invent is worse than none. Never suggest something already on their list' +
           (body.open?.length ? ':\n' + body.open.map((a) => '- ' + a).join('\n') : '.') +
-          '\n\nReturn only the prose and that last line.',
+          (body.siblings?.length
+            ? '\n\nThen, on a line of its own, write BELONGS: followed by one sentence naming what kind of capture should be filed into this thread and what should not. This line is never shown to them — it is read by the sorter deciding where new captures go, so it must be useful for that and nothing else. Name the boundary against the neighbouring threads specifically where they are close: "anything broken or asked for in Capture — not its pricing or positioning, which go to Capture." Describe the SUBJECT that belongs, never the vocabulary; two threads about the same product cannot be told apart by the words they use. The other threads on this board are:\n' +
+                body.siblings.map((n) => '- ' + n).join('\n')
+            : '') +
+          '\n\nReturn only the prose and those last lines.',
         providerOptions: tier.providerOptions,
       });
       return text;
     });
-    const { summary, next } = splitNext(value);
-    return Response.json({ summary, next, via });
+    const { summary, next, belongs } = splitNext(value);
+    return Response.json({ summary, next, belongs, via });
   } catch (error) {
     console.error("summarize failed", error);
     const { message, status } = explain(error);
