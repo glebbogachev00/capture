@@ -37,6 +37,15 @@ export type SortResult = {
   due?: string | null;
   threadId?: string | null;
   threadName?: string | null;
+  /** When the capture is split, the part that stays with the primary
+      destination. `clean` remains the whole capture, because the ledger and
+      Undo are written around it. */
+  primaryText?: string | null;
+  /** Further threads this capture also belongs in, each carrying only its
+      own share of the words. Empty for the ordinary one-subject capture. */
+  also?:
+    | { text: string; threadId?: string | null; threadName?: string | null }[]
+    | null;
   /** Which model tier sorted it — recorded in the capture ledger. */
   via?: string;
 };
@@ -67,7 +76,86 @@ const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
  * Fold a sorted capture into a board, returning the new board plus what it
  * landed as. `at` is the capture's timestamp; images are already stored by id.
  */
+/**
+ * Apply a sorted capture, including any further subjects it holds.
+ *
+ * One breath is often about two things. The primary destination is decided
+ * exactly as it always was — so the banner, the ledger entry and the
+ * misfiled question all still have the single target they are written
+ * around — and each further subject is folded in afterwards as a fragment
+ * carrying only its own share of the words.
+ *
+ * Undo needed no changes: it reverts by `addedIds`, which is a diff of the
+ * whole board, so it already takes back everything a capture created
+ * however many places it touched.
+ */
 export function applySorted(
+  out: SortResult,
+  imgIds: string[],
+  at: number,
+  board: Board
+): Applied {
+  /* Split captures file their own share in the primary thread, not the whole
+     capture — otherwise the half that went to `also` is sitting in two
+     places and the person has to notice the copy and delete it. `clean`
+     itself is untouched: the ledger records what was actually said. */
+  const share =
+    (out.also?.length ?? 0) > 0 && out.primaryText?.trim()
+      ? { ...out, clean: out.primaryText.trim() }
+      : out;
+  const primary = applyPrimary(share, imgIds, at, board);
+  return foldAlso(primary, out, at);
+}
+
+/** Add each further subject to its thread, opening one where none was named. */
+function foldAlso(applied: Applied, out: SortResult, at: number): Applied {
+  const pieces = (out.also ?? []).filter((p) => p?.text?.trim());
+  if (!pieces.length) return applied;
+
+  let board = applied.next;
+  const landedIds = [...applied.landedIds];
+  const names: string[] = [];
+
+  for (const piece of pieces) {
+    const frag: Frag = { id: uid(), at, text: piece.text.trim(), imgs: [] };
+    landedIds.push(frag.id);
+    const home = piece.threadId
+      ? board.threads.find((t) => t.id === piece.threadId)
+      : undefined;
+    if (home) {
+      names.push(home.name);
+      board = {
+        ...board,
+        threads: board.threads.map((t) =>
+          t.id === home.id ? { ...t, frags: [...t.frags, frag] } : t
+        ),
+      };
+      continue;
+    }
+    /* No thread named, or one that no longer exists: open a new one rather
+       than drop the words. */
+    const fresh: Thread = {
+      id: uid(),
+      name: piece.threadName || out.title,
+      summary: "",
+      frags: [frag],
+    };
+    names.push(fresh.name);
+    landedIds.push(fresh.id);
+    board = { ...board, threads: [fresh, ...board.threads] };
+  }
+
+  return {
+    ...applied,
+    next: board,
+    landedIds,
+    /* The banner names every place it went, because "landed somewhere" is
+       exactly the doubt a split creates. */
+    landed: applied.landed + names.map((n) => " · " + n).join(""),
+  };
+}
+
+function applyPrimary(
   out: SortResult,
   imgIds: string[],
   at: number,

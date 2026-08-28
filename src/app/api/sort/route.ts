@@ -44,6 +44,48 @@ const Sorted = z.object({
     .string()
     .nullable()
     .describe("name for a new thread, or null"),
+  /* One breath can be about two subjects. "Retake is slow on my machine and
+     Capture keeps mis-sorting" is not one thought filed twice — it is two
+     thoughts said together, and filing the whole sentence in one thread
+     puts half of it where its owner will never look for it.
+
+     The primary destination above still carries the capture. This names the
+     OTHER places part of it belongs, each with only its own share of the
+     words. Bounded at three, because a capture that claims to be about five
+     subjects is almost always one subject the model failed to name. */
+  /* `clean` stays the whole capture — the ledger records it, Undo restores
+     it, the misfiled question quotes it. So the primary's share needs its
+     own field rather than narrowing `clean`, which would fight every other
+     use of it. Null when there is no split. */
+  primaryText: z
+    .string()
+    .nullable()
+    .describe(
+      "when `also` is used, ONLY the part of the capture that stays with the primary destination — the words in `also` must not appear here. Null when `also` is empty"
+    ),
+  also: z
+    .array(
+      z.object({
+        text: z
+          .string()
+          .describe(
+            "only the part of the capture that belongs here, in the person's own words"
+          ),
+        threadId: z
+          .string()
+          .nullable()
+          .describe("id of the existing thread this part belongs to, or null"),
+        threadName: z
+          .string()
+          .nullable()
+          .describe("name for a new thread for this part, or null"),
+      })
+    )
+    .max(3)
+    .nullable()
+    .describe(
+      "further threads this capture also belongs in — empty for the normal case of one subject"
+    ),
 });
 
 /** A compact record of a recent capture and where it landed. */

@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+import { applySorted, type SortResult } from "./boardOps";
+import type { Board } from "./model";
+
+/**
+ * One breath, two subjects. "Retake is slow and Capture keeps mis-sorting"
+ * is not one thought filed twice — it is two thoughts said together, and
+ * filing the whole sentence in one thread puts half of it where its owner
+ * will never look for it.
+ */
+const board = (): Board => ({
+  actions: [],
+  threads: [
+    { id: "t-retake", name: "Retake", summary: "", frags: [] },
+    { id: "t-capture", name: "Capture.", summary: "", frags: [] },
+  ],
+  intentions: [],
+  principles: [],
+  ledger: [],
+  corrections: [],
+});
+
+const base: SortResult = {
+  clean: "Retake takes a while to render on this machine.",
+  kind: "thread",
+  title: "Retake speed",
+  threadId: "t-retake",
+  threadName: null,
+};
+
+describe("a capture that is about two subjects", () => {
+  it("puts each part in its own thread, and neither text in both", () => {
+    const out: SortResult = {
+      ...base,
+      also: [
+        { text: "Capture keeps mis-sorting my notes.", threadId: "t-capture" },
+      ],
+    };
+    const { next, landed } = applySorted(out, [], 1, board());
+    const retake = next.threads.find((t) => t.id === "t-retake")!;
+    const capture = next.threads.find((t) => t.id === "t-capture")!;
+
+    expect(retake.frags).toHaveLength(1);
+    expect(capture.frags).toHaveLength(1);
+    expect(retake.frags[0].text).toContain("Retake takes a while");
+    expect(capture.frags[0].text).toContain("mis-sorting");
+    // split, never copied
+    expect(retake.frags[0].text).not.toContain("mis-sorting");
+    expect(capture.frags[0].text).not.toContain("Retake takes a while");
+    // the banner names both, because "it went somewhere" is the doubt a split creates
+    expect(landed).toContain("Capture.");
+  });
+
+  it("opens a thread when the second subject has no home yet", () => {
+    const out: SortResult = {
+      ...base,
+      also: [{ text: "I want a daily journal.", threadId: null, threadName: "Journal" }],
+    };
+    const { next } = applySorted(out, [], 1, board());
+    const fresh = next.threads.find((t) => t.name === "Journal");
+    expect(fresh).toBeTruthy();
+    expect(fresh!.frags[0].text).toBe("I want a daily journal.");
+    expect(next.threads).toHaveLength(3);
+  });
+
+  it("keeps the words when the named thread has since gone", () => {
+    const out: SortResult = {
+      ...base,
+      also: [{ text: "orphaned words", threadId: "t-deleted" }],
+    };
+    const { next } = applySorted(out, [], 1, board());
+    expect(
+      next.threads.some((t) => t.frags.some((f) => f.text === "orphaned words"))
+    ).toBe(true);
+  });
+
+  it("changes nothing at all for the ordinary one-subject capture", () => {
+    const plain = applySorted(base, [], 1, board());
+    const withEmpty = applySorted({ ...base, also: [] }, [], 1, board());
+    expect(plain.landed).toBe(withEmpty.landed);
+    expect(plain.next.threads).toHaveLength(2);
+    expect(withEmpty.next.threads).toHaveLength(2);
+  });
+
+  it("everything it created is in landedIds, so Undo takes all of it back", () => {
+    const out: SortResult = {
+      ...base,
+      also: [{ text: "second subject", threadId: null, threadName: "New" }],
+    };
+    const { landedIds, next } = applySorted(out, [], 1, board());
+    const fresh = next.threads.find((t) => t.name === "New")!;
+    expect(landedIds).toContain(fresh.id);
+    expect(landedIds).toContain(fresh.frags[0].id);
+  });
+});

@@ -60,5 +60,27 @@ export const ROUTING_RULE =
   "word, not the subject.\n" +
   "- When no thread genuinely fits, set threadId to null and invent a short " +
   "threadName. A new thread is cheap and honest; a wrong one buries the note " +
-  "where it will not be found again.\n";
+  "where it will not be found again.\n" +
+  "\nWhen one capture is about TWO subjects — `also`:\n" +
+  "- A person says two things in one breath more often than they say one. " +
+  '"Retake is slow on my machine and Capture keeps mis-sorting" is not one ' +
+  "thought that mentions two apps; it is two thoughts said together. Filing " +
+  "the whole sentence in one thread puts half of it somewhere its owner will " +
+  "never look for it.\n" +
+  "- So: the primary destination takes the part it is about, and each further " +
+  "subject goes in `also` with ONLY its own share of the words. Never repeat " +
+  "the same sentence in two places — split it, do not copy it.\n" +
+  "- `clean` still holds the WHOLE capture, exactly as always — it is the " +
+  "record of what was said. The primary destination's share goes in " +
+  "`primaryText`, and the words you put in `also` must not appear there. " +
+  "Filing the whole capture in the primary AND a copy of half of it " +
+  "elsewhere is worse than not splitting at all: the person now has to " +
+  "notice the duplicate and delete it.\n" +
+  "- The bar is high. Two subjects means two things that would be read in " +
+  "different places on different days. A capture that mentions another thread " +
+  "in passing, or compares one thing to another, is ONE thought about one " +
+  "subject — leave `also` empty. So is a list of steps toward a single goal.\n" +
+  "- Empty is the normal answer. Most captures are about one thing, and a " +
+  "split that was not really there is worse than no split at all: it tears a " +
+  "sentence in half and files the halves apart.\n";
 
