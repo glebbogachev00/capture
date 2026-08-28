@@ -2138,51 +2138,69 @@ export function useBoard(now: number) {
     setTangleBusy(true);
     void (async () => {
       try {
-        const res = await fetch("/api/untangle", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          /* Judged in the direction the corrections point: what sits in the
-             thread they keep moving things OUT of. */
-          body: JSON.stringify({
-            from: {
-              name: from.name,
-              frags: from.frags.slice(0, 60).map((f) => ({ id: f.id, text: f.text })),
-            },
-            to: {
-              name: to.name,
-              frags: to.frags.slice(0, 30).map((f) => ({ text: f.text })),
-            },
-            /* The threads' own boundary lines, when they have them. History
-               says what this person HAS done; the boundary says what they
-               have decided to do, and those can point opposite ways — the
-               corrections show notes moving one direction while the stated
-               rule sends them back. What they decided wins. */
-            rule:
-              from.belongs || to.belongs
-                ? [
-                    from.belongs && `"${from.name}": ${from.belongs}`,
-                    to.belongs && `"${to.name}": ${to.belongs}`,
-                  ]
-                    .filter(Boolean)
-                    .join("\n")
-                : undefined,
-          }),
-        });
-        if (!res.ok) return;
-        const out = (await res.json()) as {
-          move?: { id: string; why: string }[];
-          rename?: string | null;
+        /* Batched and paced HERE, not inside the route.
+ 
+           The judging has to be split — a whole thread at once is more
+           tokens than the fast provider accepts in a minute — but doing the
+           splitting server-side made one request that ran for eighty to
+           ninety seconds, and every route in this app is capped at sixty.
+           It worked on a developer machine and was killed in production
+           every single time, which is why this proposal never once appeared
+           on the real phone. The client has no such ceiling. */
+        const BATCH = 8;
+        const PACE_MS = 22_000;
+        const rule =
+          from.belongs || to.belongs
+            ? [
+                from.belongs && `"${from.name}": ${from.belongs}`,
+                to.belongs && `"${to.name}": ${to.belongs}`,
+              ]
+                .filter(Boolean)
+                .join("\n")
+            : undefined;
+        const toSide = {
+          name: to.name,
+          frags: to.frags.slice(0, 30).map((f) => ({ text: f.text })),
         };
-        const move = (out.move ?? []).filter((m) =>
-          latest.current.threads
-            .find((t) => t.id === pair.fromId)
-            ?.frags.some((f) => f.id === m.id)
+
+        const found = new Map<string, { id: string; why: string }>();
+        let rename: string | null = null;
+        const all = from.frags.slice(0, 60);
+
+        for (let i = 0; i < all.length; i += BATCH) {
+          if (i > 0) await new Promise((r) => setTimeout(r, PACE_MS));
+          const res = await fetch("/api/untangle", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from: {
+                name: from.name,
+                frags: all.slice(i, i + BATCH).map((f) => ({ id: f.id, text: f.text })),
+              },
+              to: toSide,
+              rule,
+            }),
+          });
+          /* One failed batch is not a failed proposal: keep what the others
+             found rather than throwing the lot away. */
+          if (!res.ok) continue;
+          const out = (await res.json()) as {
+            move?: { id: string; why: string }[];
+            rename?: string | null;
+          };
+          for (const m of out.move ?? []) if (!found.has(m.id)) found.set(m.id, m);
+          if (!rename && out.rename) rename = out.rename;
+        }
+
+        const live = latest.current.threads.find((t) => t.id === pair.fromId);
+        const move = [...found.values()].filter((m) =>
+          live?.frags.some((f) => f.id === m.id)
         );
         /* Nothing to say is the common and correct answer. */
         if (!move.length) return;
-        setTangle({ pair, move, rename: out.rename ?? null });
+        setTangle({ pair, move, rename });
       } catch {
-        /* Asked again next session; nothing is wrong with the board. */
+        /* Asked again tomorrow; nothing is wrong with the board. */
       } finally {
         setTangleBusy(false);
       }
@@ -2373,27 +2391,61 @@ export function useBoard(now: number) {
     setOrganizeAiStatus("thinking");
     try {
       const whole = compactBoard(latest.current);
-      const res = await fetch("/api/organize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...whole,
-          threads: whole.threads.filter((t) =>
-            planned.send.some((s) => s.id === t.id)
-          ),
-        }),
-      });
-      if (!res.ok) {
+
+      /* One pass per request, paced HERE.
+ 
+         The board is read in groups because the whole of it is more tokens
+         than the fast provider accepts in a minute. Doing that grouping
+         inside the route made a single request that ran for eighty-odd
+         seconds — and every route in this app is capped at sixty, because
+         that is the platform's ceiling. It passed on a developer machine
+         and was killed in production every time. The client can wait. */
+      const PER_PASS = 5;
+      const PACE_MS = 22_000;
+      const sending = whole.threads.filter((t) =>
+        planned.send.some((s) => s.id === t.id)
+      );
+      const groups: (typeof sending)[] = [];
+      for (let i = 0; i < sending.length; i += PER_PASS)
+        groups.push(sending.slice(i, i + PER_PASS));
+      if (!groups.length) groups.push([]);
+
+      const raw: RawAiProposal[] = [];
+      let via: string | undefined;
+      let answeredAny = false;
+      for (const [i, threads] of groups.entries()) {
+        if (i > 0) await new Promise((r) => setTimeout(r, PACE_MS));
+        const res = await fetch("/api/organize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...whole,
+            threads,
+            /* Actions and intentions ride with the first pass only, or the
+               same claim comes back once per pass. */
+            actions: i === 0 ? whole.actions : [],
+            intentions: i === 0 ? whole.intentions : [],
+          }),
+        });
+        /* A failed pass costs its own threads, not the whole review. */
+        if (!res.ok) continue;
+        const out = (await res.json()) as {
+          proposals?: RawAiProposal[];
+          via?: string;
+        };
+        answeredAny = true;
+        via = out.via;
+        raw.push(...(out.proposals ?? []));
+      }
+      noteVia(via);
+      if (!answeredAny) {
         setOrganizeAiStatus("offline");
         return;
       }
-      const out = (await res.json()) as {
-        proposals?: RawAiProposal[];
-      };
+
       /* Mapped against the WHOLE board: a proposal names ids, and the ids
          have to resolve against everything, not only what was sent. */
-      const fresh = mapAiProposals(whole, out.proposals ?? []);
-      /* What was not re-read still stands. */
+      const fresh = mapAiProposals(whole, raw);
       const allThreadIds = new Set(latest.current.threads.map((t) => t.id));
       const ai = [
         ...keepProposals(aiOrganize.current, planned.unchanged, allThreadIds),
@@ -2403,10 +2455,7 @@ export function useBoard(now: number) {
       aiOrganize.current = ai;
       organizeRead.current = { sig: boardSignature(latest.current, []), ai };
       setOrganize(
-        mergeOrganize(
-          ai,
-          scanStale(latest.current, dismissedOrganize.current)
-        )
+        mergeOrganize(ai, scanStale(latest.current, dismissedOrganize.current))
       );
       setOrganizeAiStatus("done");
     } catch {

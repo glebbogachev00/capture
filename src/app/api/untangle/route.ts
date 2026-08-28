@@ -28,9 +28,13 @@ import { withFallback } from "@/lib/providers";
  */
 
 export const runtime = "nodejs";
-/* Paced batches take longer than a single call by design — see the pacing
-   note below. */
-export const maxDuration = 300;
+/* One batch per request, and every other route in this app is capped at 60
+   seconds for a reason: that is the platform's ceiling. An earlier version
+   paced four batches inside a single request, took eighty to ninety
+   seconds, and was therefore killed every time in production while working
+   perfectly on a developer machine. The pacing now lives on the client,
+   which can wait as long as it likes. */
+export const maxDuration = 60;
 
 const Body = z.object({
   /** The thread the person keeps moving things OUT of. */
@@ -139,84 +143,46 @@ export async function POST(request: Request) {
     return Response.json({ move: [] });
   }
 
-  /* Judged in batches, because the whole thread at once is too big a single
-     request for the fastest provider's per-minute allowance — a full thread
-     came to nearly 9,000 tokens against a 7,000 limit, so every call was
-     rejected and fell through to a weaker model that is markedly worse at
-     this. The batches are small enough to be accepted, and each one still
-     sees the whole of the other thread, which is what the judgement needs.
-
-     A second reason to batch: recall matters more than speed here. The
-     person reviews every row, and a smaller list per call means fewer notes
-     competing for attention in one answer. */
-  const BATCH = 8;
-  /* Just over a third of a minute per batch keeps three batches inside the
-     per-minute token allowance with room to spare. */
-  const PACE_MS = 22_000;
-  const batches: (typeof body.from.frags)[] = [];
-  for (let i = 0; i < body.from.frags.length; i += BATCH)
-    batches.push(body.from.frags.slice(i, i + BATCH));
-
   try {
-    const offered = new Set(body.from.frags.map((f) => f.id));
-    const seen = new Map<string, { id: string; why: string }>();
-    let via: string | undefined;
-    let rename: string | null = null;
-
-    for (const [i, frags] of batches.entries()) {
-      /* Paced, not just split. The fastest provider allows 8,000 tokens a
-         minute and each batch costs around 2,600, so three fired together
-         still exceed it and the rest fall through to a weaker model that is
-         markedly worse at this judgement. Waiting between them keeps every
-         batch on the good model. This runs about once a month, so a minute
-         spent here costs nothing and buys the difference between a list
-         worth reviewing and one worth ignoring. */
-      if (i > 0) await new Promise((r) => setTimeout(r, PACE_MS));
-      const part = { ...body, from: { ...body.from, frags } };
-      const answered = await withFallback(async (tier) => {
-        const { object } = await generateObject({
-          model: tier.model,
-          maxRetries: 0,
-          schema: Result,
-          system: "You are capture's untangler.",
-          prompt: promptFor(part),
-          providerOptions: tier.providerOptions,
-        });
-        return object;
+    const answered = await withFallback(async (tier) => {
+      const { object } = await generateObject({
+        model: tier.model,
+        maxRetries: 0,
+        schema: Result,
+        system: "You are capture's untangler.",
+        prompt: promptFor(body),
+        providerOptions: tier.providerOptions,
       });
-      via = answered.via;
-      for (const m of answered.value.move ?? [])
-        if (offered.has(m.id) && !seen.has(m.id)) seen.set(m.id, m);
-      /* The name only needs deciding once; the first batch that has an
-         opinion is as good as any, since each sees the same two threads. */
-      if (!rename && answered.value.rename?.trim()) rename = answered.value.rename.trim();
-    }
+      return object;
+    });
 
-    const value = { move: [...seen.values()], rename };
-    const move = value.move;
-    /* A rename is only worth offering alongside a real move; on its own it
-       is an opinion about someone's vocabulary. */
+    /* Only ids that were actually offered. A model that invents one would
+       otherwise move a note nobody was asked about. */
+    const offered = new Set(body.from.frags.map((f) => f.id));
+    const move = (answered.value.move ?? []).filter((m) => offered.has(m.id));
+
     /* A rename is only worth offering when it DROPS something the name was
-       listing. "Bugs, Issues and Additions" becoming "Bugs" is the whole
-       point: the label was telling every sort that additions live there
-       while the person had decided they do not. "Capture." becoming
-       "Capture app" is the model renaming for its own sake, and a thread's
-       name is its identity — a pointless suggestion beside a good list of
-       moves makes the whole proposal look careless.
-
-       So the new name has to be shorter and made only of words the old one
-       already had. Anything else is not the fix this is for. */
+       listing. "Bugs, Issues and Additions" becoming "Bugs" is the point:
+       the label was telling every sort that additions live there while the
+       person had decided they do not. "Capture." becoming "Capture app" is
+       the model renaming for its own sake, and a thread's name is its
+       identity. So the new name must be shorter and built only from words
+       the old one already had. */
     const words = (t: string) =>
       t.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(Boolean);
     const old = new Set(words(body.from.name));
-    const suggested = value.rename?.trim() ?? "";
+    const suggested = answered.value.rename?.trim() ?? "";
     const narrows =
       !!suggested &&
       suggested !== body.from.name &&
       suggested.length < body.from.name.length &&
       words(suggested).every((w) => old.has(w));
-    const named = move.length && narrows ? suggested : null;
-    return Response.json({ move, rename: named, via });
+
+    return Response.json({
+      move,
+      rename: narrows ? suggested : null,
+      via: answered.via,
+    });
   } catch {
     /* No proposal today. Nothing is wrong with the board — it just does not
        get asked about until the next time. */
