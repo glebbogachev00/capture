@@ -178,10 +178,24 @@ const TANGLE_EVERY_MS = 20 * 60 * 60 * 1000;
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
-const reasonOf = (error: unknown) =>
-  error instanceof SortError && error.message
-    ? (playgroundError(error.message) as string)
-    : "The sort didn't go through.";
+const reasonOf = (error: unknown) => {
+  /* The server names its own failures precisely — rate limit, spent quota,
+     billing, a rejected key — and those come back as a SortError carrying
+     the text. Anything else means no usable answer arrived at all: the
+     connection dropped, or the request died before it could reply.
+ 
+     That distinction was invisible. Both showed "The sort didn't go
+     through", so a phone on a patchy signal and a rate-limited provider
+     looked identical — and the one thing the person could actually act on,
+     being offline, was the thing the message hid. */
+  if (error instanceof SortError && error.message) {
+    return playgroundError(error.message) as string;
+  }
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return "No connection — nothing was sent. It is saved here; sort it when you are back online.";
+  }
+  return "The request didn't complete — connection or a timeout, not the sorter. Saved as it is.";
+};
 
 /* SortResult, LandedSource, Suggestion, applySorted and computeSuggestion now
    live in @/lib/boardOps — the pure board logic, testable without React. */
