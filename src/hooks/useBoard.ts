@@ -165,6 +165,15 @@ const ORGANIZE_DISMISSED_KEY = "capture:organize-dismissed";
    observations you have already considered is a fact about you, not the
    board. */
 const TANGLE_DISMISSED_KEY = "capture:tangle-dismissed";
+/* When the untangle question was last asked of the model.
+ 
+   The pair it finds changes about monthly, but the check ran on every app
+   open — three or four paced model calls, roughly ten thousand tokens, each
+   time. On a phone opened a dozen times a day that was the single largest
+   consumer of a 200,000-token daily allowance, spent re-deriving an answer
+   that had not changed. Once a day is more often than the question is. */
+const TANGLE_ASKED_KEY = "capture:tangle-asked-at";
+const TANGLE_EVERY_MS = 20 * 60 * 60 * 1000;
 /** When the record last went out to an agent. Per device, never synced. */
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -2087,11 +2096,14 @@ export function useBoard(now: number) {
   const [tangle, setTangle] = useState<TangleProposal | null>(null);
   const [tangleBusy, setTangleBusy] = useState(false);
   const tangleTried = useRef(new Set<string>());
+  const tangleAskedAt = useRef<number | null>(null);
   const tangleDismissed = useRef<string[]>([]);
 
   useEffect(() => {
     void (async () => {
       try {
+        const asked = await get(TANGLE_ASKED_KEY);
+        tangleAskedAt.current = asked ? Number(asked) : null;
         const raw = await get(TANGLE_DISMISSED_KEY);
         tangleDismissed.current = raw ? JSON.parse(raw) : [];
       } catch {
@@ -2113,7 +2125,16 @@ export function useBoard(now: number) {
     const to = board.threads.find((t) => t.id === pair.toId);
     if (!from?.frags.length || !to?.frags.length) return;
 
+    /* Asked at most once a day. Everything above this is free — the pair
+       itself is read off the board's own history with no model involved —
+       so the cheap half still runs every time and only the expensive half
+       is rationed. */
+    const asked = tangleAskedAt.current;
+    if (asked && Date.now() - asked < TANGLE_EVERY_MS) return;
+
     tangleTried.current.add(tangleProposalId(pair));
+    tangleAskedAt.current = Date.now();
+    void set(TANGLE_ASKED_KEY, String(Date.now()));
     setTangleBusy(true);
     void (async () => {
       try {
