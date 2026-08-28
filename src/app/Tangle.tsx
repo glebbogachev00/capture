@@ -106,8 +106,9 @@ export function TangleReview({
       <p className="int-note" style={{ marginBottom: 18 }}>
         You&apos;ve already moved {pair.times}{" "}
         {pair.times === 1 ? "note" : "notes"} from {pair.fromName} to{" "}
-        {pair.toName} by hand. These look like they belong there too — untick
-        anything that doesn&apos;t, then move the rest.
+        {pair.toName}{" "}
+        by hand. These look like they belong there too — untick anything that
+        doesn&apos;t, then move the rest.
       </p>
 
       <div className="tangle-list">

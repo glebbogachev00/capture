@@ -196,10 +196,26 @@ export async function POST(request: Request) {
     const move = value.move;
     /* A rename is only worth offering alongside a real move; on its own it
        is an opinion about someone's vocabulary. */
-    const named =
-      move.length && value.rename && value.rename !== body.from.name
-        ? value.rename
-        : null;
+    /* A rename is only worth offering when it DROPS something the name was
+       listing. "Bugs, Issues and Additions" becoming "Bugs" is the whole
+       point: the label was telling every sort that additions live there
+       while the person had decided they do not. "Capture." becoming
+       "Capture app" is the model renaming for its own sake, and a thread's
+       name is its identity — a pointless suggestion beside a good list of
+       moves makes the whole proposal look careless.
+
+       So the new name has to be shorter and made only of words the old one
+       already had. Anything else is not the fix this is for. */
+    const words = (t: string) =>
+      t.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(Boolean);
+    const old = new Set(words(body.from.name));
+    const suggested = value.rename?.trim() ?? "";
+    const narrows =
+      !!suggested &&
+      suggested !== body.from.name &&
+      suggested.length < body.from.name.length &&
+      words(suggested).every((w) => old.has(w));
+    const named = move.length && narrows ? suggested : null;
     return Response.json({ move, rename: named, via });
   } catch {
     /* No proposal today. Nothing is wrong with the board — it just does not
