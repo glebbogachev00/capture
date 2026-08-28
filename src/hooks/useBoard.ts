@@ -103,6 +103,7 @@ import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
 import { PLAYGROUND, playgroundError } from "@/lib/playground";
 import { degradedTier, type Answered } from "@/lib/degraded";
+import { planTidy, keepProposals, type TidyRead } from "@/lib/tidyChanged";
 import {
   confusedPairs,
   tangleProposalId,
@@ -1984,6 +1985,8 @@ export function useBoard(now: number) {
      a fixed number of tokens per minute, and everything over that was
      answered by a weaker model with nothing on screen to say so. Weeks of
      "it randomly got worse" was a rate limit nobody could see. */
+  /* What Tidy last read, per thread, so the next run can ask about less. */
+  const tidyRead = useRef<TidyRead | null>(null);
   const [answers, setAnswers] = useState<Answered[]>([]);
   const noteVia = useCallback((via?: string | null) => {
     if (!via) return;
@@ -2327,12 +2330,27 @@ export function useBoard(now: number) {
       return;
     }
 
+    /* Only the threads that actually moved.
+ 
+       Reading the whole board takes three to five minutes, and that is a
+       rate limit rather than a tuning problem: 15,000 tokens against an
+       allowance of 8,000 a minute is a two-minute floor before the model
+       thinks. But a person captures one thought and taps Tidy, and
+       eighteen of their nineteen threads are exactly as they were the last
+       time it read them. Re-reading those buys nothing but the wait. */
+    const planned = planTidy(latest.current, tidyRead.current);
     setOrganizeAiStatus("thinking");
     try {
+      const whole = compactBoard(latest.current);
       const res = await fetch("/api/organize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(compactBoard(latest.current)),
+        body: JSON.stringify({
+          ...whole,
+          threads: whole.threads.filter((t) =>
+            planned.send.some((s) => s.id === t.id)
+          ),
+        }),
       });
       if (!res.ok) {
         setOrganizeAiStatus("offline");
@@ -2341,10 +2359,16 @@ export function useBoard(now: number) {
       const out = (await res.json()) as {
         proposals?: RawAiProposal[];
       };
-      const ai = mapAiProposals(
-        compactBoard(latest.current),
-        out.proposals ?? []
-      );
+      /* Mapped against the WHOLE board: a proposal names ids, and the ids
+         have to resolve against everything, not only what was sent. */
+      const fresh = mapAiProposals(whole, out.proposals ?? []);
+      /* What was not re-read still stands. */
+      const allThreadIds = new Set(latest.current.threads.map((t) => t.id));
+      const ai = [
+        ...keepProposals(aiOrganize.current, planned.unchanged, allThreadIds),
+        ...fresh,
+      ];
+      tidyRead.current = planned.read;
       aiOrganize.current = ai;
       organizeRead.current = { sig: boardSignature(latest.current, []), ai };
       setOrganize(
