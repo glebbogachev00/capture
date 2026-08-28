@@ -1272,6 +1272,52 @@ export function useBoard(now: number) {
     };
   };
 
+  /* Summaries wait, and rapid captures collapse into one.
+ 
+     A capture costs a sort of roughly 3,700 tokens; the summary that
+     follows costs another 2,300. The fastest provider allows 8,000 a
+     minute, so two captures in quick succession pushed the second onto a
+     weaker model — which is the intermittent "sometimes it is fine,
+     sometimes it is stupid" that has no pattern from the outside.
+ 
+     The summary is background work: nobody is waiting on it, and rewriting
+     it three times while someone is mid-flow was always wasted anyway. So
+     it is deferred, and a further capture into the same thread resets the
+     timer — three captures in a minute now produce one summary instead of
+     three, and leave the sort with room to run on the good model. */
+  const summaryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const SUMMARY_AFTER_MS = 20_000;
+
+  const scheduleSummary = useCallback((threadId: string) => {
+    const timers = summaryTimers.current;
+    const pending = timers.get(threadId);
+    if (pending) clearTimeout(pending);
+    timers.set(
+      threadId,
+      setTimeout(() => {
+        timers.delete(threadId);
+        /* Against the board as it is when the timer fires, not as it was
+           when the capture landed. */
+        if (!latest.current.threads.some((t) => t.id === threadId)) return;
+        void regenerate(latest.current, threadId);
+      }, SUMMARY_AFTER_MS)
+    );
+    /* `regenerate` is deliberately not a dependency: it is redefined every
+       render, and depending on it would rebuild this scheduler constantly
+       for no gain. The timer reads the latest board through a ref when it
+       fires, so a stale closure cannot commit stale state. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* Nothing half-written left behind when the board unmounts. */
+  useEffect(() => {
+    const timers = summaryTimers.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, []);
+
   /** Rewrite a thread's "Where this stands" from its current fragments. */
   const regenerate = async (board: Board, threadId: string): Promise<Board> => {
     const target = board.threads.find((t) => t.id === threadId);
@@ -1314,8 +1360,7 @@ export function useBoard(now: number) {
     return result;
   };
 
-  /**
-   * Manual re-run from the thread view. Unlike the automatic path, a failure
+  /** Manual re-run from the thread view. Unlike the automatic path, a failure
    * is shown rather than swallowed, so a stale summary is never silent.
    */
   const refreshSummary = async (threadId: string) => {
@@ -1741,7 +1786,7 @@ export function useBoard(now: number) {
           (v): v is string => !!v
         )
       ))
-        void regenerate(filed, id);
+        scheduleSummary(id);
     } catch (error) {
       await saveUnsorted(raw, imgIds, at, reasonOf(error), dictated);
     }
@@ -2245,6 +2290,10 @@ export function useBoard(now: number) {
     } finally {
       warming.current = false;
     }
+    /* `noteVia` only ever appends to a bounded list through a setter, so it
+       is stable in every way that matters here; listing it would rebuild
+       the warm on every render. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runOrganize = async () => {
