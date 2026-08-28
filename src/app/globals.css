@@ -3834,3 +3834,332 @@ body {
 .frag-pic input {
   display: none;
 }
+
+/* THE DAILY WRAP.
+
+   Arrival first: one line above the board, the width of the board, gone
+   after a tap either way. It has to read as an offer rather than a task,
+   so it carries no badge, no count and no colour the rest of the board
+   does not already use. */
+/* The way in. A line rather than a card: no fill, no border, no padding to
+   speak of, so it costs the board about twenty pixels instead of a block.
+   It carries its own name and the day's actual sentence, because a label
+   you have to decode is not an invitation. */
+.wrap-callout {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  row-gap: 2px;
+  column-gap: 10px;
+  width: 100%;
+  /* The record's own tiles are 10px 12px in a 12px radius, spaced 16px from
+     what follows. The call-out is a guest on their page, so it keeps their
+     measurements rather than its own. */
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  background: var(--accent-soft, #e2e9de);
+  border: 1px solid #cddac6;
+  border-radius: 12px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.wrap-callout .wrap-line-label {
+  grid-column: 1;
+}
+.wrap-callout .wrap-line-text {
+  grid-column: 1;
+}
+.wrap-callout svg {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  color: var(--accent);
+}
+
+.wrap-line-link {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  row-gap: 1px;
+  column-gap: 8px;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.wrap-line-label {
+  grid-column: 1;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+/* Two lines, never three. The sentence is the whole invitation, so cutting
+   it mid-joke defeats the point — but it still has to stay a line of text
+   rather than become a paragraph. */
+.wrap-line-text {
+  grid-column: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  line-height: 1.32;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.wrap-line-link svg {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  color: var(--muted);
+  align-self: center;
+}
+.wrap-line-link:hover .wrap-line-text {
+  color: var(--accent);
+}
+/* Read: still there, still opens, just no longer asking. */
+.wrap-line-link.read .wrap-line-label {
+  color: var(--muted);
+}
+.wrap-line-link.read .wrap-line-text {
+  color: var(--muted);
+}
+/* Read: it stays in the line, it just stops asking to be read. */
+.wrap-link.read {
+  color: var(--muted);
+}
+
+/* The reading. It sits in the board's own space, so it needs no scrim, no
+   float and no width of its own. */
+/* Its own page now: no divider to separate it from what is above, because
+   nothing is above it but the way back. */
+.wrap-sheet {
+  position: relative;
+  padding: 2px 0 24px;
+}
+.wrap-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 4px;
+}
+.wrap-close:hover {
+  color: var(--ink);
+}
+.wrap-k {
+  font-family: var(--mono, "IBM Plex Mono", monospace);
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wrap-day {
+  font-family: var(--mono, "IBM Plex Mono", monospace);
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wrap-title {
+  font-family: var(--serif, Fraunces, Georgia, serif);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-size: 26px;
+  margin: 5px 0 16px;
+}
+.wrap-counts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  margin-bottom: 14px;
+}
+.wrap-count {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 9px 9px 8px;
+  min-width: 0;
+}
+.wrap-n {
+  font-family: var(--serif, Fraunces, Georgia, serif);
+  font-size: 22px;
+  line-height: 1.1;
+  margin-top: 1px;
+}
+.wrap-card {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 12px;
+}
+.wrap-bars {
+  margin-top: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+/* The row IS the bar. A separate bar column stole nearly half the width to
+   draw four near-identical lengths, which forced every thread name to
+   truncate — the one thing on the row a person actually reads. As a
+   background fill the proportion costs no width at all, and the name can
+   run as long as it likes. */
+.wrap-bar {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.wrap-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--fill, 0%);
+  background: var(--accent, #2f5d3f);
+  opacity: 0.16;
+  border-radius: 6px;
+}
+.wrap-bar-rest::before {
+  opacity: 0.08;
+}
+.wrap-bar-name {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.35;
+  /* Wraps rather than truncates: a cut-off thread name tells you less than
+     a two-line one. */
+  overflow-wrap: anywhere;
+}
+.wrap-bar-rest .wrap-bar-name {
+  color: var(--muted);
+}
+.wrap-bar-n {
+  position: relative;
+  flex: none;
+  text-align: right;
+}
+.wrap-line-wrap {
+  margin-top: 18px;
+}
+.wrap-line {
+  font-family: var(--serif, Fraunces, Georgia, serif);
+  font-size: 21px;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  margin-top: 7px;
+  text-wrap: balance;
+}
+
+/* The insights are the reading, so they are given quiet — no boxes, no
+   rules down the side, nothing to look at but the words. Four bordered
+   cards stacked on a narrow screen read as freight; four hairlined rows
+   read as a list of observations, which is what they are. */
+.wrap-insights {
+  margin-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+.wrap-insight {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.wrap-insight-v {
+  font-size: 14.5px;
+  line-height: 1.42;
+  margin-top: 3px;
+}
+.wrap-tomorrow {
+  margin-top: 14px;
+  background: var(--accent-soft, #e2e9de);
+  border-color: #cddac6;
+}
+.wrap-tomorrow .wrap-k {
+  color: var(--accent, #2f5d3f);
+}
+
+/* What actually got done. Last, because it is the one part that needs no
+   interpretation — and because ending on it is nicer than ending on a
+   list of what you did not finish. */
+.wrap-done {
+  margin-top: 18px;
+}
+.wrap-done-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wrap-done-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.wrap-done-list svg {
+  flex: none;
+  color: var(--accent, #2f5d3f);
+  transform: translateY(1px);
+}
+.wrap-span {
+  font-family: var(--mono, "IBM Plex Mono", monospace);
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 18px;
+}
+.wrap-count .wrap-k {
+  /* Never let a label wrap: it would drag its number out of line with the
+     other three. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .wrap-counts {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  .wrap-count {
+    padding: 8px 10px;
+  }
+  .wrap-n {
+    font-size: 19px;
+  }
+  .wrap-title {
+    font-size: 23px;
+  }
+  .wrap-line {
+    font-size: 19px;
+  }
+}
+
+/* The one mark on the board that a day is waiting to be read. Not a count —
+   there is only ever one — so a dot is the whole message. */
+.wrap-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 2px;
+}

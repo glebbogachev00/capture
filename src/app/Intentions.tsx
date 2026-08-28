@@ -19,6 +19,8 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { ReportBugForm } from "@/components/ReportBug";
 import { PLAYGROUND } from "@/lib/playground";
 import type { CaptureEntry } from "@/lib/ledger";
+import type { DayWrap } from "@/lib/wrap";
+import { WrapView, WrapCallout } from "./Wrap";
 import {
   heatGrid,
   caughtWords,
@@ -432,10 +434,18 @@ export function RecordScreen({
   onClearRule,
   threads,
   onOpenThread,
+  wrap,
+  onWrapSeen,
 }: {
   ledger: CaptureEntry[];
   now: number;
   onBack: () => void;
+  /* Yesterday's reading. It lives here rather than on the board: the record
+     is already the place days are looked back on, and the heat map right
+     below says which days were worth looking at. On the board it was
+     clutter — a statement wedged into a stack of tools. */
+  wrap?: DayWrap | null;
+  onWrapSeen?: () => void;
   /* The bounded personal model: what the sorter has come to expect, each
      with a way to forget it. */
   rules: LearnedRule[];
@@ -444,6 +454,7 @@ export function RecordScreen({
   threads: { id: string; name: string }[];
   onOpenThread: (id: string) => void;
 }) {
+  const [openWrap, setOpenWrap] = useState(false);
   const stats = recordStats(ledger);
   const grid = heatGrid(ledger, now);
   const months = monthLabels(grid);
@@ -453,6 +464,21 @@ export function RecordScreen({
       month: "long",
       day: "numeric",
     });
+  /* The day is its own page, one step further in: capture → the record →
+     the day. Unfolding it inside the record left the record's own title and
+     figures wrapped around it, which read as an accident rather than a
+     choice. One screen, one thing. */
+  if (wrap && openWrap) {
+    return (
+      <div>
+        <button className="back" onClick={() => setOpenWrap(false)}>
+          ← the record
+        </button>
+        <WrapView wrap={wrap} onSeen={onWrapSeen} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <button className="back" onClick={onBack}>
@@ -462,6 +488,13 @@ export function RecordScreen({
       <div className="tname" style={{ fontSize: 26, marginBottom: 10 }}>
         The record
       </div>
+
+      {/* A call-out, not the reading. The record is a page you come to for
+          a reason; yesterday's wrap announces itself in one line here and
+          opens as its own page, so it never displaces what you came for. */}
+      {wrap && (
+        <WrapCallout wrap={wrap} onOpen={() => setOpenWrap(true)} />
+      )}
 
 
 

@@ -55,3 +55,4 @@ CaptureVault/
 next-env.d.ts
 .next-retake/
 .next-playground/
+.next-lab/

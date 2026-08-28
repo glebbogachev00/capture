@@ -109,7 +109,7 @@ export type HeatCell = {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Local yyyy-mm-dd, the bucketing key — days are the user's days. */
-function dayKey(t: number): string {
+export function dayKey(t: number): string {
   const d = new Date(t);
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;

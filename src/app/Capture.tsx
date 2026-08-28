@@ -15,8 +15,9 @@
    ============================================================ */
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { BrushCleaning, Check, Copy, Image as ImageIcon, Layers, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
+import { BrushCleaning, Check, Copy, Image as ImageIcon, Layers, MessagesSquare, Mic, ChevronRight, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
+
 import { DistillView } from "./Distill";
 import {
   clockServerSnapshot,
@@ -165,6 +166,8 @@ export function Capture() {
     organizeAiStatus,
     runOrganize,
     closeOrganize,
+    wrap,
+    dismissWrap,
     tidyHint,
     acceptOrganize,
     acceptOrganizeAll,
@@ -459,6 +462,10 @@ export function Capture() {
               title="The record — everything said, and what became of it"
             >
               {live.length} open · {data.threads.length} threads
+              {/* The single mark anywhere on the board that yesterday has
+                  been read. No line, no card, no banner: the record is
+                  where days live, and this says one is waiting. */}
+              {wrap && !wrap.seen && <span className="wrap-dot" />}
             </button>
             {!PLAYGROUND && (
               <button
@@ -844,6 +851,8 @@ export function Capture() {
           <RecordScreen
             ledger={data.ledger ?? []}
             now={now}
+            wrap={wrap}
+            onWrapSeen={() => void dismissWrap()}
             onBack={() => setShowRecord(false)}
             rules={learnedRules}
             onClearRule={(key) => void clearRule(key)}

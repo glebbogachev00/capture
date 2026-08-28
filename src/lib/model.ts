@@ -8,6 +8,8 @@
    whole board can be described from one import. */
 import type { CaptureEntry, CorrectionEntry } from "./ledger";
 export type { CaptureEntry, CorrectionEntry };
+import type { DayWrap } from "./wrap";
+export type { DayWrap };
 import { del } from "./storage";
 
 export const KEY = "capture:data:v1";
@@ -144,6 +146,24 @@ export type Principle = {
   updatedAt?: number;
 };
 
+/**
+ * One action, finished.
+ *
+ * Ticking an action removes it from the board — that is the point of the
+ * board, which holds only what is still open. But it used to remove it from
+ * existence too, so a day of getting things done left exactly the same trace
+ * as a day of doing nothing. This is the receipt: append-only, tiny, and
+ * merged like the ledgers so a tick on the phone is not lost to the laptop.
+ */
+export type Completion = {
+  /** The action's own id, so a tick can never be recorded twice. */
+  id: string;
+  text: string;
+  at: number;
+  /** The thread it belonged to, when it had one. */
+  threadId?: string;
+};
+
 export type Board = {
   actions: Action[];
   threads: Thread[];
@@ -157,6 +177,14 @@ export type Board = {
       user accepted, dismissed, renamed, or corrected — the signal a bounded
       personal model will learn from. Same sync semantics as the ledger. */
   corrections: CorrectionEntry[];
+  /** One frozen entry per day that was worth wrapping. Written once and
+      never rewritten, so a past day cannot change under you; same
+      append-only sync semantics as the ledgers. Optional because boards
+      stored before the wrap existed have none. */
+  wraps?: DayWrap[];
+  /** Every action ticked, oldest first. Append-only history, like the
+      ledger: the board forgets finished work, this does not. */
+  completions?: Completion[];
   /** When the history was last started over. The ledger and corrections
       are append-only and union-merged, which means no single copy can ever
       empty them: a wiped hub got its history straight back from the first
@@ -237,6 +265,25 @@ export function hydrate(raw: Partial<Board> | null | undefined): Board {
         typeof e.at === "number" &&
         typeof e.proposalKind === "string" &&
         typeof e.accepted === "boolean"
+    ),
+    /* Same shape of guard as the ledgers. Anything hydrate does not name is
+       dropped from every board that passes through it — including the hub
+       round trip — so a new Board field that is not listed here silently
+       ceases to exist on the next sync. */
+    wraps: (raw?.wraps ?? []).filter(
+      (w) =>
+        w &&
+        typeof w.day === "string" &&
+        typeof w.at === "number" &&
+        typeof w.line === "string" &&
+        !!w.stats
+    ),
+    completions: (raw?.completions ?? []).filter(
+      (c) =>
+        c &&
+        typeof c.id === "string" &&
+        typeof c.at === "number" &&
+        typeof c.text === "string"
     ),
   };
 }

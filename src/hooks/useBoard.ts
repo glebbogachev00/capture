@@ -43,6 +43,15 @@ import { importIntentBackup } from "@/lib/importIntent";
 import { threadBriefs } from "@/lib/threadBrief";
 import { warmDelay } from "@/lib/tidyWarm";
 import {
+  dayStats,
+  mergeCompletions,
+  wrapDue,
+  wrapRequest,
+  pendingWrap,
+  mergeWraps,
+  type DayWrap,
+} from "@/lib/wrap";
+import {
   expiredDays,
   snapshotDay,
   snapshotDays,
@@ -918,6 +927,11 @@ export function useBoard(now: number) {
         corrections: mergeCorrections(
           latest.current.corrections ?? [],
           next.corrections ?? []
+        ),
+        wraps: mergeWraps(latest.current.wraps ?? [], next.wraps ?? []),
+        completions: mergeCompletions(
+          latest.current.completions ?? [],
+          next.completions ?? []
         ),
       };
       const stamped = stampChanges(
@@ -1832,6 +1846,85 @@ export function useBoard(now: number) {
     setOrganizeAiStatus("idle");
   }, []);
 
+  /* THE DAILY WRAP.
+
+     It is not a place in the app. There is no tab, no archive and no badge
+     to clear: yesterday's reading appears once, above the board, the first
+     time Capture is opened on a new day. Look at it or dismiss it; either
+     way it stops asking, and the day stays stored so the next wrap can say
+     "third day running on bugs".
+
+     Writing is one-shot and guarded, because a wrap is frozen once written:
+     a second pass would produce different words for a day the person may
+     already have read. */
+  const [showWrap, setShowWrap] = useState(false);
+  const writingWrap = useRef(false);
+  /* Days this tab has already tried. The stored wrap is the real guard, but
+     it only works once the commit has landed, and this effect re-runs on
+     every board change — so a slow write could be started again from a
+     render in between. Attempting a day at most once per session closes
+     that window, and costs nothing when the stored guard is doing its job. */
+  const wrapTried = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (PLAYGROUND || !loaded || writingWrap.current) return;
+    const board = latest.current;
+    const day = wrapDue(board, board.wraps ?? [], Date.now());
+    if (!day || wrapTried.current.has(day)) return;
+    wrapTried.current.add(day);
+    const body = wrapRequest(board, day, board.wraps ?? []);
+    if (!body) return;
+    writingWrap.current = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/wrap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) return;
+        const out = (await res.json()) as Omit<DayWrap, "day" | "at" | "stats">;
+        if (!out?.line) return;
+        /* Against the board as it is now: the day was already over when the
+           request left, but the wraps list may not have been. */
+        const now = latest.current;
+        if ((now.wraps ?? []).some((w) => w.day === day)) return;
+        const stats = dayStats(now, day);
+        if (!stats) return;
+        const wrap: DayWrap = {
+          day,
+          at: Date.now(),
+          stats,
+          line: out.line,
+          insights: out.insights ?? [],
+          tomorrow: out.tomorrow ?? "",
+          via: out.via,
+        };
+        await commit({ ...now, wraps: [...(now.wraps ?? []), wrap] });
+      } catch {
+        /* No wrap today. The day stays in the ledger, so the next open
+           tries again — nothing is lost by failing here. */
+      } finally {
+        writingWrap.current = false;
+      }
+    })();
+  }, [loaded, data, commit]);
+
+  /** Yesterday's reading, on offer for the whole of today. */
+  const wrap = pendingWrap(latest.current.wraps ?? data.wraps ?? [], now);
+
+  /** Read once: the line stays, it just stops calling attention to itself. */
+  const dismissWrap = useCallback(async () => {
+    setShowWrap(false);
+    const b = latest.current;
+    const ws = b.wraps ?? [];
+    if (!ws.some((w) => !w.seen)) return;
+    await commit({
+      ...b,
+      wraps: ws.map((w) => (w.seen ? w : { ...w, seen: true })),
+    });
+  }, [commit]);
+
   /** One in-flight warm at a time, and the clock since the last one. */
   const warming = useRef(false);
   const lastWarm = useRef(0);
@@ -2212,9 +2305,20 @@ export function useBoard(now: number) {
   const toggleAction = async (id: string) => {
     const a = latest.current.actions.find((x) => x.id === id);
     await dropImages(a?.imgs);
+    /* The board holds what is still open, so a tick takes the row away. It
+       used to take the fact with it: a day of finishing things left the same
+       trace as a day of none. The receipt is kept instead — append-only,
+       keyed by the action's own id so a re-tick cannot double-count. */
+    const done = a
+      ? [
+          ...(latest.current.completions ?? []),
+          { id: a.id, text: a.text, at: stamp(), threadId: a.threadId },
+        ]
+      : latest.current.completions;
     await commit({
       ...latest.current,
       actions: latest.current.actions.filter((x) => x.id !== id),
+      completions: done,
     });
   };
 
@@ -3812,6 +3916,10 @@ export function useBoard(now: number) {
     organizeAiStatus,
     runOrganize,
     closeOrganize,
+    wrap,
+    showWrap,
+    setShowWrap,
+    dismissWrap,
     tidyHint,
     acceptOrganize,
     acceptOrganizeAll,

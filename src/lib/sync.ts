@@ -21,6 +21,7 @@
 
 import type { Board, Frag, Thread } from "./model";
 import { mergeCorrections, mergeLedgers } from "./ledger";
+import { mergeWraps, mergeCompletions } from "./wrap";
 
 export type TombstoneKind =
   | "action"
@@ -137,8 +138,9 @@ export function mergeBoards(a: Board, b: Board): Board {
      history is dropped rather than merged back in. */
   const ea = a.historyEpoch ?? 0;
   const eb = b.historyEpoch ?? 0;
-  const ha = ea >= eb ? a : { ledger: [], corrections: [] };
-  const hb = eb >= ea ? b : { ledger: [], corrections: [] };
+  const empty = { ledger: [], corrections: [], wraps: [], completions: [] };
+  const ha = ea >= eb ? a : empty;
+  const hb = eb >= ea ? b : empty;
   return {
     historyEpoch: Math.max(ea, eb),
     actions: mergeList(a.actions, b.actions, (x, y) => y.at - x.at),
@@ -150,6 +152,10 @@ export function mergeBoards(a: Board, b: Board): Board {
     ledger: mergeLedgers(ha.ledger ?? [], hb.ledger ?? []),
     /* Same for corrections — append-only records, union by id. */
     corrections: mergeCorrections(ha.corrections ?? [], hb.corrections ?? []),
+    /* Wraps are union by day; a dismissal on one device carries. */
+    wraps: mergeWraps(ha.wraps ?? [], hb.wraps ?? []),
+    /* Ticks are union by action id — recorded once, never changed. */
+    completions: mergeCompletions(ha.completions ?? [], hb.completions ?? []),
   };
 }
 
@@ -176,6 +182,8 @@ export function applyTombstones(board: Board, tombstones: Tombstone[]): Board {
     /* Tombstones claim items, never history — the ledgers ride through. */
     ledger: board.ledger,
     corrections: board.corrections,
+    wraps: board.wraps,
+    completions: board.completions,
   };
 }
 
@@ -204,6 +212,32 @@ export function boardSignature(board: Board, tombstones: Tombstone[]): string {
   for (const i of board.intentions) parts.push(`i:${i.id}:${ts(i)}`);
   for (const p of board.principles) parts.push(`p:${p.id}:${p.updatedAt ?? 0}`);
   for (const tb of tombstones) parts.push(`x:${tb.kind}:${tb.id}:${tb.deletedAt}`);
+
+  /* History counts as change. It did not, and the omission was invisible
+     precisely because history is the part no screen shows: a wrap written
+     on the phone, a capture undone on the laptop, or a ticked action moved
+     the hub without moving this signature, so the pull merged correctly and
+     was then thrown away by the adoption gate below it.
+
+     These are summarised rather than listed item by item. The ledger can
+     hold thousands of entries and this runs on every poll, so the parts
+     that can actually differ are what get named:
+       - length, because every list here only grows by union;
+       - the newest id, because the ledger is capped — at the cap a new
+         entry pushes the oldest out and the length stops moving;
+       - undone ids, the one field of a ledger entry that mutates;
+       - each wrap by day and seen, the only mutable history record;
+       - the epoch, which is how history is deliberately thrown away. */
+  const led = board.ledger ?? [];
+  parts.push(`L:${led.length}:${led[0]?.id ?? ""}`);
+  for (const e of led) if (e.undone) parts.push(`Lu:${e.id}`);
+  const cor = board.corrections ?? [];
+  parts.push(`C:${cor.length}:${cor[0]?.id ?? ""}`);
+  const done = board.completions ?? [];
+  parts.push(`K:${done.length}:${done[done.length - 1]?.id ?? ""}`);
+  for (const w of board.wraps ?? []) parts.push(`W:${w.day}:${w.seen ? 1 : 0}`);
+  parts.push(`E:${board.historyEpoch ?? 0}`);
+
   return parts.sort().join("|");
 }
 
@@ -345,6 +379,8 @@ export function stampChanges(
       principles,
       ledger: next.ledger,
       corrections: next.corrections,
+      wraps: next.wraps,
+      completions: next.completions,
     },
     tombstones,
   };
