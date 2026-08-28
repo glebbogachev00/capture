@@ -1,6 +1,41 @@
+import { execSync } from "node:child_process";
 import type { NextConfig } from "next";
 
+/* A name for this exact build, so a running app can tell whether the server
+   has moved on without it.
+ *
+ * The board is a single-page app that people keep open — installed to a home
+ * screen, resumed days later, never actually navigated. Its JavaScript is
+ * whatever was loaded the first time. A phone spent an evening reporting a
+ * bug that had been fixed that morning, against a build from the day before,
+ * and every "it is still broken" after a real fix cost an hour of looking in
+ * the wrong place. An app that cannot tell you it is out of date makes every
+ * bug report unreliable.
+ *
+ * Whatever this resolves to must be IDENTICAL for the client bundle and the
+ * server route within one build, or the two disagree forever and the app
+ * reloads in a loop. The deployment's own identity is used where there is
+ * one; the commit is stable locally; the timestamp is a last resort and is
+ * why the client also refuses to reload twice for the same answer. */
+const BUILD_ID =
+  process.env.VERCEL_DEPLOYMENT_ID ||
+  process.env.VERCEL_URL ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  (() => {
+    try {
+      return execSync("git rev-parse --short HEAD", {
+        cwd: __dirname,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .toString()
+        .trim();
+    } catch {
+      return "dev";
+    }
+  })();
+
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
   /* Pin the workspace root to this project. Next otherwise walks up looking
      for a lockfile, finds one in a parent directory, and traces the whole of
      that tree into the build — which both warns and risks pulling unrelated

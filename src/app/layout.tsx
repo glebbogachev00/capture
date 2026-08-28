@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, IBM_Plex_Mono, Instrument_Sans } from "next/font/google";
+import { FreshBuild } from "@/components/FreshBuild";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import "./globals.css";
 
@@ -62,6 +63,7 @@ export default function RootLayout({
       <body>
         {children}
         <ServiceWorkerRegistrar />
+        <FreshBuild />
       </body>
     </html>
   );

@@ -1,0 +1,17 @@
+# What a CLI deploy must not carry.
+#
+# `vercel deploy` uploads the working directory; the build then happens on
+# Vercel from source, so every local build directory here is dead weight. A
+# preview deploy was uploading 1.1GB — almost a gigabyte of it stale build
+# output from the eval and check runs — and never completed.
+.next
+.next-*
+outputs
+coverage
+
+# Local state and secrets. .env* is already excluded by Vercel, but the lab
+# hub and downloaded backups are board data and have no business leaving
+# this machine.
+*.local
+lab-hub
+sync.json
