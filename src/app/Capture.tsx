@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BrushCleaning, Check, Copy, Image as ImageIcon, Layers, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
+import { TangleCallout, TangleReview } from "./Tangle";
 
 import { DistillView } from "./Distill";
 import {
@@ -130,6 +131,7 @@ export function Capture() {
   /* Grouped view of the Actions tab — a lens, not a structure: nothing is
      written to the board, and toggling off restores the flat list untouched.
      Remembered across visits; read in an effect so hydration stays clean. */
+  const [showTangle, setShowTangle] = useState(false);
   const [groupView, setGroupView] = useState(false);
   useEffect(() => {
     void get(GROUP_VIEW_KEY).then((v) => {
@@ -168,6 +170,9 @@ export function Capture() {
     closeOrganize,
     wrap,
     dismissWrap,
+    tangle,
+    acceptTangle,
+    dismissTangle,
     tidyHint,
     acceptOrganize,
     acceptOrganizeAll,
@@ -985,8 +990,30 @@ export function Capture() {
                 }}
                 onOpenIntention={(id) => setOpenIntention(id)}
               />
+            ) : showTangle && tangle ? (
+              <TangleReview
+                tangle={tangle}
+                fragText={(id) =>
+                  data.threads
+                    .flatMap((t) => t.frags)
+                    .find((f) => f.id === id)?.text ?? ""
+                }
+                onAccept={(ids, rename) => {
+                  setShowTangle(false);
+                  void acceptTangle(ids, rename);
+                }}
+                onBack={() => setShowTangle(false)}
+              />
             ) : (
               <>
+            {tangle && !showTangle && (
+              <TangleCallout
+                tangle={tangle}
+                onOpen={() => setShowTangle(true)}
+                onDismiss={dismissTangle}
+              />
+            )}
+
             <div className="tabs">
               <button
                 className={"tab" + (tab === "actions" ? " on" : "")}

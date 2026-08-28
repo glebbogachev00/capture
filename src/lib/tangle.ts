@@ -113,3 +113,11 @@ export function tangleReason(pair: ConfusedPair): string {
   const n = pair.times;
   return `you have moved ${n} ${n === 1 ? "thing" : "things"} from ${pair.fromName} to ${pair.toName}`;
 }
+
+/** A pair, the notes to move, and the name it suggests instead. */
+export type TangleProposal = {
+  pair: ConfusedPair;
+  move: { id: string; why: string }[];
+  /** A better name for the thread things keep leaving, or null. */
+  rename: string | null;
+};

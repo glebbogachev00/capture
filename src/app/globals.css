@@ -4219,3 +4219,136 @@ body {
   color: var(--muted);
   max-width: 34ch;
 }
+
+/* THE ONE FINDING THAT ARRIVES.
+
+   Everything else Tidy notices waits behind the button. This pair caused a
+   third of all misfiling on a real board, and acting on it changes how
+   everything files afterwards — so it comes and finds you. It can afford
+   the space because it is rare: nineteen threads produced exactly one. */
+.tangle-callout {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  margin: 0 0 12px;
+  background: var(--accent-soft, #e2e9de);
+  border: 1px solid #cddac6;
+  border-radius: 11px;
+  overflow: hidden;
+}
+.tangle-callout-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 10px 12px;
+  font: inherit;
+  color: inherit;
+}
+.tangle-callout-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.tangle-callout-line {
+  font-size: 14.5px;
+  line-height: 1.35;
+}
+.tangle-callout-x {
+  flex: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0 11px;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+.tangle-callout-x:hover {
+  color: var(--ink);
+}
+
+/* The review. Everything ticked to start with: the judging errs towards
+   including too much, because a note left out is invisible while an extra
+   one costs a glance. */
+.tangle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tangle-row,
+.tangle-rename {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 11px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--muted);
+}
+.tangle-row.on,
+.tangle-rename.on {
+  color: var(--ink);
+  border-color: #cddac6;
+  background: var(--accent-soft, #e2e9de);
+}
+.tangle-tick {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border-radius: 5px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+.tangle-row.on .tangle-tick,
+.tangle-rename.on .tangle-tick {
+  border-color: var(--accent);
+}
+.tangle-row-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.tangle-row-text {
+  font-size: 14.5px;
+  line-height: 1.4;
+  /* Three lines is enough to recognise a note; the whole of a long one
+     would turn the list into a wall. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tangle-row-why {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.tangle-rename {
+  margin-top: 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  align-items: center;
+}
+.tangle-do {
+  margin-top: 18px;
+}

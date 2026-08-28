@@ -103,6 +103,11 @@ import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
 import { PLAYGROUND, playgroundError } from "@/lib/playground";
 import {
+  confusedPairs,
+  tangleProposalId,
+  type TangleProposal,
+} from "@/lib/tangle";
+import {
   recordCopiedAt as readRecordCopiedAt,
   recordCopiedAtOnServer,
   stampRecordCopied,
@@ -154,6 +159,10 @@ const FORGOTTEN_RULES_KEY = "capture:forgotten-rules";
    dismissed pair stays dismissed, like a cleared rule. Device-local on
    purpose (v1): the proposal ids embed item ids that are stable per device. */
 const ORGANIZE_DISMISSED_KEY = "capture:organize-dismissed";
+/* Pairs the person has waved away, by `fromId>toId`. Per device: which
+   observations you have already considered is a fact about you, not the
+   board. */
+const TANGLE_DISMISSED_KEY = "capture:tangle-dismissed";
 /** When the record last went out to an agent. Per device, never synced. */
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -1984,6 +1993,140 @@ export function useBoard(now: number) {
       wraps: ws.map((w) => (w.seen ? w : { ...w, seen: true })),
     });
   }, [commit]);
+
+  /* TWO THREADS THAT KEEP BEING CONFUSED.
+ 
+     Measured on a real board, one pair caused a third of all misfiling —
+     not because the boundary was hard but because it was absent: the same
+     kind of thought went to both for months. Three engines failed on it
+     identically, so no amount of sorting skill was going to help. The fix
+     belongs on the board, and only the person can make it.
+ 
+     This is the one finding that arrives unasked. It is rare — a board of
+     nineteen threads produced exactly one pair — and acting on it changes
+     how everything files afterwards, which is what earns the interruption.
+     Everything else Tidy notices stays behind the button. */
+  const [tangle, setTangle] = useState<TangleProposal | null>(null);
+  const [tangleBusy, setTangleBusy] = useState(false);
+  const tangleTried = useRef(new Set<string>());
+  const tangleDismissed = useRef<string[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const raw = await get(TANGLE_DISMISSED_KEY);
+        tangleDismissed.current = raw ? JSON.parse(raw) : [];
+      } catch {
+        tangleDismissed.current = [];
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (PLAYGROUND || !loaded || tangle || tangleBusy) return;
+    const board = latest.current;
+    const pair = confusedPairs(board).find(
+      (p) =>
+        !tangleDismissed.current.includes(tangleProposalId(p)) &&
+        !tangleTried.current.has(tangleProposalId(p))
+    );
+    if (!pair) return;
+    const from = board.threads.find((t) => t.id === pair.fromId);
+    const to = board.threads.find((t) => t.id === pair.toId);
+    if (!from?.frags.length || !to?.frags.length) return;
+
+    tangleTried.current.add(tangleProposalId(pair));
+    setTangleBusy(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/untangle", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          /* Judged in the direction the corrections point: what sits in the
+             thread they keep moving things OUT of. */
+          body: JSON.stringify({
+            from: {
+              name: from.name,
+              frags: from.frags.slice(0, 60).map((f) => ({ id: f.id, text: f.text })),
+            },
+            to: {
+              name: to.name,
+              frags: to.frags.slice(0, 30).map((f) => ({ text: f.text })),
+            },
+            /* The threads' own boundary lines, when they have them. History
+               says what this person HAS done; the boundary says what they
+               have decided to do, and those can point opposite ways — the
+               corrections show notes moving one direction while the stated
+               rule sends them back. What they decided wins. */
+            rule:
+              from.belongs || to.belongs
+                ? [
+                    from.belongs && `"${from.name}": ${from.belongs}`,
+                    to.belongs && `"${to.name}": ${to.belongs}`,
+                  ]
+                    .filter(Boolean)
+                    .join("\n")
+                : undefined,
+          }),
+        });
+        if (!res.ok) return;
+        const out = (await res.json()) as {
+          move?: { id: string; why: string }[];
+          rename?: string | null;
+        };
+        const move = (out.move ?? []).filter((m) =>
+          latest.current.threads
+            .find((t) => t.id === pair.fromId)
+            ?.frags.some((f) => f.id === m.id)
+        );
+        /* Nothing to say is the common and correct answer. */
+        if (!move.length) return;
+        setTangle({ pair, move, rename: out.rename ?? null });
+      } catch {
+        /* Asked again next session; nothing is wrong with the board. */
+      } finally {
+        setTangleBusy(false);
+      }
+    })();
+  }, [loaded, data, tangle, tangleBusy]);
+
+  /** Move everything ticked, and take the new name if one was offered. */
+  const acceptTangle = useCallback(
+    async (fragIds: string[], rename: boolean) => {
+      const t = tangle;
+      if (!t) return;
+      setTangle(null);
+      for (const id of fragIds) await moveFrag(t.pair.fromId, id, t.pair.toId);
+      if (rename && t.rename) renameThread(t.pair.fromId, t.rename);
+      await commit(
+        noteCorrection(latest.current, {
+          proposalKind: "related_suggestion",
+          accepted: true,
+          context: `untangled ${t.pair.fromName} and ${t.pair.toName}`,
+          rule: `Notes like these belong in "${t.pair.toName}", not "${t.pair.fromName}"`,
+        })
+      );
+      setNotice(
+        `Moved ${fragIds.length} to ${t.pair.toName}` +
+          (rename && t.rename ? ` · renamed to ${t.rename}` : "")
+      );
+      setTimeout(() => setNotice(null), 5000);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tangle, commit]
+  );
+
+  /** Waved away: this pair stops being raised on this device. */
+  const dismissTangle = useCallback(() => {
+    if (tangle) {
+      tangleDismissed.current = [
+        ...tangleDismissed.current,
+        tangleProposalId(tangle.pair),
+      ];
+      void set(TANGLE_DISMISSED_KEY, JSON.stringify(tangleDismissed.current));
+    }
+    setTangle(null);
+  }, [tangle]);
 
   /** One in-flight warm at a time, and the clock since the last one. */
   const warming = useRef(false);
@@ -3985,6 +4128,9 @@ export function useBoard(now: number) {
     showWrap,
     setShowWrap,
     dismissWrap,
+    tangle,
+    acceptTangle,
+    dismissTangle,
     tidyHint,
     acceptOrganize,
     acceptOrganizeAll,
