@@ -2096,18 +2096,56 @@ export function useBoard(now: number) {
       const t = tangle;
       if (!t) return;
       setTangle(null);
-      for (const id of fragIds) await moveFrag(t.pair.fromId, id, t.pair.toId);
-      if (rename && t.rename) renameThread(t.pair.fromId, t.rename);
+
+      /* Moved in ONE pass, not by calling the single-note move twenty times.
+         That helper re-summarises both threads after every move — two model
+         calls each — so a batch of twenty-one became forty-two sequential
+         calls: minutes of work, a rate limit hit halfway, and a screen that
+         looks stuck while two of the twenty-one land. The batch does the
+         whole move at once and summarises each thread once at the end. */
+      const taking = new Set(fragIds);
+      const board = latest.current;
+      const from = board.threads.find((x) => x.id === t.pair.fromId);
+      const going = (from?.frags ?? []).filter((f) => taking.has(f.id));
+      if (!going.length && !(rename && t.rename)) return;
+
+      const threads = board.threads.map((x) => {
+        if (x.id === t.pair.fromId) {
+          const left = x.frags.filter((f) => !taking.has(f.id));
+          return {
+            ...x,
+            frags: left,
+            ...(rename && t.rename ? { name: t.rename } : {}),
+          };
+        }
+        if (x.id === t.pair.toId)
+          return {
+            ...x,
+            frags: [...x.frags, ...going].sort((a, b) => a.at - b.at),
+          };
+        return x;
+      });
+
+      /* One correction for the batch. Twenty-one of them would drown the
+         signal the correction ledger exists to carry. */
       await commit(
-        noteCorrection(latest.current, {
-          proposalKind: "related_suggestion",
-          accepted: true,
-          context: `untangled ${t.pair.fromName} and ${t.pair.toName}`,
-          rule: `Notes like these belong in "${t.pair.toName}", not "${t.pair.fromName}"`,
-        })
+        noteCorrection(
+          { ...board, threads },
+          {
+            proposalKind: "related_suggestion",
+            accepted: true,
+            context: `untangled ${t.pair.fromName} and ${t.pair.toName}`,
+            rule: `Notes like these belong in "${t.pair.toName}", not "${t.pair.fromName}"`,
+          }
+        )
       );
+      /* Both accounts of themselves are now wrong: one gained a pile, the
+         other lost one. Once each, after the move. */
+      const after = await regenerate(latest.current, t.pair.toId);
+      if (threads.some((x) => x.id === t.pair.fromId && x.frags.length))
+        await regenerate(after, t.pair.fromId);
       setNotice(
-        `Moved ${fragIds.length} to ${t.pair.toName}` +
+        `Moved ${going.length} to ${t.pair.toName}` +
           (rename && t.rename ? ` · renamed to ${t.rename}` : "")
       );
       setTimeout(() => setNotice(null), 5000);
