@@ -60,10 +60,17 @@ const Body = z.object({
     .max(MAX_CANDIDATES),
 });
 
+/* Candidates are numbered 1..N for the model, not addressed by their real
+   ids. The real ones are composites like "fold_action:eb7qyemt:f12eovu2",
+   and asking a model to echo a random-looking string exactly is a coin
+   flip: the first run came back with ids that matched nothing, every
+   verdict was filtered out, and the route reported an empty result that
+   looked exactly like "the model rejected all of them". A small integer it
+   can copy without thinking removes the whole class of mistake. */
 const Verdicts = z.object({
   verdicts: z.array(
     z.object({
-      id: z.string(),
+      n: z.number().int().describe("the candidate's number, exactly as given"),
       keep: z.boolean(),
       /* Required-but-nullable: Groq's structured output needs every
          property in `required`, and an optional one is dropped from it. */
@@ -91,14 +98,17 @@ Dropping is the normal answer. Most of these are coincidences, and a suggestion 
 
 For each one you keep, write a reason the person can check against their own words — what the two things actually have in common. Never say "both mention X"; a shared word is the thing you were asked to see past, not a reason. If the only reason you can give is a shared phrase, do not keep it.
 
-Return a verdict for every candidate, using its exact id.
+Return a verdict for every candidate, using its number.
 
 The candidates:
 `;
 
-function render(c: z.infer<typeof Body>["candidates"][number]): string {
+function render(
+  c: z.infer<typeof Body>["candidates"][number],
+  n: number
+): string {
   return [
-    `[${c.id}] claim: ${c.kind}`,
+    `${n}. claim: ${c.kind}`,
     `  this: ${clip(c.source, 400)}`,
     `  against: ${clip(c.target, 400)}`,
     c.targetContext
@@ -130,19 +140,33 @@ export async function POST(request: Request) {
       const { object } = await generateObject({
         model: tier.model,
         schema: Verdicts,
-        prompt: PROMPT + body.candidates.map(render).join("\n\n"),
+        prompt:
+          PROMPT +
+          body.candidates.map((c, i) => render(c, i + 1)).join("\n\n"),
         providerOptions: tier.providerOptions,
       });
       return object;
     }, preferredFor("judge"));
 
-    /* A verdict for an id nobody asked about is noise; a candidate with no
-       verdict is dropped, because silence is not agreement. */
-    const asked = new Set(body.candidates.map((c) => c.id));
-    return Response.json({
-      verdicts: value.verdicts.filter((v) => asked.has(v.id)),
-      via,
-    });
+    /* Map numbers back to the ids the caller knows. A verdict for a number
+       nobody offered is noise; a candidate with no verdict is dropped,
+       because silence is not agreement. */
+    const verdicts = value.verdicts
+      .filter((v) => v.n >= 1 && v.n <= body.candidates.length)
+      .map((v) => ({
+        id: body.candidates[v.n - 1].id,
+        keep: v.keep,
+        reason: v.reason,
+      }));
+
+    /* Answering about nothing is a failure, not a unanimous rejection.
+       Reported as one, the caller shows an empty panel and everyone
+       believes the model considered these and said no. */
+    if (!verdicts.length) {
+      return Response.json({ error: "no usable judgement" }, { status: 503 });
+    }
+
+    return Response.json({ verdicts, via });
   } catch {
     /* The caller decides what to do without a judgement — it falls back to
        the strict local scan rather than showing nothing. */
