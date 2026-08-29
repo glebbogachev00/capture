@@ -84,15 +84,15 @@ describe("bestThreadHome", () => {
   it("names the thread a phrase clearly belongs with", () => {
     const b = board({
       threads: [
-        thread("t1", "Coffee Setup", ["Bought an espresso machine for the kitchen"]),
+        thread("t1", "Coffee Setup", ["Bought an espresso machine grinder for the kitchen"]),
         thread("t2", "Renew car insurance", ["The renewal is due this month"]),
       ],
     });
-    const hit = bestThreadHome(b, "buy an espresso machine and a grinder");
+    const hit = bestThreadHome(b, "buy an espresso machine grinder today");
     expect(hit).not.toBeNull();
     expect(hit?.id).toBe("t1");
     expect(hit?.name).toBe("Coffee Setup");
-    expect(hit?.reason).toMatch(/espresso machine/);
+    expect(hit?.reason).toMatch(/espresso machine grinder/);
   });
 
   it("a lone shared word is no home, however distinctive", () => {
@@ -114,6 +114,45 @@ describe("bestThreadHome", () => {
     expect(bestThreadHome(b, "my perfectionism is ruining the release")).toBeNull();
   });
 
+  it("two words are a home only if they were written together", () => {
+    /* The rule this file used to encode was "any two words", and on a real
+       board it was wrong more often than right: seven of eleven proposed
+       homes rested on a two-word match, sending "Publish articles and
+       quotes on X" to "Reducing friction strategy" because both said
+       "articles quotes". Rarity did not separate the good from the bad —
+       every one of those pairs was rare by the engine's own measure. What
+       separates them is whether anyone actually wrote the words side by
+       side: matching strips connectives, so "articles and quotes" becomes
+       "articles quotes" and looks like a compound it never was. */
+    const loose = board({
+      threads: [
+        thread("t1", "Newsletter", ["Collect quotes and articles for later"]),
+      ],
+    });
+    expect(bestThreadHome(loose, "publish articles and quotes on X")).toBeNull();
+
+    /* A compound the person really typed still files. */
+    const compound = board({
+      threads: [
+        thread("t1", "Kitchen", ["The cold brew tap needs cleaning"]),
+      ],
+    });
+    expect(bestThreadHome(compound, "we are out of cold brew again")?.id).toBe("t1");
+  });
+
+  it("two words that name the thread are always enough", () => {
+    /* Naming the destination out loud is the strongest short signal there
+       is, and it is why the bar is not simply three words. */
+    const b = board({
+      threads: [
+        thread("t1", "Kitchen renovation", ["Countertop samples arrived"]),
+      ],
+    });
+    expect(
+      bestThreadHome(b, "Compare water filter options for the kitchen renovation")?.id
+    ).toBe("t1");
+  });
+
   it("returns nothing when nothing on the board shares a phrase", () => {
     const b = board({
       threads: [thread("t1", "Cold brew ratios", ["Brewing coffee darker"])],
@@ -123,10 +162,10 @@ describe("bestThreadHome", () => {
 
   it("takes the strongest thread even when an action phrase-matches too", () => {
     const b = board({
-      threads: [thread("t1", "Coffee Setup", ["espresso machine on the counter"])],
-      actions: [action("a1", "espresso machine maintenance")],
+      threads: [thread("t1", "Coffee Setup", ["espresso machine grinder on the counter"])],
+      actions: [action("a1", "espresso machine grinder maintenance")],
     });
-    const hit = bestThreadHome(b, "buy an espresso machine");
+    const hit = bestThreadHome(b, "buy an espresso machine grinder");
     // Only a thread can be a home, so the action's match is ignored.
     expect(hit?.id).toBe("t1");
   });
@@ -134,26 +173,26 @@ describe("bestThreadHome", () => {
   it("returns the best of several matching threads", () => {
     const b = board({
       threads: [
-        thread("t1", "Coffee Setup", ["The espresso machine arrived"]),
-        thread("t2", "Grinder research", ["The grinder is still on the list"]),
+        thread("t1", "Coffee Setup", ["The espresso machine burr grinder arrived"]),
+        thread("t2", "Grinder research", ["The burr grinder counter is clean"]),
       ],
     });
-    const hit = bestThreadHome(b, "espresso machine and a burr grinder");
-    // Both share a phrase; "espresso machine" outranks "grinder" alone.
+    const hit = bestThreadHome(b, "espresso machine burr grinder counter");
+    // Both clear the three-word bar; the longer run wins.
     expect(hit?.id).toBe("t1");
   });
 
   it("excludes the source id when handed one", () => {
     const b = board({
       threads: [
-        thread("t1", "Coffee Setup", ["espresso machine notes"]),
+        thread("t1", "Coffee Setup", ["espresso machine grinder"]),
         thread("t2", "Renew insurance", ["Nothing in common here"]),
       ],
     });
     // The capture always phrase-matches the item it landed in; handing its
     // id keeps the engine from reporting that item as its own home.
-    expect(bestThreadHome(b, "espresso machine notes", "t1")).toBeNull();
-    expect(bestThreadHome(b, "espresso machine notes", "t9")?.id).toBe("t1");
+    expect(bestThreadHome(b, "espresso machine grinder", "t1")).toBeNull();
+    expect(bestThreadHome(b, "espresso machine grinder", "t9")?.id).toBe("t1");
   });
 });
 
@@ -165,7 +204,7 @@ describe("bestActionDuplicate", () => {
         action("a2", "Call the dentist about the appointment"),
       ],
     });
-    const hit = bestActionDuplicate(b, "buy espresso beans");
+    const hit = bestActionDuplicate(b, "grab espresso beans for the machine");
     expect(hit?.id).toBe("a1");
     expect(hit?.reason).toMatch(/espresso beans/);
   });
@@ -181,6 +220,23 @@ describe("bestActionDuplicate", () => {
     expect(bestActionDuplicate(b, "pick up the espresso grind")).toBeNull();
   });
 
+  it("a shared run is not a duplicate unless most of the shorter task is shared", () => {
+    /* The run alone was claiming, on a real board, that "Create a portfolio
+       for Dom" duplicated "Mention to the parent that Dom has two lessons
+       left" — eleven such claims, none of them real, each offering to
+       delete one of the pair. */
+    const b = board({
+      actions: [action("a1", "Add small sound effects to the demo music")],
+    });
+    expect(
+      bestActionDuplicate(b, "create demo transitions and animations")
+    ).toBeNull();
+    // The same task said twice still lands.
+    expect(
+      bestActionDuplicate(b, "add small sound effects to the demo track")?.id
+    ).toBe("a1");
+  });
+
   it("returns nothing when nothing repeats a phrase", () => {
     const b = board({
       actions: [action("a1", "Buy milk and eggs")],
@@ -193,7 +249,7 @@ describe("bestActionDuplicate", () => {
       actions: [action("a1", "Buy espresso beans for the machine")],
       threads: [thread("t1", "Coffee Setup", ["espresso beans on the counter"])],
     });
-    const hit = bestActionDuplicate(b, "buy espresso beans");
+    const hit = bestActionDuplicate(b, "grab espresso beans for the machine");
     // Only an action can be a duplicate; the thread's match is ignored.
     expect(hit?.id).toBe("a1");
   });
@@ -204,13 +260,13 @@ describe("bestActionDuplicate", () => {
     // duplicate. The older, real counterpart must be the one found.
     const b = board({
       actions: [
-        action("a-new", "Buy espresso beans"),
+        action("a-new", "Buy espresso beans machine"),
         action("a-old", "Buy espresso beans for the machine"),
       ],
     });
-    expect(bestActionDuplicate(b, "buy espresso beans", "a-new")?.id).toBe("a-old");
+    expect(bestActionDuplicate(b, "buy espresso beans machine", "a-new")?.id).toBe("a-old");
     // Without an exclusion the self-match at the front wins.
-    expect(bestActionDuplicate(b, "buy espresso beans")?.id).toBe("a-new");
+    expect(bestActionDuplicate(b, "buy espresso beans machine")?.id).toBe("a-new");
   });
 });
 

@@ -68,16 +68,20 @@ describe("filing — a shared word only counts when it is rare", () => {
     expect(moves(b)).toHaveLength(0);
   });
 
-  it("still files on a rare two-word overlap", () => {
-    /* "espresso machine" is two words, the same length as "three items",
-       and belongs — because almost nothing else on the board says it. */
+  it("still files on a rare three-word overlap", () => {
+    /* Three words, because two turned out not to be evidence. Measured on a
+       real 19-thread board, seven of eleven proposed homes rested on a
+       two-word match and most were coincidence — and rarity did not
+       separate them, since every one of those pairs was rare by the
+       engine's own measure. What remains true is the point this test was
+       always making: a genuine shared subject still files. */
     const b = board([
       thread("career", "Career", [
         frag("f1", "Espresso machine grinder calibration keeps drifting"),
         frag("f2", "Portfolio review went well"),
       ]),
       thread("equip", "Kitchen Equipment", [
-        frag("f3", "Espresso machine settings overview"),
+        frag("f3", "Espresso machine grinder settings overview"),
       ]),
     ]);
     const out = moves(b);
@@ -113,16 +117,16 @@ describe("filing — a shared word only counts when it is rare", () => {
         frag("f2", "Portfolio review went well"),
       ]),
       thread("equip", "Kitchen Equipment", [
-        frag("f3", "Espresso machine settings overview"),
+        frag("f3", "Espresso machine grinder settings overview"),
       ]),
     ]);
     const reason = moves(b)[0].reason;
     /* The claim is about what is already over there, so the quote has to be
        findable over there — quoting the note's own wording turned a
-       two-word overlap into a sentence the thread had never said. */
+       shared phrase into a sentence the thread had never said. */
     const quoted = reason.match(/"([^"]+)"/)?.[1] ?? "";
     expect(quoted).toBeTruthy();
-    expect("Kitchen Equipment Espresso machine settings overview".toLowerCase())
+    expect("Kitchen Equipment Espresso machine grinder settings overview".toLowerCase())
       .toContain(quoted.toLowerCase());
   });
 });

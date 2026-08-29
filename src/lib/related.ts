@@ -264,7 +264,41 @@ type Hit = {
   score: number;
   fragId?: string;
   phrase?: string;
+  /** The phrase is the thread's own name, not something buried in its prose. */
+  named?: boolean;
+  /** The matched item's text, for checks that need the words as written. */
+  raw?: string;
 };
+
+
+/**
+ * Were these words written next to each other, or only made neighbours by
+ * throwing the small words away?
+ *
+ * Matching strips connectives, so "Publish articles and quotes on X" offers
+ * up "articles quotes" as a contiguous phrase — and on a real board that is
+ * where the bad claims came from: "articles quotes", "increase efficiency"
+ * (from "increase the efficiency"), "feedback slow". None of those are
+ * things anyone said. The pairs that were right had been written as
+ * written: "cold brew", "kitchen renovation", "espresso machine".
+ *
+ * So for the shortest phrases — two words, where there is no length to lean
+ * on — the words have to be adjacent in the text as the person typed it,
+ * on BOTH sides. A compound survives; two words that merely shared a
+ * sentence do not.
+ */
+function writtenTogether(phrase: string, text: string): boolean {
+  const want = phrase.split(" ");
+  const raw = tokens(text);
+  for (let i = 0; i + want.length <= raw.length; i++) {
+    let ok = true;
+    for (let j = 0; j < want.length; j++) {
+      if (!stems(raw[i + j]).includes(want[j])) { ok = false; break; }
+    }
+    if (ok) return true;
+  }
+  return false;
+}
 
 function hitsFor(board: Board, text: string, excludeId?: string): Hit[] {
   const targetWords = contentWords(text);
@@ -340,7 +374,20 @@ function hitsFor(board: Board, text: string, excludeId?: string): Hit[] {
       }
       return false;
     })?.id;
-    hits.push({ kind: "thread", id: t.id, name: NAME(t.name), fragId, ...sig });
+    /* Did the phrase come from the thread's NAME, or from its prose?
+     *
+     * The two are not the same evidence. A capture that says "for the
+     * kitchen renovation" against a thread called "Kitchen renovation" has
+     * named its destination out loud. The same two words found somewhere
+     * inside a thread's notes is coincidence more often than not — every
+     * bad claim measured on a real board came from prose ("articles
+     * quotes", "feedback slow", "development necessary"), and every claim
+     * that was right either named the thread or ran to three words. */
+    const named = !!sig.phrase && !!longestSharedRun(
+      contentWords(text),
+      contentWords(spokenText(t.name))
+    )?.startsWith(sig.phrase);
+    hits.push({ kind: "thread", id: t.id, name: NAME(t.name), fragId, named, raw: threadText(t), ...sig });
   }
   for (const i of board.intentions) {
     if (i.id === excludeId) continue;
@@ -375,11 +422,38 @@ function hitsFor(board: Board, text: string, excludeId?: string): Hit[] {
 export function bestThreadHome(
   board: Board,
   text: string,
-  excludeId?: string
+  excludeId?: string,
+  /* Three words, not two.
+   *
+   * A "phrase" here can be as short as two content words, and two words
+   * turned out not to be evidence of anything. Measured against a real
+   * 19-thread board, seven of eleven proposed homes rested on a two-word
+   * match, and most were coincidence: "Publish articles and quotes on X"
+   * was sent to "Reducing friction strategy" because both said "articles
+   * quotes"; "Wire up Capture to the agents I use" was sent to "Bugs,
+   * Issues and Additions" because both said "development necessary". Every
+   * one of the four three-word matches was right.
+   *
+   * So the bar is three, which is also what the capture-time duplicate
+   * banner already settled on for the same reason. A suggestion that is
+   * wrong more often than not is worse than no suggestion: it trains you to
+   * dismiss the whole feature without reading it. */
+  minPhraseWords = 3
 ): RelatedItem | null {
-  const hit = hitsFor(board, text, excludeId).find(
-    (h) => h.kind === "thread" && h.phrase
-  );
+  const hit = hitsFor(board, text, excludeId).find((h) => {
+    if (h.kind !== "thread") return false;
+    const words = h.phrase?.split(" ").length ?? 0;
+    /* Naming the thread is evidence in its own right. */
+    if (h.named) return words >= 2;
+    if (words >= minPhraseWords) return true;
+    /* Two words only count as a compound the person actually wrote — on
+       both sides. */
+    return (
+      words === 2 &&
+      writtenTogether(h.phrase!, text) &&
+      writtenTogether(h.phrase!, h.raw ?? "")
+    );
+  });
   if (!hit) return null;
   return { kind: "thread", id: hit.id, name: hit.name, reason: hit.reason };
 }  /**
@@ -409,11 +483,23 @@ export function bestActionDuplicate(
      always also accused of being a copy of itself. */
   minPhraseWords = 1
 ): RelatedItem | null {
-  const hit = hitsFor(board, text, excludeId).find(
-    (h) =>
-      h.kind === "action" &&
-      (h.phrase?.split(" ").length ?? 0) >= minPhraseWords
-  );
+  const words = contentWords(text);
+  const hit = hitsFor(board, text, excludeId).find((h) => {
+    if (h.kind !== "action") return false;
+    if ((h.phrase?.split(" ").length ?? 0) < minPhraseWords) return false;
+    /* A shared run of words is not the same task twice.
+     *
+     * On a real board the run alone claimed that "Publish articles and
+     * quotes on X" duplicated "Define workflow for agents", and that
+     * "Create a portfolio for Dom" duplicated "Mention to the parent that
+     * Dom has two lessons left" — eleven claims, none of them real, each
+     * offering to delete one of the pair. Raising the run to three words
+     * only cut it to five, still none real, because length was never the
+     * question. The question is how much of the shorter task the two
+     * actually have in common. */
+    const other = board.actions.find((a) => a.id === h.id);
+    return !!other && covers(words, contentWords(other.text), ACTION_DUP_COVERAGE);
+  });
   if (!hit) return null;
   return { kind: "action", id: hit.id, name: hit.name, reason: hit.reason };
 }
@@ -516,9 +602,19 @@ export type FragOverlap = FragDuplicate & {
  */
 const DUP_MIN_WORDS = 3;
 const DUP_COVERAGE = 0.7;
+/* Actions are one line long, so their content-word count is tiny and a
+   single differing verb is a big share of it: "Schedule the dentist
+   appointment" and "Book a dentist appointment" are plainly the same task
+   and share only two words of three. The looser bar is affordable here
+   because coverage is a far stricter test than the contiguous run it sits
+   on top of — measured against a real board, the run alone produced eleven
+   duplicate claims and not one was a duplicate. */
+const ACTION_DUP_COVERAGE = 0.6;
 const DUP_SIZE_RATIO = 0.5;
 
-function sameNote(a: string[], b: string[]): boolean {
+/** How much of the shorter text the two share. The size guard keeps a short
+    text quoted inside a long one from reading as a copy of it. */
+function covers(a: string[], b: string[], threshold: number): boolean {
   const A = new Set(a);
   const B = new Set(b);
   const [small, big] = A.size <= B.size ? [A, B] : [B, A];
@@ -527,7 +623,11 @@ function sameNote(a: string[], b: string[]): boolean {
   if (small.size / big.size < DUP_SIZE_RATIO) return false;
   let shared = 0;
   for (const w of small) if (big.has(w)) shared++;
-  return shared / small.size >= DUP_COVERAGE;
+  return shared / small.size >= threshold;
+}
+
+function sameNote(a: string[], b: string[]): boolean {
+  return covers(a, b, DUP_COVERAGE);
 }
 
 /**

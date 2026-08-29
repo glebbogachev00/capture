@@ -73,14 +73,22 @@ describe("scanBoard — duplicate actions", () => {
     expect(out[0].verb).toBe("Drop duplicate");
   });
 
-  it("rates a two-word overlap medium and a three-word run high", () => {
+  it("ignores a two-word overlap and rates a three-word run high", () => {
+    /* Tidy used to accept two words and file the claim under "medium", on
+       the reasoning that a reviewed list can afford a lower bar than a
+       banner that interrupts. Measured on a real board it could not: seven
+       of eleven proposals rested on two words and most were coincidence, so
+       the list itself became something to dismiss unread. Two words now
+       produce nothing here, which also means these paths only ever emit
+       "high" — the tier survives for the judgement-call proposals that set
+       it explicitly. */
     const two = board({
       actions: [
         act("a1", "Reserve a dentist appointment for Tuesday", 200),
         act("a2", "Book a dentist appointment for Friday", 100),
       ],
     });
-    expect(scanBoard(two, [], FIXTURE_NOW)[0].confidence).toBe("medium");
+    expect(scanBoard(two, [], FIXTURE_NOW)).toHaveLength(0);
 
     const three = board({
       actions: [
@@ -226,7 +234,7 @@ describe("scanBoard — fold an action into a thread", () => {
   it("proposes folding an action that shares a phrase with a thread", () => {
     const b = board({
       actions: [act("a1", "Buy cold brew equipment for the office", 200)],
-      threads: [thread("t1", "Cold brew", [frag("f1", "cold brew experiments going well", 100)])],
+      threads: [thread("t1", "Cold brew", [frag("f1", "cold brew equipment experiments going well", 100)])],
     });
     const out = scanBoard(b, [], FIXTURE_NOW);
     expect(out).toHaveLength(1);
@@ -279,7 +287,7 @@ describe("scanBoard — fold an action into a thread", () => {
        does NOT already hold this note is still a legitimate fold. */
     const b = board({
       actions: [act("a1", "Buy cold brew equipment for the office", 200)],
-      threads: [thread("t1", "Cold brew", [frag("f1", "cold brew experiments going well", 100)])],
+      threads: [thread("t1", "Cold brew", [frag("f1", "cold brew equipment experiments going well", 100)])],
     });
     const folds = scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "fold_action");
     expect(folds).toHaveLength(1);
@@ -316,24 +324,28 @@ describe("scanBoard — no whole-thread merges (the product rule)", () => {
 
 describe("scanBoard — move a fragment to the right thread", () => {
   it("moves a misplaced note to the thread it belongs with", () => {
+    /* The match is with the DESTINATION THREAD's name, not with any one
+       note in it. That distinction is the whole rule: when a fragment
+       overlaps another fragment, "merge" claims it first and moves it
+       anyway. A move is what is left — a note whose subject is a thread
+       that exists, where no single note over there says the same thing. */
     const b = board({
       threads: [
         thread("career", "Career", [
-          frag("fc", "Espresso machine grinder calibration notes", 200),
+          frag("fc", "Espresso machine grinder calibration wobbles during morning service", 200),
           frag("fc2", "Portfolio review went well", 100),
         ]),
-        thread("equip", "Equipment", [
-          frag("fe", "Espresso machine settings overview", 50),
+        thread("equip", "Espresso machine grinder", [
+          frag("fe", "Pressure profile overview", 50),
+          frag("fe2", "Descaling schedule kept slipping", 40),
         ]),
       ],
     });
-    /* The move is one-way: the career fragment is misplaced (its own thread
-       has nothing else on the subject), and the equipment thread keeps its
-       single-fragment home — a lone fragment is a merge's claim, not a
-       move's, so the directions never propose each other. */
     const moves = scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "move_fragment");
     expect(moves).toHaveLength(1);
-    expect(moves[0].confidence).toBe("medium");
+    /* Three shared words, so this is a strong claim rather than one behind
+       "Show more" — the two-word tier no longer reaches here. */
+    expect(moves[0].confidence).toBe("high");
     expect(moves[0].sourceThreadId).toBe("career");
     expect(moves[0].sourceFragId).toBe("fc");
     expect(moves[0].targetId).toBe("equip");
