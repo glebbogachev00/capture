@@ -712,3 +712,77 @@ export function splitProposals(
     medium: proposals.filter((p) => p.confidence === "medium"),
   };
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Sending word-matches to be judged.
+
+   The scan finds shared words, and shared words are a good way to find
+   pairs worth looking at and a bad way to decide. Measured on a real
+   board, the loose bar produced eleven claims and most were coincidence;
+   tightening it to four bought precision by staying quiet, and three of
+   the seven it silenced were correct.
+
+   So these claims stop going to the panel and start going to a model that
+   can read what the notes say. Recall here, precision there. The reason a
+   person eventually reads comes back from the judge too, which is half the
+   value: "both mention small sound effects" is the evidence restated, not
+   a reason.
+   ───────────────────────────────────────────────────────────────────── */
+
+/** The claims that rest on word overlap — the ones that need judging. */
+export function wordMatched(ps: OrganizeProposal[]): OrganizeProposal[] {
+  return ps.filter(
+    (p) => p.origin === "local" && p.kind !== "let_go" && p.kind !== "revisit_intention"
+  );
+}
+
+export type JudgeCandidate = {
+  id: string;
+  kind: string;
+  source: string;
+  target: string;
+  targetContext?: string;
+};
+
+/** What the judge needs to tell a shared subject from a shared word: the
+    text on each side, and what is already sitting in the destination. */
+export function toCandidates(
+  board: Board,
+  ps: OrganizeProposal[]
+): JudgeCandidate[] {
+  return ps.map((p) => {
+    const thread = board.threads.find((t) => t.id === p.targetId);
+    const action = board.actions.find((a) => a.id === p.targetId);
+    return {
+      id: p.id,
+      kind: p.kind,
+      source: p.sourceName,
+      target: thread?.name ?? action?.text ?? p.targetName,
+      targetContext: thread
+        ? (thread.frags ?? [])
+            .slice(0, 3)
+            .map((f) => f.text)
+            .join(" · ")
+            .slice(0, 700)
+        : undefined,
+    };
+  });
+}
+
+export type Verdict = { id: string; keep: boolean; reason: string | null };
+
+/** Keep what survived, and let the judge's reason replace the word-match.
+ 
+    A verdict for a claim nobody offered is ignored, and a claim with no
+    verdict is dropped — silence is not agreement. */
+export function keepJudged(
+  ps: OrganizeProposal[],
+  verdicts: Verdict[]
+): OrganizeProposal[] {
+  const by = new Map(verdicts.map((v) => [v.id, v]));
+  return ps.flatMap((p) => {
+    const v = by.get(p.id);
+    if (!v?.keep) return [];
+    return [{ ...p, reason: v.reason?.trim() || p.reason }];
+  });
+}

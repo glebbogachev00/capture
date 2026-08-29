@@ -140,8 +140,12 @@ import {
 } from "@/lib/ledger";
 import { deriveRules, type LearnedRule } from "@/lib/rules";
 import {
+  keepJudged,
+  scanBoard,
   scanStale,
   threadHoldsNote,
+  toCandidates,
+  wordMatched,
   type OrganizeProposal,
 } from "@/lib/organize";
 import {
@@ -2112,6 +2116,11 @@ export function useBoard(now: number) {
   const tangleTried = useRef(new Set<string>());
   const tangleAskedAt = useRef<number | null>(null);
   const tangleDismissed = useRef<string[]>([]);
+  /* Word-matches that survived the judge, kept against the board they were
+     judged about — asking twice about an unchanged board should not produce
+     two different answers, the same reason the model read is cached. */
+  const judged = useRef<OrganizeProposal[]>([]);
+  const judgedRead = useRef<{ sig: string; kept: OrganizeProposal[] } | null>(null);
   /* Bumped by Tidy to ask for a check on demand. The daily gate exists so
      the app does not interrupt; it should never stop a person who came
      looking. */
@@ -2437,6 +2446,57 @@ export function useBoard(now: number) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Ask the judge which word-matches mean anything, and show the ones
+      that do. Never throws into the caller: no judgement means no extra
+      rows, which is what the panel shows today. */
+  const judgeWordMatches = async () => {
+    const board = latest.current;
+    const sig = boardSignature(board, []);
+    if (judgedRead.current?.sig === sig) {
+      judged.current = judgedRead.current.kept;
+      return;
+    }
+
+    /* Loose on purpose. The strict thresholds exist for claims that talk
+       to a person directly; a candidate the scan never emits is one the
+       judge never gets to keep. */
+    const candidates = wordMatched(
+      scanBoard(board, dismissedOrganize.current, Date.now(), { loose: true })
+    ).slice(0, 14);
+    if (!candidates.length) {
+      judged.current = [];
+      judgedRead.current = { sig, kept: [] };
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/judge", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ candidates: toCandidates(board, candidates) }),
+      });
+      if (!res.ok) return;
+      const { verdicts, via } = await res.json();
+      noteVia(via);
+      const kept = keepJudged(candidates, verdicts ?? []);
+
+      /* Against the board as it is NOW. A capture mid-flight invalidates
+         this rather than inheriting it. */
+      if (boardSignature(latest.current, []) !== sig) return;
+      judged.current = kept;
+      judgedRead.current = { sig, kept };
+      if (!kept.length) return;
+      setOrganize((cur) =>
+        mergeOrganize(
+          [...(cur ?? []), ...kept],
+          scanStale(latest.current, dismissedOrganize.current)
+        )
+      );
+    } catch {
+      /* No judgement, no extra rows. */
+    }
+  };
+
   const runOrganize = async () => {
     /* Tidy also asks about a tangled pair.
  
@@ -2455,6 +2515,29 @@ export function useBoard(now: number) {
        pair is read off the board's own history with no model involved. */
     tangleTried.current.clear();
     setTangleNudge((n) => n + 1);
+
+    /* The word-matches, sent to be judged.
+ 
+       These never reach the panel on their own — scanStale drops them,
+       because on a real board word overlap was wrong more often than right
+       and a suggestion that is usually wrong teaches you to dismiss the
+       panel unread. What the scan is genuinely good at is finding pairs
+       worth LOOKING at, cheaply and instantly, and that is what it does
+       here: a loose pass proposes candidates and a model that can read the
+       notes decides which mean anything.
+ 
+       One request, so its answers land well before the whole-board pass
+       finishes. It runs alongside rather than in front — a judgement that
+       never arrives must not hold up everything else.
+ 
+       Measured on a real board: eight candidates in, two kept, and the
+       reasons came back as reasons ("both address design considerations
+       for the Retake feature") rather than the evidence restated. The same
+       eight sent to a weaker provider kept none, which is why this is
+       routed to the measured-best one and why a failure here shows nothing
+       rather than falling back to the unjudged claims. Nothing extra is
+       exactly what the panel shows today. */
+    void judgeWordMatches();
 
     /* The local scan is shown immediately; the AI results merge in when
        they arrive. Both are read from the LATEST board at their moment, so
@@ -2478,7 +2561,10 @@ export function useBoard(now: number) {
     if (cached && cached.sig === sig) {
       setOrganize(
         mergeOrganize(
-          cached.ai.filter((p) => !dismissedOrganize.current.includes(p.id)),
+          [
+            ...cached.ai.filter((p) => !dismissedOrganize.current.includes(p.id)),
+            ...judged.current.filter((p) => !dismissedOrganize.current.includes(p.id)),
+          ],
           scanStale(latest.current, dismissedOrganize.current)
         )
       );
@@ -2562,7 +2648,10 @@ export function useBoard(now: number) {
       aiOrganize.current = ai;
       organizeRead.current = { sig: boardSignature(latest.current, []), ai };
       setOrganize(
-        mergeOrganize(ai, scanStale(latest.current, dismissedOrganize.current))
+        mergeOrganize(
+          [...ai, ...judged.current],
+          scanStale(latest.current, dismissedOrganize.current)
+        )
       );
       setOrganizeAiStatus("done");
     } catch {
