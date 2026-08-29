@@ -1,5 +1,14 @@
-import { describe, it, expect } from "vitest";
-import { keepJudged, toCandidates, wordMatched, type OrganizeProposal } from "./organize";
+import { describe, it, expect, vi } from "vitest";
+import {
+  judgedForSignature,
+  keepJudged,
+  requestJudgedProposals,
+  toCandidates,
+  wordMatched,
+  type JudgedRead,
+  type OrganizeProposal,
+} from "./organize";
+import { mergeOrganize } from "./organizeAi";
 import { EMPTY } from "./model";
 
 const claim = (over: Partial<OrganizeProposal> = {}): OrganizeProposal => ({
@@ -83,5 +92,97 @@ describe("sending word-matches to be judged", () => {
       [{ id: "fold_action:a1:t1", keep: true, reason: "   " }]
     );
     expect(kept[0].reason).toBe('both mention "small sound effects"');
+  });
+});
+
+const priorRead = (): JudgedRead => ({
+  sig: "board-a",
+  kept: [claim({ id: "fold_action:old:t-old", sourceId: "old", targetId: "t-old" })],
+});
+
+const visibleAfter = (read: JudgedRead | null, sig = "board-b") =>
+  mergeOrganize(judgedForSignature(read, sig), []);
+
+const response = (body: unknown, ok = true) => ({
+  ok,
+  json: async () => body,
+});
+
+describe("judged proposals in the visible organizer", () => {
+  it.each([
+    ["fetch failure", async () => { throw new Error("offline"); }],
+    ["non-OK response", async () => response({}, false)],
+    ["missing verdict payload", async () => response({ via: "groq" })],
+    ["malformed verdict payload", async () => response({ verdicts: "yes" })],
+  ])("never carries board A into board B after %s", async (_name, request) => {
+    const result = await requestJudgedProposals({
+      board: EMPTY,
+      sig: "board-b",
+      cached: priorRead(),
+      candidates: [claim()],
+      currentSig: () => "board-b",
+      request,
+    });
+
+    expect(result.read).toBeNull();
+    expect(visibleAfter(result.read)).toEqual([]);
+  });
+
+  it("never carries board A into board B when the response becomes stale", async () => {
+    const result = await requestJudgedProposals({
+      board: EMPTY,
+      sig: "board-b",
+      cached: priorRead(),
+      candidates: [claim()],
+      currentSig: () => "board-c",
+      request: async () =>
+        response({
+          verdicts: [{ id: claim().id, keep: true, reason: "Same project" }],
+        }),
+    });
+
+    expect(result.read).toBeNull();
+    expect(visibleAfter(result.read)).toEqual([]);
+  });
+
+  it("reuses judged proposals only for the same board signature", async () => {
+    const cached: JudgedRead = { sig: "board-a", kept: [claim()] };
+    const request = vi.fn();
+    const same = await requestJudgedProposals({
+      board: EMPTY,
+      sig: "board-a",
+      cached,
+      candidates: [claim()],
+      currentSig: () => "board-a",
+      request,
+    });
+
+    expect(same.read).toBe(cached);
+    expect(visibleAfter(same.read, "board-a")).toEqual([claim()]);
+    expect(judgedForSignature(same.read, "board-b")).toEqual([]);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("sends at most fourteen candidates to the judge", async () => {
+    const candidates = Array.from({ length: 16 }, (_, i) =>
+      claim({ id: `fold_action:a${i}:t1`, sourceId: `a${i}` })
+    );
+    const sent: unknown[][] = [];
+    const request = vi.fn(async (items: unknown[]) => {
+      sent.push(items);
+      return response({ verdicts: [] });
+    });
+
+    await requestJudgedProposals({
+      board: EMPTY,
+      sig: "board-b",
+      cached: null,
+      candidates,
+      currentSig: () => "board-b",
+      request,
+    });
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(sent[0]).toHaveLength(14);
   });
 });

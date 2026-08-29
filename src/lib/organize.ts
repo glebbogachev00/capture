@@ -771,8 +771,77 @@ export function toCandidates(
 
 export type Verdict = { id: string; keep: boolean; reason: string | null };
 
+export type JudgedRead = { sig: string; kept: OrganizeProposal[] };
+
+type JudgeResponse = {
+  ok: boolean;
+  json: () => Promise<unknown>;
+};
+
+type RequestJudgedInput = {
+  board: Board;
+  sig: string;
+  cached: JudgedRead | null;
+  candidates: OrganizeProposal[];
+  currentSig: () => string;
+  request: (candidates: JudgeCandidate[]) => Promise<JudgeResponse>;
+};
+
+/** Read judged proposals only when they were produced for this exact board. */
+export function judgedForSignature(
+  read: JudgedRead | null,
+  sig: string
+): OrganizeProposal[] {
+  return read?.sig === sig ? read.kept : [];
+}
+
+const isVerdict = (value: unknown): value is Verdict => {
+  if (!value || typeof value !== "object") return false;
+  const verdict = value as Record<string, unknown>;
+  return (
+    typeof verdict.id === "string" &&
+    typeof verdict.keep === "boolean" &&
+    (verdict.reason === null || typeof verdict.reason === "string")
+  );
+};
+
+/** Run the bounded judge request and return state safe to merge visibly. */
+export async function requestJudgedProposals({
+  board,
+  sig,
+  cached,
+  candidates,
+  currentSig,
+  request,
+}: RequestJudgedInput): Promise<{ read: JudgedRead | null; via?: string }> {
+  if (cached?.sig === sig) return { read: cached };
+
+  const bounded = candidates.slice(0, 14);
+  if (!bounded.length) return { read: { sig, kept: [] } };
+
+  try {
+    const response = await request(toCandidates(board, bounded));
+    if (!response.ok) return { read: null };
+
+    const payload = await response.json();
+    if (!payload || typeof payload !== "object") return { read: null };
+    const { verdicts, via } = payload as Record<string, unknown>;
+    if (!Array.isArray(verdicts) || !verdicts.every(isVerdict)) {
+      return { read: null };
+    }
+    if (currentSig() !== sig) return { read: null };
+
+    return {
+      read: { sig, kept: keepJudged(bounded, verdicts) },
+      ...(typeof via === "string" ? { via } : {}),
+    };
+  } catch {
+    return { read: null };
+  }
+}
+
 /** Keep what survived, and let the judge's reason replace the word-match.
- 
+
     A verdict for a claim nobody offered is ignored, and a claim with no
     verdict is dropped — silence is not agreement. */
 export function keepJudged(
