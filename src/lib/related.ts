@@ -481,7 +481,11 @@ export function bestActionDuplicate(
      captures that merely shared a turn of phrase. Worse, a learned rule
      needs exactly two shared words, so the pair that proved a rule was
      always also accused of being a copy of itself. */
-  minPhraseWords = 1
+  minPhraseWords = 1,
+  /* How much of the shorter task must be shared. Lowered to zero when this
+     is generating CANDIDATES for a model to judge rather than claims to
+     show a person: there, recall is the job and precision is the judge's. */
+  coverage = ACTION_DUP_COVERAGE
 ): RelatedItem | null {
   const words = contentWords(text);
   const hit = hitsFor(board, text, excludeId).find((h) => {
@@ -498,7 +502,7 @@ export function bestActionDuplicate(
      * question. The question is how much of the shorter task the two
      * actually have in common. */
     const other = board.actions.find((a) => a.id === h.id);
-    return !!other && covers(words, contentWords(other.text), ACTION_DUP_COVERAGE);
+    return !!other && (coverage <= 0 || covers(words, contentWords(other.text), coverage));
   });
   if (!hit) return null;
   return { kind: "action", id: hit.id, name: hit.name, reason: hit.reason };

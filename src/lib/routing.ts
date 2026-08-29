@@ -57,6 +57,12 @@ export const PREFERRED: Record<string, string | undefined> = {
   /* Same shape of judgement as untangle, same reasoning. */
   organize: "groq",
 
+  /* Deciding whether a word-match means anything is the same kind of
+     judgement as untangle, where the model choice was worth 100% against
+     22-43%. It is also the only thing standing between a coincidence and
+     a suggestion, so it gets the measured-best provider. */
+  judge: "groq",
+
   /* Left on the chain's own order: not measured, and not frequent enough to
      be worth guessing about. */
   distill: undefined,

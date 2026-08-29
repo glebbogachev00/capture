@@ -98,6 +98,28 @@ describe("being asked about a tangled pair", () => {
     expect(accept).toMatch(/\(from\?\.frags \?\? \[\]\)\.length > 0/);
   });
 
+  it("can take every note in the thread, not just the listed ones", () => {
+    /* Caught by looking at the recording, not by any test here: the review
+       said "Merge" and the board said "Moved 22". The judge lists what it
+       is confident about — twenty-two of a larger thread — so ticking
+       every row emptied the review and never the thread, and the merge was
+       unreachable in practice on the one board that needed it. */
+    const accept = source.slice(
+      source.indexOf("const acceptTangle"),
+      source.indexOf("const dismissTangle")
+    );
+    expect(accept).toMatch(/takeAll = false/);
+    expect(accept).toMatch(
+      /takeAll \? \(from\?\.frags \?\? \[\]\)\.map\(\(f\) => f\.id\) : fragIds/
+    );
+  });
+
+  it("tells the review how big the thread actually is", () => {
+    /* The label promised a merge off the wrong number. It compares against
+       the thread's own count now, which the hook has to send. */
+    expect(source).toMatch(/fromFrags: \(from\?\.frags \?\? \[\]\)\.length/);
+  });
+
   it("still holds the daily gate when nobody asked", () => {
     /* The gate is the whole reason the app is not annoying. A nudge lifts
        it; the absence of one must not. */

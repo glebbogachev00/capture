@@ -2223,7 +2223,12 @@ export function useBoard(now: number) {
         );
         /* Nothing to say is the common and correct answer. */
         if (!move.length) return;
-        setTangle({ pair, move, rename });
+        setTangle({
+          pair,
+          move,
+          rename,
+          fromFrags: (from?.frags ?? []).length,
+        });
       } catch {
         /* Give the day back.
  
@@ -2246,7 +2251,20 @@ export function useBoard(now: number) {
 
   /** Move everything ticked, and take the new name if one was offered. */
   const acceptTangle = useCallback(
-    async (fragIds: string[], rename: boolean) => {
+    async (
+      fragIds: string[],
+      rename: boolean,
+      /* Take every note in the thread, not just the ones the model listed.
+ 
+         Without this the merge was unreachable in practice. The judge
+         proposes the notes it is confident about — twenty-two of a larger
+         thread — so "tick everything" emptied the review, never the thread,
+         and the board came back saying "Moved 22" while both names stayed
+         in the list. The person who has already moved notes between these
+         two threads seven times by hand is not asking about twenty-two of
+         them. */
+      takeAll = false
+    ) => {
       const t = tangle;
       if (!t) return;
       setTangle(null);
@@ -2257,9 +2275,11 @@ export function useBoard(now: number) {
          calls: minutes of work, a rate limit hit halfway, and a screen that
          looks stuck while two of the twenty-one land. The batch does the
          whole move at once and summarises each thread once at the end. */
-      const taking = new Set(fragIds);
       const board = latest.current;
       const from = board.threads.find((x) => x.id === t.pair.fromId);
+      const taking = new Set(
+        takeAll ? (from?.frags ?? []).map((f) => f.id) : fragIds
+      );
       const going = (from?.frags ?? []).filter((f) => taking.has(f.id));
       if (!going.length && !(rename && t.rename)) return;
 

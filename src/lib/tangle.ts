@@ -120,4 +120,13 @@ export type TangleProposal = {
   move: { id: string; why: string }[];
   /** A better name for the thread things keep leaving, or null. */
   rename: string | null;
+  /** How many notes the source thread holds in total.
+ 
+     Not the same as `move.length`, and the difference is the whole reason
+     this field exists: the review screen called it a merge when every
+     PROPOSED row was ticked, while the board only absorbs the thread when
+     every note in it actually leaves. The model proposed twenty-two of a
+     larger thread, the button said "Merge", and the board said "Moved 22"
+     — the label promised something the change did not do. */
+  fromFrags: number;
 };

@@ -72,10 +72,10 @@ export function TangleReview({
   tangle: TangleProposal;
   /** The note itself, so the person judges the words and not a summary. */
   fragText: (id: string) => string;
-  onAccept: (fragIds: string[], rename: boolean) => void;
+  onAccept: (fragIds: string[], rename: boolean, takeAll?: boolean) => void;
   onBack: () => void;
 }) {
-  const { pair, move, rename } = tangle;
+  const { pair, move, rename, fromFrags } = tangle;
   const [picked, setPicked] = useState<Set<string>>(
     () => new Set(move.map((m) => m.id))
   );
@@ -90,7 +90,13 @@ export function TangleReview({
      stops existing. That is a bigger thing than moving some notes, and the
      button has to say so before it is pressed rather than the notice
      explaining it afterwards. */
-  const merging = picked.size > 0 && picked.size === move.length;
+  const merging = picked.size > 0 && picked.size === fromFrags;
+  /* The judge lists what it is confident about, which on a real thread is
+     most of it and not all of it. Someone who has moved notes between
+     these two threads seven times by hand is asking about the thread, not
+     about the confident subset — so the rest is one tap away rather than
+     unreachable. */
+  const rest = fromFrags - move.length;
 
   const toggle = (id: string) =>
     setPicked((cur) => {
@@ -179,6 +185,16 @@ export function TangleReview({
               : `Move ${picked.size} to ${pair.toName}`}
         </button>
       </div>
+
+      {rest > 0 && (
+        <button
+          className="tangle-all"
+          onClick={() => onAccept([], takeName, true)}
+        >
+          Or merge the whole thread — {rest} more{" "}
+          {rest === 1 ? "note" : "notes"} not listed above
+        </button>
+      )}
     </div>
   );
 }

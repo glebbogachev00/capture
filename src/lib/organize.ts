@@ -321,11 +321,35 @@ export function scanStale(
  *     and a move beats an action extraction.
  *   - A dismissed proposal (by id) never reappears.
  */
+/** How the scan is being used. */
+export type ScanMode = {
+  /* Generate CANDIDATES for a model to judge, not claims to show a person.
+ 
+     The strict thresholds exist because word overlap talking directly to
+     someone has to be right — measured on a real board, the loose bar was
+     wrong more often than not, and a suggestion that is usually wrong
+     teaches you to dismiss the whole panel unread.
+ 
+     But those same thresholds are the wrong ones when something downstream
+     can read context and decide. There, being quiet is the failure: a
+     candidate the scan never emits is one the model never gets to keep.
+     Recall is this pass's job and precision is the judge's, so the bar
+     drops and the volume goes up — on the board that produced the numbers
+     above, eleven candidates instead of four. */
+  loose?: boolean;
+};
+
 export function scanBoard(
   board: Board,
   dismissed: Iterable<string> = [],
-  now: number = Date.now()
+  now: number = Date.now(),
+  mode: ScanMode = {}
 ): OrganizeProposal[] {
+  /* Two words is a candidate; three is a claim. And a duplicate candidate
+     skips the coverage test entirely — deciding whether two tasks are the
+     same task is exactly what the judge is for. */
+  const minPhrase = mode.loose ? 2 : 3;
+  const dupCoverage = mode.loose ? 0 : undefined;
   const dropped = new Set(dismissed);
   const freq = threadFrequency(board);
   const out: OrganizeProposal[] = [];
@@ -335,7 +359,7 @@ export function scanBoard(
   /* Duplicate actions — same task twice. The newer action is the copy. */
   for (const a of board.actions) {
     if (a.faded || a.done) continue;
-    const dup = bestActionDuplicate(board, actionText(a), a.id);
+    const dup = bestActionDuplicate(board, actionText(a), a.id, 1, dupCoverage);
     if (!dup) continue;
     const target = board.actions.find((x) => x.id === dup.id);
     if (!target || target.faded) continue;
@@ -426,7 +450,7 @@ export function scanBoard(
   /* Fold an action into the thread it clearly belongs with. */
   for (const a of board.actions) {
     if (a.faded || a.done || dupClaimed.has(a.id)) continue;
-    const hit = bestThreadHome(board, actionText(a), a.id);
+    const hit = bestThreadHome(board, actionText(a), a.id, minPhrase);
     if (!hit) continue;
     /* A fold-back is never a fold: extraction leaves the note in place, so
        an extracted action phrase-matches the very fragment it came from —
@@ -465,7 +489,7 @@ export function scanBoard(
     if ((t.frags || []).length < 2) continue;
     for (const f of t.frags || []) {
       if (fragClaimed.has(f.id)) continue;
-      const home = bestThreadHome(board, f.text, t.id);
+      const home = bestThreadHome(board, f.text, t.id, minPhrase);
       if (!home) continue;
       if (sharedPhrase(f.text, threadTextWithout(board, t.id, f.id))) continue;
       const phrase = sharedPhrase(f.text, threadOwnTextById(board, home.id));
@@ -517,7 +541,7 @@ export function scanBoard(
         )
       );
       if (own.some((w) => others.has(w))) continue;
-      if (bestThreadHome(board, f.text, t.id)) continue;
+      if (bestThreadHome(board, f.text, t.id, minPhrase)) continue;
       fragClaimed.add(f.id);
       out.push({
         id: `split_fragment:${f.id}`,

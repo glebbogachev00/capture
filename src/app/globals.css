@@ -4386,3 +4386,25 @@ body {
   color: var(--muted);
   cursor: default;
 }
+
+/* The quieter of the two ways out of an untangle review: take the notes the
+   judge listed, or take the thread. The second is the bigger change, so it
+   is the smaller control — a line of text under the button rather than a
+   second button competing with it. */
+.tangle-all {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.tangle-all:hover {
+  color: var(--ink);
+}
