@@ -95,5 +95,17 @@ export const ROUTING_RULE =
   "subject — leave `also` empty. So is a list of steps toward a single goal.\n" +
   "- Empty is the normal answer. Most captures are about one thing, and a " +
   "split that was not really there is worse than no split at all: it tears a " +
-  "sentence in half and files the halves apart.\n";
+  "sentence in half and files the halves apart.\n" +
+  "- Splitting does not change how the PRIMARY is chosen. Go back through " +
+  "the threads one at a time and apply the same subject test to the primary " +
+  "share, exactly as if `also` were empty. Measured on a real board, three " +
+  "splits in five got the further subject right and then invented a thread " +
+  "for the primary that an existing thread already covered.\n" +
+  "- Never name a thread after the SHAPE of the capture. \"Multi-thread " +
+  "capture\", \"Multi-thread storage\", \"Two subjects\", \"Split note\" are " +
+  "descriptions of what you are doing with the text, not subjects anyone " +
+  "will ever look for. The same goes for naming a thread after the app\'s " +
+  "own mechanics — filing, sorting, threads, splitting — when the capture is " +
+  "a request about the app: that is a note about building the app, and it " +
+  "belongs in the thread that already collects those.\n";
 
