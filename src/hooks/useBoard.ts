@@ -2263,32 +2263,60 @@ export function useBoard(now: number) {
       const going = (from?.frags ?? []).filter((f) => taking.has(f.id));
       if (!going.length && !(rename && t.rename)) return;
 
-      const threads = board.threads.map((x) => {
-        if (x.id === t.pair.fromId) {
-          const left = x.frags.filter((f) => !taking.has(f.id));
-          return {
-            ...x,
-            frags: left,
-            ...(rename && t.rename ? { name: t.rename } : {}),
-          };
-        }
-        if (x.id === t.pair.toId)
-          return {
-            ...x,
-            frags: [...x.frags, ...going].sort((a, b) => a.at - b.at),
-          };
-        return x;
-      });
+      /* Taking every note is a merge, whatever it was called on the way in.
+ 
+         The app does not merge threads on its own — not on shared words,
+         not on a model's opinion — and that rule stands. This one case is
+         different in kind: the pair was raised because the person had
+         already moved notes between these two threads by hand, several
+         times, and they have just agreed to move the rest. Leaving the
+         emptied thread behind would keep the name that caused the
+         confusion sitting in the list, where the sorter reads it and files
+         into it again. The clutter this removes is the clutter that was
+         making everything else file wrongly. */
+      const emptied =
+        (from?.frags ?? []).length > 0 &&
+        (from?.frags ?? []).every((f) => taking.has(f.id));
+
+      const threads = board.threads
+        .map((x) => {
+          if (x.id === t.pair.fromId) {
+            const left = x.frags.filter((f) => !taking.has(f.id));
+            return {
+              ...x,
+              frags: left,
+              ...(rename && t.rename ? { name: t.rename } : {}),
+            };
+          }
+          if (x.id === t.pair.toId)
+            return {
+              ...x,
+              frags: [...x.frags, ...going].sort((a, b) => a.at - b.at),
+            };
+          return x;
+        })
+        .filter((x) => !(emptied && x.id === t.pair.fromId));
+
+      /* Actions remember the thread they arrived with, and that thread is
+         about to stop existing. They follow the notes rather than becoming
+         orphans pointing at nothing. */
+      const actions = emptied
+        ? board.actions.map((a) =>
+            a.threadId === t.pair.fromId ? { ...a, threadId: t.pair.toId } : a
+          )
+        : board.actions;
 
       /* One correction for the batch. Twenty-one of them would drown the
          signal the correction ledger exists to carry. */
       await commit(
         noteCorrection(
-          { ...board, threads },
+          { ...board, threads, actions },
           {
             proposalKind: "related_suggestion",
             accepted: true,
-            context: `untangled ${t.pair.fromName} and ${t.pair.toName}`,
+            context: emptied
+              ? `merged ${t.pair.fromName} into ${t.pair.toName}`
+              : `untangled ${t.pair.fromName} and ${t.pair.toName}`,
             rule: `Notes like these belong in "${t.pair.toName}", not "${t.pair.fromName}"`,
           }
         )
@@ -2299,8 +2327,12 @@ export function useBoard(now: number) {
       if (threads.some((x) => x.id === t.pair.fromId && x.frags.length))
         await regenerate(after, t.pair.fromId);
       setNotice(
-        `Moved ${going.length} to ${t.pair.toName}` +
-          (rename && t.rename ? ` · renamed to ${t.rename}` : "")
+        emptied
+          ? `Merged ${t.pair.fromName} into ${t.pair.toName} · ${going.length} ${
+              going.length === 1 ? "note" : "notes"
+            }`
+          : `Moved ${going.length} to ${t.pair.toName}` +
+            (rename && t.rename ? ` · renamed to ${t.rename}` : "")
       );
       setTimeout(() => setNotice(null), 5000);
     },

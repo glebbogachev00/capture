@@ -61,6 +61,43 @@ describe("being asked about a tangled pair", () => {
     expect(organize).toMatch(/tangleTried\.current\.clear\(\)/);
   });
 
+  it("absorbs the old thread when every note leaves it", () => {
+    /* The app refuses to merge threads on shared words or a model's
+       opinion, and that rule stands. This case is different in kind: the
+       pair was raised because the person had already moved notes between
+       these two threads by hand, and they have just agreed to move the
+       rest. Leaving the emptied thread behind keeps the name that caused
+       the confusion in the list, where the sorter reads it and files into
+       it again. */
+    const accept = source.slice(
+      source.indexOf("const acceptTangle"),
+      source.indexOf("const dismissTangle")
+    );
+    expect(accept).toMatch(/const emptied =/);
+    expect(accept).toMatch(/\.filter\(\(x\) => !\(emptied && x\.id === t\.pair\.fromId\)\)/);
+  });
+
+  it("takes the actions with it rather than orphaning them", () => {
+    /* An action remembers the thread it arrived with. Deleting the thread
+       without repointing leaves it pointing at nothing. */
+    const accept = source.slice(
+      source.indexOf("const acceptTangle"),
+      source.indexOf("const dismissTangle")
+    );
+    expect(accept).toMatch(/a\.threadId === t\.pair\.fromId \? \{ \.\.\.a, threadId: t\.pair\.toId \}/);
+    expect(accept).toMatch(/\{ \.\.\.board, threads, actions \}/);
+  });
+
+  it("only absorbs when the thread actually had notes to lose", () => {
+    /* An already-empty thread is not something the person just agreed to
+       merge, and deleting it here would be a change nobody asked for. */
+    const accept = source.slice(
+      source.indexOf("const acceptTangle"),
+      source.indexOf("const dismissTangle")
+    );
+    expect(accept).toMatch(/\(from\?\.frags \?\? \[\]\)\.length > 0/);
+  });
+
   it("still holds the daily gate when nobody asked", () => {
     /* The gate is the whole reason the app is not annoying. A nudge lifts
        it; the absence of one must not. */

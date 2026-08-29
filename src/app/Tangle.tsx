@@ -86,6 +86,12 @@ export function TangleReview({
      because it is the thread's identity. */
   const [takeName, setTakeName] = useState(false);
 
+  /* Ticking everything is a merge: nothing is left in the old thread, so it
+     stops existing. That is a bigger thing than moving some notes, and the
+     button has to say so before it is pressed rather than the notice
+     explaining it afterwards. */
+  const merging = picked.size > 0 && picked.size === move.length;
+
   const toggle = (id: string) =>
     setPicked((cur) => {
       const next = new Set(cur);
@@ -152,15 +158,25 @@ export function TangleReview({
         </button>
       )}
 
+      {merging && (
+        <p className="int-note" style={{ marginTop: 18, marginBottom: 0 }}>
+          Every note is moving, so {pair.fromName} will be absorbed into{" "}
+          {pair.toName} and stop existing. Anything filed under it comes
+          along. Undo puts it back.
+        </p>
+      )}
+
       <div className="tangle-do">
         <button
           className="primary"
           disabled={!picked.size && !(rename && takeName)}
           onClick={() => onAccept([...picked], takeName)}
         >
-          {picked.size
-            ? `Move ${picked.size} to ${pair.toName}`
-            : "Rename only"}
+          {!picked.size
+            ? "Rename only"
+            : merging
+              ? `Merge ${pair.fromName} into ${pair.toName}`
+              : `Move ${picked.size} to ${pair.toName}`}
         </button>
       </div>
     </div>
