@@ -2112,6 +2112,11 @@ export function useBoard(now: number) {
   const tangleTried = useRef(new Set<string>());
   const tangleAskedAt = useRef<number | null>(null);
   const tangleDismissed = useRef<string[]>([]);
+  /* Bumped by Tidy to ask for a check on demand. The daily gate exists so
+     the app does not interrupt; it should never stop a person who came
+     looking. */
+  const [tangleNudge, setTangleNudge] = useState(0);
+  const tangleHandled = useRef(0);
 
   useEffect(() => {
     void (async () => {
@@ -2144,8 +2149,14 @@ export function useBoard(now: number) {
        so the cheap half still runs every time and only the expensive half
        is rationed. */
     const asked = tangleAskedAt.current;
-    if (asked && Date.now() - asked < TANGLE_EVERY_MS) return;
+    const askedFor = tangleNudge > tangleHandled.current;
+    if (!askedFor && asked && Date.now() - asked < TANGLE_EVERY_MS) return;
+    tangleHandled.current = tangleNudge;
 
+    /* Claim the day BEFORE the work, so two renders cannot both start it —
+       but remember what the clock said, because a failure has to give it
+       back. */
+    const askedBefore = tangleAskedAt.current;
     tangleTried.current.add(tangleProposalId(pair));
     tangleAskedAt.current = Date.now();
     void set(TANGLE_ASKED_KEY, String(Date.now()));
@@ -2214,12 +2225,24 @@ export function useBoard(now: number) {
         if (!move.length) return;
         setTangle({ pair, move, rename });
       } catch {
-        /* Asked again tomorrow; nothing is wrong with the board. */
+        /* Give the day back.
+ 
+           The clock was started before the work, and this used to leave it
+           started — so an attempt that never produced a proposal still
+           cost twenty hours of silence. While the providers were out of
+           quota every attempt failed, which meant the callout could not
+           appear at all: a board with seven corrections between the same
+           two threads went a week without ever being asked about them. The
+           symptom read as "it never suggests anything", and the cause was
+           this line doing nothing. */
+        tangleAskedAt.current = askedBefore;
+        if (askedBefore === null) void del(TANGLE_ASKED_KEY);
+        else void set(TANGLE_ASKED_KEY, String(askedBefore));
       } finally {
         setTangleBusy(false);
       }
     })();
-  }, [loaded, data, tangle, tangleBusy]);
+  }, [loaded, data, tangle, tangleBusy, tangleNudge]);
 
   /** Move everything ticked, and take the new name if one was offered. */
   const acceptTangle = useCallback(
@@ -2363,6 +2386,24 @@ export function useBoard(now: number) {
   }, []);
 
   const runOrganize = async () => {
+    /* Tidy also asks about a tangled pair.
+ 
+       Two threads that keep swallowing each other's notes is the largest
+       clutter a board can have, and the scan below is forbidden to propose
+       it — merging threads is the one restructuring this app does not do
+       on its own. So the only thing that ever raises it is the daily
+       callout, which is easy to miss and, until now, was silenced for
+       twenty hours by its own failures. A board with seven corrections
+       between the same two threads went a week without being asked.
+ 
+       Tidy is the button people press when the board feels wrong. Pressing
+       it should therefore be a way to ask, not just a way to wait: the
+       daily gate is there so the app does not interrupt, and it has no
+       business stopping someone who came looking. Free either way — the
+       pair is read off the board's own history with no model involved. */
+    tangleTried.current.clear();
+    setTangleNudge((n) => n + 1);
+
     /* The local scan is shown immediately; the AI results merge in when
        they arrive. Both are read from the LATEST board at their moment, so
        a board change mid-fetch is never overwritten by a stale snapshot. */
