@@ -696,7 +696,7 @@ export function Capture() {
         {busy && (
           <div className="status">
             <span className="pulse" />
-            {busy}…
+            <BusyLine key={busy} label={busy} />
           </div>
         )}
         {/* The same note, but for work that is not in anyone's way. It says
@@ -1575,6 +1575,56 @@ function Row({
  * Photos come back from IndexedDB the same way fragment images do, so a
  * cover picked on the phone appears on the Mac once its bytes sync.
  */
+/**
+ * The wait, said like it means it.
+ *
+ * "Sorting…" for eight seconds reads as stuck; the same eight seconds
+ * narrated reads as working. Tidy set the pattern — say what is actually
+ * happening, in order, claiming no progress the request cannot know — and
+ * this brings the two slow capture waits into it. Every line is true
+ * whenever it appears: the engine really is doing roughly this, and none
+ * of them says a step has finished.
+ *
+ * Faster cadence than Tidy's, because a sort is seconds rather than a
+ * minute and a half — a line that never gets read is not fun, it is
+ * furniture. Anything not listed here keeps its plain label.
+ */
+const BUSY_LINES: Record<string, string[]> = {
+  Sorting: [
+    "Reading it back.",
+    "Deciding what this is — a task, a thought, or a declaration.",
+    "Weighing which thread it belongs with.",
+    "A new thread is the expensive answer, so it argues itself out of one first.",
+    "Taking its time — long thoughts take longer.",
+    "Still on it. The words are safe either way.",
+  ],
+  "Finding the intention": [
+    "Reading it back.",
+    "Listening for the state underneath the words.",
+    "Writing it as already true.",
+    "Naming what pulls against it — that part takes the longest.",
+    "Still on it. You read everything before it lands.",
+  ],
+};
+const BUSY_EVERY_MS = 3_500;
+
+function BusyLine({ label }: { label: string }) {
+  const lines = BUSY_LINES[label];
+  /* The label is the reset: a new job remounts the counter via key below,
+     so no state needs writing inside the effect. */
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (!lines) return;
+    const t = setInterval(
+      () => setI((n) => Math.min(n + 1, lines.length - 1)),
+      BUSY_EVERY_MS
+    );
+    return () => clearInterval(t);
+  }, [lines]);
+  if (!lines) return <>{label}…</>;
+  return <>{lines[i]}</>;
+}
+
 function CoverBand({ cover }: { cover: Cover }) {
   /* Memory first: a cover seen once renders on the first frame of every
      later mount, instead of blanking while IndexedDB answers — which it
