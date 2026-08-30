@@ -89,7 +89,6 @@ import {
   computeSuggestion,
   type Suggestion,
 } from "@/lib/boardOps";
-import { arrivedIn, arrivedNote } from "@/lib/arrived";
 import { parseCommandPrefix } from "@/lib/command";
 import {
   commandRule,
@@ -116,6 +115,7 @@ import {
   subscribeRecordCopied,
 } from "@/lib/recordCopied";
 import { imgLoad, imgSave } from "@/lib/imgCache";
+import { adoptHubState } from "@/lib/adopt";
 import { applyTangleAccept } from "@/lib/tangleOps";
 import { restoreCapture } from "@/lib/undoOps";
 import { referencedImageIds } from "@/lib/imgSync";
@@ -123,7 +123,6 @@ import {
   TOMBSTONE_KEY,
   boardSignature,
   applyTombstones,
-  mergeSync,
   mergeTombstones,
   stampChanges,
   type SyncState,
@@ -526,20 +525,22 @@ export function useBoard(now: number) {
       if (!res.ok) throw new Error("sync failed");
       const stored = (await res.json()) as SyncStore;
       hubRev.current = stored.rev ?? null;
-      /* The hub merged OUR push with whatever else it holds — a superset of
-         what we sent. Adopt it, but merge against anything that changed
-         locally while the request was in flight so that newer edits win. */
-      const merged = mergeSync(
+      /* The adoption policy lives in lib/adopt — pure, and pinned by tests
+         that replay sync's shipped incidents (the in-flight capture eaten
+         by its own reply, the cheap changed-test dropping edits). The note
+         is deliberately unused here: a push's job is sending, and the next
+         pull narrates arrivals. */
+      const adopted = adoptHubState(
         { board: latest.current, tombstones: tombstones.current },
         { board: stored.board, tombstones: stored.tombstones }
       );
-      latest.current = merged.board;
-      setData(merged.board);
-      tombstones.current = merged.tombstones;
+      latest.current = adopted.board;
+      setData(adopted.board);
+      tombstones.current = adopted.tombstones;
       try {
         await setMany([
-          [KEY, JSON.stringify(merged.board)],
-          [TOMBSTONE_KEY, JSON.stringify(merged.tombstones)],
+          [KEY, JSON.stringify(adopted.board)],
+          [TOMBSTONE_KEY, JSON.stringify(adopted.tombstones)],
         ]);
       } catch {
         /* disk hiccup; next commit retries */
@@ -547,7 +548,7 @@ export function useBoard(now: number) {
       setSync({ ok: true, at: stamp() });
       /* The text is up; hand the pictures over too. Not awaited — a photo
          upload must never hold up the sync status the user is watching. */
-      void reconcileImages(merged.board);
+      void reconcileImages(adopted.board);
     } catch {
       /* hub unreachable — keep everything local, retry on the next change */
       setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
@@ -586,33 +587,25 @@ export function useBoard(now: number) {
         return false;
       }
       hubRev.current = remote.rev ?? null;
-      const merged = mergeSync(
+      /* One policy for both halves of sync — see lib/adopt for the rules
+         and the incidents behind them. */
+      const adopted = adoptHubState(
         { board: latest.current, tombstones: tombstones.current },
         { board: remote.board, tombstones: remote.tombstones }
       );
-      /* Item-by-item, not "is the newest thing newer than mine?" — that
-         cheaper test silently dropped real edits whenever this device held
-         anything fresher than the incoming change. The rev short-circuit
-         above means this only runs when the hub genuinely moved. */
-      const changed =
-        boardSignature(merged.board, merged.tombstones) !==
-        boardSignature(latest.current, tombstones.current);
+      const changed = adopted.changed;
       if (changed) {
-        /* Say what actually came in. The merge has always known; staying
-           silent made "synced" and "three notes arrived" look identical.
-           Additions only — an edit shows itself where it happened. */
-        const note = arrivedNote(arrivedIn(latest.current, merged.board));
-        latest.current = merged.board;
-        setData(merged.board);
-        tombstones.current = merged.tombstones;
-        if (note) {
-          setNotice(note);
+        latest.current = adopted.board;
+        setData(adopted.board);
+        tombstones.current = adopted.tombstones;
+        if (adopted.note) {
+          setNotice(adopted.note);
           setTimeout(() => setNotice(null), 5000);
         }
         try {
           await setMany([
-            [KEY, JSON.stringify(merged.board)],
-            [TOMBSTONE_KEY, JSON.stringify(merged.tombstones)],
+            [KEY, JSON.stringify(adopted.board)],
+            [TOMBSTONE_KEY, JSON.stringify(adopted.tombstones)],
           ]);
         } catch {
           /* next commit retries */
@@ -627,7 +620,7 @@ export function useBoard(now: number) {
          the merge reads as unchanged from then on and the fetch was never
          retried. The device kept the text and lost the photograph, for
          good. Reconciling is a no-op for images it already holds. */
-      void reconcileImages(merged.board);
+      void reconcileImages(adopted.board);
       if (changed) schedulePush();
       return changed;
     } catch {
