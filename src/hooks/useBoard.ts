@@ -2831,7 +2831,6 @@ export function useBoard(now: number) {
       done list would make ticking the start of a new chore. */
   const toggleAction = async (id: string) => {
     const a = latest.current.actions.find((x) => x.id === id);
-    await dropImages(a?.imgs);
     /* The board holds what is still open, so a tick takes the row away. It
        used to take the fact with it: a day of finishing things left the same
        trace as a day of none. The receipt is kept instead — append-only,
@@ -2847,6 +2846,9 @@ export function useBoard(now: number) {
       actions: latest.current.actions.filter((x) => x.id !== id),
       completions: done,
     });
+    /* Bytes AFTER the board, never awaited: the old order deleted photos
+       first (a failed commit left the action alive, pictures gone). */
+    if (a?.imgs?.length) void dropImages(a.imgs);
   };
 
   const setShelf = (id: string, span: number | null, label: ShelfLife) =>

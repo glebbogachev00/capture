@@ -14,7 +14,7 @@
    render what it hands back.
    ============================================================ */
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BrushCleaning, Check, Copy, Image as ImageIcon, Layers, MessagesSquare, Mic, MoreHorizontal, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
 import { degradedNote } from "@/lib/degraded";
@@ -1371,7 +1371,18 @@ function SearchResults({
   );
 }
 
-function Row({
+/**
+ * Memoized on DATA only — function props are treated as stable.
+ *
+ * Every tick commits the board, and the commit re-rendered every card on
+ * screen; on a phone that render was the "wait" between ticking one action
+ * and being able to tick the next. The handlers passed in are inline
+ * closures (new identity every render) but each one only wraps a stable
+ * hook function with a fixed id, so comparing them would defeat the memo
+ * for no safety. If a handler ever needs to close over CHANGING data, put
+ * that data in a prop instead — the compare below is the contract.
+ */
+const Row = memo(function Row({
   a,
   faded,
   landed,
@@ -1570,7 +1581,14 @@ function Row({
       </div>
     </div>
   );
-}
+},
+(prev, next) =>
+  prev.a === next.a &&
+  prev.landed === next.landed &&
+  prev.now === next.now &&
+  prev.shelfOpen === next.shelfOpen &&
+  prev.busy === next.busy
+);
 
 /**
  * A thread's cover: a colour band, or a photo band when one was chosen.
