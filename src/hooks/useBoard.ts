@@ -117,6 +117,7 @@ import {
 } from "@/lib/recordCopied";
 import { imgLoad, imgSave } from "@/lib/imgCache";
 import { applyTangleAccept } from "@/lib/tangleOps";
+import { restoreCapture } from "@/lib/undoOps";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
@@ -138,7 +139,6 @@ import {
   withLedger,
   type CorrectionEntry,
   type CaptureSource,
-  markUndone,
 } from "@/lib/ledger";
 import { deriveRules, type LearnedRule } from "@/lib/rules";
 import {
@@ -678,80 +678,13 @@ export function useBoard(now: number) {
          comes back with a fresh updatedAt, so it out-ages the tombstone the
          capture itself pushed for it. */
     const now = Date.now();
-    const bump = <T extends { updatedAt?: number }>(x: T): T => ({
-      ...x,
-      updatedAt: now,
-    });
-    const had = (list: { id: string }[], id: string) =>
-      list.some((x) => x.id === id);
-    /* Only what THIS capture created goes. The board as it stands may also
-       hold what another device captured in the meantime — the push reply
-       at 1.2s and every poll merge the hub in — and diffing the snapshot
-       against the board would tombstone that too: an undo here deleting
-       a capture made there. Items the snapshot lacks and the capture did
-       not create are kept, and the tombstones are computed afterwards
-       from a board that still has them. */
-    const mine = snap.addedIds ?? new Set<string>();
-    const foreign = <T extends { id: string }>(live: T[], snapped: T[]) =>
-      live.filter((x) => !mine.has(x.id) && !had(snapped, x.id));
-    const board: Board = {
-      actions: [
-        ...foreign(latest.current.actions, snap.board.actions),
-        ...snap.board.actions.map((a) =>
-          had(latest.current.actions, a.id) ? a : bump(a)
-        ),
-      ],
-      threads: [
-        ...foreign(latest.current.threads, snap.board.threads),
-        ...snap.board.threads.map((t) => {
-          const live = latest.current.threads.find((x) => x.id === t.id);
-          if (!live) return { ...bump(t), frags: t.frags.map(bump) };
-          return {
-            ...t,
-            frags: [
-              ...t.frags.map((f) => (had(live.frags, f.id) ? f : bump(f))),
-              ...foreign(live.frags, t.frags),
-            ],
-          };
-        }),
-      ],
-      intentions: [
-        ...foreign(latest.current.intentions, snap.board.intentions),
-        ...snap.board.intentions.map((i) =>
-          had(latest.current.intentions, i.id) ? i : bump(i)
-        ),
-      ],
-      principles: [
-        ...snap.board.principles.map((p) =>
-          had(latest.current.principles, p.id) ? p : bump(p)
-        ),
-        ...foreign(latest.current.principles, snap.board.principles),
-      ],
-      /* History is append-only and keyed by id: the other device's entries
-         stay, and only this capture's own entry is taken out. */
-      ledger: mergeLedgers(
-        snap.board.ledger ?? [],
-        markUndone(latest.current.ledger ?? [], snap.ledgerIds ?? [])
-      ),
-      corrections: mergeCorrections(
-        snap.board.corrections ?? [],
-        latest.current.corrections ?? []
-      ),
-      /* Undo reverts ONE capture. It does not revert the day's reading, the
-         actions ticked since, or a history wipe — none of which the capture
-         created. Rebuilding the board without naming them dropped all three
-         silently: a single Undo destroyed every wrap and every tick receipt
-         on the device, with nothing on screen to say so. */
-      wraps: mergeWraps(snap.board.wraps ?? [], latest.current.wraps ?? []),
-      completions: mergeCompletions(
-        snap.board.completions ?? [],
-        latest.current.completions ?? []
-      ),
-      historyEpoch: Math.max(
-        snap.board.historyEpoch ?? 0,
-        latest.current.historyEpoch ?? 0
-      ),
-    };
+    /* The restore math lives in lib/undoOps — pure, and pinned by behavior
+       tests that replay every incident this code has shipped: the deleted
+       foreign capture, the tombstone race, the destroyed wraps. This
+       callback owns what React owns — tombstones, the misfiled question,
+       persistence. */
+    const board: Board = restoreCapture(latest.current, snap, now);
+
     const added = stampChanges(latest.current, board, now).tombstones;
 
     /* The capture being undone: the one ledger entry the snapshot does not
