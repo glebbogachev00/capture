@@ -52,11 +52,11 @@ if [ "$SYNC" = "200" ]; then
 fi
 echo "hub isolation confirmed (sync answered $SYNC)"
 
-node scripts/lab-manifest.mjs "$URL" "$BACKUP" "$RETAKE/demos/capture-lab.yaml" >/dev/null
+if [ "${2:-}" = "--full" ]; then
+  node scripts/lab-manifest.mjs "$URL" "$BACKUP" "$RETAKE/demos/capture-lab.yaml" >/dev/null
+else
+  node scripts/lab-manifest.mjs "$URL" "$BACKUP" "$RETAKE/demos/capture-lab.yaml" --gate >/dev/null
+fi
 echo "suite → $URL  (board from $(basename "$BACKUP"))"
 cd "$RETAKE"
-if [ "${2:-}" = "--full" ]; then
-  exec npx tsx src/cli.ts run demos/capture-lab.yaml --preset draft --no-master
-else
-  exec npx tsx src/cli.ts run demos/capture-lab.yaml --preset draft --no-master --until 24-tidy-proposals
-fi
+exec npx tsx src/cli.ts run demos/capture-lab.yaml --preset draft --no-master

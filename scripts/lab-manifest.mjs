@@ -127,6 +127,20 @@ doc.setup = (doc.setup || []).filter(
 const nav = doc.setup.findIndex((s) => s?.action === "navigate");
 doc.setup.splice(nav < 0 ? 0 : nav, 0, seedStep);
 
+/* Gate mode: end the manifest right after the Tidy-proposals scene.
+   The steps beyond it (the untangle callout and review) depend on the
+   measured-best model answering — on a day the quota is spent they wait
+   five minutes for a callout that cannot come, and the gate reads as
+   failed for reasons that have nothing to do with the change under test.
+   "--until" cannot help: it stops at the NEXT scene marker, which sits
+   after the very wait that hangs. */
+if (process.argv.includes("--gate")) {
+  const idx = doc.steps.findIndex(
+    (st) => st.action === "scene" && st.label === "24-tidy-proposals"
+  );
+  if (idx >= 0) doc.steps = doc.steps.slice(0, idx + 1);
+}
+
 fs.writeFileSync(out, YAML.stringify(doc, { lineWidth: 0 }));
 console.log(
   `lab manifest → ${out}\n  host: ${url}\n  board: ${(board.threads || []).length} threads, ` +

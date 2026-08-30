@@ -27,7 +27,7 @@ describe("the two big files only shrink", () => {
   });
 
   it("Capture.tsx stays under its ratchet", () => {
-    expect(lines("src/app/Capture.tsx")).toBeLessThanOrEqual(2420);
+    expect(lines("src/app/Capture.tsx")).toBeLessThanOrEqual(1975);
   });
 
   it("policy stays out of the hook: no merge math creeps back", () => {
