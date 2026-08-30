@@ -41,14 +41,12 @@ import {
 import { importIntentBackup } from "@/lib/importIntent";
 import { threadBriefs } from "@/lib/threadBrief";
 import { warmDelay } from "@/lib/tidyWarm";
-import {
-  dayStats,
+import { acceptWrap, markWrapsSeen, type DayWrap,
   mergeCompletions,
   wrapDue,
   wrapRequest,
   pendingWrap,
   mergeWraps,
-  type DayWrap,
 } from "@/lib/wrap";
 import {
   expiredDays,
@@ -1983,23 +1981,12 @@ export function useBoard(now: number) {
         });
         if (!res.ok) return;
         const out = (await res.json()) as Omit<DayWrap, "day" | "at" | "stats">;
-        if (!out?.line) return;
-        /* Against the board as it is now: the day was already over when the
-           request left, but the wraps list may not have been. */
-        const now = latest.current;
-        if ((now.wraps ?? []).some((w) => w.day === day)) return;
-        const stats = dayStats(now, day);
-        if (!stats) return;
-        const wrap: DayWrap = {
-          day,
-          at: Date.now(),
-          stats,
-          line: out.line,
-          insights: out.insights ?? [],
-          tomorrow: out.tomorrow ?? "",
-          via: out.via,
-        };
-        await commit({ ...now, wraps: [...(now.wraps ?? []), wrap] });
+        /* Guards and assembly live in lib/wrap.acceptWrap — against the
+           board as it is NOW, including the two-devices race. */
+        const accepted = out?.line
+          ? acceptWrap(latest.current, day, out, Date.now())
+          : null;
+        if (accepted) await commit(accepted);
       } catch {
         /* No wrap today. The day stays in the ledger, so the next open
            tries again — nothing is lost by failing here. */
@@ -2015,13 +2002,8 @@ export function useBoard(now: number) {
   /** Read once: the line stays, it just stops calling attention to itself. */
   const dismissWrap = useCallback(async () => {
     setShowWrap(false);
-    const b = latest.current;
-    const ws = b.wraps ?? [];
-    if (!ws.some((w) => !w.seen)) return;
-    await commit({
-      ...b,
-      wraps: ws.map((w) => (w.seen ? w : { ...w, seen: true })),
-    });
+    const next = markWrapsSeen(latest.current);
+    if (next) await commit(next);
   }, [commit]);
 
   /* TWO THREADS THAT KEEP BEING CONFUSED.

@@ -300,3 +300,44 @@ export function wrapRequest(board: Board, day: string, wraps: DayWrap[]) {
       .map((w) => ({ day: w.day, line: w.line })),
   };
 }
+
+/**
+ * Accepting the model's reading of a day onto the board.
+ *
+ * Extracted from the hook with its two guards intact, each a race that was
+ * handled inline: the day may ALREADY be wrapped by the time the reply
+ * lands (the other device wrote it while our request was in flight — the
+ * wraps list merges through sync like everything else), and the stats are
+ * computed from the board AS IT IS NOW, not as it was when the request
+ * left. Null means "nothing to write", never an error.
+ */
+export function acceptWrap(
+  board: Board,
+  day: string,
+  out: { line: string; insights?: DayWrap["insights"]; tomorrow?: string; via?: string },
+  at: number
+): Board | null {
+  if (!out.line) return null;
+  if ((board.wraps ?? []).some((w) => w.day === day)) return null;
+
+  const stats = dayStats(board, day);
+  if (!stats) return null;
+  const wrap: DayWrap = {
+    day,
+    at,
+    stats,
+    line: out.line,
+    insights: out.insights ?? [],
+    tomorrow: out.tomorrow ?? "",
+    via: out.via,
+  };
+  return { ...board, wraps: [...(board.wraps ?? []), wrap] };
+}
+
+/** Read once: every unseen wrap stops calling attention to itself. Null
+    when there is nothing unseen — no commit for a no-op. */
+export function markWrapsSeen(board: Board): Board | null {
+  const ws = board.wraps ?? [];
+  if (!ws.some((w) => !w.seen)) return null;
+  return { ...board, wraps: ws.map((w) => (w.seen ? w : { ...w, seen: true })) };
+}
