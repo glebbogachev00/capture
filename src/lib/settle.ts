@@ -131,3 +131,83 @@ export function settleUnsortedCapture(
     ledgerId: ids.ledgerId,
   };
 }
+
+/**
+ * Recording a SUCCESSFUL capture — the history entries for everywhere it
+ * landed, and the list of threads whose descriptions are now stale.
+ *
+ * The board mutation itself is applySorted (boardOps); this writes the
+ * account of it, and the two must describe the same event — same rule as
+ * the failed-sort settlement above. The subtleties this owns:
+ *
+ *   - One captureId across every entry one utterance writes, so counting
+ *     entries never counts destinations (a split once met the wrap's
+ *     three-capture threshold by itself).
+ *   - On a split, the primary entry holds only the PRIMARY'S SHARE of the
+ *     words; the other shares have entries of their own. Keeping the whole
+ *     sentence on the primary counted the same words in two places.
+ *   - Every thread the capture reached needs its summary refreshed — not
+ *     just the first. A split used to leave the secondary thread holding a
+ *     fragment its own description knew nothing about.
+ */
+
+export type SortedFacts = {
+  raw: string;
+  payload: string;
+  at: number;
+  dictated: boolean;
+  imgIds: string[];
+  transcript?: string;
+  captureId: string;
+  kind: "action" | "thread" | "intention" | "both";
+  clean: string;
+  primaryText?: string | null;
+  via?: string;
+  /** Where the primary landed. */
+  primary: { targetId: string; fragId?: string };
+  /** Where each further split share landed. */
+  also: { text: string; threadId: string; fragId?: string }[];
+};
+
+export function recordSortedCapture(
+  board: Board,
+  f: SortedFacts,
+  mkId: () => string
+): { board: Board; summaryTargets: string[] } {
+  const split = f.also.length > 0 && !!f.primaryText?.trim();
+  const source = sourceOf(f.payload, f.dictated, f.imgIds.length > 0);
+  let next = withLedger(board, {
+    id: mkId(),
+    captureId: f.captureId,
+    at: f.at,
+    raw: f.raw,
+    clean: (split ? f.primaryText!.trim() : f.clean) || f.payload,
+    kind: f.kind,
+    source,
+    targetId: f.primary.targetId,
+    targetFragId: f.primary.fragId,
+    modelVia: f.via,
+    transcript: f.transcript?.trim() || undefined,
+    imgs: f.imgIds.length ? f.imgIds : undefined,
+  });
+  for (const piece of f.also) {
+    next = withLedger(next, {
+      id: mkId(),
+      captureId: f.captureId,
+      at: f.at,
+      raw: f.raw,
+      clean: piece.text,
+      kind: "thread",
+      source,
+      targetId: piece.threadId,
+      targetFragId: piece.fragId,
+      modelVia: f.via,
+    });
+  }
+  const summaryTargets = [
+    ...new Set(
+      [f.primary.targetId, ...f.also.map((p) => p.threadId)].filter(Boolean)
+    ),
+  ];
+  return { board: next, summaryTargets };
+}

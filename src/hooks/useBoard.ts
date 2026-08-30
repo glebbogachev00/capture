@@ -113,7 +113,7 @@ import {
 } from "@/lib/recordCopied";
 import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
-import { settleUnsortedCapture } from "@/lib/settle";
+import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
 import { applySaveDraft } from "@/lib/intentionOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
 import { assemblePanel } from "@/lib/tidyPanel";
@@ -1650,53 +1650,38 @@ export function useBoard(now: number) {
         landedIds: fresh,
         alsoLanded,
       } = applySorted(out, imgIds, at, latest.current);
-      /* One identity for the whole utterance, carried by every entry it
-         writes. `raw` is what was said and is the same on all of them;
-         `clean` is that destination's share. */
-      const captureId = uid();
-      const split = (alsoLanded?.length ?? 0) > 0 && !!out.primaryText?.trim();
-      // The capture records itself in the ledger before it lands: what was
-      // said, what it became, where it went, and which model tier sorted it.
-      const filed = withLedger(next, {
-        id: uid(),
-        captureId,
-        at,
-        raw,
-        /* When it split, this entry holds the primary's share — the other
-           shares have entries of their own. Keeping the whole sentence here
-           counted the same words in two places. */
-        clean: (split ? out.primaryText!.trim() : out.clean) || payload,
-        kind: out.kind,
-        source: sourceOf(payload, dictated, imgIds.length > 0),
-        targetId:
-          out.kind === "action"
-            ? source?.id ?? next.actions[0]?.id ?? ""
-            : (source?.id ?? targetId ?? ""),
-        targetFragId: source?.fragId,
-        modelVia: out.via,
-        transcript: transcript.trim() || undefined,
-        imgs: imgIds.length ? imgIds : undefined,
-      });
-      /* A split capture landed in more than one place, and each place needs
-         its own entry: the ledger is what Undo walks back and what the daily
-         wrap counts, so a fragment it cannot see is a fragment that silently
-         does not exist. Same raw words, same moment — only the destination
-         and the share differ. */
-      const withAll = (alsoLanded ?? []).reduce(
-        (board, piece) =>
-          withLedger(board, {
-            id: uid(),
-            captureId,
-            at,
-            raw,
-            clean: piece.text,
-            kind: "thread",
-            source: sourceOf(payload, dictated, imgIds.length > 0),
-            targetId: piece.threadId,
-            targetFragId: piece.fragId,
-            modelVia: out.via,
-          }),
-        filed
+      /* The account of the landing — every entry, every share, and the
+         list of threads whose descriptions are now stale — comes from
+         lib/settle.recordSortedCapture, behavior-tested beside the
+         failed-sort settlement it mirrors. */
+      const { board: withAll, summaryTargets } = recordSortedCapture(
+        next,
+        {
+          raw,
+          payload,
+          at,
+          dictated,
+          imgIds,
+          transcript,
+          captureId: uid(),
+          kind: out.kind,
+          clean: out.clean,
+          primaryText: out.primaryText,
+          via: out.via,
+          primary: {
+            targetId:
+              out.kind === "action"
+                ? source?.id ?? next.actions[0]?.id ?? ""
+                : (source?.id ?? targetId ?? ""),
+            fragId: source?.fragId,
+          },
+          also: (alsoLanded ?? []).map((p) => ({
+            text: p.text,
+            threadId: p.threadId,
+            fragId: p.fragId,
+          })),
+        },
+        uid
       );
       const recorded = commandLesson
         ? noteCorrection(withAll, {
@@ -1732,7 +1717,7 @@ export function useBoard(now: number) {
          choice is ever second-guessed. Computed before the summary refresh
          so it lands with the banner, never a model round-trip later. */
       setSuggestion(
-        force ? null : computeSuggestion(filed, out.clean, source)
+        force ? null : computeSuggestion(withAll, out.clean, source)
       );
       /* Not awaited. The capture has landed, the banner is up, and the box
          is free for the next thought; the summary catches up behind it. */
@@ -1741,12 +1726,7 @@ export function useBoard(now: number) {
          written before that fragment arrived — so the thread said one thing
          and contained another, and the sorter went on routing against the
          stale description. */
-      for (const id of new Set(
-        [targetId, ...(alsoLanded ?? []).map((p) => p.threadId)].filter(
-          (v): v is string => !!v
-        )
-      ))
-        scheduleSummary(id);
+      for (const id of summaryTargets) scheduleSummary(id);
     } catch (error) {
       await saveUnsorted(raw, imgIds, at, reasonOf(error), dictated);
     }

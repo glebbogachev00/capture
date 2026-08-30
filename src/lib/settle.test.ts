@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY, type Board } from "./model";
-import { settleUnsortedCapture } from "./settle";
+import { recordSortedCapture, settleUnsortedCapture } from "./settle";
 
 /**
  * The settlement's one invariant, tested as behavior: the board, the
@@ -86,5 +86,70 @@ describe("settling a capture the sorter could not sort", () => {
     for (const key of Object.keys(EMPTY)) {
       expect(out[key], `settlement dropped Board.${key}`).toBeDefined();
     }
+  });
+});
+
+describe("recording a successful capture", () => {
+  const facts = (over = {}) => ({
+    raw: "retake is slow on my machine and capture keeps mis-sorting",
+    payload: "retake is slow on my machine and capture keeps mis-sorting",
+    at: 100,
+    dictated: true,
+    imgIds: [] as string[],
+    captureId: "cap1",
+    kind: "thread" as const,
+    clean: "Retake is slow on my machine and Capture keeps mis-sorting.",
+    primaryText: "Retake is slow on my machine.",
+    via: "groq",
+    primary: { targetId: "t-retake", fragId: "f1" },
+    also: [{ text: "Capture keeps mis-sorting.", threadId: "t-capture", fragId: "f2" }],
+    ...over,
+  });
+
+  let n = 0;
+  const mkId = () => "id" + n++;
+
+  it("a split counts each share once — never the whole sentence twice", () => {
+    n = 0;
+    const { board } = recordSortedCapture({ ...EMPTY }, facts(), mkId);
+    const primary = board.ledger!.find((e) => e.targetId === "t-retake")!;
+    const other = board.ledger!.find((e) => e.targetId === "t-capture")!;
+    expect(primary.clean).toBe("Retake is slow on my machine.");
+    expect(other.clean).toBe("Capture keeps mis-sorting.");
+    /* One utterance, one captureId, however many destinations. */
+    expect(primary.captureId).toBe(other.captureId);
+  });
+
+  it("no split: the primary entry keeps the whole cleaned text", () => {
+    n = 0;
+    const { board } = recordSortedCapture(
+      { ...EMPTY },
+      facts({ also: [], primaryText: null }),
+      mkId
+    );
+    expect(board.ledger![0].clean).toBe(
+      "Retake is slow on my machine and Capture keeps mis-sorting."
+    );
+  });
+
+  it("every reached thread is named for a summary refresh, once", () => {
+    n = 0;
+    const { summaryTargets } = recordSortedCapture({ ...EMPTY }, facts(), mkId);
+    expect(summaryTargets.sort()).toEqual(["t-capture", "t-retake"]);
+    /* The primary landing twice in the list would refresh it twice. */
+    const dup = recordSortedCapture(
+      { ...EMPTY },
+      facts({ also: [{ text: "x", threadId: "t-retake", fragId: "f9" }] }),
+      mkId
+    );
+    expect(dup.summaryTargets).toEqual(["t-retake"]);
+  });
+
+  it("entries and targets describe the same landing", () => {
+    n = 0;
+    const { board } = recordSortedCapture({ ...EMPTY }, facts(), mkId);
+    const primary = board.ledger!.find((e) => e.targetId === "t-retake")!;
+    expect(primary.targetFragId).toBe("f1");
+    expect(board.ledger!.some((e) => e.targetId === "t-capture")).toBe(true);
   });
 });
