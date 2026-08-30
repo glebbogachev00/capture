@@ -10,7 +10,7 @@ import type { CaptureEntry, CorrectionEntry } from "./ledger";
 export type { CaptureEntry, CorrectionEntry };
 import type { DayWrap } from "./wrap";
 export type { DayWrap };
-import { del } from "./storage";
+import {  } from "./storage";
 
 export const KEY = "capture:data:v1";
 export const IMG = (id: string) => "capture:img:" + id;
@@ -336,13 +336,9 @@ export const left = (ms: number) =>
       : Math.max(1, Math.ceil(ms / HOUR)) + "h";
 
 export async function dropImages(ids: string[] | undefined) {
-  for (const id of ids || []) {
-    try {
-      await del(IMG(id));
-    } catch {
-      /* already gone */
-    }
-  }
+  /* Through the cache, so a memory copy can never outlive the bytes. */
+  const { imgDrop } = await import("./imgCache");
+  for (const id of ids || []) await imgDrop(id);
 }
 
 /** The cleanup pass. Runs on open. Never touches threads. */

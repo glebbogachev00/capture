@@ -36,7 +36,6 @@ import {
   type Thread,
   DAY,
   GRACE,
-  IMG,
   fmt,
   fmtDue,
   left,
@@ -51,6 +50,7 @@ import {
   SettingsScreen,
 } from "./Intentions";
 import { OrganizeScreen } from "./Organize";
+import { imgLoad, imgNow, imgSave } from "@/lib/imgCache";
 import {
   shareAction,
   shareIntention,
@@ -1576,12 +1576,15 @@ function Row({
  * cover picked on the phone appears on the Mac once its bytes sync.
  */
 function CoverBand({ cover }: { cover: Cover }) {
-  const [src, setSrc] = useState<string | null>(null);
+  /* Memory first: a cover seen once renders on the first frame of every
+     later mount, instead of blanking while IndexedDB answers — which it
+     does slowly mid-sort, when commits hold the store's write lock. */
   const id = cover.kind === "img" ? cover.id : null;
+  const [src, setSrc] = useState<string | null>(() => (id ? imgNow(id) : null));
   useEffect(() => {
     if (!id) return;
     let alive = true;
-    void get(IMG(id))
+    void imgLoad(id)
       .then((v) => {
         if (alive) setSrc(v);
       })
@@ -1886,7 +1889,7 @@ function ThreadView({
               void shrinkFile(f)
                 .then(async (src) => {
                   const id = uid();
-                  await set(IMG(id), src);
+                  await imgSave(id, src);
                   onSetCover(imgValue(id));
                 })
                 .catch(() => {
@@ -2047,7 +2050,9 @@ function FragView({
   onAddImages: (files: FileList | null) => void;
   busy: boolean;
 }) {
-  const [srcs, setSrcs] = useState<string[]>([]);
+  const [srcs, setSrcs] = useState<string[]>(() =>
+    (f.imgs || []).map((id) => imgNow(id)).filter((v): v is string => !!v)
+  );
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(f.text);
   const [confirming, setConfirming] = useState(false);
@@ -2083,7 +2088,7 @@ function FragView({
       const ids = imgKey ? imgKey.split(",") : [];
       const out = (
         await Promise.all(
-          ids.map((id) => get(IMG(id)).catch(() => null))
+          ids.map((id) => imgLoad(id).catch(() => null))
         )
       ).filter((v): v is string => !!v);
       setSrcs(out);

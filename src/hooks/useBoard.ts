@@ -115,6 +115,7 @@ import {
   stampRecordCopied,
   subscribeRecordCopied,
 } from "@/lib/recordCopied";
+import { imgLoad, imgSave } from "@/lib/imgCache";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
@@ -467,28 +468,43 @@ export function useBoard(now: number) {
    * the next sync tries again, and a missing photo never blocks the text.
    */
   const reconcileImages = useCallback(async (board: Board) => {
-    for (const id of referencedImageIds(board)) {
-      try {
-        const mine = await get(IMG(id));
-        if (!mine) {
-          const res = await fetch(`/api/img/${id}`);
-          if (!res.ok) continue;
-          const { src } = (await res.json()) as { src?: string };
-          if (src) await set(IMG(id), src);
-          imgsOnHub.current.add(id);
-          continue;
+    /* A few at a time, not one at a time. Each exchange is a serverless
+       round-trip of a few hundred KB; strictly sequential, a board of
+       twenty photos took minutes to refill — which a phone that had just
+       lost its storage experienced as "the images don't save, I wait
+       minutes for them to reappear". Four in flight cuts that to seconds
+       without stampeding the hub's rate limit. */
+    const ids = referencedImageIds(board);
+    const lane = async (mine: string[]) => {
+      for (const id of mine) {
+        try {
+          const have = await imgLoad(id);
+          if (!have) {
+            const res = await fetch(`/api/img/${id}`);
+            if (!res.ok) continue;
+            const { src } = (await res.json()) as { src?: string };
+            if (src) await imgSave(id, src);
+            imgsOnHub.current.add(id);
+            continue;
+          }
+          if (imgsOnHub.current.has(id)) continue;
+          const res = await fetch(`/api/img/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ src: have }),
+          });
+          if (res.ok) imgsOnHub.current.add(id);
+        } catch {
+          /* hub unreachable or disk hiccup — the next sync picks it up */
         }
-        if (imgsOnHub.current.has(id)) continue;
-        const res = await fetch(`/api/img/${id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ src: mine }),
-        });
-        if (res.ok) imgsOnHub.current.add(id);
-      } catch {
-        /* hub unreachable or disk hiccup — the next sync picks it up */
       }
-    }
+    };
+    const LANES = 4;
+    await Promise.all(
+      Array.from({ length: LANES }, (_, k) =>
+        lane(ids.filter((_, i) => i % LANES === k))
+      )
+    );
   }, []);
 
   /** Send our state to the hub and adopt its merged answer. */
@@ -1668,7 +1684,7 @@ export function useBoard(now: number) {
     const imgIds: string[] = [];
     for (const p of pics) {
       try {
-        await set(IMG(p.id), p.src);
+        await imgSave(p.id, p.src);
         imgIds.push(p.id);
       } catch {
         /* skip */
@@ -3180,7 +3196,7 @@ export function useBoard(now: number) {
     for (const src of srcs) {
       const id = uid();
       try {
-        await set(IMG(id), src);
+        await imgSave(id, src);
         ids.push(id);
       } catch {
         /* out of disk — skip this one rather than lose the note */
