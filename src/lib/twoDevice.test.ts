@@ -17,6 +17,9 @@ const docs = new Map<string, { body: string; version: number }>();
 
 function memoryStore(): HubStore {
   return {
+    async exists(key: string) {
+      return docs.has(key);
+    },
     async read(key): Promise<StoredValue | null> {
       const doc = docs.get(key);
       return doc ? { body: doc.body, version: String(doc.version) } : null;
@@ -27,8 +30,9 @@ function memoryStore(): HubStore {
         const want = expect.version === null ? undefined : Number(expect.version);
         if ((cur?.version ?? undefined) !== want) return false;
       }
-      docs.set(key, { body, version: (cur?.version ?? 0) + 1 });
-      return true;
+      const version = (cur?.version ?? 0) + 1;
+      docs.set(key, { body, version });
+      return { version: String(version) };
     },
   };
 }
