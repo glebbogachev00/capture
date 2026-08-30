@@ -89,7 +89,12 @@ const Sorted = z.object({
     .max(3)
     .nullable()
     .describe(
-      "further threads this capture also belongs in — empty for the normal case of one subject"
+      /* Was "further threads this capture also belongs in", which asks the
+         wrong question. "Does this whole capture belong in two places?" is
+         almost always no, so the field stayed empty even where the capture
+         plainly changed subject halfway through. The question that gets an
+         honest answer is how many subjects are IN it. */
+      "one entry per FURTHER SUBJECT present in this capture, carrying only the words that belong to that subject — not places the whole capture belongs. Empty when everything said is about one subject"
     ),
 });
 

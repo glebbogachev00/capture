@@ -74,6 +74,14 @@ export const ROUTING_RULE =
   "- If you find yourself naming the new thread after words that already " +
   "appear in an existing thread's name, that is the signal you should be " +
   "filing into that thread instead.\n" +
+  "- A capture about ONE FEATURE of something is about that thing, not about " +
+  "the feature. Notes on the intentions screen, the sorter, the sync, the " +
+  "board go in the thread about the app — not a new thread called " +
+  "\"Intentions system\", \"Intentions handling\" or \"Sorting engine\". Measured " +
+  "on a real board, that was the commonest way a new thread got invented while " +
+  "the right one sat in the list: a feature name reads like a subject and is " +
+  "not one. The same holds anywhere — a note about one character is about the " +
+  "story, a note about one lesson is about the teaching.\n" +
   "\nWhen one capture is about TWO subjects — `also`:\n" +
   "- A person says two things in one breath more often than they say one. " +
   '"Retake is slow on my machine and Capture keeps mis-sorting" is not one ' +
@@ -93,6 +101,21 @@ export const ROUTING_RULE =
   "different places on different days. A capture that mentions another thread " +
   "in passing, or compares one thing to another, is ONE thought about one " +
   "subject — leave `also` empty. So is a list of steps toward a single goal.\n" +
+  "- Size is not the test — subject is. A second subject can be one sentence " +
+  "against a whole paragraph and still be a second subject. People finish a " +
+  "long thought and then say one more thing about something else, and that " +
+  "last sentence is the one most often lost: it gets filed under whatever the " +
+  "paragraph was about, where its owner will never look for it. Measured on a " +
+  "real board: \"I need to fix the intentions... I am also thinking about " +
+  "making intentions an extension... I will be working two to four hours a day " +
+  "and should stay focused without overworking, that is the hallmark of a great " +
+  "work session\" came back as one subject three times out of three. The first " +
+  "two sentences are about the app; the last is about how the person works, " +
+  "which is a different subject on a different day, and it belongs somewhere " +
+  "else.\n" +
+  "- The test to run at the end of a long capture: read the LAST thing said on " +
+  "its own, with none of the words before it. If it would make sense filed " +
+  "somewhere else, it is a second subject.\n" +
   "- Empty is the normal answer. Most captures are about one thing, and a " +
   "split that was not really there is worse than no split at all: it tears a " +
   "sentence in half and files the halves apart.\n" +
