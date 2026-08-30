@@ -55,12 +55,23 @@ Extracted and owned (policy in `lib`, tested):
 | Image bytes | `imgCache.ts` | pictures blanking behind the store's write lock |
 | Provider chain | `providers.ts` / `routing.ts` | 30-second sorts probing dead tiers |
 
+| Intention save | `intentionOps.ts` | minutes of talking condensed to two lines, the rest unreachable |
+| Tidy panel | `tidyPanel.ts` | dismissed suggestions resurrecting depending on repaint path |
+| Failed-sort settlement | `settle.ts` | board wrote "action" while history wrote "thread" — the visible tab as transaction input |
+
+The settlement pattern (one operation returns one typed result; the caller
+applies it — adapted from Excalidraw's ActionResult and tldraw's atomic
+history entries, pattern only, no dependency) came from the architecture
+radar in code-audits/capture-github-architecture-radar-2026-08-30.md. Its
+rule is now house rule: **the visible tab is never valid transaction
+input; an explicitly open thread is, because the person chose it.**
+
 Still living inside `useBoard`, in extraction order:
 
-1. Intention flow board math (build/save/discard application)
-2. Tidy and judge orchestration (planning, caching, merging of proposals)
-3. Wrap lifecycle
-4. Capture submit's fallback parking
+1. Wrap lifecycle
+2. Successful-capture settlement (extend `settle.ts`'s shape to applySorted)
+3. Durable sync outbox (radar phase two — queued pushes surviving a closed
+   tab; separate change, never combined with a settlement change)
 
 Then `Capture.tsx` decomposes into `components/` — logic-free moves, one
 screen per gated step.

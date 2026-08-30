@@ -115,6 +115,7 @@ import {
 } from "@/lib/recordCopied";
 import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
+import { settleUnsortedCapture } from "@/lib/settle";
 import { applySaveDraft } from "@/lib/intentionOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
 import { assemblePanel } from "@/lib/tidyPanel";
@@ -1409,86 +1410,22 @@ export function useBoard(now: number) {
     reason: string,
     dictated = false
   ) => {
-    const b = latest.current;
-    const body = raw || "(image only)";
-    const openThread = b.threads.find((t) => t.id === open);
-    const frag: Frag = {
-      id: uid(),
-      at,
-      text: body,
-      imgs: imgIds,
-      unsorted: true,
-    };
-
-    let next: Board;
-    let targetId = "";
-    let targetFragId: string | undefined;
-    if (openThread) {
-      next = {
-        ...b,
-        threads: b.threads.map((t) =>
-          t.id === openThread.id ? { ...t, frags: [...t.frags, frag] } : t
-        ),
-      };
-      targetId = openThread.id;
-      targetFragId = frag.id;
-      showReceipt(openThread.name + " — saved unsorted");
-    } else {
-      /* A failed sort NEVER invents a thread.
- 
-         This used to branch on whichever tab happened to be open: standing
-         on Threads when the model did not answer minted a new thread named
-         after the first five words of what was said. So an error path made
-         a permanent structural decision about the board — and every retry
-         made another. Four attempts at one thought left four threads, and
-         undoing them left the wreckage in the record.
- 
-         It also fed back into the thing it was breaking. The sorter routes
-         by reading thread names, so "The next issue is action" sitting on
-         the board made every later capture harder to place. A failure that
-         degrades the next attempt is the worst shape a failure can take.
- 
-         An unsorted action is the honest holding place: flat, reversible,
-         visibly marked, and `resort` can later turn it into a thread, an
-         action or an intention — everything the invented thread offered,
-         with none of the commitment. */
-      const action: Action = {
-        id: uid(),
-        text: body,
-        done: false,
-        at,
-        src: body,
-        imgs: imgIds,
-        shelf: "keep",
-        expires: null,
-        unsorted: true,
-      };
-      next = { ...b, actions: [action, ...b.actions] };
-      targetId = action.id;
-      /* Say where it is and that it is not lost. "Kept unsorted" told you
-         a state; this tells you where to find it and that it can still be
-         sorted once the model answers again. */
-      showReceipt("Kept in Actions, unsorted — sort it when the model is back");
-    }
-
-    // The fallback is still a capture — the ledger records it exactly as it
-    // was said, flagged by the kind it fell back to.
-    next = withLedger(next, {
-      id: uid(),
-      at,
-      raw,
-      clean: body,
-      kind: openThread || tab === "threads" ? "thread" : "action",
-      source: sourceOf(raw, dictated, imgIds.length > 0),
-      targetId,
-      targetFragId,
-      imgs: imgIds.length ? imgIds : undefined,
-    });
-
+    /* One computation decides everything — board, history entry, receipt,
+       target — so they cannot disagree. The old inline version computed
+       the board and the history on different lines, and the history's
+       kind read the VISIBLE TAB: standing on Threads when a sort failed
+       recorded "thread" about an event that created an action. The
+       settlement's signature has no tab parameter; see lib/settle. */
+    const settled = settleUnsortedCapture(
+      latest.current,
+      { raw, imgIds, at, dictated, openThreadId: open ?? undefined },
+      { itemId: uid(), ledgerId: uid() }
+    );
+    const next = settled.board;
+    showReceipt(settled.receipt);
     setText("");
     setPics([]);
-    // The fallback still lands something — Undo can take it back, words
-    // and all, so the raw capture is never lost.
+
     captureSnapshot.current = {
       board: latest.current,
       tombstones: tombstones.current,
