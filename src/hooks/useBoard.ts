@@ -1577,12 +1577,13 @@ export function useBoard(now: number) {
       setErr(reasonOf(error) + " It is still here, untouched.");
     }
     setBusy(null);
-    /* Same widened window as the main capture — Undo lives here too. */
-    setTimeout(() => {
-      setLanded(null);
-      setLandedIds([]);
-      setSuggestion(null);
-    }, 9000);
+    /* No timer. The banner is the receipt — where the capture went, with
+       the only Undo button in it — and a receipt that shreds itself after
+       nine seconds is how "it filed somewhere and I never saw where"
+       happens: dictate, glance away while the sort runs, look back at a
+       clean screen. It stays until the next capture, an undo, or an
+       accepted suggestion replaces it, which is also what the intention
+       path already does. */
   };
 
   /**
@@ -1831,12 +1832,13 @@ export function useBoard(now: number) {
     }
 
     setBusy(null);
-    /* Same widened window as the main capture — Undo lives here too. */
-    setTimeout(() => {
-      setLanded(null);
-      setLandedIds([]);
-      setSuggestion(null);
-    }, 9000);
+    /* No timer. The banner is the receipt — where the capture went, with
+       the only Undo button in it — and a receipt that shreds itself after
+       nine seconds is how "it filed somewhere and I never saw where"
+       happens: dictate, glance away while the sort runs, look back at a
+       clean screen. It stays until the next capture, an undo, or an
+       accepted suggestion replaces it, which is also what the intention
+       path already does. */
   };
 
   /* ----------------------- capture suggestion ----------------------- */
@@ -3698,45 +3700,41 @@ export function useBoard(now: number) {
     intentionLedger.current = null;
     setDraft(null);
 
-    /* Discarding the draft must not discard the words.
+    /* Discarding the draft must not discard the words — but the words do
+       not belong on the board either.
  
-       A draft opened FROM an action is backed by that action — it stays on
-       the board, so walking away loses nothing. But a draft opened by a
-       fresh capture holds the only copy of what was said: four minutes of
-       talking lived nowhere but here, and this function used to null it.
-       "I don't want it to be an intention" is a judgement about the KIND,
-       not permission to delete the thought — so the words park as an
-       unsorted action, the same shelter a failed sort uses, and the ledger
-       records the capture like any other. Everything the draft offered,
-       recoverable; nothing kept that was asked to be dropped except the
-       expansion itself. */
+       The first fix parked them as an unsorted action, which was wrong in
+       an obvious-in-hindsight way: an intention is often minutes of
+       talking, and minutes of talking pinned to the Actions list is not a
+       task, it is clutter wearing a checkbox. What was actually asked for:
+       "this intention was discarded, but you can still restore it from
+       history."
+ 
+       So it goes where everything said already goes — the record — as an
+       entry marked undone from birth: said, and then not kept. No board
+       object, nothing to tidy, and the full text sits in history where an
+       undone capture would be, with the same way back (say it again).
+ 
+       A draft opened FROM an action writes nothing: its words already live
+       on the board as that action, which stays. */
     if (fromAction || !d?.rawInput.trim()) return;
 
-    const at = stamp();
-    const action: Action = {
-      id: uid(),
-      text: d.rawInput,
-      done: false,
-      at,
-      src: d.rawInput,
-      shelf: "keep",
-      expires: null,
-      unsorted: true,
-    };
-    const next = withLedger(
-      { ...latest.current, actions: [action, ...latest.current.actions] },
-      {
+    await commit(
+      withLedger(latest.current, {
         id: uid(),
-        at,
+        at: stamp(),
         raw: opened?.raw ?? d.rawInput,
         clean: d.rawInput,
-        kind: "action",
+        kind: "intention",
         source: opened?.source ?? sourceOf(d.rawInput, false, false),
-        targetId: action.id,
-      }
+        /* Nothing was created, so there is nothing to point at — the same
+           state an undone capture reaches once its object is removed. */
+        targetId: "",
+        undone: true,
+      })
     );
-    setLanded("Actions, unsorted — that thought was not an intention");
-    await commit(next);
+    setNotice("Discarded — it's in the record if you want it back");
+    setTimeout(() => setNotice(null), 6000);
   };
 
   const updateIntention = (next: Intention) =>
@@ -3746,41 +3744,6 @@ export function useBoard(now: number) {
         i.id === next.id ? { ...next, updatedAt: stamp() } : i
       ),
     });
-
-  /** Un-make an intention: the kind was wrong, the words were not.
- 
-      The landed banner's Undo covers the first minutes; this covers the
-      day-later discovery, which is when a misfiled intention is usually
-      noticed. Delete answers "I do not want this thought" — this answers
-      "this thought is not an intention", so the words go back to the same
-      shelter every other wrong-kind path uses: an unsorted action, ready to
-      be sorted as what it really is. */
-  const unmakeIntention = async (id: string) => {
-    const it = latest.current.intentions.find((i) => i.id === id);
-    if (!it) return;
-    const words = (it.rawInput || it.expandedIntention || "").trim();
-    if (!words) return;
-    const at = stamp();
-    const action: Action = {
-      id: uid(),
-      text: words,
-      done: false,
-      at,
-      src: words,
-      shelf: "keep",
-      expires: null,
-      unsorted: true,
-    };
-    await commit({
-      ...latest.current,
-      intentions: latest.current.intentions.filter((i) => i.id !== id),
-      actions: [action, ...latest.current.actions],
-    });
-    setOpenIntention(null);
-    setTab("actions");
-    setNotice("Not an intention, then — kept in Actions, unsorted");
-    setTimeout(() => setNotice(null), 5000);
-  };
 
   const deleteIntention = async (id: string) => {
     await commit({
@@ -4699,7 +4662,6 @@ export function useBoard(now: number) {
     refreshSummary,
     updateIntention,
     deleteIntention,
-    unmakeIntention,
     makeIntention,
     logout,
     togglePrinciple,

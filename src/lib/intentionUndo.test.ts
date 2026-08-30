@@ -23,6 +23,17 @@ const view = fs.readFileSync(
 );
 
 describe("landing an intention", () => {
+  it("no path shreds the receipt on a timer", () => {
+    /* The banner is the receipt — where the capture went, with the only
+       Undo in it. The intention path was fixed first; the main capture and
+       resort paths turned out to have the same 9-second timer, found when
+       the banner vanished unclicked on a deployed preview — the reported
+       "it shows where it filed things, but that banner is gone or moves
+       too fast". No setLanded(null) may sit inside a setTimeout. */
+    const timers = [...hook.matchAll(/setTimeout\([^)]*=>\s*\{[^}]*setLanded\(null\)/g)];
+    expect(timers).toHaveLength(0);
+  });
+
   it("leaves the banner up, because Undo lives inside it", () => {
     /* Every other capture leaves its banner until the next one. This path
        cleared it after 4.5s while canUndo stayed true — so the only way to
@@ -64,27 +75,27 @@ describe("an intention's own words", () => {
 });
 
 describe("walking away from an intention", () => {
-  it("discarding a draft parks the words instead of deleting them", () => {
-    /* "I don't want it to be an intention" is a judgement about the kind,
-       not permission to delete the thought. The old discard nulled the
-       draft — the only copy of four minutes of talking — and the person
-       reported the loss in exactly those words: "I literally lost that
-       thought, which came as an inspiration." */
+  it("discarding a draft records the words instead of deleting them", () => {
+    /* The first fix parked them as an unsorted action — wrong in an
+       obvious-in-hindsight way, because an intention is often minutes of
+       talking and minutes of talking is not a task. Discard now writes the
+       record entry the save would have written, marked undone from birth:
+       said, then not kept, with the full text in history and a way back. */
     const discard = hook.slice(
       hook.indexOf("const discardDraft"),
       hook.indexOf("const updateIntention")
     );
-    expect(discard).toMatch(/unsorted: true/);
     expect(discard).toMatch(/withLedger/);
-    /* The banner renders as "Landed in {x}." — so the string must read as
-       a PLACE, and the durable promise is where the words went, not the
-       phrasing around it. */
-    expect(discard).toMatch(/Actions, unsorted/i);
+    expect(discard).toMatch(/undone: true/);
+    expect(discard).toMatch(/it's in the record/i);
+    /* And nothing lands on the board. */
+    expect(discard).not.toMatch(/unsorted: true/);
+    expect(discard).not.toMatch(/actions: \[/);
   });
 
   it("a draft backed by an existing action still discards clean", () => {
     /* Converting an action opens a draft COPY — the action stays on the
-       board, so parking the words again would duplicate them. */
+       board, so recording the words again would double them. */
     const discard = hook.slice(
       hook.indexOf("const discardDraft"),
       hook.indexOf("const updateIntention")
@@ -92,17 +103,10 @@ describe("walking away from an intention", () => {
     expect(discard).toMatch(/if \(fromAction \|\| !d\?\.rawInput\.trim\(\)\) return;/);
   });
 
-  it("a misfiled intention can be un-made from its own screen, words kept", () => {
-    /* The banner's Undo covers the first minutes; this covers the day-later
-       discovery. Delete answers "I don't want this thought" — un-make
-       answers "this thought is not an intention". */
-    const unmake = hook.slice(
-      hook.indexOf("const unmakeIntention"),
-      hook.indexOf("const deleteIntention")
-    );
-    expect(unmake).toMatch(/it\.rawInput \|\| it\.expandedIntention/);
-    expect(unmake).toMatch(/unsorted: true/);
-    expect(unmake).toMatch(/intentions: latest\.current\.intentions\.filter/);
-    expect(view).toMatch(/Not an intention/);
+  it("an undone record entry offers the way back", () => {
+    /* "You can still restore it in history." Restoring is just saying it
+       again — the words return to the composer and sort fresh. */
+    expect(view).toMatch(/Say it again/);
+    expect(view).toMatch(/onRestore\(e\.said\)/);
   });
 });

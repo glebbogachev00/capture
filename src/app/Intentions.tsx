@@ -224,14 +224,12 @@ export function IntentionDetail({
   onChange,
   onCopy,
   onDelete,
-  onUnmake,
 }: {
   intention: Intention;
   onBack: () => void;
   onChange: (next: Intention) => void;
   onCopy: () => void;
   onDelete: () => void;
-  onUnmake: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -296,13 +294,6 @@ export function IntentionDetail({
           <div className="row-actions">
             <button className="ghost" onClick={() => setEditing(true)}>
               Edit wording
-            </button>
-            {/* The kind was wrong, not the thought. Delete answers "I do
-                not want this"; this answers "this is not an intention" and
-                sends the words back to Actions, unsorted — asked for after
-                a mislabelled capture could only be deleted, words and all. */}
-            <button className="ghost" onClick={onUnmake}>
-              Not an intention
             </button>
             <button
               className="ghost warn"
@@ -472,6 +463,7 @@ export function RecordScreen({
   onClearRule,
   threads,
   onOpenThread,
+  onRestore,
   wrap,
   onWrapSeen,
 }: {
@@ -491,6 +483,9 @@ export function RecordScreen({
   /** Just enough of the board to name where each capture landed. */
   threads: { id: string; name: string }[];
   onOpenThread: (id: string) => void;
+  /** Put an undone capture's words back in the composer — the way back for
+      anything discarded: said again, sorted fresh. */
+  onRestore: (said: string) => void;
 }) {
   const [openWrap, setOpenWrap] = useState(false);
   const stats = recordStats(ledger);
@@ -613,6 +608,19 @@ export function RecordScreen({
                   <p className="record-said">
                     <span>said</span> {e.said}
                   </p>
+                )}
+                {e.undone && e.said && (
+                  /* The way back. An undone entry is a thought that was
+                     said and then not kept — restoring it is just saying it
+                     again, so that is literally what the button does: the
+                     words return to the composer and sort fresh. No new
+                     object kinds, no resurrection machinery. */
+                  <button
+                    className="record-restore"
+                    onClick={() => onRestore(e.said)}
+                  >
+                    Say it again
+                  </button>
                 )}
                 <p className="record-meta">
                   {e.kind} · {e.undone && "undone · "}

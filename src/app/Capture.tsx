@@ -242,7 +242,6 @@ export function Capture() {
     refreshSummary,
     updateIntention,
     deleteIntention,
-    unmakeIntention,
     makeIntention,
     logout,
     togglePrinciple,
@@ -876,6 +875,10 @@ export function Capture() {
             rules={learnedRules}
             onClearRule={(key) => void clearRule(key)}
             threads={data.threads}
+            onRestore={(said) => {
+              setText((x) => (x ? x + " " : "") + said);
+              setShowRecord(false);
+            }}
             onOpenThread={(id) => {
               setShowRecord(false);
               setTab("threads");
@@ -931,7 +934,6 @@ export function Capture() {
             onChange={updateIntention}
             onCopy={() => copyWhole(shareIntention(intention))}
             onDelete={() => deleteIntention(intention.id)}
-            onUnmake={() => unmakeIntention(intention.id)}
           />
         ) : thread ? (
           <ThreadView
