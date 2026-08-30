@@ -34,7 +34,6 @@ import {
   SHELF,
   dropImages,
   hydrate,
-  nextNumber,
   pad,
   sweep,
   uid,
@@ -118,6 +117,7 @@ import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
 import { applySaveDraft } from "@/lib/intentionOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
+import { assemblePanel } from "@/lib/tidyPanel";
 import { restoreCapture } from "@/lib/undoOps";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
@@ -154,7 +154,6 @@ import {
 import {
   compactBoard,
   mapAiProposals,
-  mergeOrganize,
   type RawAiProposal,
 } from "@/lib/organizeAi";
 
@@ -2398,10 +2397,12 @@ export function useBoard(now: number) {
     const kept = judgedForSignature(result.read, sig);
     if (!kept.length) return;
     setOrganize((cur) =>
-      mergeOrganize(
-        [...(cur ?? []), ...kept],
-        scanStale(latest.current, dismissedOrganize.current)
-      )
+      assemblePanel({
+        board: latest.current,
+        ai: cur ?? [],
+        judged: kept,
+        dismissed: dismissedOrganize.current,
+      })
     );
   };
 
@@ -2468,15 +2469,12 @@ export function useBoard(now: number) {
     const cached = organizeRead.current;
     if (cached && cached.sig === sig) {
       setOrganize(
-        mergeOrganize(
-          [
-            ...cached.ai.filter((p) => !dismissedOrganize.current.includes(p.id)),
-            ...judgedForSignature(judgedRead.current, sig).filter(
-              (p) => !dismissedOrganize.current.includes(p.id)
-            ),
-          ],
-          scanStale(latest.current, dismissedOrganize.current)
-        )
+        assemblePanel({
+          board: latest.current,
+          ai: cached.ai,
+          judged: judgedForSignature(judgedRead.current, sig),
+          dismissed: dismissedOrganize.current,
+        })
       );
       setOrganizeAiStatus("done");
       return;
@@ -2558,16 +2556,15 @@ export function useBoard(now: number) {
       aiOrganize.current = ai;
       organizeRead.current = { sig: boardSignature(latest.current, []), ai };
       setOrganize(
-        mergeOrganize(
-          [
-            ...ai,
-            ...judgedForSignature(
-              judgedRead.current,
-              boardSignature(latest.current, [])
-            ),
-          ],
-          scanStale(latest.current, dismissedOrganize.current)
-        )
+        assemblePanel({
+          board: latest.current,
+          ai,
+          judged: judgedForSignature(
+            judgedRead.current,
+            boardSignature(latest.current, [])
+          ),
+          dismissed: dismissedOrganize.current,
+        })
       );
       setOrganizeAiStatus("done");
     } catch {
