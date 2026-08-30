@@ -3677,7 +3677,16 @@ export function useBoard(now: number) {
     setTab("intentions");
     setLanded("Intention " + pad(intention.number));
     setLandedIds([]);
-    setTimeout(() => setLanded(null), 4500);
+    /* The banner is NOT cleared on a timer here, unlike everywhere else
+       that shows one for a moment.
+ 
+       The Undo button lives inside this banner, and this is the only path
+       that offers an undo and then took it away again after four and a half
+       seconds. An intention is the slowest thing the app makes — several
+       minutes of talking before it appears — so the window closed before
+       there was anything to read, and undoing became impossible rather than
+       merely awkward. Every other capture leaves its banner up until the
+       next capture or an undo clears it; this one does the same now. */
   };
 
   /** Close the intention draft without saving; the source action stays put. */

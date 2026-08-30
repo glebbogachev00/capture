@@ -234,6 +234,20 @@ export function IntentionDetail({
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [more, setMore] = useState(false);
+  const [said, setSaid] = useState(false);
+
+  /* What was actually said, when it is not simply the same sentence.
+ 
+     An intention keeps both: rawInput, the person's own words, and
+     expandedIntention, the model's version of them. Only the second was
+     ever rendered — so four minutes of talking produced two lines on a
+     card, the rest sat in the board unreachable, and the honest report of
+     that was "a lot of things I said got lost". Nothing was lost; nothing
+     was shown. */
+  const spoken = (intention.rawInput ?? "").trim();
+  const hasSpoken =
+    spoken.length > 0 &&
+    spoken !== (intention.expandedIntention ?? "").trim();
 
   return (
     <div>
@@ -341,6 +355,21 @@ export function IntentionDetail({
         }
       />
 
+      {hasSpoken && (
+        /* Folded, and last. The expanded intention is the thing to act on;
+           this is the record behind it, wanted occasionally and never in
+           the way. */
+        <div className="int-said">
+          <button
+            className="int-said-open"
+            onClick={() => setSaid((v) => !v)}
+            aria-expanded={said}
+          >
+            {said ? "Hide what you said" : "What you said"}
+          </button>
+          {said && <p className="int-said-text">{spoken}</p>}
+        </div>
+      )}
     </div>
   );
 }
