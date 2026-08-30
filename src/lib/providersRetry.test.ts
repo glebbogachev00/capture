@@ -105,3 +105,83 @@ describe("a second Groq account", () => {
     expect(seen).toEqual(["groq", "mistral"]);
   });
 });
+
+describe("a tier that is out for the day", () => {
+  it("is skipped on the next request instead of probed again", async () => {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    process.env.MISTRAL_API_KEY = "m";
+    const { withFallback, _resetDailyOut } = await import("./providers");
+    _resetDailyOut();
+
+    const daily = Object.assign(
+      new Error(
+        "Rate limit reached on tokens per day (TPD): Limit 200000. Please try again in 11m57s."
+      ),
+      { statusCode: 429 }
+    );
+    const calls: string[] = [];
+    const attempt = async (tier: { name: string }) => {
+      calls.push(tier.name);
+      if (tier.name === "groq") throw daily;
+      return "answered";
+    };
+
+    await withFallback(attempt);
+    /* Learned once... */
+    expect(calls).toEqual(["groq", "mistral"]);
+    await withFallback(attempt);
+    /* ...spared thereafter. The person waiting on a sort does not pay for
+       a probe of a budget that refills over a day. */
+    expect(calls).toEqual(["groq", "mistral", "mistral"]);
+  });
+
+  it("never skips its way to asking nobody", async () => {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    delete process.env.MISTRAL_API_KEY;
+    const { withFallback, _resetDailyOut } = await import("./providers");
+    _resetDailyOut();
+
+    const daily = Object.assign(
+      new Error("tokens per day (TPD) exceeded. Please try again in 5m."),
+      { statusCode: 429 }
+    );
+    let calls = 0;
+    await expect(
+      withFallback(async () => {
+        calls++;
+        throw daily;
+      })
+    ).rejects.toThrow();
+    const after = calls;
+    /* The only tier is marked out — but a request must still ASK rather
+       than fail without trying: being wrong about a recovery costs one
+       call, refusing to try costs the capture. */
+    await expect(
+      withFallback(async () => {
+        calls++;
+        throw daily;
+      })
+    ).rejects.toThrow();
+    expect(calls).toBeGreaterThan(after);
+  });
+
+  it("does not sit out the 18-second wait for a budget that refills over a day", async () => {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    delete process.env.MISTRAL_API_KEY;
+    const { withFallback, _resetDailyOut } = await import("./providers");
+    _resetDailyOut();
+
+    const daily = Object.assign(
+      new Error("on tokens per day (TPD). Please try again in 9m."),
+      { statusCode: 429 }
+    );
+    const started = Date.now();
+    await expect(withFallback(async () => Promise.reject(daily))).rejects.toThrow();
+    /* The old path waited 18-25s before failing — pure waiting-room for the
+       person, since a day does not roll over while they watch. */
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+});

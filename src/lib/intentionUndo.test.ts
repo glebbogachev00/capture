@@ -62,3 +62,44 @@ describe("an intention's own words", () => {
     expect(view).toMatch(/aria-expanded=\{said\}/);
   });
 });
+
+describe("walking away from an intention", () => {
+  it("discarding a draft parks the words instead of deleting them", () => {
+    /* "I don't want it to be an intention" is a judgement about the kind,
+       not permission to delete the thought. The old discard nulled the
+       draft — the only copy of four minutes of talking — and the person
+       reported the loss in exactly those words: "I literally lost that
+       thought, which came as an inspiration." */
+    const discard = hook.slice(
+      hook.indexOf("const discardDraft"),
+      hook.indexOf("const updateIntention")
+    );
+    expect(discard).toMatch(/unsorted: true/);
+    expect(discard).toMatch(/withLedger/);
+    expect(discard).toMatch(/kept in Actions, unsorted/i);
+  });
+
+  it("a draft backed by an existing action still discards clean", () => {
+    /* Converting an action opens a draft COPY — the action stays on the
+       board, so parking the words again would duplicate them. */
+    const discard = hook.slice(
+      hook.indexOf("const discardDraft"),
+      hook.indexOf("const updateIntention")
+    );
+    expect(discard).toMatch(/if \(fromAction \|\| !d\?\.rawInput\.trim\(\)\) return;/);
+  });
+
+  it("a misfiled intention can be un-made from its own screen, words kept", () => {
+    /* The banner's Undo covers the first minutes; this covers the day-later
+       discovery. Delete answers "I don't want this thought" — un-make
+       answers "this thought is not an intention". */
+    const unmake = hook.slice(
+      hook.indexOf("const unmakeIntention"),
+      hook.indexOf("const deleteIntention")
+    );
+    expect(unmake).toMatch(/it\.rawInput \|\| it\.expandedIntention/);
+    expect(unmake).toMatch(/unsorted: true/);
+    expect(unmake).toMatch(/intentions: latest\.current\.intentions\.filter/);
+    expect(view).toMatch(/Not an intention/);
+  });
+});

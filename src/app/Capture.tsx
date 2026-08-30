@@ -242,6 +242,7 @@ export function Capture() {
     refreshSummary,
     updateIntention,
     deleteIntention,
+    unmakeIntention,
     makeIntention,
     logout,
     togglePrinciple,
@@ -930,6 +931,7 @@ export function Capture() {
             onChange={updateIntention}
             onCopy={() => copyWhole(shareIntention(intention))}
             onDelete={() => deleteIntention(intention.id)}
+            onUnmake={() => unmakeIntention(intention.id)}
           />
         ) : thread ? (
           <ThreadView

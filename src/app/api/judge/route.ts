@@ -138,6 +138,7 @@ export async function POST(request: Request) {
   try {
     const { value, via } = await withFallback(async (tier) => {
       const { object } = await generateObject({
+        maxRetries: 0,
         model: tier.model,
         schema: Verdicts,
         prompt:

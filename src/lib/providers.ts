@@ -148,12 +148,42 @@ function askedToWait(error: unknown): number | null {
   return m[2].toLowerCase() === "m" ? n * 60_000 : n * 1000;
 }
 
+/** A daily limit, as opposed to a per-minute one. The distinction decides
+    everything below: a minute rolls over while the person is still reading
+    the error, a day does not. */
+function dailyLimited(error: unknown): boolean {
+  return (
+    rateLimited(error) &&
+    /per day|tpd/i.test(String((error as { message?: string })?.message ?? ""))
+  );
+}
+
+/* Tiers whose DAILY budget is spent, and when to look again.
+ 
+   Module-level on purpose: within a warm serverless instance every request
+   shares it, so one discovered exhaustion spares every later request the
+   probe. Without this, every single sort re-asked two dead Groq orgs before
+   reaching the provider that would answer — wasted round-trips on the path
+   a person is actively waiting on, all day, until midnight-ish. A cold
+   instance re-learns with one cheap failure.
+ 
+   The window honours what the provider said, capped: Groq's daily limit is
+   a rolling 24h window that trickles back, so a probe every few minutes is
+   how a recovered tier gets found again. */
+const dailyOut = new Map<string, number>();
+const DAILY_RECHECK_CAP_MS = 10 * 60_000;
+
 /* Long enough for a per-minute window to roll over, short enough that the
    person is still waiting on the same capture rather than a new one. */
 const DEFAULT_WAIT_MS = 18_000;
 /* The whole route is capped at sixty seconds, so there is room for exactly
    one more pass through the chain and no more. */
 const MAX_WAIT_MS = 25_000;
+
+/** Test hook: clear the daily-exhaustion memory between cases. */
+export function _resetDailyOut(): void {
+  dailyOut.clear();
+}
 
 export async function withFallback<T>(
   attempt: (tier: Tier) => Promise<T>,
@@ -194,12 +224,24 @@ export async function withFallback<T>(
   > => {
     let last: unknown;
     let limited = false;
-    for (const tier of tiers) {
+    /* Skip tiers known to be out for the day — but never skip our way to
+       an empty round: if the breaker would silence everyone, ignore it and
+       ask anyway. Being wrong about a recovery costs one failed call;
+       refusing to try at all costs the capture. */
+    let live = tiers.filter((t) => (dailyOut.get(t.name) ?? 0) < Date.now());
+    if (!live.length) live = tiers;
+    for (const tier of live) {
       try {
         return { ok: true, value: await attempt(tier), via: tier.name };
       } catch (error) {
         last = error;
         if (rateLimited(error)) limited = true;
+        if (dailyLimited(error)) {
+          dailyOut.set(
+            tier.name,
+            Date.now() + Math.min(askedToWait(error) ?? DAILY_RECHECK_CAP_MS, DAILY_RECHECK_CAP_MS)
+          );
+        }
         console.warn(`[capture] ${tier.name} failed, trying next`, error);
         // Remember which tier this error came from so the message shown to
         // the operator names the provider that actually failed.
@@ -216,8 +258,11 @@ export async function withFallback<T>(
   const first = await round();
   if (first.ok) return { value: first.value, via: first.via };
   /* Only a rate limit earns a second pass. An outage does not get better
-     for being asked twice, and the person is waiting. */
-  if (!first.limited) throw first.error;
+     for being asked twice, and the person is waiting — and neither does a
+     DAILY limit: eighteen seconds against a budget that refills over a day
+     is pure waiting-room, so it fails now and the client parks the capture
+     unsorted instead. */
+  if (!first.limited || dailyLimited(first.error)) throw first.error;
 
   const wait = Math.min(askedToWait(first.error) ?? DEFAULT_WAIT_MS, MAX_WAIT_MS);
   console.warn(`[capture] every tier rate-limited; waiting ${wait}ms and trying once more`);

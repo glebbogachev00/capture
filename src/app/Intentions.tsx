@@ -224,12 +224,14 @@ export function IntentionDetail({
   onChange,
   onCopy,
   onDelete,
+  onUnmake,
 }: {
   intention: Intention;
   onBack: () => void;
   onChange: (next: Intention) => void;
   onCopy: () => void;
   onDelete: () => void;
+  onUnmake: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -294,6 +296,13 @@ export function IntentionDetail({
           <div className="row-actions">
             <button className="ghost" onClick={() => setEditing(true)}>
               Edit wording
+            </button>
+            {/* The kind was wrong, not the thought. Delete answers "I do
+                not want this"; this answers "this is not an intention" and
+                sends the words back to Actions, unsorted — asked for after
+                a mislabelled capture could only be deleted, words and all. */}
+            <button className="ghost" onClick={onUnmake}>
+              Not an intention
             </button>
             <button
               className="ghost warn"
