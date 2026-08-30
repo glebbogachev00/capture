@@ -23,6 +23,19 @@ const view = fs.readFileSync(
 );
 
 describe("landing an intention", () => {
+  it("a new capture retires the previous receipt", () => {
+    /* Persistence cuts both ways. The receipt must survive idle time — and
+       must NOT survive the next capture starting, or it sits there saying
+       "Landed in X" about words still being sorted, and anything waiting
+       on .landed as a finished-signal fires on the stale banner. */
+    const sortStarts = [...hook.matchAll(/setBusy\("Sorting"\)/g)];
+    expect(sortStarts.length).toBeGreaterThanOrEqual(2);
+    for (const m of sortStarts) {
+      const before = hook.slice(Math.max(0, m.index - 700), m.index);
+      expect(before).toMatch(/setLanded\(null\)/);
+    }
+  });
+
   it("no path shreds the receipt on a timer", () => {
     /* The banner is the receipt — where the capture went, with the only
        Undo in it. The intention path was fixed first; the main capture and

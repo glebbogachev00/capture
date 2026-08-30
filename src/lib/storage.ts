@@ -53,6 +53,27 @@ export async function set(key: string, value: string): Promise<void> {
   await run("readwrite", (s) => s.put(value, key));
 }
 
+/** Several writes, one transaction.
+ 
+    Every call to set() opens its own readwrite transaction, and a readwrite
+    transaction blocks every read queued behind it on the same store. The
+    board commit wrote the board and then the tombstones — two lock windows
+    back to back, at exactly the moment cover images are trying to read.
+    One transaction halves the blocking for the same bytes, and is also the
+    honest unit: a commit's board and tombstones belong together or not at
+    all. */
+export async function setMany(entries: [string, string][]): Promise<void> {
+  const conn = await db();
+  await new Promise<void>((resolve, reject) => {
+    const tx = conn.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    for (const [key, value] of entries) store.put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 export async function del(key: string): Promise<void> {
   await run("readwrite", (s) => s.delete(key));
 }

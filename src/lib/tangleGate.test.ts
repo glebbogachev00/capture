@@ -61,63 +61,22 @@ describe("being asked about a tangled pair", () => {
     expect(organize).toMatch(/tangleTried\.current\.clear\(\)/);
   });
 
-  it("absorbs the old thread when every note leaves it", () => {
-    /* The app refuses to merge threads on shared words or a model's
-       opinion, and that rule stands. This case is different in kind: the
-       pair was raised because the person had already moved notes between
-       these two threads by hand, and they have just agreed to move the
-       rest. Leaving the emptied thread behind keeps the name that caused
-       the confusion in the list, where the sorter reads it and files into
-       it again. */
+  it("delegates the merge math to lib/tangleOps", () => {
+    /* The absorb rules — every note leaving, actions following, an empty
+       thread never absorbed — used to be pinned here as source greps,
+       because the math lived inline in the hook and could not be called.
+       It moved to lib/tangleOps and those rules are now BEHAVIOR tests in
+       tangleOps.test.ts, which replay both of the feature's shipped bugs
+       as assertions. What remains to guard here is the seam itself: the
+       hook must go through the tested function, not grow a second copy of
+       the math. */
     const accept = source.slice(
       source.indexOf("const acceptTangle"),
       source.indexOf("const dismissTangle")
     );
-    expect(accept).toMatch(/const emptied =/);
-    expect(accept).toMatch(/\.filter\(\(x\) => !\(emptied && x\.id === t\.pair\.fromId\)\)/);
-  });
-
-  it("takes the actions with it rather than orphaning them", () => {
-    /* An action remembers the thread it arrived with. Deleting the thread
-       without repointing leaves it pointing at nothing. */
-    const accept = source.slice(
-      source.indexOf("const acceptTangle"),
-      source.indexOf("const dismissTangle")
-    );
-    expect(accept).toMatch(/a\.threadId === t\.pair\.fromId \? \{ \.\.\.a, threadId: t\.pair\.toId \}/);
-    expect(accept).toMatch(/\{ \.\.\.board, threads, actions \}/);
-  });
-
-  it("only absorbs when the thread actually had notes to lose", () => {
-    /* An already-empty thread is not something the person just agreed to
-       merge, and deleting it here would be a change nobody asked for. */
-    const accept = source.slice(
-      source.indexOf("const acceptTangle"),
-      source.indexOf("const dismissTangle")
-    );
-    expect(accept).toMatch(/\(from\?\.frags \?\? \[\]\)\.length > 0/);
-  });
-
-  it("can take every note in the thread, not just the listed ones", () => {
-    /* Caught by looking at the recording, not by any test here: the review
-       said "Merge" and the board said "Moved 22". The judge lists what it
-       is confident about — twenty-two of a larger thread — so ticking
-       every row emptied the review and never the thread, and the merge was
-       unreachable in practice on the one board that needed it. */
-    const accept = source.slice(
-      source.indexOf("const acceptTangle"),
-      source.indexOf("const dismissTangle")
-    );
+    expect(accept).toMatch(/applyTangleAccept\(/);
     expect(accept).toMatch(/takeAll = false/);
-    expect(accept).toMatch(
-      /takeAll \? \(from\?\.frags \?\? \[\]\)\.map\(\(f\) => f\.id\) : fragIds/
-    );
-  });
-
-  it("tells the review how big the thread actually is", () => {
-    /* The label promised a merge off the wrong number. It compares against
-       the thread's own count now, which the hook has to send. */
-    expect(source).toMatch(/fromFrags: \(from\?\.frags \?\? \[\]\)\.length/);
+    expect(accept).not.toMatch(/frags\.filter/);
   });
 
   it("still holds the daily gate when nobody asked", () => {

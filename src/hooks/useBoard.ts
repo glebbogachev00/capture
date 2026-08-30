@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { stamp } from "@/lib/clock";
-import { del, get, keys, set } from "@/lib/storage";
+import { del, get, keys, set, setMany } from "@/lib/storage";
 import {
   type Action,
   type Board,
@@ -116,6 +116,7 @@ import {
   subscribeRecordCopied,
 } from "@/lib/recordCopied";
 import { imgLoad, imgSave } from "@/lib/imgCache";
+import { applyTangleAccept } from "@/lib/tangleOps";
 import { referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
@@ -536,8 +537,10 @@ export function useBoard(now: number) {
       setData(merged.board);
       tombstones.current = merged.tombstones;
       try {
-        await set(KEY, JSON.stringify(merged.board));
-        await set(TOMBSTONE_KEY, JSON.stringify(merged.tombstones));
+        await setMany([
+          [KEY, JSON.stringify(merged.board)],
+          [TOMBSTONE_KEY, JSON.stringify(merged.tombstones)],
+        ]);
       } catch {
         /* disk hiccup; next commit retries */
       }
@@ -607,8 +610,10 @@ export function useBoard(now: number) {
           setTimeout(() => setNotice(null), 5000);
         }
         try {
-          await set(KEY, JSON.stringify(merged.board));
-          await set(TOMBSTONE_KEY, JSON.stringify(merged.tombstones));
+          await setMany([
+            [KEY, JSON.stringify(merged.board)],
+            [TOMBSTONE_KEY, JSON.stringify(merged.tombstones)],
+          ]);
         } catch {
           /* next commit retries */
         }
@@ -1008,8 +1013,12 @@ export function useBoard(now: number) {
         );
       }
       try {
-        await set(KEY, JSON.stringify(stamped.board));
-        await set(TOMBSTONE_KEY, JSON.stringify(tombstones.current));
+        /* One transaction, not two: board and tombstones are one commit,
+           and each extra readwrite window blocks image reads behind it. */
+        await setMany([
+          [KEY, JSON.stringify(stamped.board)],
+          [TOMBSTONE_KEY, JSON.stringify(tombstones.current)],
+        ]);
       } catch {
         setErr("Couldn't save that. Your last capture is still on screen — try again.");
       }
@@ -1550,6 +1559,16 @@ export function useBoard(now: number) {
   /** Run a capture that was saved raw back through the sorter. */
   const resort = async (a: Action) => {
     setErr("");
+    /* The old receipt clears the moment a new capture begins — not on a
+       timer. The banner persists so its Undo stays reachable, but once a
+       new sort is in flight the receipt is about the PREVIOUS capture and
+       its Undo is already stale; leaving it up reads as "Landed in X"
+       about words still being sorted. (It also silently broke the recorded
+       suite, whose wait-for-.landed resolved on the stale banner and
+       clicked ahead of the sort.) */
+    setLanded(null);
+    setLandedIds([]);
+    setSuggestion(null);
     setBusy("Sorting");
     try {
       /* An unsorted capture with a photo re-sorts by what it shows, like the
@@ -1677,6 +1696,10 @@ export function useBoard(now: number) {
        is on its way. A re-sort passes `pinned`, and must keep its own
        question alive long enough to have written the rule. */
     if (!pinned) setMisfiled(null);
+    /* Same rule as resort: a new capture retires the previous receipt. */
+    setLanded(null);
+    setLandedIds([]);
+    setSuggestion(null);
     setBusy("Sorting");
 
     const at = stamp();
@@ -2278,109 +2301,35 @@ export function useBoard(now: number) {
 
   /** Move everything ticked, and take the new name if one was offered. */
   const acceptTangle = useCallback(
-    async (
-      fragIds: string[],
-      rename: boolean,
-      /* Take every note in the thread, not just the ones the model listed.
- 
-         Without this the merge was unreachable in practice. The judge
-         proposes the notes it is confident about — twenty-two of a larger
-         thread — so "tick everything" emptied the review, never the thread,
-         and the board came back saying "Moved 22" while both names stayed
-         in the list. The person who has already moved notes between these
-         two threads seven times by hand is not asking about twenty-two of
-         them. */
-      takeAll = false
-    ) => {
+    async (fragIds: string[], rename: boolean, takeAll = false) => {
       const t = tangle;
       if (!t) return;
       setTangle(null);
 
-      /* Moved in ONE pass, not by calling the single-note move twenty times.
-         That helper re-summarises both threads after every move — two model
-         calls each — so a batch of twenty-one became forty-two sequential
-         calls: minutes of work, a rate limit hit halfway, and a screen that
-         looks stuck while two of the twenty-one land. The batch does the
-         whole move at once and summarises each thread once at the end. */
-      const board = latest.current;
-      const from = board.threads.find((x) => x.id === t.pair.fromId);
-      const taking = new Set(
-        takeAll ? (from?.frags ?? []).map((f) => f.id) : fragIds
-      );
-      const going = (from?.frags ?? []).filter((f) => taking.has(f.id));
-      if (!going.length && !(rename && t.rename)) return;
-
-      /* Taking every note is a merge, whatever it was called on the way in.
- 
-         The app does not merge threads on its own — not on shared words,
-         not on a model's opinion — and that rule stands. This one case is
-         different in kind: the pair was raised because the person had
-         already moved notes between these two threads by hand, several
-         times, and they have just agreed to move the rest. Leaving the
-         emptied thread behind would keep the name that caused the
-         confusion sitting in the list, where the sorter reads it and files
-         into it again. The clutter this removes is the clutter that was
-         making everything else file wrongly. */
-      const emptied =
-        (from?.frags ?? []).length > 0 &&
-        (from?.frags ?? []).every((f) => taking.has(f.id));
-
-      const threads = board.threads
-        .map((x) => {
-          if (x.id === t.pair.fromId) {
-            const left = x.frags.filter((f) => !taking.has(f.id));
-            return {
-              ...x,
-              frags: left,
-              ...(rename && t.rename ? { name: t.rename } : {}),
-            };
-          }
-          if (x.id === t.pair.toId)
-            return {
-              ...x,
-              frags: [...x.frags, ...going].sort((a, b) => a.at - b.at),
-            };
-          return x;
-        })
-        .filter((x) => !(emptied && x.id === t.pair.fromId));
-
-      /* Actions remember the thread they arrived with, and that thread is
-         about to stop existing. They follow the notes rather than becoming
-         orphans pointing at nothing. */
-      const actions = emptied
-        ? board.actions.map((a) =>
-            a.threadId === t.pair.fromId ? { ...a, threadId: t.pair.toId } : a
-          )
-        : board.actions;
+      /* The merge math lives in lib/tangleOps — pure, and pinned by
+         behavior tests that replay this feature's two shipped bugs. This
+         callback owns only what React owns: the correction ledger entry,
+         the summary refreshes, and the notice. */
+      const out = applyTangleAccept(latest.current, t, fragIds, rename, takeAll);
+      if (!out) return;
 
       /* One correction for the batch. Twenty-one of them would drown the
          signal the correction ledger exists to carry. */
       await commit(
-        noteCorrection(
-          { ...board, threads, actions },
-          {
-            proposalKind: "related_suggestion",
-            accepted: true,
-            context: emptied
-              ? `merged ${t.pair.fromName} into ${t.pair.toName}`
-              : `untangled ${t.pair.fromName} and ${t.pair.toName}`,
-            rule: `Notes like these belong in "${t.pair.toName}", not "${t.pair.fromName}"`,
-          }
-        )
+        noteCorrection(out.board, {
+          proposalKind: "related_suggestion",
+          accepted: true,
+          context: out.emptied
+            ? `merged ${t.pair.fromName} into ${t.pair.toName}`
+            : `untangled ${t.pair.fromName} and ${t.pair.toName}`,
+          rule: `Notes like these belong in "${t.pair.toName}", not "${t.pair.fromName}"`,
+        })
       );
       /* Both accounts of themselves are now wrong: one gained a pile, the
-         other lost one. Once each, after the move. */
+         other lost one — unless it stopped existing. Once each, after. */
       const after = await regenerate(latest.current, t.pair.toId);
-      if (threads.some((x) => x.id === t.pair.fromId && x.frags.length))
-        await regenerate(after, t.pair.fromId);
-      setNotice(
-        emptied
-          ? `Merged ${t.pair.fromName} into ${t.pair.toName} · ${going.length} ${
-              going.length === 1 ? "note" : "notes"
-            }`
-          : `Moved ${going.length} to ${t.pair.toName}` +
-            (rename && t.rename ? ` · renamed to ${t.rename}` : "")
-      );
+      if (!out.emptied) await regenerate(after, t.pair.fromId);
+      setNotice(out.notice);
       setTimeout(() => setNotice(null), 5000);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps

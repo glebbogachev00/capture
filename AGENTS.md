@@ -73,7 +73,11 @@ board into the same `kv` store the images read from; heavy writes stall every
 writes, and nothing new gets gated on `busy` without asking what it feels
 like at 30 seconds.
 
-Quick tests, in order: `npm run check` (lint, 698 tests, build, trace guard) ·
-deploy isolated preview and click through the changed surface · one capture
-with the model provider forced dead (`GROQ_API_KEY=broken`) · reload the PWA
-twice and check `/api/version` agrees with the screen.
+Quick tests, in order: `npm run check` (lint, full suite, build, trace
+guard) · `scripts/preview-verify.sh` (deploys an isolated dead-hub preview
+and runs the recorded mobile suite against it — the gate that catches what
+unit tests cannot; `--full` for all 28 steps) · one capture with the model
+provider forced dead (`GROQ_API_KEY=broken`) · reload the PWA twice and
+check `/api/version` agrees with the screen. When done:
+`scripts/preview-clean.sh` — previews carry live model keys with no app
+password, and leaving them standing is quota anyone can burn.
