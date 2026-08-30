@@ -239,6 +239,7 @@ export function Capture() {
     mergeThreads,
     saveDraft,
     discardDraft,
+    draftToThread,
     refreshSummary,
     updateIntention,
     deleteIntention,
@@ -926,6 +927,7 @@ export function Capture() {
             onChange={setDraft}
             onSave={saveDraft}
             onDiscard={discardDraft}
+            onThreadInstead={() => void draftToThread()}
           />
         ) : intention ? (
           <IntentionDetail

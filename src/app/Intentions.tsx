@@ -107,12 +107,14 @@ export function IntentionDraft({
   onChange,
   onSave,
   onDiscard,
+  onThreadInstead,
 }: {
   draft: Draft;
   busy: boolean;
   onChange: (d: Draft) => void;
   onSave: () => void;
   onDiscard: () => void;
+  onThreadInstead: () => void;
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -140,6 +142,14 @@ export function IntentionDraft({
       <div className="act-meta">
         <button className="ghost" onClick={() => setEditing(true)}>
           Edit wording
+        </button>
+        {/* The escape from a wrong classification, asked for three times:
+            everything said goes back through the sorter as a thread — the
+            FULL dictation, not this condensed reading of it. Next to Edit
+            wording because that is where the eye goes when the words feel
+            wrong. */}
+        <button className="ghost" onClick={onThreadInstead} disabled={busy}>
+          It&apos;s a thread, not an intention
         </button>
       </div>
 
