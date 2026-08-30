@@ -116,6 +116,7 @@ import {
 } from "@/lib/recordCopied";
 import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
+import { applySaveDraft } from "@/lib/intentionOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
 import { restoreCapture } from "@/lib/undoOps";
 import { referencedImageIds } from "@/lib/imgSync";
@@ -3529,47 +3530,19 @@ export function useBoard(now: number) {
   const saveDraft = async () => {
     if (!draft) return;
     const at = stamp();
-    const intention: Intention = {
-      id: uid(),
-      number: nextNumber(latest.current.intentions),
-      rawInput: draft.rawInput,
-      expandedIntention: draft.expandedIntention,
-      recommendedActions: draft.recommendedActions,
-      counterIntentions: draft.counterIntentions,
-      at,
-      updatedAt: at,
-    };
-    let next: Board = {
-      ...latest.current,
-      intentions: [intention, ...latest.current.intentions],
-    };
-    // This draft came from converting an action; the action only goes once
-    // the intention is actually saved — discarding the draft keeps it.
-    // Its photos stay on disk: Undo below can bring the action back, and a
-    // restored action pointing at bytes we deleted is worse than a stray
-    // picture nobody references.
-    if (pendingSource) {
-      next = {
-        ...next,
-        actions: latest.current.actions.filter((a) => a.id !== pendingSource),
-      };
-    }
-    // A capture that became this intention records itself in the ledger:
-    // what was said (raw) and what it became (the reviewed wording).
+    /* The board math lives in lib/intentionOps — pure and behavior-tested:
+       the full rawInput rides on the intention, a converted action retires
+       only now, and a capture-born draft writes its ledger entry. This
+       callback keeps what React owns. */
     const fromCapture = intentionLedger.current;
-    if (fromCapture) {
-      next = withLedger(next, {
-        id: uid(),
-        at,
-        raw: fromCapture.raw,
-        clean: draft.expandedIntention,
-        kind: "intention",
-        source: fromCapture.source,
-        targetId: intention.id,
-        modelVia: fromCapture.via,
-      });
-      intentionLedger.current = null;
-    }
+    const { board: next, intention } = applySaveDraft(
+      latest.current,
+      draft,
+      { pendingSource, capture: fromCapture },
+      { intentionId: uid(), ledgerId: uid() },
+      at
+    );
+    if (fromCapture) intentionLedger.current = null;
     /* Saving is the first commit on this path. The capture fork threw the
        snapshot away because a draft can just be discarded — but the moment
        the intention is on the board, discarding is no longer on offer and
