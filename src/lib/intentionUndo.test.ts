@@ -76,7 +76,10 @@ describe("walking away from an intention", () => {
     );
     expect(discard).toMatch(/unsorted: true/);
     expect(discard).toMatch(/withLedger/);
-    expect(discard).toMatch(/kept in Actions, unsorted/i);
+    /* The banner renders as "Landed in {x}." — so the string must read as
+       a PLACE, and the durable promise is where the words went, not the
+       phrasing around it. */
+    expect(discard).toMatch(/Actions, unsorted/i);
   });
 
   it("a draft backed by an existing action still discards clean", () => {
