@@ -24,10 +24,10 @@ const view = fs.readFileSync(
 
 describe("landing an intention", () => {
   it("a new capture retires the previous receipt", () => {
-    /* Persistence cuts both ways. The receipt must survive idle time — and
-       must NOT survive the next capture starting, or it sits there saying
-       "Landed in X" about words still being sorted, and anything waiting
-       on .landed as a finished-signal fires on the stale banner. */
+    /* Persistence cuts both ways: the receipt must survive long enough to
+       read, and must NOT survive the next capture starting — a stale
+       "Landed in X" over words still being sorted misreports the board,
+       and anything waiting on .landed as a finished-signal fires early. */
     const sortStarts = [...hook.matchAll(/setBusy\("Sorting"\)/g)];
     expect(sortStarts.length).toBeGreaterThanOrEqual(2);
     for (const m of sortStarts) {
@@ -36,15 +36,21 @@ describe("landing an intention", () => {
     }
   });
 
-  it("no path shreds the receipt on a timer", () => {
-    /* The banner is the receipt — where the capture went, with the only
-       Undo in it. The intention path was fixed first; the main capture and
-       resort paths turned out to have the same 9-second timer, found when
-       the banner vanished unclicked on a deployed preview — the reported
-       "it shows where it filed things, but that banner is gone or moves
-       too fast". No setLanded(null) may sit inside a setTimeout. */
-    const timers = [...hook.matchAll(/setTimeout\([^)]*=>\s*\{[^}]*setLanded\(null\)/g)];
-    expect(timers).toHaveLength(0);
+  it("the receipt stays about half a minute, then leaves on its own", () => {
+    /* The number that survived both complaints: 4.5 seconds was gone
+       before the slowest flow could be read ("where is the undo button"),
+       and forever was furniture ("it doesn't have to stay there forever...
+       maybe thirty seconds"). The ceiling lives in ONE place; every
+       receipt-showing site must go through it. */
+    const m = /const RECEIPT_MS = ([0-9_]+);/.exec(hook);
+    expect(m, "RECEIPT_MS should exist").toBeTruthy();
+    const ms = Number(m![1].replace(/_/g, ""));
+    expect(ms).toBeGreaterThanOrEqual(25_000);
+    expect(ms).toBeLessThanOrEqual(45_000);
+    /* No site may set a visible receipt around the policy. */
+    const direct = [...hook.matchAll(/setLanded\((?!null)[^)]/g)];
+    /* setLanded appears inside showReceipt itself and nowhere else. */
+    expect(direct.length).toBe(1);
   });
 
   it("leaves the banner up, because Undo lives inside it", () => {
@@ -54,15 +60,15 @@ describe("landing an intention", () => {
        minutes of talking, and the window shut before there was anything to
        read. */
     const landing = hook.slice(
-      hook.indexOf('setLanded("Intention "'),
-      hook.indexOf('setLanded("Intention "') + 900
+      hook.indexOf('showReceipt("Intention "'),
+      hook.indexOf('showReceipt("Intention "') + 900
     );
     expect(landing).not.toMatch(/setTimeout\([^)]*setLanded\(null\)/);
   });
 
   it("still offers the undo at all", () => {
     /* The guard above is worthless if the path stops enabling undo. */
-    const before = hook.lastIndexOf("setCanUndo(true)", hook.indexOf('setLanded("Intention "'));
+    const before = hook.lastIndexOf("setCanUndo(true)", hook.indexOf('showReceipt("Intention "'));
     expect(before).toBeGreaterThan(-1);
   });
 });

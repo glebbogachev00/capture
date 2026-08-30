@@ -279,6 +279,26 @@ export function useBoard(now: number) {
   const [summarising, setSummarising] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [landed, setLanded] = useState<string | null>(null);
+
+  /* How long a receipt stays: long enough to read and to reach its Undo,
+     gone before it becomes furniture. It also retires early when the next
+     capture starts — each sort start clears it — so this timer is the
+     ceiling, not the lifetime. The first version cleared at 4.5 seconds
+     (unreadable on the slowest flow), the second never cleared ("it
+     doesn't have to stay there forever"); thirty-five seconds is the
+     number that survived both complaints. */
+  const RECEIPT_MS = 35_000;
+  const receiptTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showReceipt = useCallback((text: string) => {
+    if (receiptTimer.current) clearTimeout(receiptTimer.current);
+    setLanded(text);
+    receiptTimer.current = setTimeout(() => {
+      receiptTimer.current = null;
+      setLanded(null);
+      setLandedIds([]);
+      setSuggestion(null);
+    }, RECEIPT_MS);
+  }, []);
   /* What the last capture created, so the board can wash those rows once —
      the banner says a capture landed; this shows WHERE. Cleared with the
      banner, and by the animation's own end on each row. */
@@ -1412,7 +1432,7 @@ export function useBoard(now: number) {
       };
       targetId = openThread.id;
       targetFragId = frag.id;
-      setLanded(openThread.name + " — saved unsorted");
+      showReceipt(openThread.name + " — saved unsorted");
     } else {
       /* A failed sort NEVER invents a thread.
  
@@ -1448,7 +1468,7 @@ export function useBoard(now: number) {
       /* Say where it is and that it is not lost. "Kept unsorted" told you
          a state; this tells you where to find it and that it can still be
          sorted once the model answers again. */
-      setLanded("Kept in Actions, unsorted — sort it when the model is back");
+      showReceipt("Kept in Actions, unsorted — sort it when the model is back");
     }
 
     // The fallback is still a capture — the ledger records it exactly as it
@@ -1518,7 +1538,7 @@ export function useBoard(now: number) {
         a.at,
         board
       );
-      setLanded(landed);
+      showReceipt(landed);
       setLandedIds(fresh);
       setTab(out.kind === "action" ? "actions" : "threads");
       // Snapshot right before the re-sort lands — Undo reverts exactly this,
@@ -1751,7 +1771,7 @@ export function useBoard(now: number) {
             rule: commandLesson,
           })
         : withAll;
-      setLanded(landed);
+      showReceipt(landed);
       setLandedIds(fresh);
       setTab(out.kind === "action" ? "actions" : "threads");
       setText("");
@@ -3568,7 +3588,7 @@ export function useBoard(now: number) {
     setDraft(null);
     setPendingSource(null);
     setTab("intentions");
-    setLanded("Intention " + pad(intention.number));
+    showReceipt("Intention " + pad(intention.number));
     setLandedIds([]);
     /* The banner is NOT cleared on a timer here, unlike everywhere else
        that shows one for a moment.
@@ -3583,6 +3603,24 @@ export function useBoard(now: number) {
   };
 
   /** Close the intention draft without saving; the source action stays put. */
+  /** The classifier called it an intention; the person says thread.
+ 
+      Asked for three times, in the same words each time: dictate minutes of
+      thinking, watch it come back as a two-line intention, and the only
+      exits were Save (wrong) or Discard-then-copy-from-history (a chore).
+      This is the third exit: the draft closes without a trace — no undone
+      entry, because the words are not being dropped, they are being FILED —
+      and the full raw text goes back through the sorter pinned to thread,
+      landing with its own receipt and its own undo like any capture. */
+  const draftToThread = async () => {
+    const d = draft;
+    if (!d?.rawInput.trim()) return;
+    setPendingSource(null);
+    intentionLedger.current = null;
+    setDraft(null);
+    await submit(false, "thread", d.rawInput);
+  };
+
   const discardDraft = async () => {
     const d = draft;
     const fromAction = pendingSource;
@@ -4550,6 +4588,7 @@ export function useBoard(now: number) {
     expandIntention,
     saveDraft,
     discardDraft,
+    draftToThread,
     refreshSummary,
     updateIntention,
     deleteIntention,
