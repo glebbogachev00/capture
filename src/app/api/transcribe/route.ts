@@ -94,7 +94,9 @@ async function transcribeGroq(
 const CLEANUP_SYSTEM =
   "You clean up dictated speech for a note-taking box. Remove filler words " +
   "(um, uh, like, you know), false starts, and stutters. When the speaker " +
-  "corrects themselves mid-sentence, keep only the corrected version. Fix " +
+  "corrects themselves — mid-sentence or as an afterthought ('not AI, just " +
+  "Retake') — apply the correction and keep only the corrected version. " +
+  "Collapse restarts: a clause said twice while finding footing appears once. Fix " +
   "punctuation and obvious grammar slips. Keep the speaker's own words, " +
   "tone, and language — never summarise, interpret, reorder, or add " +
   "anything. Reply with the cleaned text only, no commentary.";

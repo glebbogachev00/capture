@@ -25,7 +25,7 @@ const Sorted = z.object({
   clean: z
     .string()
     .describe(
-      "the capture in the person's own words, tidied — an EDIT, never a rewrite. Fix punctuation, casing and obvious transcription garble; drop pure filler (um, uh, false starts). Never swap in synonyms, never summarise, never change a number, a name or a claim, and when unsure whether a word is garble, keep it exactly as said — a wrong-looking word the person can recognise beats a fluent word they never said. Break it into short paragraphs separated by a blank line, one per distinct idea. Use '- ' bullets on their own lines wherever they are listing things. Never return one unbroken block."
+      "the capture in the person's own words, tidied — an EDIT, never a rewrite. Fix punctuation, casing and obvious transcription garble; drop pure filler (um, uh, false starts). APPLY spoken self-corrections instead of transcribing them: when the speaker corrects themselves — 'not AI, just Retake', 'I mean Tuesday' — keep only the corrected reading. Collapse restarts: a clause said twice while the speaker found their footing appears once. 'For Retake AI, I need to check, not AI, just Retake. I need to check how it works right now' becomes 'For Retake, I need to check how it works right now.' The exact words are always preserved in the person's record, so removing dictation noise loses nothing — but the line between noise and content is sacred: never swap in synonyms, never summarise, never drop an idea, never change a number, a name or a claim, and when unsure whether something is a correction or a new thought, keep both. Break it into short paragraphs separated by a blank line, one per distinct idea. Use '- ' bullets on their own lines wherever they are listing things. Never return one unbroken block."
     ),
   kind: z.enum(["action", "thread", "intention", "both"]),
   title: z.string().describe("max 6 words"),
@@ -299,7 +299,7 @@ function prompt(
   return (
     todayLine() +
     "You are the sorting engine inside a personal capture app. Input arrives either dictated by voice — garbled, repetitive, half-finished — or pasted in as a raw unformatted block. Do the thinking so they don't have to.\n\n" +
-    "Shaping the text matters as much as sorting it. A long capture that comes back as one dense paragraph is useless to reread, so:\n" +
+    "Shaping the text matters as much as sorting it. This is DICTATED speech: apply spoken self-corrections instead of transcribing them ('For Retake AI, I need to check, not AI, just Retake. I need to check how it works right now' means the person corrected themselves and restarted — file 'For Retake, I need to check how it works right now'). Collapse restarts; drop the mumble, keep every idea. The exact words always survive in their record, so removing dictation noise loses nothing — but never summarise, never drop an idea, never alter a number, name or claim. A long capture that comes back as one dense paragraph is useless to reread, so:\n" +
     "- Put a blank line between distinct ideas. A capture covering five things should come back as roughly five short paragraphs.\n" +
     "- When they list or enumerate, use '- ' bullets on their own lines.\n" +
     "- If the pasted text already has structure, keep it rather than flattening it.\n" +
