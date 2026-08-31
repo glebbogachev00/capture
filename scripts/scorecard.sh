@@ -18,7 +18,7 @@ echo "tests     : ${tests:-unknown} · $fails failing"
 echo "audit     : $(npm audit --omit=dev 2>/dev/null | grep -oE 'found [0-9]+|[0-9]+ (high|critical)' | head -1 || echo '0 vulnerabilities')"
 echo "useBoard  : $(wc -l < src/hooks/useBoard.ts | tr -d ' ') lines (ratchet: only down)"
 echo "Capture   : $(wc -l < src/app/Capture.tsx | tr -d ' ') lines (ratchet: only down)"
-echo "lib seams : $(ls src/lib/{adopt,undoOps,tangleOps,intentionOps,tidyPanel,settle,pushGovernor,summaryAccept,tangleGate,receiptWindow,fragOps}.ts 2>/dev/null | wc -l | tr -d ' ')/11 present"
+echo "lib seams : $(ls src/lib/{adopt,undoOps,tangleOps,intentionOps,tidyPanel,settle,pushGovernor,summaryAccept,tangleGate,receiptWindow,fragOps,actionOps}.ts 2>/dev/null | wc -l | tr -d ' ')/12 present"
 echo
 echo "── done contract (frozen 2026-08-31; only these gate the release) ──"
 c() { printf "  [%s] %s\n" "$1" "$2"; }

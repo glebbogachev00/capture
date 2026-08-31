@@ -121,6 +121,11 @@ import {
   applyFragMove,
   applyFragSplit,
 } from "@/lib/fragOps";
+import {
+  applyActionDone,
+  applyActionFold,
+  applyActionToNewThread,
+} from "@/lib/actionOps";
 import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
@@ -155,7 +160,6 @@ import {
   requestJudgedProposals,
   scanBoard,
   scanStale,
-  threadHoldsNote,
   wordMatched,
   type JudgedRead,
   type OrganizeProposal,
@@ -2707,25 +2711,13 @@ export function useBoard(now: number) {
       app's promise is that a finished task stops existing; keeping a
       done list would make ticking the start of a new chore. */
   const toggleAction = async (id: string) => {
-    const a = latest.current.actions.find((x) => x.id === id);
-    /* The board holds what is still open, so a tick takes the row away. It
-       used to take the fact with it: a day of finishing things left the same
-       trace as a day of none. The receipt is kept instead — append-only,
-       keyed by the action's own id so a re-tick cannot double-count. */
-    const done = a
-      ? [
-          ...(latest.current.completions ?? []),
-          { id: a.id, text: a.text, at: stamp(), threadId: a.threadId },
-        ]
-      : latest.current.completions;
-    await commit({
-      ...latest.current,
-      actions: latest.current.actions.filter((x) => x.id !== id),
-      completions: done,
-    });
+    /* The tick receipt and its double-tap guard live in lib/actionOps. */
+    const out = applyActionDone(latest.current, id, stamp());
+    if (!out) return;
+    await commit(out.board);
     /* Bytes AFTER the board, never awaited: the old order deleted photos
        first (a failed commit left the action alive, pictures gone). */
-    if (a?.imgs?.length) void dropImages(a.imgs);
+    if (out.imgs.length) void dropImages(out.imgs);
   };
 
   const setShelf = (id: string, span: number | null, label: ShelfLife) =>
@@ -2756,19 +2748,9 @@ export function useBoard(now: number) {
   };
 
   const moveToThread = async (a: Action) => {
-    const t: Thread = {
-      id: uid(),
-      name: a.text.split(" ").slice(0, 5).join(" "),
-      summary: "",
-      frags: [
-        { id: uid(), at: a.at, text: a.src || a.text, imgs: a.imgs || [] },
-      ],
-    };
-    await commit({
-      ...latest.current,
-      actions: latest.current.actions.filter((x) => x.id !== a.id),
-      threads: [t, ...latest.current.threads],
-    });
+    const out = applyActionToNewThread(latest.current, a.id, uid);
+    if (!out) return;
+    await commit(out.board);
     setTab("threads");
   };
 
@@ -2778,66 +2760,27 @@ export function useBoard(now: number) {
    * (interleaved by date, images carried over) and the thread is re-summarised.
    */
   const foldActionIntoThread = async (actionId: string, threadId: string) => {
-    const a = latest.current.actions.find((x) => x.id === actionId);
-    const t = latest.current.threads.find((x) => x.id === threadId);
-    if (!a || !t) return;
-    /* A fold-back must never duplicate: extraction leaves the note in the
-       thread, so an action extracted from it folds right back into the very
-       fragment it came from. When the thread already holds the note, the
-       action is still retired (it was a task, not a note) but nothing is
-       appended — this is the safety net that guarantees approve-all can
-       never stack copies, whatever a stale proposal or cached AI pass says. */
-    const already = threadHoldsNote(t.frags, a.src || a.text, a.text);
-    /* Folded within minutes of landing: the sorter called it a task when it
-       was really a note on a subject already open. Same correction as a
-       re-filed fragment, from the other direction. */
-    const foldLesson = isRefile(a.at, stamp())
-      ? refileRule(
-          a.src || a.text,
-          t.name,
-          [t.name, t.summary, ...t.frags.map((f) => f.text)].join(" ")
-        )
-      : null;
-
-    const folded = {
-      ...latest.current,
-      actions: latest.current.actions.filter((x) => x.id !== actionId),
-      threads: already
-        ? latest.current.threads
-        : latest.current.threads.map((x) =>
-            x.id === threadId
-              ? {
-                  ...x,
-                  frags: [
-                    ...x.frags,
-                    {
-                      id: uid(),
-                      at: a.at,
-                      text: a.src || a.text,
-                      imgs: a.imgs || [],
-                    },
-                  ].sort((p, q) => p.at - q.at),
-                }
-              : x
-          ),
-    };
+    /* The dedupe safety net (approve-all can never stack copies) and the
+       fold-as-correction lesson both live in lib/actionOps. */
+    const out = applyActionFold(latest.current, actionId, threadId, stamp(), uid);
+    if (!out) return;
     await commit(
-      foldLesson
-        ? noteCorrection(folded, {
+      out.lesson
+        ? noteCorrection(out.board, {
             proposalKind: "refiled",
             accepted: true,
-            context: (a.src || a.text).slice(0, 160),
-            rule: foldLesson,
+            context: out.foldedText.slice(0, 160),
+            rule: out.lesson,
           })
-        : folded
+        : out.board
     );
     setNotice(
-      already
-        ? `${t.name} already has this note — task retired.`
-        : `Moved into ${t.name}.`
+      out.already
+        ? `${out.threadName} already has this note — task retired.`
+        : `Moved into ${out.threadName}.`
     );
     setTimeout(() => setNotice(null), 4500);
-    if (!already) await regenerate(latest.current, threadId);
+    if (!out.already) await regenerate(latest.current, threadId);
   };
 
   /* ---------------------------- threads ----------------------------- */
