@@ -126,6 +126,7 @@ import {
   applyActionFold,
   applyActionToNewThread,
 } from "@/lib/actionOps";
+import { suggestionOutcome } from "@/lib/suggestionRecord";
 import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
@@ -1747,18 +1748,28 @@ export function useBoard(now: number) {
     const s = suggestion;
     if (!s) return;
     setSuggestion(null);
-    let context = "";
+    /* The wording — the rules the personal model learns from — lives in
+       lib/suggestionRecord, mirror-tested against dismiss. */
+    const { context, rule } = suggestionOutcome(s, true);
     if (s.kind === "duplicate") {
-      context = `dropped a duplicate of ${s.targetName}`;
-      const rule = `Drop duplicates of "${s.targetName}"`;
+      setNotice("Removed the duplicate.");
+      setTimeout(() => setNotice(null), 4000);
       if (s.sourceKind === "thread") {
         /* The copy is a note; drop that fragment (or its whole fresh thread
            when it was the only note) and re-summarise. The original stays
            where it was. The notice goes out before the refresh — the model
-           call can take a second, and the outcome is the same either way. */
-        setNotice("Removed the duplicate.");
-        setTimeout(() => setNotice(null), 4000);
+           call can take a second, and the outcome is the same either way.
+           deleteFrag commits inside; the outcome is recorded on top of
+           whatever it left behind. */
         await deleteFrag(s.sourceId, s.sourceFragId!);
+        await commit(
+          noteCorrection(latest.current, {
+            proposalKind: "related_suggestion",
+            accepted: true,
+            context,
+            rule,
+          })
+        );
       } else {
         const dup = latest.current.actions.find((x) => x.id === s.sourceId);
         await dropImages(dup?.imgs);
@@ -1779,31 +1790,8 @@ export function useBoard(now: number) {
           )
         );
       }
-      setNotice("Removed the duplicate.");
-      setTimeout(() => setNotice(null), 4000);
-      // The thread-fragment branch committed inside deleteFrag; record the
-      // outcome on top of whatever it left behind.
-      if (s.sourceKind === "thread") {
-        await commit(
-          noteCorrection(latest.current, {
-            proposalKind: "related_suggestion",
-            accepted: true,
-            context,
-            rule,
-          })
-        );
-      }
       return;
     }
-    const article = s.sourceKind === "action" ? "an action" : "a thread";
-    context =
-      s.verb === "Merge"
-        ? `merged ${article} into ${s.targetName}`
-        : `moved ${article} into ${s.targetName}`;
-    const rule =
-      s.verb === "Merge"
-        ? `Merge ${s.sourceKind}s into "${s.targetName}"`
-        : `Move ${s.sourceKind}s into "${s.targetName}"`;
     if (s.sourceKind === "action") {
       await foldActionIntoThread(s.sourceId, s.targetId);
     } else if (s.fragId) {
@@ -1827,15 +1815,7 @@ export function useBoard(now: number) {
     const s = suggestion;
     setSuggestion(null);
     if (!s) return;
-    const article = s.sourceKind === "action" ? "an action" : "a thread";
-    const context =
-      s.kind === "duplicate"
-        ? `kept the duplicate of ${s.targetName}`
-        : `kept ${article} out of ${s.targetName}`;
-    const rule =
-      s.kind === "duplicate"
-        ? `Don't treat "${s.targetName}" as a duplicate`
-        : `Keep ${s.sourceKind}s out of "${s.targetName}"`;
+    const { context, rule } = suggestionOutcome(s, false);
     void commit(
       noteCorrection(latest.current, {
         proposalKind: "related_suggestion",
