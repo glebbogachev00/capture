@@ -43,9 +43,13 @@ export function TangleCallout({
             opened — the only visible control was the dismiss. How many you
             moved before is why this is here, and it belongs in the review
             where there is room for it. */}
+        {/* The names are quoted because they are the user's own words and
+            can carry punctuation: a thread called "Capture." unquoted read
+            as "7 notes in Capture. look like…" — a broken sentence. */}
         <span className="tangle-callout-line">
           {move.length} {move.length === 1 ? "note" : "notes"} in{" "}
-          {pair.fromName} look like they belong in {pair.toName}
+          &ldquo;{pair.fromName}&rdquo; look like they belong in &ldquo;
+          {pair.toName}&rdquo;
         </span>
       </button>
       <span className="tangle-callout-go" aria-hidden="true">

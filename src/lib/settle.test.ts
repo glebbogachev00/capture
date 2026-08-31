@@ -35,7 +35,13 @@ describe("settling a capture the sorter could not sort", () => {
     const entry = out.board.ledger!.find((e) => e.id === "led1")!;
     expect(entry.kind).toBe("action");
     expect(entry.targetId).toBe(out.target.id);
-    expect(out.receipt).toMatch(/Kept in Actions, unsorted/);
+    /* The banner frames this as "Landed in <receipt>." — the receipt must
+       complete that sentence, not start its own ("Landed in Kept in
+       Actions" shipped, and was read on camera). */
+    expect(out.receipt).toMatch(/^Actions, unsorted/);
+    expect("Landed in " + out.receipt + ".").toMatch(
+      /^Landed in Actions, unsorted — sort it when the model is back\.$/
+    );
   });
 
   it("an open thread is a chosen destination: fragment there, record says thread", () => {

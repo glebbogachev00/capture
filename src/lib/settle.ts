@@ -127,7 +127,10 @@ export function settleUnsortedCapture(
   return {
     board: next,
     target: { kind: "action", id: action.id },
-    receipt: "Kept in Actions, unsorted — sort it when the model is back",
+    /* The banner frames every receipt as "Landed in <receipt>." — this
+       string must complete that sentence. The first version began "Kept
+       in Actions…" and the screen read "Landed in Kept in Actions". */
+    receipt: "Actions, unsorted — sort it when the model is back",
     ledgerId: ids.ledgerId,
   };
 }
