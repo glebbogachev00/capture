@@ -115,6 +115,12 @@ import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
 import { createPushGovernor, type PushGovernor } from "@/lib/pushGovernor";
 import { createReceiptWindow, type ReceiptWindow } from "@/lib/receiptWindow";
+import {
+  applyFragDelete,
+  applyFragEdit,
+  applyFragMove,
+  applyFragSplit,
+} from "@/lib/fragOps";
 import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
@@ -2989,58 +2995,24 @@ export function useBoard(now: number) {
   };
 
   const editFrag = async (threadId: string, fragId: string, text: string) => {
-    // A save that changed nothing spends no model call and no push.
-    if (
-      latest.current.threads
-        .find((t) => t.id === threadId)
-        ?.frags.find((f) => f.id === fragId)?.text === text
-    )
-      return;
-    // The edit lands immediately — saving never waits on a model call.
-    const next = {
-      ...latest.current,
-      threads: latest.current.threads.map((t) =>
-        t.id === threadId
-          ? {
-              ...t,
-              frags: t.frags.map((f) => (f.id === fragId ? { ...f, text } : f)),
-            }
-          : t
-      ),
-    };
+    // The edit lands immediately — saving never waits on a model call. A
+    // save that changed nothing spends neither (fragOps returns null).
+    const next = applyFragEdit(latest.current, threadId, fragId, text);
+    if (!next) return;
     await commit(next);
-    // Then the proofread pass catches typos before they stick. Only applied
-    // if the note still reads as the text we checked — a newer edit is
-    // never clobbered by a stale correction.
+    // Then the proofread pass catches typos before they stick. The
+    // `ifTextIs` guard is what keeps a stale correction off a newer edit.
     const fixed = await proofreadEdit(text);
     if (fixed !== text) {
-      const current = latest.current;
-      const frag = current.threads
-        .find((t) => t.id === threadId)
-        ?.frags.find((f) => f.id === fragId);
-      if (frag && frag.text === text) {
+      const guarded = applyFragEdit(latest.current, threadId, fragId, fixed, text);
+      if (guarded) {
         await commit(
-          noteCorrection(
-            {
-              ...current,
-              threads: current.threads.map((t) =>
-                t.id === threadId
-                  ? {
-                      ...t,
-                      frags: t.frags.map((f) =>
-                        f.id === fragId ? { ...f, text: fixed } : f
-                      ),
-                    }
-                  : t
-              ),
-            },
-            {
-              proposalKind: "clean_fragment",
-              accepted: true,
-              context: frag.text.slice(0, 120),
-              correctionText: fixed.slice(0, 120),
-            }
-          )
+          noteCorrection(guarded, {
+            proposalKind: "clean_fragment",
+            accepted: true,
+            context: text.slice(0, 120),
+            correctionText: fixed.slice(0, 120),
+          })
         );
         setNotice("Fixed a couple of typos.");
         setTimeout(() => setNotice(null), 4000);
@@ -3050,34 +3022,17 @@ export function useBoard(now: number) {
   };
 
   const deleteFrag = async (threadId: string, fragId: string) => {
-    const target = latest.current.threads.find((t) => t.id === threadId);
-    const frag = target?.frags.find((f) => f.id === fragId);
-    /* Idempotency: a fast double-tap on a delete already consumed the frag;
-       a second run would otherwise re-commit and re-summarise a board that
-       did not change. */
-    if (!frag) return;
-    await dropImages(frag?.imgs);
-
-    const remaining = (target?.frags || []).filter((f) => f.id !== fragId);
-
-    // A thread with nothing left in it is just a name; drop it and go back.
-    if (!remaining.length) {
-      await commit({
-        ...latest.current,
-        threads: latest.current.threads.filter((t) => t.id !== threadId),
-      });
+    /* Idempotency, empty-thread removal, and the image handover all live
+       in fragOps — a double-tap comes back null before any work. */
+    const out = applyFragDelete(latest.current, threadId, fragId);
+    if (!out) return;
+    await dropImages(out.imgs);
+    await commit(out.board);
+    if (out.removedThread) {
       setOpen(null);
       return;
     }
-
-    const next = {
-      ...latest.current,
-      threads: latest.current.threads.map((t) =>
-        t.id === threadId ? { ...t, frags: remaining } : t
-      ),
-    };
-    await commit(next);
-    await regenerate(next, threadId);
+    await regenerate(out.board, threadId);
   };
 
   /**
@@ -3088,94 +3043,45 @@ export function useBoard(now: number) {
    * are re-summarised afterwards.
    */
   const moveFrag = async (fromId: string, fragId: string, toId: string) => {
-    const from = latest.current.threads.find((t) => t.id === fromId);
-    const frag = from?.frags.find((f) => f.id === fragId);
-    if (!from || !frag) return;
-
-    const remaining = from.frags.filter((f) => f.id !== fragId);
-    const to = latest.current.threads.find((t) => t.id === toId);
-    if (!to) return;
-
-    let threads = latest.current.threads.map((t) =>
-      t.id === toId
-        ? { ...t, frags: [...t.frags, frag].sort((a, b) => a.at - b.at) }
-        : t
-    );
-
-    const emptied = remaining.length === 0;
-    threads = emptied
-      ? threads.filter((t) => t.id !== fromId)
-      : threads.map((t) => (t.id === fromId ? { ...t, frags: remaining } : t));
-
-    /* A note moved out within minutes of landing is the sorter being told it
-       was wrong, with the right home attached. That is the strongest signal
-       the app gets, and until now it went unrecorded — the ledger only ever
-       heard about proposals the engine itself had offered. */
-    const lesson = isRefile(frag.at, stamp())
-      ? refileRule(
-          frag.text,
-          to.name,
-          [to.name, to.summary, ...to.frags.map((f) => f.text)].join(" ")
-        )
-      : null;
-
-    const next = lesson
-      ? noteCorrection(
-          { ...latest.current, threads },
-          {
-            proposalKind: "refiled",
-            accepted: true,
-            context: frag.text.slice(0, 160),
-            rule: lesson,
-          }
-        )
-      : { ...latest.current, threads };
+    /* The board math, the time-order landing, and the refile lesson (a
+       note moved out within minutes of landing is the sorter being told it
+       was wrong, with the right home attached) all live in fragOps. */
+    const out = applyFragMove(latest.current, fromId, fragId, toId, stamp());
+    if (!out) return;
+    const next = out.lesson
+      ? noteCorrection(out.board, {
+          proposalKind: "refiled",
+          accepted: true,
+          context: out.movedText.slice(0, 160),
+          rule: out.lesson,
+        })
+      : out.board;
     await commit(next);
     setNotice(
-      emptied
-        ? `Moved to ${to.name}. ${from.name} was left empty and removed.`
-        : lesson
-          ? `Moved to ${to.name} — noted for next time.`
-          : `Moved to ${to.name}.`
+      out.emptied
+        ? `Moved to ${out.toName}. ${out.fromName} was left empty and removed.`
+        : out.lesson
+          ? `Moved to ${out.toName} — noted for next time.`
+          : `Moved to ${out.toName}.`
     );
     setTimeout(() => setNotice(null), 4500);
 
-    if (emptied) setOpen(toId);
+    if (out.emptied) setOpen(toId);
     const afterTo = await regenerate(next, toId);
-    if (!emptied) await regenerate(afterTo, fromId);
+    if (!out.emptied) await regenerate(afterTo, fromId);
   };
 
   /** Split a fragment out into a thread of its own. */
   const moveFragToNew = async (fromId: string, fragId: string) => {
-    const from = latest.current.threads.find((t) => t.id === fromId);
-    const frag = from?.frags.find((f) => f.id === fragId);
-    if (!from || !frag) return;
-
-    const fresh: Thread = {
-      id: uid(),
-      name: frag.text.split(/\s+/).slice(0, 5).join(" "),
-      summary: "",
-      frags: [frag],
-    };
-    const remaining = from.frags.filter((f) => f.id !== fragId);
-    const emptied = remaining.length === 0;
-
-    const threads = [
-      fresh,
-      ...(emptied
-        ? latest.current.threads.filter((t) => t.id !== fromId)
-        : latest.current.threads.map((t) =>
-            t.id === fromId ? { ...t, frags: remaining } : t
-          )),
-    ];
-    const next = { ...latest.current, threads };
-    await commit(next);
-    setOpen(fresh.id);
+    const out = applyFragSplit(latest.current, fromId, fragId, uid);
+    if (!out) return;
+    await commit(out.board);
+    setOpen(out.freshId);
     setNotice(`Split into a new thread. Rename it if the name is wrong.`);
     setTimeout(() => setNotice(null), 5000);
 
-    const afterNew = await regenerate(next, fresh.id);
-    if (!emptied) await regenerate(afterNew, fromId);
+    const afterNew = await regenerate(out.board, out.freshId);
+    if (!out.emptied) await regenerate(afterNew, fromId);
   };
 
   const copyFragment = async (threadId: string, fragId: string) => {
