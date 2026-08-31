@@ -40,6 +40,22 @@ it lives:
   account; the full board and photo bytes are stored there, readable by
   that account's credentials. Rotate the token if it ever leaks.
 
+## Trust boundaries
+
+Who can read or change what, and what stands between them:
+
+| Boundary | Crosses it | Guarded by |
+|---|---|---|
+| Browser → app server | every API call | `APP_PASSWORD` session cookie (HMAC, `__Host-` in production); playground closes the past-the-browser routes outright |
+| App server → model providers | capture text (table above) | your API keys; failure logs sanitized to name + status + bounded message |
+| App server → hub (Redis) | full board + photo bytes on sync | the Redis token; anyone holding it can read the board, so rotate on any suspected leak |
+| Device → device | nothing directly | devices only meet through the hub; merge is last-write-wins per item with tombstones |
+| Build → deployment | code only | `scripts/check-trace.mjs` fails the build if board data enters the trace |
+
+The server holds no accounts and no database of its own: it is a relay
+with one password. The two secrets that matter are the model keys (spend)
+and the Redis token (read the board).
+
 ## Working toward
 
 Local model support, so sorting and summaries can run without any text

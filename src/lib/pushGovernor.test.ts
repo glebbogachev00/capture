@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createPushGovernor } from "./pushGovernor";
 
 /** Manual timers, so the race can be staged deterministically. */

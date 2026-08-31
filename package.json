@@ -35,11 +35,14 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^30.0.1",
     "typescript": "^5",
     "vitest": "^4.1.10"
   }

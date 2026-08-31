@@ -204,11 +204,15 @@ runs full-screen, keeps its own icon, and opens offline.
 
 ## Where your data lives
 
-In your browser's IndexedDB, on the device you're using. Not on a server, not
-in an account. Captured text goes to your chosen model provider at the moment
-you ask for it to be sorted, and nowhere else. If you pair your phone and Mac
-with the sync command, the two devices merge through a hub on your own
-machine — each device stays local-first, the hub just keeps them in step.
+In your browser's IndexedDB, on the device you're using. Captured text goes to
+your chosen model provider at the moment you ask for it to be sorted.
+
+If you turn on sync, your devices merge through a hub you configure. Run it on
+your own machine and nothing leaves your network. Host it (for example Vercel
+with Upstash Redis) and the full board, photos included, is stored in that
+account, readable by its credentials. Each device stays local-first either
+way; the hub just keeps them in step. The full picture of what leaves the
+device, and when, is in [docs/DATA-FLOW.md](docs/DATA-FLOW.md).
 
 That also means **clearing site data deletes everything**. Settings has a
 *Download backup* button that saves the whole board — photos included — as one
