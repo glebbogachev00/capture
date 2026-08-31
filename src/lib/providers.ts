@@ -185,6 +185,41 @@ export function _resetDailyOut(): void {
   dailyOut.clear();
 }
 
+
+/**
+ * What a provider failure is allowed to say in a log.
+ *
+ * The old line logged the whole error object, and an AI SDK APICallError
+ * carries `requestBodyValues` — the request body, which for this app means
+ * the person's own captured words, en route to a server log they never
+ * agreed to. A failure log's job is "which tier, why, how long to wait",
+ * and that is ALL that survives:
+ *
+ *   - provider name, HTTP status, error name;
+ *   - the message, but only after every field that can carry payload
+ *     (request bodies, response bodies, headers, causes) is discarded —
+ *     and truncated, because provider messages occasionally echo input.
+ *
+ * Nothing else. Add a field here only if you can argue it cannot contain
+ * what someone said.
+ */
+export function sanitizeProviderError(error: unknown): {
+  name: string;
+  status?: number;
+  message: string;
+} {
+  const e = error as {
+    name?: string;
+    statusCode?: number;
+    message?: string;
+  } | null;
+  return {
+    name: e?.name ?? "Error",
+    status: e?.statusCode,
+    message: String(e?.message ?? "").slice(0, 200),
+  };
+}
+
 export async function withFallback<T>(
   attempt: (tier: Tier) => Promise<T>,
   /* Which provider should go first for this job.
@@ -242,7 +277,10 @@ export async function withFallback<T>(
             Date.now() + Math.min(askedToWait(error) ?? DAILY_RECHECK_CAP_MS, DAILY_RECHECK_CAP_MS)
           );
         }
-        console.warn(`[capture] ${tier.name} failed, trying next`, error);
+        console.warn(
+          `[capture] ${tier.name} failed, trying next`,
+          sanitizeProviderError(error)
+        );
         // Remember which tier this error came from so the message shown to
         // the operator names the provider that actually failed.
         try {

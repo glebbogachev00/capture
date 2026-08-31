@@ -185,3 +185,52 @@ describe("a tier that is out for the day", () => {
     expect(Date.now() - started).toBeLessThan(2_000);
   });
 });
+
+describe("what a provider failure may say in a log", () => {
+  it("the person's words cannot reach the log line", async () => {
+    /* The exact leak: an AI SDK APICallError carries the request body —
+       the captured words — and the old log line printed the whole object
+       into server logs. The sanitizer keeps tier, status and a bounded
+       message; everything that can carry payload is discarded. */
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    const { sanitizeProviderError } = await import("./providers");
+    const SECRET = "I want to remove my mind frictions and my private fears";
+    const sdkError = Object.assign(new Error("Bad request"), {
+      name: "AI_APICallError",
+      statusCode: 400,
+      requestBodyValues: { prompt: SECRET },
+      responseBody: `{"echo":"${SECRET}"}`,
+      responseHeaders: { "x-request-id": "abc" },
+      cause: new Error(SECRET),
+      data: { messages: [{ content: SECRET }] },
+    });
+    const logged = sanitizeProviderError(sdkError);
+    const flat = JSON.stringify(logged);
+    expect(flat).not.toContain(SECRET);
+    expect(flat).not.toContain("mind frictions");
+    /* And it still says what a log needs to say. */
+    expect(logged.name).toBe("AI_APICallError");
+    expect(logged.status).toBe(400);
+    expect(logged.message).toBe("Bad request");
+  });
+
+  it("even a payload-echoing message is bounded", async () => {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    const { sanitizeProviderError } = await import("./providers");
+    const long = "x".repeat(5000);
+    expect(sanitizeProviderError(new Error(long)).message.length).toBeLessThanOrEqual(200);
+  });
+
+  it("the raw error object never reaches console.warn", async () => {
+    /* Seam guard: the chain may only log through the sanitizer. */
+    const fs = await import("node:fs");
+    const src = fs.readFileSync("src/lib/providers.ts", "utf8");
+    const warns = [...src.matchAll(/console\.warn\(([\s\S]*?)\)/g)];
+    for (const w of warns) {
+      expect(w[1]).not.toMatch(/,\s*error\s*$/);
+    }
+    expect(src).toMatch(/sanitizeProviderError\(error\)/);
+  });
+});
