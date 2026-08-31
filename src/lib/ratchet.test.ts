@@ -23,7 +23,7 @@ const lines = (p: string) =>
 
 describe("the two big files only shrink", () => {
   it("useBoard.ts stays under its ratchet", () => {
-    expect(lines("src/hooks/useBoard.ts")).toBeLessThanOrEqual(4499);
+    expect(lines("src/hooks/useBoard.ts")).toBeLessThanOrEqual(4491);
   });
 
   it("Capture.tsx stays under its ratchet", () => {
@@ -42,5 +42,6 @@ describe("the two big files only shrink", () => {
     expect(hook).toMatch(/from "@\/lib\/tangleOps"/);
     expect(hook).toMatch(/from "@\/lib\/undoOps"/);
     expect(hook).toMatch(/from "@\/lib\/intentionOps"/);
+    expect(hook).toMatch(/from "@\/lib\/tangleGate"/);
   });
 });

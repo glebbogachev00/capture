@@ -115,6 +115,7 @@ import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
 import { createPushGovernor, type PushGovernor } from "@/lib/pushGovernor";
 import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
+import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
 import { applySaveDraft } from "@/lib/intentionOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
@@ -180,7 +181,6 @@ const TANGLE_DISMISSED_KEY = "capture:tangle-dismissed";
    consumer of a 200,000-token daily allowance, spent re-deriving an answer
    that had not changed. Once a day is more often than the question is. */
 const TANGLE_ASKED_KEY = "capture:tangle-asked-at";
-const TANGLE_EVERY_MS = 20 * 60 * 60 * 1000;
 /** When the record last went out to an agent. Per device, never synced. */
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -1990,7 +1990,9 @@ export function useBoard(now: number) {
   const [tangle, setTangle] = useState<TangleProposal | null>(null);
   const [tangleBusy, setTangleBusy] = useState(false);
   const tangleTried = useRef(new Set<string>());
-  const tangleAskedAt = useRef<number | null>(null);
+  /* The gate's rules (once a day, the nudge, failure gives the day back)
+     live in lib/tangleGate as behavior — the hook keeps only persistence. */
+  const tangleGate = useRef<TangleGate>(createTangleGate(null));
   const tangleDismissed = useRef<string[]>([]);
   /* Word-matches that survived the judge, kept against the board they were
      judged about — asking twice about an unchanged board should not produce
@@ -2006,7 +2008,7 @@ export function useBoard(now: number) {
     void (async () => {
       try {
         const asked = await get(TANGLE_ASKED_KEY);
-        tangleAskedAt.current = asked ? Number(asked) : null;
+        tangleGate.current = createTangleGate(asked ? Number(asked) : null);
         const raw = await get(TANGLE_DISMISSED_KEY);
         tangleDismissed.current = raw ? JSON.parse(raw) : [];
       } catch {
@@ -2032,18 +2034,11 @@ export function useBoard(now: number) {
        itself is read off the board's own history with no model involved —
        so the cheap half still runs every time and only the expensive half
        is rationed. */
-    const asked = tangleAskedAt.current;
     const askedFor = tangleNudge > tangleHandled.current;
-    if (!askedFor && asked && Date.now() - asked < TANGLE_EVERY_MS) return;
+    if (!tangleGate.current.tryClaim(Date.now(), askedFor)) return;
     tangleHandled.current = tangleNudge;
-
-    /* Claim the day BEFORE the work, so two renders cannot both start it —
-       but remember what the clock said, because a failure has to give it
-       back. */
-    const askedBefore = tangleAskedAt.current;
     tangleTried.current.add(tangleProposalId(pair));
-    tangleAskedAt.current = Date.now();
-    void set(TANGLE_ASKED_KEY, String(Date.now()));
+    void set(TANGLE_ASKED_KEY, String(tangleGate.current.askedAt()));
     setTangleBusy(true);
     void (async () => {
       try {
@@ -2124,9 +2119,10 @@ export function useBoard(now: number) {
            two threads went a week without ever being asked about them. The
            symptom read as "it never suggests anything", and the cause was
            this line doing nothing. */
-        tangleAskedAt.current = askedBefore;
-        if (askedBefore === null) void del(TANGLE_ASKED_KEY);
-        else void set(TANGLE_ASKED_KEY, String(askedBefore));
+        tangleGate.current.release();
+        const back = tangleGate.current.askedAt();
+        if (back === null) void del(TANGLE_ASKED_KEY);
+        else void set(TANGLE_ASKED_KEY, String(back));
       } finally {
         setTangleBusy(false);
       }

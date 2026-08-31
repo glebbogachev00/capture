@@ -44,6 +44,10 @@ export function createPushGovernor(
     running = true;
     try {
       await run();
+    } catch {
+      /* A failed push must not wedge the machine or leak an unhandled
+         rejection from the timer — the runner owns its own error
+         reporting (the sync status dot). */
     } finally {
       running = false;
       if (pending) {

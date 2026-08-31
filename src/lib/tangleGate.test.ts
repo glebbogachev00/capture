@@ -31,23 +31,15 @@ const source = fs.readFileSync(
 );
 
 describe("being asked about a tangled pair", () => {
-  it("gives the day back when the attempt fails", () => {
-    /* The clock is still claimed up front — two renders must not both
-       start the work — so what matters is that the failure path restores
-       whatever it replaced, rather than leaving today's stamp behind. */
-    const catchBlock = source.slice(
-      source.indexOf("} catch {", source.indexOf("tangleAskedAt.current = Date.now()")),
-      source.indexOf("setTangleBusy(false)", source.indexOf("tangleAskedAt.current = Date.now()"))
-    );
-    expect(catchBlock).toMatch(/tangleAskedAt\.current = askedBefore/);
-    expect(catchBlock).toMatch(/TANGLE_ASKED_KEY/);
-  });
-
-  it("remembers what the clock said before claiming it", () => {
-    const before = source.indexOf("const askedBefore = tangleAskedAt.current");
-    const claim = source.indexOf("tangleAskedAt.current = Date.now()");
-    expect(before, "askedBefore should exist").toBeGreaterThan(-1);
-    expect(before).toBeLessThan(claim);
+  it("delegates the gate to lib/tangleGate", () => {
+    /* The rules — once a day, the nudge, failure returns the day — are now
+       BEHAVIOR tests in tangleGate.behavior.test.ts, which replay the
+       week-of-silence incident as an assertion. What this file guards is
+       the seam: the hook must go through the gate, not re-grow inline
+       clock arithmetic. */
+    expect(source).toMatch(/tangleGate\.current\.tryClaim\(/);
+    expect(source).toMatch(/tangleGate\.current\.release\(\)/);
+    expect(source).not.toMatch(/Date\.now\(\) - asked < TANGLE_EVERY_MS/);
   });
 
   it("lets Tidy ask on demand, past the daily gate", () => {
@@ -80,10 +72,9 @@ describe("being asked about a tangled pair", () => {
   });
 
   it("still holds the daily gate when nobody asked", () => {
-    /* The gate is the whole reason the app is not annoying. A nudge lifts
-       it; the absence of one must not. */
-    expect(source).toMatch(
-      /if \(!askedFor && asked && Date\.now\(\) - asked < TANGLE_EVERY_MS\) return;/
-    );
+    /* The gate exists so the app does not interrupt; only the nudge lifts
+       it. The behavior lives in tangleGate.behavior.test.ts — here, the
+       seam: the nudge is what tryClaim receives. */
+    expect(source).toMatch(/tryClaim\(Date\.now\(\), askedFor\)/);
   });
 });
