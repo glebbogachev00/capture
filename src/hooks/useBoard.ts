@@ -113,6 +113,8 @@ import {
 } from "@/lib/recordCopied";
 import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
+import { createPushGovernor, type PushGovernor } from "@/lib/pushGovernor";
+import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
 import { applySaveDraft } from "@/lib/intentionOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
@@ -423,8 +425,11 @@ export function useBoard(now: number) {
     | { ok: boolean; at: number; note?: string }
     | null
   >(null);
-  const syncing = useRef(false);
-  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /* Push scheduling lives in lib/pushGovernor — the state machine that
+     cannot drop: an edit made during an in-flight push becomes pending,
+     and the finishing push re-schedules it. The old timer-plus-flag pair
+     here had exactly that race, staged and pinned in pushGovernor.test. */
+  const pushGovernor = useRef<PushGovernor | null>(null);
 
   /* ------------------------------ undo ------------------------------ */
 
@@ -528,10 +533,9 @@ export function useBoard(now: number) {
 
   /** Send our state to the hub and adopt its merged answer. */
   const pushNow = useCallback(async () => {
-    /* Playground: no hub. See lib/playground.ts for why this is a hard stop. */
+    /* Playground: no hub. See lib/playground.ts for why this is a hard stop.
+       Serialization is the governor's job now, not a flag's. */
     if (PLAYGROUND) return;
-    if (syncing.current) return;
-    syncing.current = true;
     try {
       const res = await fetch("/api/sync", {
         method: "POST",
@@ -572,17 +576,14 @@ export function useBoard(now: number) {
       /* hub unreachable — keep everything local, retry on the next change */
       setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
     }
-    syncing.current = false;
   }, [reconcileImages]);
 
   /** Coalesce bursts of edits into one push a beat after the last one. */
   const schedulePush = useCallback(() => {
     if (PLAYGROUND) return;
-    if (pushTimer.current !== null) return;
-    pushTimer.current = setTimeout(() => {
-      pushTimer.current = null;
-      void pushNow();
-    }, 1200);
+    if (!pushGovernor.current)
+      pushGovernor.current = createPushGovernor(pushNow);
+    pushGovernor.current.schedule();
   }, [pushNow]);
 
   /**
@@ -652,17 +653,12 @@ export function useBoard(now: number) {
   /** Manual "sync now": bring the other device's changes in, then push ours up. */
   const syncNow = useCallback(async () => {
     if (PLAYGROUND) return;
-    if (pushTimer.current !== null) {
-      clearTimeout(pushTimer.current);
-      pushTimer.current = null;
-    }
     await pullNow();
-    // pullNow schedules a debounced push; a manual sync should push now.
-    if (pushTimer.current !== null) {
-      clearTimeout(pushTimer.current);
-      pushTimer.current = null;
-    }
-    await pushNow();
+    /* A manual sync pushes NOW — flush cancels any pending debounce and
+       still serializes behind an in-flight push. */
+    if (!pushGovernor.current)
+      pushGovernor.current = createPushGovernor(pushNow);
+    await pushGovernor.current.flush();
   }, [pullNow, pushNow]);
 
   /**
@@ -779,11 +775,9 @@ export function useBoard(now: number) {
     /* Push now, not on the debounce: a pull landing in the debounce window
        would re-merge the hub's copy (which still holds the capture) before
        our tombstones go out. */
-    if (pushTimer.current !== null) {
-      clearTimeout(pushTimer.current);
-      pushTimer.current = null;
-    }
-    await pushNow();
+    if (!pushGovernor.current)
+      pushGovernor.current = createPushGovernor(pushNow);
+    await pushGovernor.current.flush();
   }, [pushNow, text, pics]);
 
   /**
@@ -1329,6 +1323,9 @@ export function useBoard(now: number) {
          describing a thread two layers ago, with nothing on screen to say
          so and nothing to trigger another attempt until the next capture
          happened to land here. */
+      /* Fingerprinted at departure: the reply may only land on the exact
+         content it summarized — see lib/summaryAccept (gate 6). */
+      const sentFingerprint = threadFingerprint(target);
       const { summary, next, belongs } = await requestSummary(
         target.name,
         target.frags
@@ -1336,21 +1333,13 @@ export function useBoard(now: number) {
         await new Promise((r) => setTimeout(r, 1200));
         return requestSummary(target.name, target.frags);
       });
-      /* The LATEST board, not the one this call started with. While the
-         summary was being written the person may have captured again, and
-         committing the snapshot this function was handed would take that
-         capture back off the board. Nothing else here reads `board`. */
-      if (!latest.current.threads.some((t) => t.id === threadId)) {
-        return latest.current;
-      }
-      result = {
-        ...latest.current,
-        threads: latest.current.threads.map((t) =>
-          t.id === threadId
-            ? { ...t, summary, next, ...(belongs ? { belongs } : {}) }
-            : t
-        ),
-      };
+      const accepted = acceptSummary(latest.current, threadId, sentFingerprint, {
+        summary,
+        next,
+        belongs,
+      });
+      if (!accepted) return latest.current;
+      result = accepted;
       await commit(result);
     } catch {
       /* the fragments are saved; the summary can lag */
