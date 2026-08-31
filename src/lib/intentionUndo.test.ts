@@ -32,25 +32,19 @@ describe("landing an intention", () => {
     expect(sortStarts.length).toBeGreaterThanOrEqual(2);
     for (const m of sortStarts) {
       const before = hook.slice(Math.max(0, m.index - 700), m.index);
-      expect(before).toMatch(/setLanded\(null\)/);
+      expect(before).toMatch(/receiptWindow\.current!\.retire\(\)/);
     }
   });
 
-  it("the receipt stays about half a minute, then leaves on its own", () => {
-    /* The number that survived both complaints: 4.5 seconds was gone
-       before the slowest flow could be read ("where is the undo button"),
-       and forever was furniture ("it doesn't have to stay there forever...
-       maybe thirty seconds"). The ceiling lives in ONE place; every
-       receipt-showing site must go through it. */
-    const m = /const RECEIPT_MS = ([0-9_]+);/.exec(hook);
-    expect(m, "RECEIPT_MS should exist").toBeTruthy();
-    const ms = Number(m![1].replace(/_/g, ""));
-    expect(ms).toBeGreaterThanOrEqual(25_000);
-    expect(ms).toBeLessThanOrEqual(45_000);
-    /* No site may set a visible receipt around the policy. */
+  it("the receipt's clock lives in ONE place, and every site goes through it", () => {
+    /* The timing itself (25-45s band, the stolen-window bug, retire
+       semantics) is behavior-tested in lib/receiptWindow.behavior.test.
+       This guards the wiring: no site may set a visible receipt around the
+       policy — setLanded with text appears inside showReceipt and nowhere
+       else, and showReceipt arms the window. */
     const direct = [...hook.matchAll(/setLanded\((?!null)[^)]/g)];
-    /* setLanded appears inside showReceipt itself and nowhere else. */
     expect(direct.length).toBe(1);
+    expect(hook).toMatch(/receiptWindow\.current!\.open\(\)/);
   });
 
   it("leaves the banner up, because Undo lives inside it", () => {

@@ -114,6 +114,7 @@ import {
 import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
 import { createPushGovernor, type PushGovernor } from "@/lib/pushGovernor";
+import { createReceiptWindow, type ReceiptWindow } from "@/lib/receiptWindow";
 import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
@@ -281,24 +282,19 @@ export function useBoard(now: number) {
   const [err, setErr] = useState("");
   const [landed, setLanded] = useState<string | null>(null);
 
-  /* How long a receipt stays: long enough to read and to reach its Undo,
-     gone before it becomes furniture. It also retires early when the next
-     capture starts — each sort start clears it — so this timer is the
-     ceiling, not the lifetime. The first version cleared at 4.5 seconds
-     (unreadable on the slowest flow), the second never cleared ("it
-     doesn't have to stay there forever"); thirty-five seconds is the
-     number that survived both complaints. */
-  const RECEIPT_MS = 35_000;
-  const receiptTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showReceipt = useCallback((text: string) => {
-    if (receiptTimer.current) clearTimeout(receiptTimer.current);
-    setLanded(text);
-    receiptTimer.current = setTimeout(() => {
-      receiptTimer.current = null;
+  /* How long a receipt stays, and why a second one is never blanked by the
+     first one's clock — lib/receiptWindow owns the timing. Everything that
+     leaves with the banner leaves through its one close channel. */
+  const receiptWindow = useRef<ReceiptWindow | null>(null);
+  if (!receiptWindow.current)
+    receiptWindow.current = createReceiptWindow(() => {
       setLanded(null);
       setLandedIds([]);
       setSuggestion(null);
-    }, RECEIPT_MS);
+    });
+  const showReceipt = useCallback((text: string) => {
+    setLanded(text);
+    receiptWindow.current!.open();
   }, []);
   /* What the last capture created, so the board can wash those rows once —
      the banner says a capture landed; this shows WHERE. Cleared with the
@@ -747,9 +743,7 @@ export function useBoard(now: number) {
     } catch {
       /* disk hiccup; next commit retries */
     }
-    setLanded(null);
-    setLandedIds([]);
-    setSuggestion(null);
+    receiptWindow.current!.retire();
     /* The capture box gets its words back too — Undo returns the draft as
        it was, not just the board. A brand-new draft already being typed is
        left alone rather than clobbered. */
@@ -1436,9 +1430,7 @@ export function useBoard(now: number) {
        about words still being sorted. (It also silently broke the recorded
        suite, whose wait-for-.landed resolved on the stale banner and
        clicked ahead of the sort.) */
-    setLanded(null);
-    setLandedIds([]);
-    setSuggestion(null);
+    receiptWindow.current!.retire();
     setBusy("Sorting");
     try {
       /* An unsorted capture with a photo re-sorts by what it shows, like the
@@ -1567,9 +1559,7 @@ export function useBoard(now: number) {
        question alive long enough to have written the rule. */
     if (!pinned) setMisfiled(null);
     /* Same rule as resort: a new capture retires the previous receipt. */
-    setLanded(null);
-    setLandedIds([]);
-    setSuggestion(null);
+    receiptWindow.current!.retire();
     setBusy("Sorting");
 
     const at = stamp();
