@@ -63,7 +63,7 @@ export async function POST(request: Request) {
         body.frags
           .map((f) => "[" + new Date(f.at).toDateString() + "] " + f.text)
           .join("\n\n") +
-          '\n\nWrite a "Where this stands" block: 3-5 sentences of plain prose describing what this idea currently is, what\'s been settled, and what\'s still open. Write it back to them in their own register. Invent nothing.' +
+          '\n\nWrite a "Where this stands" block: 2-5 sentences of plain prose describing what this idea currently is, what\'s been settled, and what\'s still open. Write it back to them in their own register. Invent nothing. Every sentence must carry specific facts from the fragments — names, numbers, decisions made, the actual open question. No throat-clearing ("The concept is defined as...", "What remains open is whether..." followed by nothing specific), no restating the thread\'s name as prose, no summarising the summary. The main reader is the sorting engine deciding where new captures belong, and it routes on substance: a dense three-sentence snapshot beats five padded ones. Fewer sentences are better whenever the facts fit.' +
           '\n\nThen, on its own last line, write NEXT: followed by the one concrete step the fragments point at — a decision the evidence has made, a person to write back to, a thing to send or ship — in their words, at most one short sentence, something they could do today. If the fragments point at nothing in particular, write NEXT: none; a step you would have to invent is worse than none. Never suggest something already on their list' +
           (body.open?.length ? ':\n' + body.open.map((a) => '- ' + a).join('\n') : '.') +
           (body.siblings?.length
