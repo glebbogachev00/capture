@@ -62,10 +62,16 @@ export function chain(): Tier[] {
 
   if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) tiers.push(geminiTier());
 
-  // Last resort. The previous default (google/gemini-2.5-flash) is a paid
-  // slug that 402s on a creditless account — it made the last-resort tier
-  // dead. A :free model keeps it usable without credits; a funded account
-  // can set OPENROUTER_MODEL to any paid slug it lists.
+  // Last resort. This slug has now died TWICE under us: the original
+  // default (google/gemini-2.5-flash) was a paid slug that 402s on a
+  // creditless account, and openai/gpt-oss-20b:free was later withdrawn
+  // from the free pool entirely — every request 404ed with "unavailable
+  // for free", and the tier was dead again with nothing on screen to say
+  // so. Free slugs are loans, not defaults you can forget: when this one
+  // dies, pick a replacement from the live list (GET /api/v1/models,
+  // ids ending in :free) and prove it follows a JSON instruction before
+  // committing it. A funded account can set OPENROUTER_MODEL to any paid
+  // slug it lists.
   if (process.env.OPENROUTER_API_KEY) {
     const openrouter = createOpenRouter({
       apiKey: process.env.OPENROUTER_API_KEY,
@@ -73,7 +79,7 @@ export function chain(): Tier[] {
     tiers.push({
       name: "openrouter",
       model: openrouter.chat(
-        process.env.OPENROUTER_MODEL || "openai/gpt-oss-20b:free"
+        process.env.OPENROUTER_MODEL || "minimax/minimax-m3:free"
       ),
     });
   }

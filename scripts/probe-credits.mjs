@@ -65,7 +65,7 @@ const tiers = [
       const { createOpenRouter } = await import("@openrouter/ai-sdk-provider");
       const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
       return openrouter.chat(
-        process.env.OPENROUTER_MODEL || "openai/gpt-oss-20b:free"
+        process.env.OPENROUTER_MODEL || "minimax/minimax-m3:free"
       );
     },
   },
