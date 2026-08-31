@@ -86,9 +86,8 @@ import {
   computeSuggestion,
   type Suggestion,
 } from "@/lib/boardOps";
-import { parseCommandPrefix } from "@/lib/command";
+import { resolveCapture } from "@/lib/command";
 import {
-  commandRule,
   isRefile,
   refileRule,
   undoRule,
@@ -1544,22 +1543,9 @@ export function useBoard(now: number) {
     pinnedThread?: string
   ) => {
     const raw = (override ?? text).trim();
-    /* A leading command pins the destination: the command word is
-       stripped and the rest goes through the sorter with the destination
-       already decided. Works typed (/action …) or spoken ("slash action …"
-       or "action. …") — the parser accepts all the forms dictation and
-       keyboards actually produce. */
-    const { force: typed, payload } = parseCommandPrefix(raw);
-    /* A kind chosen after an undo outranks a typed prefix: the person has
-       just been asked the question outright and answered it. */
-    const force = pinned ?? typed;
-    /* A destination named up front is a statement about where this kind of
-       thing belongs, so it teaches — the same loop an answered undo feeds.
-       Only a TYPED command: a re-sort after undo has already written its
-       own, stronger lesson, and recording both would count one correction
-       twice. */
-    const commandLesson =
-      !pinned && typed ? commandRule(payload, typed) : null;
+    /* What the capture's opening decides — command prefix, undo-answer
+       precedence, and whether it teaches — lives in lib/command. */
+    const { payload, force, commandLesson } = resolveCapture(raw, pinned);
     if (!payload && !pics.length) return;
     setErr("");
     setSwept(null);

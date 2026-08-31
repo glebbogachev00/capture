@@ -1,3 +1,5 @@
+import { commandRule } from "./refiled";
+
 /**
  * Destination commands on the front of a capture.
  *
@@ -41,4 +43,36 @@ export function parseCommandPrefix(raw: string): {
      action: send it"); strip any leading punctuation off the payload. */
   const payload = raw.slice(m[0].length).replace(/^[.:\s]+/, "");
   return { force: kind, payload };
+}
+
+/**
+ * Resolve everything a capture's opening decides, in one place.
+ *
+ * Two precedence rules live here, each with an incident behind it:
+ *
+ *   - A kind chosen after an undo OUTRANKS a typed prefix. The person has
+ *     just been asked the question outright and answered it; the prefix
+ *     was written before the question existed.
+ *   - Only a TYPED command teaches. A re-sort after undo has already
+ *     written its own, stronger lesson — recording both counted one
+ *     correction twice, and the personal model weighed the same answer
+ *     double.
+ */
+export type ResolvedCapture = {
+  payload: string;
+  force: ForceKind | undefined;
+  /** The lesson the typed command teaches, or null. */
+  commandLesson: string | null;
+};
+
+export function resolveCapture(
+  raw: string,
+  pinned?: ForceKind
+): ResolvedCapture {
+  const { force: typed, payload } = parseCommandPrefix(raw);
+  return {
+    payload,
+    force: pinned ?? typed,
+    commandLesson: !pinned && typed ? commandRule(payload, typed) : null,
+  };
 }

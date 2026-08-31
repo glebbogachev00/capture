@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCommandPrefix } from "./command";
+import { parseCommandPrefix, resolveCapture } from "./command";
 
 const parse = (raw: string) => {
   const { force, payload } = parseCommandPrefix(raw);
@@ -90,5 +90,31 @@ describe("parseCommandPrefix", () => {
   it("a bare command word with no payload still forces the kind", () => {
     expect(parse("/thread")).toEqual(["thread", ""]);
     expect(parse("action:")).toEqual(["action", ""]);
+  });
+});
+
+describe("resolving a capture's opening", () => {
+  it("a kind chosen after an undo outranks the typed prefix", () => {
+    /* The person was just asked the question outright and answered it;
+       the prefix was written before the question existed. */
+    const r = resolveCapture("/action send the retake demo", "thread");
+    expect(r.force).toBe("thread");
+    expect(r.payload).toBe("send the retake demo");
+  });
+
+  it("an undo-driven re-sort never writes a second lesson", () => {
+    /* The re-sort has already written its own, stronger lesson. Recording
+       the typed prefix too counted one correction twice. */
+    const r = resolveCapture("/action send the retake demo", "action");
+    expect(r.commandLesson).toBeNull();
+  });
+
+  it("a typed command teaches; plain speech does not", () => {
+    const typed = resolveCapture("/action send the retake demo");
+    expect(typed.force).toBe("action");
+    expect(typed.commandLesson).toMatch(/are put in Actions|action/i);
+    const plain = resolveCapture("send the retake demo");
+    expect(plain.force).toBeUndefined();
+    expect(plain.commandLesson).toBeNull();
   });
 });
