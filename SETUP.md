@@ -1,8 +1,10 @@
 # SETUP.md — Self-hosting capture on a Mac
 
-capture is a self-hosted Next.js app. All your data lives in the browser's
-IndexedDB on the device you use it from; the server is just a thin API layer
-that calls your model providers. This guide covers running it on a Mac,
+capture is a self-hosted Next.js app. Your board lives in the browser's
+IndexedDB on the device you use it from. The server calls your model
+providers with your keys, and holds the sync hub if you enable sync.
+Nothing is sent anywhere except to services you set up yourself — the full
+list is in [docs/DATA-FLOW.md](docs/DATA-FLOW.md). This guide covers running it on a Mac,
 keeping it reachable from your phone, and keeping the Mac awake so the server
 survives you walking away.
 

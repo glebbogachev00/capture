@@ -12,11 +12,24 @@ whether it is something to close, something that accumulates, or something you
 are declaring about your life — cleans up the wording, and files it. Nothing
 to categorise by hand, no folders, no tags, nothing to maintain later.
 
-**Your data. Your keys. Your server.** capture is local-first and self-hosted:
-your board lives in your browser's IndexedDB, your model keys stay on your own
-machine, and there is no account, no third-party cloud, and no subscription.
-Sync, when you use it, runs through your own machine — one command pairs your
-phone and Mac over Tailscale. Built for one person's devices — yours.
+**Your data. Your keys. Your choice of where it lives.**
+
+capture is local-first. Your board lives in your browser, works offline, and
+there is no account and no subscription.
+
+Two things leave your device, and you control both. Sorting sends the text of
+a capture to the AI provider you configured with your own keys. Dictation
+audio goes the same way. Summaries and the daily wrap use the same models in
+the background.
+
+Sync is optional. Run it privately over Tailscale between your own devices,
+or through a Redis store you own on your own hosting. Either way it is your
+infrastructure and your keys.
+
+Nothing is sent anywhere except to services you set up yourself. We are
+working on support for local models, so that in the future nothing has to
+leave your machine at all. The full list of what leaves the device, when,
+and to whom is in [docs/DATA-FLOW.md](docs/DATA-FLOW.md).
 
 <!--
   DEMO GIF — drop a screen recording here once you have one. Replace this
