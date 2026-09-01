@@ -107,3 +107,24 @@ describe("one telling word is not enough", () => {
     expect(open).toContain("phrase");
   });
 });
+
+describe("finished work is visible, for the agent reading the board", () => {
+  it("a ticked action shows in done via its completion receipt", () => {
+    /* A tick removes the row; the receipt is the surviving fact. Before
+       this read the done list was always empty, so a share handed to an
+       agent could not tell done from never-existed. */
+    const board: Board = {
+      ...EMPTY,
+      actions: [],
+      completions: [
+        { id: "a-undo", text: "Add an undo button next to the edit wording button", at: 2000, threadId: "t1" },
+        { id: "a-other", text: "Rotate the Upstash token", at: 3000 },
+      ],
+      threads: [thread()],
+    };
+    const t = board.threads[0];
+    const { done } = actionsForThread(board, t);
+    expect(done.map((d) => d.id)).toEqual(["a-undo"]);
+    expect(done[0].text).toMatch(/undo button/);
+  });
+});

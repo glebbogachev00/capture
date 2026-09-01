@@ -14,10 +14,14 @@ import { sharedPhrase } from "./related";
  * intelligence at all on a board whose actions mostly predate the field;
  * the subject match is what makes the list feel like it was read.
  */
+/** A finished item as the thread shows it — enough for a count, a
+    checkbox line, and an agent reading the share. */
+export type DoneItem = { id: string; text: string; at: number };
+
 export function actionsForThread(
   board: Board,
   thread: Thread
-): { open: Action[]; done: Action[] } {
+): { open: Action[]; done: DoneItem[] } {
   const vouched = new Set<string>();
   for (const e of board.ledger ?? []) {
     if (e.kind === "both" && e.targetId === thread.id && !e.undone) {
@@ -76,10 +80,22 @@ export function actionsForThread(
 
   const mine = board.actions.filter(isMine);
   const related = board.actions.filter((a) => !isMine(a) && isRelated(a));
+  /* The finished work, from the completion receipts. A tick REMOVES the
+     action from the board (the receipt is the fact that survives), so
+     until this read the done list was always empty — a thread with a week
+     of finished work looked untouched, and an agent handed the share had
+     no way to tell done from never-existed. That visibility is the point:
+     "when I have a board the agent knows what was done and what to work
+     on." */
+  const ticked: DoneItem[] = (board.completions ?? [])
+    .filter((c) => c.threadId === thread.id)
+    .map((c) => ({ id: c.id, text: c.text, at: c.at }));
   return {
     open: take(
       [...mine.filter((a) => !a.done), ...related].sort(newestFirst)
     ),
-    done: mine.filter((a) => a.done).sort(newestFirst),
+    done: take(
+      [...mine.filter((a) => a.done), ...ticked].sort(newestFirst)
+    ),
   };
 }

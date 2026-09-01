@@ -13,6 +13,7 @@ import { imgLoad, imgNow, imgSave } from "@/lib/imgCache";
 import { TONES, TONE_NAMES, imgValue, toneValue } from "@/lib/cover";
 import { fmt, uid, type Action, type Frag, type Thread } from "@/lib/model";
 import { shrinkFile } from "@/lib/shrink";
+import type { DoneItem } from "@/lib/threadActions";
 import { ConfirmDelete } from "./ConfirmDelete";
 
 export function ThreadView({
@@ -59,7 +60,7 @@ export function ThreadView({
   onDismissNext: () => void;
   /** What this thread gave rise to — shown as one quiet line, and only
       when there is something to show. */
-  fromActions: { open: Action[]; done: Action[] };
+  fromActions: { open: Action[]; done: DoneItem[] };
   busy: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
