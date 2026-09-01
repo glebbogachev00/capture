@@ -141,6 +141,7 @@ const VERBS: Record<OrganizeKind, string> = {
      cost on the one claim that needs none. */
   let_go: "Let go",
   revisit_intention: "Still true",
+  looks_done: "Tick off",
 };
 
 /** Fragment kinds — proposals that name a specific note inside a thread. */
@@ -245,6 +246,12 @@ export function mapAiProposals(
           !!targetThread &&
           targetThread.id !== sourceThread.id;
         break;
+      case "looks_done":
+        /* The action must exist and be open, and the claimed evidence must
+           be a real thread — the model cites WHERE the board says it
+           happened, and a hallucinated citation drops the claim. */
+        ok = !!actionById.get(dupSource) && !!targetThread;
+        break;
       case "fold_action": {
         ok = !!actionById.get(dupSource) && !!targetThread;
         /* A fold-back is never a fold: the thread already holds the note
@@ -270,7 +277,7 @@ export function mapAiProposals(
     seen.add(id);
 
     const sourceName =
-      p.kind === "dup_action" || p.kind === "fold_action"
+      p.kind === "dup_action" || p.kind === "fold_action" || p.kind === "looks_done"
         ? actionById.get(dupSource) ?? ""
         : frag?.text ?? "";
     const targetName =

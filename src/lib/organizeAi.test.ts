@@ -571,3 +571,49 @@ describe("a proposal with no fragment named", () => {
     expect(withNull.length).toBeGreaterThan(0);
   });
 });
+
+describe("mapAiProposals — looks_done (offered a tick, never ticked for)", () => {
+  it("a real action with real cited evidence maps to a Tick off row", () => {
+    const raw: RawAiProposal[] = [
+      {
+        kind: "looks_done",
+        confidence: "high",
+        sourceId: "a1",
+        sourceFragId: null,
+        targetId: "t2",
+        reason: "a later Vet note says the appointment is booked",
+      },
+    ];
+    const out = mapAiProposals(snapshot(), raw);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      kind: "looks_done",
+      verb: "Tick off",
+      sourceId: "a1",
+      sourceName: "Book a dentist appointment",
+      targetName: "Vet",
+    });
+  });
+
+  it("a hallucinated action or a hallucinated evidence thread is dropped", () => {
+    const raw: RawAiProposal[] = [
+      {
+        kind: "looks_done",
+        confidence: "high",
+        sourceId: "ghost-action",
+        sourceFragId: null,
+        targetId: "t2",
+        reason: "says it happened",
+      },
+      {
+        kind: "looks_done",
+        confidence: "high",
+        sourceId: "a1",
+        sourceFragId: null,
+        targetId: "no-such-thread",
+        reason: "says it happened",
+      },
+    ];
+    expect(mapAiProposals(snapshot(), raw)).toEqual([]);
+  });
+});

@@ -42,6 +42,7 @@ const YES_LABEL: Record<OrganizeKind, string> = {
   extract_action: "Make action",
   let_go: "Let go",
   revisit_intention: "Still true",
+  looks_done: "Tick off",
 };
 
 /**
@@ -80,6 +81,16 @@ function Ask({ p }: { p: OrganizeProposal }) {
     return (
       <span className="org-line">
         Make an action out of <em>{p.sourceName}</em>
+      </span>
+    );
+  }
+  if (p.kind === "looks_done") {
+    /* The claim names its evidence: which thread's notes say it happened.
+       The reason line under the row quotes the model's pointer to them. */
+    return (
+      <span className="org-line">
+        Tick off <em>{p.sourceName}</em> — <em>{p.targetName}</em> says it
+        already happened
       </span>
     );
   }

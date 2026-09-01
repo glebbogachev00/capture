@@ -52,6 +52,10 @@ export type OrganizeKind =
   | "split_fragment"
   | "extract_action"
   | "merge_fragments"
+  /** An open action the board's own later notes say already happened —
+      proposed for a tick, never ticked automatically. Asked for on the
+      board (1 Sep): threads full of finished work still read as open. */
+  | "looks_done"
   /** Still being carried, past its moment — the "get light" claim. */
   | "let_go"
   /** Declared a long time ago and untouched since — "are you still

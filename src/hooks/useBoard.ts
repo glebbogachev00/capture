@@ -2466,6 +2466,18 @@ export function useBoard(now: number) {
         })
       );
       return true;
+    } else if (p.kind === "looks_done") {
+      /* Accepting IS the tick: the row leaves the board and the completion
+         receipt is kept, exactly as if the checkbox had been tapped — one
+         path, one behavior (lib/actionOps owns it). No correction is
+         recorded: finishing a task says nothing about how captures should
+         be FILED. */
+      const open = latest.current.actions.find((x) => x.id === p.sourceId);
+      if (!open) return false;
+      await toggleAction(p.sourceId);
+      setNotice("Ticked off — it's in the record.");
+      setTimeout(() => setNotice(null), 4000);
+      return true;
     } else if (p.kind === "let_go") {
       /* Fade it, never delete it. The action moves to Faded exactly as it
          would have if it had a shelf life that ran out — recoverable for
