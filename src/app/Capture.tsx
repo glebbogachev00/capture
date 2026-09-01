@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { BrushCleaning, Image as ImageIcon, Layers, MessagesSquare, Mic, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
 import { BusyLine, Row, TCard } from "@/components/cards";
+import { GroupedActionRows } from "@/components/GroupedActionRows";
 import { SearchResults } from "@/components/SearchResults";
 import { ThreadView } from "@/components/ThreadView";
 import { degradedNote } from "@/lib/degraded";
@@ -1099,20 +1100,7 @@ export function Capture() {
                         Nothing groups yet — no two actions share a subject.
                       </p>
                     )}
-                    {grouped.groups.map((g) => (
-                      <div key={g.actions[0].id}>
-                        <div className="group-label">
-                          {g.label} · {g.actions.length}
-                        </div>
-                        {g.actions.map((a) => row(a))}
-                      </div>
-                    ))}
-                    {!!grouped.groups.length && !!grouped.rest.length && (
-                      <div className="group-label rest">
-                        everything else · {grouped.rest.length}
-                      </div>
-                    )}
-                    {grouped.rest.map((a) => row(a))}
+                    <GroupedActionRows grouped={grouped} renderRow={row} />
                   </>
                 ) : (
                   live.map((a) => row(a))

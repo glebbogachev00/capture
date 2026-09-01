@@ -561,16 +561,16 @@ export function useBoard(now: number) {
         { board: latest.current, tombstones: tombstones.current },
         { board: stored.board, tombstones: stored.tombstones }
       );
-      latest.current = adopted.board;
-      setData(adopted.board);
-      tombstones.current = adopted.tombstones;
-      try {
-        await setMany([
-          [KEY, JSON.stringify(adopted.board)],
-          [TOMBSTONE_KEY, JSON.stringify(adopted.tombstones)],
-        ]);
-      } catch {
-        /* disk hiccup; next commit retries */
+      if (adopted.changed) {
+        latest.current = adopted.board;
+        setData(adopted.board);
+        tombstones.current = adopted.tombstones;
+        try {
+          await setMany([
+            [KEY, JSON.stringify(adopted.board)],
+            [TOMBSTONE_KEY, JSON.stringify(adopted.tombstones)],
+          ]);
+        } catch { /* disk hiccup; next commit retries */ }
       }
       setSync({ ok: true, at: stamp() });
       /* The text is up; hand the pictures over too. Not awaited — a photo

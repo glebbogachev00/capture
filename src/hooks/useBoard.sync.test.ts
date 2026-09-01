@@ -148,4 +148,25 @@ describe("the real hook, pushing to the real seam", () => {
     ]);
     unmount();
   });
+
+  it("an unchanged push reply keeps the current board identity", async () => {
+    const { result, unmount } = renderHook(() => useBoard(T0 + 60_000));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      await result.current.toggleAction("a1");
+    });
+    const afterEdit = result.current.data;
+    await waitFor(() => expect(sync.posts).toHaveLength(1), {
+      timeout: 4000,
+    });
+
+    await act(async () => {
+      sync.release();
+    });
+    await waitFor(() => expect(result.current.sync?.ok).toBe(true));
+
+    expect(result.current.data).toBe(afterEdit);
+    unmount();
+  });
 });

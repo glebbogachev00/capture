@@ -295,6 +295,66 @@ function tierFor(phrase: string): OrganizeConfidence {
  * Two questions come out of it — what are you still carrying, and what are
  * you still choosing.
  */
+function staleProposals(
+  board: Board,
+  dropped: Set<string>,
+  now: number
+): OrganizeProposal[] {
+  const out: OrganizeProposal[] = [];
+  for (const a of board.actions) {
+    if (a.faded || a.done) continue;
+    const overdue = !!a.due && a.due < now - AFTER_DUE;
+    const carried =
+      a.shelf === "keep" && !a.due && now - (a.at || 0) > LONG_CARRY;
+    if (!overdue && !carried) continue;
+    const id = `let_go:${a.id}`;
+    if (dropped.has(id)) continue;
+    const days = Math.floor((now - (overdue ? a.due! : a.at || now)) / DAY_MS);
+    out.push({
+      id,
+      kind: "let_go",
+      confidence: "medium",
+      verb: "Let go",
+      sourceId: a.id,
+      sourceName: NAME(a.text),
+      targetId: a.id,
+      targetName: NAME(a.text),
+      reason: overdue
+        ? `its own deadline passed ${days} days ago and it is still open`
+        : `kept for ${days} days without being closed — nothing will fade it`,
+      score: 40 + Math.min(days, 40),
+      origin: "local",
+    });
+  }
+
+  const quiet = board.intentions
+    .filter((i) => now - (i.updatedAt || i.at || now) > INTENTION_QUIET)
+    .sort((a, b) => (a.updatedAt || a.at || 0) - (b.updatedAt || b.at || 0));
+  const oldest = quiet.find((i) => !dropped.has(`revisit_intention:${i.id}`));
+  if (oldest) {
+    const weeks = Math.floor(
+      (now - (oldest.updatedAt || oldest.at || now)) / (7 * DAY_MS)
+    );
+    const name = NAME(
+      (oldest.expandedIntention || oldest.rawInput).replace(/[.!]+$/, "")
+    );
+    out.push({
+      id: `revisit_intention:${oldest.id}`,
+      kind: "revisit_intention",
+      confidence: "medium",
+      verb: "Still true",
+      sourceId: oldest.id,
+      sourceName: name,
+      targetId: oldest.id,
+      targetName: name,
+      reason: `declared ${weeks} weeks ago and untouched since`,
+      score: 30 + Math.min(weeks, 30),
+      origin: "local",
+    });
+  }
+  return out;
+}
+
 export function scanStale(
   board: Board,
   dismissed: Iterable<string> = [],
@@ -302,12 +362,9 @@ export function scanStale(
 ): OrganizeProposal[] {
   const dropped = new Set(dismissed);
   return [
-    ...scanBoard(board, dismissed, now).filter(
-      (p) =>
-        (p.kind === "let_go" || p.kind === "revisit_intention") &&
-        !dropped.has(p.id)
-    ),
-    /* The receipts' own claims ride with the free scan — see scanResolved. */
+    ...staleProposals(board, dropped, now)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, MEDIUM_CAP),
     ...scanResolved(board, dismissed),
   ];
 }
@@ -333,13 +390,33 @@ export function scanResolved(
   const dropped = new Set(dismissed);
   const receipts = board.completions ?? [];
   if (!receipts.length) return [];
+  /* sameNoteText requires a shared contiguous run of three content words.
+     Index those runs once, then apply the exact matcher only to candidates.
+     The previous nested find compared every fragment with every lifetime
+     receipt on every board render. */
+  const byRun = new Map<string, typeof receipts>();
+  for (const receipt of receipts) {
+    const words = contentWords(receipt.text);
+    const seen = new Set<string>();
+    for (let i = 0; i <= words.length - 3; i++) {
+      const run = words.slice(i, i + 3).join(" ");
+      if (seen.has(run)) continue;
+      seen.add(run);
+      byRun.set(run, [...(byRun.get(run) ?? []), receipt]);
+    }
+  }
   const out: OrganizeProposal[] = [];
   for (const t of board.threads) {
     for (const f of t.frags || []) {
       if (f.resolvedAt) continue;
       const id = `done:${f.id}`;
       if (dropped.has(id)) continue;
-      const receipt = receipts.find((c) => sameNoteText(f.text, c.text));
+      const candidates = new Set<(typeof receipts)[number]>();
+      const words = contentWords(f.text);
+      for (let i = 0; i <= words.length - 3; i++)
+        for (const receipt of byRun.get(words.slice(i, i + 3).join(" ")) ?? [])
+          candidates.add(receipt);
+      const receipt = [...candidates].find((c) => sameNoteText(f.text, c.text));
       if (!receipt) continue;
       out.push({
         id,
@@ -619,92 +696,10 @@ export function scanBoard(
     }
   }
 
-  /* ------------------------------ get light ------------------------------
-     A different question from the rest of this scan. Everything above asks
-     "what is messy?"; this asks "what is still pulling at you?".
-
-     It only ever looks at actions the board will NEVER clear by itself.
-     Everything with a shelf life fades on its own — that is the whole
-     design — so the only things that can pile up indefinitely are the ones
-     the app promised to keep, plus anything whose stated deadline has come
-     and gone. Those are the open loops, and they are invisible precisely
-     because nothing is going to remove them.
-
-     Accepting does NOT delete. It fades the action: it moves to Faded,
-     recoverable for two weeks, then goes. Letting go, in the app's own
-     vocabulary, and reversible for a fortnight — because "get light" must
-     never be a thing you regret having tapped. */
-  for (const a of board.actions) {
-    if (a.faded || a.done) continue;
-
-    /* Its own stated deadline has passed. The strongest case: the capture
-       named the day itself, so nothing here is inferred. */
-    const overdue = !!a.due && a.due < now - AFTER_DUE;
-    /* Kept, and carried a long time. "keep" means the app will never fade
-       it, so this is the only pile that grows without limit. */
-    const carried =
-      a.shelf === "keep" && !a.due && now - (a.at || 0) > LONG_CARRY;
-    if (!overdue && !carried) continue;
-
-    const days = Math.floor((now - (overdue ? a.due! : a.at || now)) / DAY_MS);
-    out.push({
-      id: `let_go:${a.id}`,
-      kind: "let_go",
-      /* Never "high": nothing here is a mistake to correct, only a question
-         worth asking, so it never crowds out a real clutter claim. */
-      confidence: "medium",
-      verb: "Let go",
-      sourceId: a.id,
-      sourceName: NAME(a.text),
-      targetId: a.id,
-      targetName: NAME(a.text),
-      reason: overdue
-        ? `its own deadline passed ${days} days ago and it is still open`
-        : `kept for ${days} days without being closed — nothing will fade it`,
-      score: 40 + Math.min(days, 40),
-      origin: "local",
-    });
-  }
-
-  /* --------------------- are you still choosing this? -------------------
-     One at a time, always. Twenty-nine intentions crossing the line in the
-     same week would turn a standing choice into a queue of paperwork, and
-     the point of asking is that it feels like being asked, not audited.
-     The oldest silence goes first; the rest wait their turn. */
-  {
-    const quiet = board.intentions
-      .filter((i) => now - (i.updatedAt || i.at || now) > INTENTION_QUIET)
-      .sort(
-        (a, b) => (a.updatedAt || a.at || 0) - (b.updatedAt || b.at || 0)
-      );
-    const oldest = quiet.find((i) => !dropped.has(`revisit_intention:${i.id}`));
-    if (oldest) {
-      const weeks = Math.floor(
-        (now - (oldest.updatedAt || oldest.at || now)) / (7 * DAY_MS)
-      );
-      out.push({
-        id: `revisit_intention:${oldest.id}`,
-        kind: "revisit_intention",
-        /* Never "high". Nothing here is a mistake to correct — it is a
-           question, and it must never outrank a real clutter claim. */
-        confidence: "medium",
-        verb: "Still true",
-        sourceId: oldest.id,
-        /* The row ends in a question mark, and an intention is written as
-           a sentence — "…is perfect.?" reads as a typo. */
-        sourceName: NAME(
-          (oldest.expandedIntention || oldest.rawInput).replace(/[.!]+$/, "")
-        ),
-        targetId: oldest.id,
-        targetName: NAME(
-          (oldest.expandedIntention || oldest.rawInput).replace(/[.!]+$/, "")
-        ),
-        reason: `declared ${weeks} weeks ago and untouched since`,
-        score: 30 + Math.min(weeks, 30),
-        origin: "local",
-      });
-    }
-  }
+  /* Date-only questions use the same narrow helper as the badge. Keeping the
+     source shared preserves Tidy's wording without making ordinary renders
+     pay for semantic overlap work. */
+  out.push(...staleProposals(board, dropped, now));
 
   /* Extract a doable task out of a fragment. Deliberately narrow — only
      fragments that OPEN with a task marker, short enough to be one action,
