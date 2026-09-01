@@ -33,6 +33,7 @@ export function ThreadView({
   onCopyThread,
   onCopyFrag,
   onExtractAction,
+  onResolveFrag,
   onAddFragImages,
   onTakeNext,
   onDismissNext,
@@ -55,6 +56,8 @@ export function ThreadView({
   onCopyThread: () => void;
   onCopyFrag: (fragId: string) => void;
   onExtractAction: (fragId: string) => void;
+  /** Label a note resolved by hand, or take the label back off. */
+  onResolveFrag: (fragId: string, on: boolean) => void;
   onAddFragImages: (fragId: string, files: FileList | null) => void;
   onTakeNext: () => void;
   onDismissNext: () => void;
@@ -362,6 +365,7 @@ export function ThreadView({
           onMoveToNew={() => onMoveFragToNew(f.id)}
           onCopy={() => onCopyFrag(f.id)}
           onExtract={() => onExtractAction(f.id)}
+          onResolve={(on) => onResolveFrag(f.id, on)}
           onAddImages={(files) => onAddFragImages(f.id, files)}
         />
       ))}
@@ -379,6 +383,7 @@ export function FragView({
   onMoveToNew,
   onCopy,
   onExtract,
+  onResolve,
   onAddImages,
   busy,
 }: {
@@ -391,6 +396,7 @@ export function FragView({
   onMoveToNew: () => void;
   onCopy: () => void;
   onExtract: () => void;
+  onResolve: (on: boolean) => void;
   onAddImages: (files: FileList | null) => void;
   busy: boolean;
 }) {
@@ -484,6 +490,16 @@ export function FragView({
           </button>
           <button className="ghost" onClick={onExtract} disabled={busy}>
             Make an action
+          </button>
+          {/* The by-hand label, for what was done in real life without the
+              board ever hearing about it. Symmetric on purpose: mislabeling
+              must cost one tap in either direction. */}
+          <button
+            className="ghost"
+            onClick={() => onResolve(!f.resolvedAt)}
+            disabled={busy}
+          >
+            {f.resolvedAt ? "Reopen" : "Mark resolved"}
           </button>
           {/* A photo usually turns up after the thought does — a screenshot
               of the bug, the receipt, the whiteboard. Attaching one used to

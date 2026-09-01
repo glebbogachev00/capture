@@ -5,6 +5,7 @@ import {
   applyFragMove,
   applyFragResolve,
   applyFragSplit,
+  applyFragUnresolve,
 } from "./fragOps";
 import { REFILE_WINDOW_MS } from "./refiled";
 import type { Board } from "./model";
@@ -185,5 +186,16 @@ describe("labeling a note resolved", () => {
     const out = applyFragResolve(b, "retake", "r1", T0 + 5000)!;
     expect(out.tickedActionText).toBeNull();
     expect(out.board.actions).toHaveLength(1);
+  });
+});
+
+describe("taking the resolved label back off", () => {
+  it("unmark restores the note to open — and only works on a labeled note", () => {
+    const labeled = applyFragResolve(board(), "retake", "r1", T0 + 5000)!;
+    const back = applyFragUnresolve(labeled.board, "retake", "r1", T0 + 9000)!;
+    expect(
+      back.threads[0].frags.find((f) => f.id === "r1")!.resolvedAt
+    ).toBeUndefined();
+    expect(applyFragUnresolve(board(), "retake", "r1", T0)).toBeNull();
   });
 });

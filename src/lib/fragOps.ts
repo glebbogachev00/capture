@@ -237,3 +237,32 @@ export function applyFragResolve(
     ? { board: done.board, tickedActionText: twin.text }
     : { board: labeled, tickedActionText: null };
 }
+
+/** Take the label back off — mislabeling must be as cheap to undo as it
+    was to apply. Null when the note is gone or was never labeled. */
+export function applyFragUnresolve(
+  board: Board,
+  threadId: string,
+  fragId: string,
+  now: number
+): Board | null {
+  const frag = board.threads
+    .find((t) => t.id === threadId)
+    ?.frags.find((f) => f.id === fragId);
+  if (!frag || !frag.resolvedAt) return null;
+  return {
+    ...board,
+    threads: board.threads.map((t) =>
+      t.id === threadId
+        ? {
+            ...t,
+            frags: t.frags.map((f) =>
+              f.id === fragId
+                ? { ...f, resolvedAt: undefined, updatedAt: now }
+                : f
+            ),
+          }
+        : t
+    ),
+  };
+}

@@ -120,6 +120,7 @@ import {
   applyFragMove,
   applyFragResolve,
   applyFragSplit,
+  applyFragUnresolve,
 } from "@/lib/fragOps";
 import {
   applyActionDone,
@@ -2950,6 +2951,28 @@ export function useBoard(now: number) {
   };
 
   /** Split a fragment out into a thread of its own. */
+  /** The by-hand label — for the backlog of things done in real life
+      that the board was never told about. Tidy can only claim what the
+      board's own evidence shows; this is how a person sweeps the rest.
+      lib/fragOps owns both directions. */
+  const resolveFrag = async (threadId: string, fragId: string) => {
+    const out = applyFragResolve(latest.current, threadId, fragId, stamp());
+    if (!out) return;
+    await commit(out.board);
+    setNotice(
+      out.tickedActionText
+        ? "Labeled resolved — its action is ticked off too."
+        : "Labeled resolved."
+    );
+    setTimeout(() => setNotice(null), 4000);
+  };
+
+  const unresolveFrag = async (threadId: string, fragId: string) => {
+    const next = applyFragUnresolve(latest.current, threadId, fragId, stamp());
+    if (!next) return;
+    await commit(next);
+  };
+
   const moveFragToNew = async (fromId: string, fragId: string) => {
     const out = applyFragSplit(latest.current, fromId, fragId, uid);
     if (!out) return;
@@ -4208,6 +4231,8 @@ export function useBoard(now: number) {
     deleteFrag,
     moveFrag,
     moveFragToNew,
+    resolveFrag,
+    unresolveFrag,
     copyFragment,
     copyWhole,
     extractAction,

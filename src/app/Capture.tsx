@@ -213,6 +213,8 @@ export function Capture() {
     deleteFrag,
     moveFrag,
     moveFragToNew,
+    resolveFrag,
+    unresolveFrag,
     copyFragment,
     copyWhole,
     extractAction,
@@ -944,6 +946,11 @@ export function Capture() {
             fromActions={actionsForThread(data, thread)}
             onCopyFrag={(fragId) => copyFragment(thread.id, fragId)}
             onExtractAction={(fragId) => extractAction(thread.id, fragId)}
+            onResolveFrag={(fragId, on) =>
+              on
+                ? void resolveFrag(thread.id, fragId)
+                : void unresolveFrag(thread.id, fragId)
+            }
             onAddFragImages={(fragId, files) => {
               /* Shrunk first, exactly like a photo picked at capture: a
                  phone shot is ~15MB as a data URL, and IndexedDB and the

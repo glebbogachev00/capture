@@ -42,6 +42,9 @@ export type TidySnapshot = {
     frags: { id: string; text: string; at: number; resolved?: boolean }[];
   }[];
   intentions: { id: string; expanded: string }[];
+  /** Recently ticked-off tasks — the receipts. Evidence for looks_done:
+      a note that asked for something a receipt says was finished. */
+  completions?: { text: string; at: number; threadId?: string }[];
 };
 
 /** Snapshot caps — a huge board must not bloat one prompt. */
@@ -50,6 +53,7 @@ export const SNAPSHOT_CAPS = {
   threads: 40,
   fragsPerThread: 12,
   intentions: 15,
+  completions: 30,
 } as const;
 
 
@@ -92,6 +96,11 @@ export function compactBoard(board: Board): TidySnapshot {
         id: i.id,
         expanded: CLIP(i.expandedIntention || i.rawInput, 160),
       })),
+    /* Newest receipts first — the history a resolved claim can cite. */
+    completions: [...(board.completions ?? [])]
+      .sort((a, b) => b.at - a.at)
+      .slice(0, SNAPSHOT_CAPS.completions)
+      .map((c) => ({ text: CLIP(c.text, 160), at: c.at, threadId: c.threadId })),
   };
 }
 
@@ -114,6 +123,10 @@ export function renderBoardForPrompt(s: TidySnapshot): string {
   if (s.intentions.length) {
     lines.push("Intentions:");
     for (const i of s.intentions) lines.push(`- [${i.id}] ${i.expanded}`);
+  }
+  if (s.completions?.length) {
+    lines.push("Ticked off (finished tasks, newest first):");
+    for (const c of s.completions) lines.push(`- ${c.text}`);
   }
   return lines.join("\n");
 }
