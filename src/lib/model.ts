@@ -83,6 +83,11 @@ export type Frag = {
   imgs?: string[];
   /** As above: saved verbatim, never cleaned up. */
   unsorted?: boolean;
+  /** The note asked for something and the board's later notes say it
+      happened — labeled (via Tidy, confirmed by a person), never deleted:
+      the thread stays the record, the label says the state. This is what
+      an agent reads to know what was done and what is still open. */
+  resolvedAt?: number;
   updatedAt?: number;
 };
 

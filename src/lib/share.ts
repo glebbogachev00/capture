@@ -64,7 +64,14 @@ export function shareThread(
   if (t.summary) lines.push("**Where this stands**", "", t.summary, "");
   lines.push("---", "");
   for (const f of t.frags) {
-    lines.push(`**${shortDate(f.at)}**`, "", f.text, "");
+    /* The label an agent reads: done and still-open must be tellable
+       apart from the text alone. */
+    lines.push(
+      `**${shortDate(f.at)}**${f.resolvedAt ? " · resolved" : ""}`,
+      "",
+      f.text,
+      ""
+    );
   }
   /* The actions this thread gave rise to ride along, open first: a person
      pasting the thread into an agent is handing over where the thinking

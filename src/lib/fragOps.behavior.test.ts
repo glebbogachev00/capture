@@ -3,6 +3,7 @@ import {
   applyFragDelete,
   applyFragEdit,
   applyFragMove,
+  applyFragResolve,
   applyFragSplit,
 } from "./fragOps";
 import { REFILE_WINDOW_MS } from "./refiled";
@@ -134,5 +135,55 @@ describe("splitting a note into its own thread", () => {
     const out = applyFragSplit(board(), "capture", "c1", () => "fresh-id")!;
     expect(out.emptied).toBe(true);
     expect(out.board.threads.some((t) => t.id === "capture")).toBe(false);
+  });
+});
+
+describe("labeling a note resolved", () => {
+  const withAction = () => {
+    const b = board();
+    b.actions = [
+      {
+        id: "a-demo",
+        text: "Record a Retake demo of the new features",
+        done: false,
+        at: T0,
+        src: "Retake demos should show the app as it is, no overlays.",
+        shelf: "keep",
+        expires: null,
+        threadId: "retake",
+      },
+    ] as unknown as typeof b.actions;
+    b.completions = [];
+    return b;
+  };
+
+  it("the note stays in its thread — labeled, never deleted", () => {
+    const out = applyFragResolve(board(), "retake", "r1", T0 + 5000)!;
+    const t = out.board.threads.find((x) => x.id === "retake")!;
+    expect(t.frags.map((f) => f.id)).toContain("r1"); // still there
+    expect(t.frags.find((f) => f.id === "r1")!.resolvedAt).toBe(T0 + 5000);
+  });
+
+  it("a double tap labels once — the second gesture is a no-op", () => {
+    const first = applyFragResolve(board(), "retake", "r1", T0 + 5000)!;
+    expect(applyFragResolve(first.board, "retake", "r1", T0 + 6000)).toBeNull();
+  });
+
+  it("the open action born from the note is ticked in the same gesture", () => {
+    /* The action's src IS the note's words — one decision resolves both
+       faces of the same capture, receipt kept. */
+    const out = applyFragResolve(withAction(), "retake", "r1", T0 + 5000)!;
+    expect(out.tickedActionText).toMatch(/Record a Retake demo/);
+    expect(out.board.actions).toHaveLength(0);
+    expect(out.board.completions!.map((c) => c.id)).toEqual(["a-demo"]);
+  });
+
+  it("an unrelated action in the same thread is left alone", () => {
+    const b = withAction();
+    b.actions[0].src = "Buy a new microphone for the recordings";
+    b.actions[0].text = "Buy a new microphone";
+    const out = applyFragResolve(b, "retake", "r1", T0 + 5000)!;
+    expect(out.tickedActionText).toBeNull();
+    expect(out.board.actions).toHaveLength(1);
   });
 });

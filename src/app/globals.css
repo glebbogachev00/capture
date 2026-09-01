@@ -1151,6 +1151,13 @@ body {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+/* Settled, not pending: the resolved label is the calm green of a done
+   thing, where unsorted's amber asks for attention. */
+.raw.resolved {
+  border-color: var(--accent);
+  color: var(--accent);
+  border-style: solid;
+}
 
 /* A picture rode in with this capture and is kept on a thread fragment;
    this is the way back to it. Sits with the other meta chips rather than

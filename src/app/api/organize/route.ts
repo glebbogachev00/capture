@@ -54,7 +54,14 @@ const Body = z.object({
       name: z.string(),
       summary: z.string().optional(),
       frags: z.array(
-        z.object({ id: z.string(), text: z.string(), at: z.number() })
+        z.object({
+          id: z.string(),
+          text: z.string(),
+          at: z.number(),
+          /* Rides through so the prompt can mark [resolved] and the mapper
+             can refuse re-claims — z.object strips unknown keys. */
+          resolved: z.boolean().optional(),
+        })
       ),
     })
   ),
@@ -109,7 +116,7 @@ Propose ONLY changes a person would immediately agree improve the board:
 Before you propose extract_action, run one check: can you quote the doing from THEIR words? Not the doing you would advise — theirs. "We're out of cold brew again, which is annoying" states a fact about the cupboard; "buy cold brew" is your idea, and proposing it puts a task on their board they never set. "The faucet drips at night" is the same. If the only action you can produce is one you thought of, there is no action to extract — and if the fragment is sitting in the wrong thread, the honest claim is the move, not an invented task.
 
 - dup_action / dup_fragment — the same task or note captured twice, worded differently. The copy is removed; the original stays.
-- looks_done — an OPEN action that the board's own LATER notes say already happened. The person will be offered a tick, never ticked for. The evidence bar is the extract_action bar in reverse: you must be able to quote the completion from THEIR later words — a note that says the thing shipped, was sent, was fixed, was decided. sourceId = the action, targetId = the thread whose note says it happened, reason = a plain sentence pointing at that note ("a later note says the undo button is in and working"). What you know about the world, what usually gets done, or the action being old are NOT evidence — an old action with no note about it is let_go's business, not yours. When the completion is not in their own words on this board, there is no claim.
+- looks_done — a note that ASKED for something, when a LATER note on the board says it happened. The person is offered a "resolved" label; nothing is ever labeled for them, and the note never leaves its thread. The evidence bar is the extract_action bar in reverse: you must be able to quote the completion from THEIR later words — a note that says the thing shipped, was sent, was fixed, was decided. sourceId = the thread holding the asking note, sourceFragId = that note, targetId = the thread whose later note says it happened (often the same thread), reason = a plain sentence pointing at the later note ("a later note says the undo button is in and working"). Never claim a note already marked [resolved]. Only when the WHOLE note is answered: a note that asks for three things of which one happened is NOT resolved — say nothing, or propose extract_action for the parts that are still tasks. What you know about the world, or the note being old, are NOT evidence — when the completion is not in their own words on this board, there is no claim.
 - move_fragment — a note sitting in the wrong thread. If a note is clearly about another thread's subject, propose the move. Being a complaint or an observation does NOT make a note untouchable: "we're out of cold brew again, which is annoying" sitting in a Career thread is still a groceries note — move it to the groceries thread. It is not a task, so never extract it; it is misfiled, so do move it. Judge a note by what it is ABOUT, not by whether it is actionable.
 - fold_action — an action that clearly belongs with a thread (it is really a note on that subject). Folding reduces the action list. An action that names a thread's subject outright ("compare water filter options for the kitchen renovation" with a "Kitchen renovation" thread open) is the clearest case. The one exception: NEVER fold an action into a thread that already contains that same note as a fragment — an action extracted from a thread is the very note it came from, and folding it back would copy it a second time. If the thread already holds the note, propose nothing; otherwise the fold stands.
 
@@ -148,6 +155,7 @@ function capped(body: TidySnapshot): TidySnapshot {
         id: f.id,
         text: clip(f.text, 240),
         at: f.at,
+        resolved: f.resolved,
       })),
     })),
     intentions: body.intentions.slice(0, CAP.intentions).map((i) => ({

@@ -118,6 +118,7 @@ import {
   applyFragDelete,
   applyFragEdit,
   applyFragMove,
+  applyFragResolve,
   applyFragSplit,
 } from "@/lib/fragOps";
 import {
@@ -2467,16 +2468,24 @@ export function useBoard(now: number) {
       );
       return true;
     } else if (p.kind === "looks_done") {
-      /* Accepting IS the tick: the row leaves the board and the completion
-         receipt is kept, exactly as if the checkbox had been tapped — one
-         path, one behavior (lib/actionOps owns it). No correction is
-         recorded: finishing a task says nothing about how captures should
-         be FILED. */
-      const open = latest.current.actions.find((x) => x.id === p.sourceId);
-      if (!open) return false;
-      await toggleAction(p.sourceId);
-      setNotice("Ticked off — it's in the record.");
-      setTimeout(() => setNotice(null), 4000);
+      /* The label, not a deletion: the note stays in its thread with a
+         "resolved" mark, and an open action born from the same note is
+         ticked in the same gesture — lib/fragOps owns both. No correction
+         is recorded: resolving says nothing about how captures are FILED. */
+      const out = applyFragResolve(
+        latest.current,
+        p.sourceThreadId ?? p.sourceId,
+        p.sourceFragId!,
+        stamp()
+      );
+      if (!out) return false;
+      await commit(out.board);
+      setNotice(
+        out.tickedActionText
+          ? "Labeled resolved — its action is ticked off too."
+          : "Labeled resolved — the note stays in the thread."
+      );
+      setTimeout(() => setNotice(null), 4500);
       return true;
     } else if (p.kind === "let_go") {
       /* Fade it, never delete it. The action moves to Faded exactly as it

@@ -572,48 +572,45 @@ describe("a proposal with no fragment named", () => {
   });
 });
 
-describe("mapAiProposals — looks_done (offered a tick, never ticked for)", () => {
-  it("a real action with real cited evidence maps to a Tick off row", () => {
+describe("mapAiProposals — looks_done (a label offered, never applied)", () => {
+  it("a real note with real cited evidence maps to a Mark resolved row", () => {
     const raw: RawAiProposal[] = [
       {
         kind: "looks_done",
         confidence: "high",
-        sourceId: "a1",
-        sourceFragId: null,
-        targetId: "t2",
-        reason: "a later Vet note says the appointment is booked",
+        sourceId: "t1",
+        sourceFragId: "f1",
+        targetId: "t1",
+        reason: "a later note says the cold brew question is settled",
       },
     ];
     const out = mapAiProposals(snapshot(), raw);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
       kind: "looks_done",
-      verb: "Tick off",
-      sourceId: "a1",
-      sourceName: "Book a dentist appointment",
-      targetName: "Vet",
+      verb: "Mark resolved",
+      sourceThreadId: "t1",
+      sourceFragId: "f1",
+      sourceName: "cold brew experiments",
+      targetName: "Coffee",
     });
   });
 
-  it("a hallucinated action or a hallucinated evidence thread is dropped", () => {
-    const raw: RawAiProposal[] = [
-      {
-        kind: "looks_done",
-        confidence: "high",
-        sourceId: "ghost-action",
-        sourceFragId: null,
-        targetId: "t2",
-        reason: "says it happened",
-      },
-      {
-        kind: "looks_done",
-        confidence: "high",
-        sourceId: "a1",
-        sourceFragId: null,
-        targetId: "no-such-thread",
-        reason: "says it happened",
-      },
-    ];
-    expect(mapAiProposals(snapshot(), raw)).toEqual([]);
+  it("a hallucinated note, a wrong thread, an already-resolved note, or a hallucinated evidence thread is dropped", () => {
+    const already = snapshot();
+    already.threads[0].frags[0].resolved = true;
+    const claim = (over: object): RawAiProposal => ({
+      kind: "looks_done",
+      confidence: "high",
+      sourceId: "t1",
+      sourceFragId: "f1",
+      targetId: "t1",
+      reason: "says it happened",
+      ...over,
+    });
+    expect(mapAiProposals(snapshot(), [claim({ sourceFragId: "ghost" })])).toEqual([]);
+    expect(mapAiProposals(snapshot(), [claim({ sourceId: "t2" })])).toEqual([]);
+    expect(mapAiProposals(snapshot(), [claim({ targetId: "no-such" })])).toEqual([]);
+    expect(mapAiProposals(already, [claim({})])).toEqual([]);
   });
 });

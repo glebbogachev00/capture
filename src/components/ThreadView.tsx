@@ -455,6 +455,7 @@ export function FragView({
       <div className="frag-date">
         {fmt(f.at)}
         {f.unsorted && <span className="raw">unsorted</span>}
+        {f.resolvedAt && <span className="raw resolved">resolved</span>}
         {!editing && (
           <div className="frag-tools">
             <button className="copy-btn" onClick={onCopy} aria-label="Copy">

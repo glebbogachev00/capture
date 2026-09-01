@@ -39,7 +39,7 @@ export type TidySnapshot = {
     id: string;
     name: string;
     summary?: string;
-    frags: { id: string; text: string; at: number }[];
+    frags: { id: string; text: string; at: number; resolved?: boolean }[];
   }[];
   intentions: { id: string; expanded: string }[];
 };
@@ -79,7 +79,12 @@ export function compactBoard(board: Board): TidySnapshot {
         summary: t.summary ? CLIP(t.summary, 160) : undefined,
         frags: t.frags
           .slice(0, SNAPSHOT_CAPS.fragsPerThread)
-          .map((f) => ({ id: f.id, text: CLIP(f.text, 240), at: f.at || 0 })),
+          .map((f) => ({
+            id: f.id,
+            text: CLIP(f.text, 240),
+            at: f.at || 0,
+            resolved: f.resolvedAt ? true : undefined,
+          })),
       })),
     intentions: board.intentions
       .slice(0, SNAPSHOT_CAPS.intentions)
@@ -102,7 +107,8 @@ export function renderBoardForPrompt(s: TidySnapshot): string {
     lines.push("Threads:");
     for (const t of s.threads) {
       lines.push(`- [${t.id}] "${t.name}"${t.summary ? ` — ${t.summary}` : ""}`);
-      for (const f of t.frags) lines.push(`    - [${f.id}] ${f.text}`);
+      for (const f of t.frags)
+        lines.push(`    - [${f.id}]${f.resolved ? " [resolved]" : ""} ${f.text}`);
     }
   }
   if (s.intentions.length) {
@@ -141,7 +147,7 @@ const VERBS: Record<OrganizeKind, string> = {
      cost on the one claim that needs none. */
   let_go: "Let go",
   revisit_intention: "Still true",
-  looks_done: "Tick off",
+  looks_done: "Mark resolved",
 };
 
 /** Fragment kinds — proposals that name a specific note inside a thread. */
@@ -150,6 +156,7 @@ const FRAGMENT_KINDS = new Set<OrganizeKind>([
   "move_fragment",
   "extract_action",
   "merge_fragments",
+  "looks_done",
 ]);
 
 /**
@@ -171,11 +178,16 @@ export function mapAiProposals(
   const threadById = new Map(snapshot.threads.map((t) => [t.id, t]));
   const fragById = new Map<
     string,
-    { threadId: string; text: string; at: number }
+    { threadId: string; text: string; at: number; resolved?: boolean }
   >();
   for (const t of snapshot.threads)
     for (const f of t.frags)
-      fragById.set(f.id, { threadId: t.id, text: f.text, at: f.at });
+      fragById.set(f.id, {
+        threadId: t.id,
+        text: f.text,
+        at: f.at,
+        resolved: f.resolved,
+      });
 
   const out: OrganizeProposal[] = [];
   const seen = new Set<string>();
@@ -247,10 +259,15 @@ export function mapAiProposals(
           targetThread.id !== sourceThread.id;
         break;
       case "looks_done":
-        /* The action must exist and be open, and the claimed evidence must
-           be a real thread — the model cites WHERE the board says it
-           happened, and a hallucinated citation drops the claim. */
-        ok = !!actionById.get(dupSource) && !!targetThread;
+        /* The claim is about a NOTE: it must really live in the named
+           thread, must not already be labeled, and the cited evidence
+           thread must exist — a hallucinated citation drops the claim. */
+        ok =
+          !!sourceThread &&
+          !!frag &&
+          frag.threadId === dupSource &&
+          !frag.resolved &&
+          !!targetThread;
         break;
       case "fold_action": {
         ok = !!actionById.get(dupSource) && !!targetThread;
@@ -277,7 +294,7 @@ export function mapAiProposals(
     seen.add(id);
 
     const sourceName =
-      p.kind === "dup_action" || p.kind === "fold_action" || p.kind === "looks_done"
+      p.kind === "dup_action" || p.kind === "fold_action"
         ? actionById.get(dupSource) ?? ""
         : frag?.text ?? "";
     const targetName =
