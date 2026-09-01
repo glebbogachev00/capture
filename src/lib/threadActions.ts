@@ -73,9 +73,9 @@ export function actionsForThread(
     return run.length >= 2;
   };
 
-  const newestFirst = (x: Action, y: Action) => y.at - x.at;
+  const newestFirst = (x: { at: number }, y: { at: number }) => y.at - x.at;
   const seen = new Set<string>();
-  const take = (list: Action[]) =>
+  const take = <T extends { id: string }>(list: T[]): T[] =>
     list.filter((a) => (seen.has(a.id) ? false : (seen.add(a.id), true)));
 
   const mine = board.actions.filter(isMine);

@@ -6,7 +6,7 @@ import {
   left,
   pad,
 } from "./model";
-import { actionsForThread } from "./threadActions";
+import { actionsForThread, type DoneItem } from "./threadActions";
 
 /**
  * Turning what is on screen into text someone else can read.
@@ -51,7 +51,7 @@ export type Shareable = {
 
 export function shareThread(
   t: Thread,
-  from?: { open: Action[]; done: Action[] }
+  from?: { open: Action[]; done: DoneItem[] }
 ): Shareable {
   const dates = t.frags.map((f) => f.at);
   const lines = [`# ${t.name}`, ""];
