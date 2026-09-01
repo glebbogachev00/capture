@@ -417,3 +417,28 @@ describe("computeSuggestion — no home offers, by decision (2026-09-01)", () =>
     ).toBe(null);
   });
 });
+
+describe("computeSuggestion — a completion note is not a duplicate (2026-09-02)", () => {
+  it("saying a thing IS DONE never flags the note that asked for it", () => {
+    /* Caught on camera: "the undo button is in and working now" was
+       offered as a duplicate of "I want an undo button", because word
+       coverage cannot tell doing from done — they share every content
+       word. Completion notes are a first-class flow now (looks_done reads
+       them); the model's Tidy pass owns real note duplicates instead. */
+    const board = base({
+      threads: [
+        thread("bugs", "Bugs & Open Issues", [
+          { id: "f1", at: 900, text: "When I discard an intention draft there is no way back — I want an undo button next to the edit wording button." },
+          { id: "f2", at: 1000, text: "The undo button next to the edit wording is in and working now, tested it on the intention screen." },
+        ]),
+      ],
+    });
+    expect(
+      computeSuggestion(
+        board,
+        "The undo button next to the edit wording is in and working now, tested it on the intention screen.",
+        { kind: "thread", id: "bugs", fragId: "f2" }
+      )
+    ).toBe(null);
+  });
+});

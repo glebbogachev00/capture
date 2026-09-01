@@ -20,11 +20,7 @@ import {
   left,
   uid,
 } from "./model";
-import {
-  bestActionDuplicate,
-  bestFragmentDuplicate,
-  bestThreadHome,
-} from "./related";
+import { bestActionDuplicate } from "./related";
 
 /** What /api/sort returns. Validated server-side against a schema. */
 export type SortResult = {
@@ -426,33 +422,23 @@ export function computeSuggestion(
       };
     }
   }
-  /* A capture that landed as a note can still duplicate a note already on the
-     board — the same thing pasted twice lands as two fragments. The fragment
-     duplicate beats the thread home: if it is the same note again, offer to
-     drop the copy instead of merging it in silently. The engine excludes the
-     just-landed fragment itself, which always phrase-matches its own text. */
-  if (source.kind === "thread") {
-    const fragDup = bestFragmentDuplicate(board, text, source.fragId);
-    if (fragDup) {
-      const crossThread = source.fragId && fragDup.threadId !== source.id;
-      return {
-        kind: "duplicate",
-        targetId: fragDup.threadId,
-        targetName:
-          fragDup.name + (crossThread ? ` (in "${fragDup.threadName}")` : ""),
-        reason: fragDup.reason,
-        sourceKind: "thread",
-        sourceId: source.id,
-        sourceFragId: source.fragId,
-      };
-    }
-  }
-  /* No home offers, by decision (2026-09-01): a filing suggestion built on
-     a shared phrase is a string match second-guessing a model that saw the
-     whole board — "it doesn't help make any decision that improves capture,
-     it just matches words." First it was restricted (never against a home
-     the sorter chose on purpose), then gated behind a judge; it kept
-     appearing and kept being wrong, so it is gone. Duplicates above are a
-     different job — the same words said twice — and stay. */
+  /* No fragment-duplicate offers, and no home offers — both by decision.
+
+     Home offers (2026-09-01): a filing suggestion built on a shared phrase
+     is a string match second-guessing a model that saw the whole board —
+     "it doesn't help make any decision that improves capture, it just
+     matches words." Restricted, then judged, it kept being wrong; gone.
+
+     Fragment duplicates (2026-09-02, caught on camera the same day the
+     looks_done flow shipped): "the undo button is in and working now"
+     was flagged as a duplicate of "I want an undo button", reason 'both
+     mention "undo button edit wording"'. Word coverage cannot tell a
+     note about DOING a thing from a note that the thing IS DONE — they
+     share every content word — and completion notes are now a first-class
+     flow. Real note duplicates are the model's to claim (Tidy's
+     dup_fragment), because it can tell those apart.
+
+     The action duplicate above stays: re-capturing a task produces two
+     imperatives, which is the one shape word coverage judges fairly. */
   return null;
 }
