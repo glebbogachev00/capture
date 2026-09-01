@@ -447,49 +447,12 @@ export function computeSuggestion(
       };
     }
   }
-  /* Never second-guess a home the sorter chose on purpose. When a capture
-     lands in a thread that already existed, a model with the whole board in
-     front of it picked that thread; offering to move it elsewhere on the
-     strength of a shared phrase is a string match overruling a judgement.
-     That is how a bug report mentioning "banking info" was told it belonged
-     with the Banking Info thread instead of the Bugs one it had just been
-     filed into. A brand-new thread (its only fragment is this capture) is
-     different: the sorter found no home, so proposing one is help. */
-  if (source.kind === "thread") {
-    const landed = board.threads.find((t) => t.id === source.id);
-    if ((landed?.frags?.length ?? 0) > 1) return null;
-  }
-  const hit = bestThreadHome(board, text, source.id);
-  if (!hit) return null;
-  if (source.kind === "action") {
-    return {
-      kind: "home",
-      targetId: hit.id,
-      targetName: hit.name,
-      reason: hit.reason,
-      sourceKind: "action",
-      sourceId: source.id,
-      verb: "Move",
-    };
-  }
-  return source.fragId
-    ? {
-        kind: "home",
-        targetId: hit.id,
-        targetName: hit.name,
-        reason: hit.reason,
-        sourceKind: "thread",
-        sourceId: source.id,
-        fragId: source.fragId,
-        verb: "Move",
-      }
-    : {
-        kind: "home",
-        targetId: hit.id,
-        targetName: hit.name,
-        reason: hit.reason,
-        sourceKind: "thread",
-        sourceId: source.id,
-        verb: "Merge",
-      };
+  /* No home offers, by decision (2026-09-01): a filing suggestion built on
+     a shared phrase is a string match second-guessing a model that saw the
+     whole board — "it doesn't help make any decision that improves capture,
+     it just matches words." First it was restricted (never against a home
+     the sorter chose on purpose), then gated behind a judge; it kept
+     appearing and kept being wrong, so it is gone. Duplicates above are a
+     different job — the same words said twice — and stay. */
+  return null;
 }

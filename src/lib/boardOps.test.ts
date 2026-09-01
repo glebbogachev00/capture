@@ -389,3 +389,31 @@ describe("the duplicate banner costs more than a turn of phrase", () => {
     ).toBe("duplicate");
   });
 });
+
+describe("computeSuggestion — no home offers, by decision (2026-09-01)", () => {
+  it("a shared phrase with an existing thread proposes nothing", () => {
+    /* The words below overlap the thread's fragment heavily — the old
+       string-matcher fired on far less. First restricted, then judged,
+       it kept second-guessing the sorter's filing and never helped:
+       "it doesn't help make any decision that improves capture. It just
+       matches words." A capture that landed somewhere STAYS there unless
+       the person moves it. */
+    const board = base({
+      threads: [
+        thread("bank", "Banking Info", [
+          { id: "f1", at: 900, text: "New banking info for the business account arrives Tuesday" },
+        ]),
+        thread("fresh", "Sorting bug report", [
+          { id: "f2", at: 1000, text: "Bug report: a capture mentioning banking info was filed into the wrong thread" },
+        ]),
+      ],
+    });
+    expect(
+      computeSuggestion(
+        board,
+        "Bug report: a capture mentioning banking info was filed into the wrong thread",
+        { kind: "thread", id: "fresh", fragId: "f2" }
+      )
+    ).toBe(null);
+  });
+});

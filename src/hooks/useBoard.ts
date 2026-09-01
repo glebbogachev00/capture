@@ -156,12 +156,8 @@ import {
 } from "@/lib/ledger";
 import { deriveRules, type LearnedRule } from "@/lib/rules";
 import {
-  judgedForSignature,
-  requestJudgedProposals,
   scanBoard,
   scanStale,
-  wordMatched,
-  type JudgedRead,
   type OrganizeProposal,
 } from "@/lib/organize";
 import {
@@ -1960,10 +1956,6 @@ export function useBoard(now: number) {
      live in lib/tangleGate as behavior — the hook keeps only persistence. */
   const tangleGate = useRef<TangleGate>(createTangleGate(null));
   const tangleDismissed = useRef<string[]>([]);
-  /* Word-matches that survived the judge, kept against the board they were
-     judged about — asking twice about an unchanged board should not produce
-     two different answers, the same reason the model read is cached. */
-  const judgedRead = useRef<JudgedRead | null>(null);
   /* Bumped by Tidy to ask for a check on demand. The daily gate exists so
      the app does not interrupt; it should never stop a person who came
      looking. */
@@ -2209,52 +2201,13 @@ export function useBoard(now: number) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Ask the judge which word-matches mean anything, and show the ones
-      that do. Never throws into the caller: no judgement means no extra
-      rows, which is what the panel shows today. */
-  const judgeWordMatches = async () => {
-    const board = latest.current;
-    const sig = boardSignature(board, []);
-    const cached = judgedRead.current;
-    /* A different board must stop seeing the prior board's judgement before
-       this function yields to the network. Every visible read is also gated. */
-    judgedRead.current = cached?.sig === sig ? cached : null;
-
-    /* Loose on purpose. The strict thresholds exist for claims that talk
-       to a person directly; a candidate the scan never emits is one the
-       judge never gets to keep. */
-    const candidates = wordMatched(
-      scanBoard(board, dismissedOrganize.current, Date.now(), { loose: true })
-    );
-    const result = await requestJudgedProposals({
-      board,
-      sig,
-      cached,
-      candidates,
-      currentSig: () => boardSignature(latest.current, []),
-      request: async (sent) =>
-        fetch("/api/judge", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ candidates: sent }),
-        }),
-    });
-
-    /* A later request for a newer board owns the cache now. */
-    if (boardSignature(latest.current, []) !== sig) return;
-    judgedRead.current = result.read;
-    noteVia(result.via);
-    const kept = judgedForSignature(result.read, sig);
-    if (!kept.length) return;
-    setOrganize((cur) =>
-      assemblePanel({
-        board: latest.current,
-        ai: cur ?? [],
-        judged: kept,
-        dismissed: dismissedOrganize.current,
-      })
-    );
-  };
+  /* Word-match rows are gone from Tidy, by decision (2026-09-01). The
+     history, so nobody rebuilds it: raw word-matches shipped and second-
+     guessed real filings; a judge was added to keep only the meaningful
+     ones (measured: 2 of 8 kept on the good provider, 0 on the weak); the
+     survivors still kept appearing and still helped nothing — "it just
+     matches words." The panel is the local stale scan plus the model's
+     semantic pass, and nothing else. */
 
   const runOrganize = async () => {
     /* Tidy also asks about a tangled pair.
@@ -2296,8 +2249,6 @@ export function useBoard(now: number) {
        routed to the measured-best one and why a failure here shows nothing
        rather than falling back to the unjudged claims. Nothing extra is
        exactly what the panel shows today. */
-    void judgeWordMatches();
-
     /* The local scan is shown immediately; the AI results merge in when
        they arrive. Both are read from the LATEST board at their moment, so
        a board change mid-fetch is never overwritten by a stale snapshot. */
@@ -2322,7 +2273,7 @@ export function useBoard(now: number) {
         assemblePanel({
           board: latest.current,
           ai: cached.ai,
-          judged: judgedForSignature(judgedRead.current, sig),
+          judged: [],
           dismissed: dismissedOrganize.current,
         })
       );
@@ -2409,10 +2360,7 @@ export function useBoard(now: number) {
         assemblePanel({
           board: latest.current,
           ai,
-          judged: judgedForSignature(
-            judgedRead.current,
-            boardSignature(latest.current, [])
-          ),
+          judged: [],
           dismissed: dismissedOrganize.current,
         })
       );
