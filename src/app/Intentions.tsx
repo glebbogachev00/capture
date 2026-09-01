@@ -24,8 +24,9 @@ import { WrapView, WrapCallout } from "./Wrap";
 import {
   heatGrid,
   caughtWords,
+  dayCaptures,
+  dayKey,
   monthLabels,
-  recentCaptures,
   recordStats,
 } from "@/lib/record";
 
@@ -498,6 +499,10 @@ export function RecordScreen({
   onRestore: (said: string) => void;
 }) {
   const [openWrap, setOpenWrap] = useState(false);
+  /* The page's real subject: ONE day. It opens on today, and any cell in
+     the grid is a way to a different day — "the point is the story on the
+     given day", not a feed of everything ever said. */
+  const [day, setDay] = useState(() => dayKey(now));
   const stats = recordStats(ledger);
   const grid = heatGrid(ledger, now);
   const months = monthLabels(grid);
@@ -579,9 +584,17 @@ export function RecordScreen({
               {grid.map((week) => (
                 <div className="record-col" key={week[0].day}>
                   {week.map((cell) => (
-                    <i
+                    /* Each cell IS its day — tap it and the story below
+                       becomes that day's. */
+                    <button
                       key={cell.day}
-                      className={"record-cell l" + cell.level}
+                      className={
+                        "record-cell l" +
+                        cell.level +
+                        (cell.day === day ? " record-cell-open" : "")
+                      }
+                      aria-pressed={cell.day === day}
+                      onClick={() => setDay(cell.day)}
                       title={`${dayName(cell.day)} · ${cell.count} capture${cell.count === 1 ? "" : "s"}`}
                     />
                   ))}
@@ -604,14 +617,22 @@ export function RecordScreen({
               : "the last twelve weeks, day by day"}
           </p>
 
-          {/* The evidence. What landed is shown first, because that is what
-              you live with; what you actually said sits under it, and only
-              when the engine changed the words. */}
+          {/* The evidence — for the chosen day only, oldest first, the way
+              the day was lived. What landed is shown first, because that is
+              what you live with; what you actually said sits under it, and
+              only when the engine changed the words. */}
           <div className="section-label" style={{ cursor: "default" }}>
-            What you said, and what became of it
+            {day === dayKey(now) ? "Today" : dayName(day)} — what you said,
+            and what became of it
           </div>
+          {!dayCaptures(ledger, day).length && (
+            <p className="record-caption">
+              Nothing said this day. Tap a green cell above for a day that
+              has a story.
+            </p>
+          )}
           <ul className="record-log">
-            {recentCaptures(ledger).map((e) => (
+            {dayCaptures(ledger, day).map((e) => (
               <li key={e.id} className={e.undone ? "record-undone" : undefined}>
                 <p className="record-filed">{e.filed || e.said}</p>
                 {e.differs && (

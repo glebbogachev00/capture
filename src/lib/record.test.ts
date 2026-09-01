@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CaptureEntry } from "./ledger";
-import { caughtWords, heatGrid, monthLabels, recentCaptures, recordStats } from "./record";
+import { caughtWords, dayCaptures, heatGrid, monthLabels, recentCaptures, recordStats } from "./record";
 
 const DAY = 24 * 60 * 60 * 1000;
 /* A fixed local noon keeps day bucketing away from midnight edges. */
@@ -164,5 +164,33 @@ describe("an undone capture in the record", () => {
       ({ id, at: 1, raw: "r", clean: "c", kind: "action", source: "typed", targetId: "", undone }) as import("./ledger").CaptureEntry;
     expect(recordStats([e("a"), e("b", true)]).actions).toBe(1);
     expect(recentCaptures([e("b", true)])[0].undone).toBe(true);
+  });
+});
+
+describe("the record shows a day's story, not the whole history", () => {
+  const at = (day: string, h: number) =>
+    new Date(day + "T00:00:00").getTime() + h * 3_600_000;
+  const entry = (id: string, t: number, raw: string): CaptureEntry => ({
+    id,
+    at: t,
+    raw,
+    clean: raw,
+    kind: "action",
+    source: "typed",
+    targetId: id + "-t",
+  });
+  const ledger = [
+    entry("b", at("2026-08-30", 17), "fix the banner so layers turn into action"),
+    entry("a", at("2026-08-30", 9), "prepare all materials before the one-to-one class"),
+    entry("c", at("2026-08-31", 11), "use retake to record the walkthrough"),
+  ];
+
+  it("only the given day's captures, in the order the day was lived", () => {
+    const day = dayCaptures(ledger, "2026-08-30");
+    expect(day.map((e) => e.id)).toEqual(["a", "b"]); // oldest first
+  });
+
+  it("a day with nothing said is an empty story, not someone else's", () => {
+    expect(dayCaptures(ledger, "2026-08-29")).toEqual([]);
   });
 });

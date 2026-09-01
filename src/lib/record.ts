@@ -70,6 +70,24 @@ export type RecordEntry = {
 const normalise = (s: string) =>
   s.toLowerCase().replace(/\s+/g, " ").replace(/[.,;:!?]+$/g, "").trim();
 
+const asEntry = (e: CaptureEntry): RecordEntry => {
+  const said = (e.transcript || e.raw || "").trim();
+  const filed = (e.clean || "").trim();
+  return {
+    id: e.id,
+    at: e.at,
+    said,
+    filed,
+    kind: e.kind,
+    undone: !!e.undone,
+    targetId:
+      (e.kind === "thread" || e.kind === "both") && e.targetId
+        ? e.targetId
+        : undefined,
+    differs: !!said && !!filed && normalise(said) !== normalise(filed),
+  };
+};
+
 /** The most recent captures, newest first, as evidence rows. */
 export function recentCaptures(
   ledger: CaptureEntry[],
@@ -78,23 +96,21 @@ export function recentCaptures(
   return [...ledger]
     .sort((a, b) => b.at - a.at)
     .slice(0, limit)
-    .map((e) => {
-      const said = (e.transcript || e.raw || "").trim();
-      const filed = (e.clean || "").trim();
-      return {
-        id: e.id,
-        at: e.at,
-        said,
-        filed,
-        kind: e.kind,
-        undone: !!e.undone,
-        targetId:
-          (e.kind === "thread" || e.kind === "both") && e.targetId
-            ? e.targetId
-            : undefined,
-        differs: !!said && !!filed && normalise(said) !== normalise(filed),
-      };
-    });
+    .map(asEntry);
+}
+
+/**
+ * One day's story, oldest first — the point of the record page. The flat
+ * everything-feed was never it: "history still gives the whole history;
+ * that is not the point of the feature. The point is the story on the
+ * given day." A day reads top to bottom the way it was lived, so unlike
+ * the recent feed this is chronological.
+ */
+export function dayCaptures(ledger: CaptureEntry[], day: string): RecordEntry[] {
+  return ledger
+    .filter((e) => dayKey(e.at) === day)
+    .sort((a, b) => a.at - b.at)
+    .map(asEntry);
 }
 
 export type HeatCell = {
