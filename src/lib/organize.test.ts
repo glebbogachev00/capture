@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Action, Board, Frag, Thread } from "./model";
 import { EMPTY } from "./model";
-import { HIGH_CAP, scanBoard } from "./organize";
+import { HIGH_CAP, scanBoard, scanResolved, scanStale } from "./organize";
 
 /* ------------------------------ builders ------------------------------ */
 
@@ -526,5 +526,51 @@ describe("a stranger in a thread", () => {
       ],
     };
     expect(scanBoard(b, [], FIXTURE_NOW).filter((p) => p.kind === "split_fragment")).toEqual([]);
+  });
+});
+
+describe("scanResolved — the receipts' own claims, no model involved", () => {
+  const withReceipt = (): Board => ({
+    ...EMPTY,
+    threads: [
+      thread("bugs", "Bugs & Open Issues", [
+        frag("f1", "Make the sorting message more fun and reduce its loading time while the model works.", 1000),
+        frag("f2", "When I discard an intention draft there is no way back.", 1100),
+      ]),
+    ],
+    completions: [
+      { id: "c1", text: "Make the sorting message more fun and reduce its loading time", at: 5000, threadId: "bugs" },
+    ],
+  });
+
+  it("a note answered by a ticked receipt gets a Mark resolved claim, citing the receipt", () => {
+    const out = scanResolved(withReceipt());
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      kind: "looks_done",
+      verb: "Mark resolved",
+      sourceThreadId: "bugs",
+      sourceFragId: "f1",
+      origin: "local",
+    });
+    expect(out[0].reason).toMatch(/you ticked off/);
+  });
+
+  it("an already-labeled note is never re-claimed, and a dismissal sticks", () => {
+    const b = withReceipt();
+    b.threads[0].frags[0].resolvedAt = 6000;
+    expect(scanResolved(b)).toEqual([]);
+    expect(scanResolved(withReceipt(), ["done:f1"])).toEqual([]);
+  });
+
+  it("no receipt, no claim — the unrelated note stays untouched", () => {
+    const b = withReceipt();
+    b.completions = [];
+    expect(scanResolved(b)).toEqual([]);
+  });
+
+  it("rides with the free scan so the panel shows it before any model answers", () => {
+    const rows = scanStale(withReceipt(), [], FIXTURE_NOW);
+    expect(rows.some((p) => p.kind === "looks_done")).toBe(true);
   });
 });

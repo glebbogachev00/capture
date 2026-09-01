@@ -35,6 +35,7 @@ import {
   bestThreadHome,
   contentWords,
   phraseAsWritten,
+  sameNoteText,
   sharedPhrase,
 } from "./related";
 
@@ -300,11 +301,64 @@ export function scanStale(
   now: number = Date.now()
 ): OrganizeProposal[] {
   const dropped = new Set(dismissed);
-  return scanBoard(board, dismissed, now).filter(
-    (p) =>
-      (p.kind === "let_go" || p.kind === "revisit_intention") &&
-      !dropped.has(p.id)
-  );
+  return [
+    ...scanBoard(board, dismissed, now).filter(
+      (p) =>
+        (p.kind === "let_go" || p.kind === "revisit_intention") &&
+        !dropped.has(p.id)
+    ),
+    /* The receipts' own claims ride with the free scan — see scanResolved. */
+    ...scanResolved(board, dismissed),
+  ];
+}
+
+
+/**
+ * Notes the receipts have already answered — free, exact, no model.
+ *
+ * A completion receipt is a FACT: the person ticked that task by their
+ * own hand. When an un-resolved note reads as the same note as a receipt
+ * (the fragment-duplicate bar — sameNoteText), the note asked for the
+ * very thing that got finished, and offering the resolved label is not
+ * word-matching: the semantics come from the tick, not the words. The
+ * model pass was tried first for this and was provider-roulette — Groq
+ * saw it, the fallback tiers did not. A receipt deserves better than a
+ * dice roll. The model keeps the subtle cases (a later note in different
+ * words); this scan owns the receipts.
+ */
+export function scanResolved(
+  board: Board,
+  dismissed: Iterable<string> = []
+): OrganizeProposal[] {
+  const dropped = new Set(dismissed);
+  const receipts = board.completions ?? [];
+  if (!receipts.length) return [];
+  const out: OrganizeProposal[] = [];
+  for (const t of board.threads) {
+    for (const f of t.frags || []) {
+      if (f.resolvedAt) continue;
+      const id = `done:${f.id}`;
+      if (dropped.has(id)) continue;
+      const receipt = receipts.find((c) => sameNoteText(f.text, c.text));
+      if (!receipt) continue;
+      out.push({
+        id,
+        kind: "looks_done",
+        confidence: "high",
+        verb: "Mark resolved",
+        sourceId: t.id,
+        sourceName: NAME(f.text),
+        sourceThreadId: t.id,
+        sourceFragId: f.id,
+        targetId: t.id,
+        targetName: t.name,
+        reason: `you ticked off "${NAME(receipt.text)}"`,
+        score: 150,
+        origin: "local",
+      });
+    }
+  }
+  return out;
 }
 
 /**

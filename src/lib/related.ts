@@ -704,3 +704,19 @@ export function bestFragmentDuplicate(
   const { duplicate, ...dup } = hit;
   return duplicate ? dup : null;
 }
+
+/**
+ * Do two texts read as the same note — the fragment-duplicate bar
+ * (a shared run of three content words, then coverage of the shorter),
+ * exported for callers that hold the texts rather than a board. The
+ * receipts scan uses it: a completion receipt restating a note is the
+ * note's own task, finished.
+ */
+export function sameNoteText(a: string, b: string): boolean {
+  const wa = contentWords(a);
+  const wb = contentWords(b);
+  if (!wa.length || !wb.length) return false;
+  const phrase = longestSharedRun(wa, wb);
+  if (!phrase || phrase.split(" ").length < 3) return false;
+  return covers(wa, wb, DUP_COVERAGE);
+}
