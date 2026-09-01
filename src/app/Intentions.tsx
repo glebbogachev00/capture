@@ -12,11 +12,12 @@
 
 import { useRef, useState } from "react";
 import { Copy, X, MoreHorizontal } from "lucide-react";
-import { type Intention, type Principle, fmt, pad } from "@/lib/model";
+import { type Intention, type Principle, type Thread, fmt, pad } from "@/lib/model";
 import { snapshotLabel } from "@/lib/snapshots";
 import type { LearnedRule } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { ReportBugForm } from "@/components/ReportBug";
+import { CaptureProfile } from "@/components/CaptureProfile";
 import { PLAYGROUND } from "@/lib/playground";
 import type { CaptureEntry } from "@/lib/ledger";
 import type { DayWrap } from "@/lib/wrap";
@@ -29,6 +30,11 @@ import {
   monthLabels,
   recordStats,
 } from "@/lib/record";
+
+const PROFILE_DEFAULTS = {
+  name: process.env.NEXT_PUBLIC_CAPTURE_PROFILE_NAME ?? "",
+  image: process.env.NEXT_PUBLIC_CAPTURE_PROFILE_IMAGE ?? "",
+};
 
 export type Draft = {
   rawInput: string;
@@ -491,8 +497,8 @@ export function RecordScreen({
      with a way to forget it. */
   rules: LearnedRule[];
   onClearRule: (key: string) => void;
-  /** Just enough of the board to name where each capture landed. */
-  threads: { id: string; name: string }[];
+  /** The threads used for both landing names and the recurring profile reading. */
+  threads: Thread[];
   onOpenThread: (id: string) => void;
   /** Put an undone capture's words back in the composer — the way back for
       anything discarded: said again, sorted fresh. */
@@ -579,43 +585,49 @@ export function RecordScreen({
             {sinceLine(stats)}
           </p>
 
-          <div className="record-frame">
-            <div className="record-grid">
-              {grid.map((week) => (
-                <div className="record-col" key={week[0].day}>
-                  {week.map((cell) => (
-                    /* Each cell IS its day — tap it and the story below
-                       becomes that day's. */
-                    <button
-                      key={cell.day}
-                      className={
-                        "record-cell l" +
-                        cell.level +
-                        (cell.day === day ? " record-cell-open" : "")
-                      }
-                      aria-pressed={cell.day === day}
-                      onClick={() => setDay(cell.day)}
-                      title={`${dayName(cell.day)} · ${cell.count} capture${cell.count === 1 ? "" : "s"}`}
-                    />
-                  ))}
-                </div>
-              ))}
+          <div className="record-profile-stack">
+            <div className="record-frame">
+              <div className="record-grid">
+                {grid.map((week) => (
+                  <div className="record-col" key={week[0].day}>
+                    {week.map((cell) => (
+                      /* Each cell IS its day — tap it and the story below
+                         becomes that day's. */
+                      <button
+                        key={cell.day}
+                        className={
+                          "record-cell l" +
+                          cell.level +
+                          (cell.day === day ? " record-cell-open" : "")
+                        }
+                        aria-pressed={cell.day === day}
+                        onClick={() => setDay(cell.day)}
+                        title={`${dayName(cell.day)} · ${cell.count} capture${cell.count === 1 ? "" : "s"}`}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="record-months">
+                {months.map((m, i) => (
+                  <span key={grid[i][0].day}>{m}</span>
+                ))}
+              </div>
+              {/* One line, not five numbers. The grid has already shown the
+                  shape of the weeks; this says how much of it there is, in
+                  something a person can picture. */}
+              <p className="record-caption record-profile-caption">
+                {caught
+                  ? `about ${caught.words.toLocaleString()} words caught — ${caught.like}`
+                  : "the last twelve weeks, day by day"}
+              </p>
             </div>
-            <div className="record-months">
-              {months.map((m, i) => (
-                <span key={grid[i][0].day}>{m}</span>
-              ))}
-            </div>
+            <CaptureProfile
+              threads={threads}
+              onOpenThread={onOpenThread}
+              defaults={PROFILE_DEFAULTS}
+            />
           </div>
-
-          {/* One line, not five numbers. The grid has already shown the
-              shape of the weeks; this says how much of it there is, in
-              something a person can picture. */}
-          <p className="record-caption">
-            {caught
-              ? `about ${caught.words.toLocaleString()} words caught — ${caught.like}`
-              : "the last twelve weeks, day by day"}
-          </p>
 
           {/* The evidence — for the chosen day only, oldest first, the way
               the day was lived. What landed is shown first, because that is

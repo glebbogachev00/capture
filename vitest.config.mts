@@ -4,7 +4,11 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/lib/**/*.test.ts", "src/hooks/**/*.test.ts"],
+    include: [
+      "src/lib/**/*.test.ts",
+      "src/hooks/**/*.test.ts",
+      "src/components/**/*.test.tsx",
+    ],
   },
   resolve: {
     alias: {
