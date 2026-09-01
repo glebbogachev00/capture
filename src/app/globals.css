@@ -1625,14 +1625,22 @@ body {
 /* The profile is an extension of the heat map, not another page. The title
    survives when collapsed; the chevron is the only control. */
 .record-profile-stack {
-  display: inline-block;
-  max-width: 100%;
+  display: block;
+  width: 100%;
+  max-width: 460px;
   margin-bottom: 18px;
 }
 .record-profile-stack .record-frame {
   display: block;
+  width: 100%;
   margin: 0;
   border-radius: 14px 14px 0 0;
+}
+.record-profile-stack .record-grid,
+.record-profile-stack .record-months {
+  width: max-content;
+  margin-left: auto;
+  margin-right: auto;
 }
 .record-profile-caption {
   margin-top: 12px;
@@ -2481,38 +2489,74 @@ body {
   color: var(--muted);
 }
 
-/* what capture has learned — the bounded personal model */
+/* Sorting preferences stay behind one disclosure. Each rule has a reversible
+   switch instead of a destructive Forget button. */
 .learned-list {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 .learned-list li {
+  min-height: 52px;
+  padding: 8px 0;
+  border-top: 1px solid var(--rule);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
-.learned-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: var(--card);
-  border: 1px solid var(--rule);
-  border-radius: 11px;
-  padding: 11px 13px;
-  min-width: 0;
+.learned-list li:first-child {
+  border-top: 0;
+}
+.learned-list li.off .learned-text {
+  opacity: 0.52;
 }
 .learned-text {
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
+  line-height: 1.4;
   color: var(--ink);
 }
-.learned-signal {
-  font-size: 12px;
-  color: var(--muted);
+.rule-switch {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.rule-switch::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 11px;
+  width: 38px;
+  height: 22px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper);
+  transition: 0.15s;
+}
+.rule-switch span {
+  position: absolute;
+  left: 6px;
+  top: 14px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: 0.15s;
+}
+.rule-switch.on::before {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.rule-switch.on span {
+  background: var(--accent);
+  transform: translateX(17px);
 }
 
 /* the password gate */
@@ -3145,12 +3189,80 @@ body {
   border-color: var(--muted);
 }
 
+/* Record sections open only when asked. One row names the section, says how
+   much is inside, and gives the chevron a full-width touch target. */
+.record-section {
+  width: 100%;
+  max-width: 460px;
+  margin-top: 18px;
+}
+.record-disclosure {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 21px;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.record-disclosure[aria-expanded="true"] {
+  border-radius: 12px 12px 0 0;
+}
+.record-disclosure-title {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 17px;
+  font-weight: 500;
+}
+.record-disclosure-meta {
+  color: var(--muted);
+  font: 10.5px var(--font-mono), monospace;
+  letter-spacing: 0.04em;
+}
+.record-disclosure-body {
+  padding: 4px 14px 12px;
+  border: 1px solid var(--rule);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: var(--card);
+}
+.record-empty {
+  margin-top: 24px;
+}
+.record-empty-day {
+  padding: 16px 2px 10px;
+}
+.record-empty-day p {
+  margin: 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 17px;
+  font-weight: 500;
+}
+.record-empty-day span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 /* The record's evidence log: what landed, and — only where the engine
    changed the words — what was actually said underneath it. */
 .record-log {
   list-style: none;
   margin: 0 0 8px;
   padding: 0;
+}
+.record-disclosure-body .record-log {
+  margin: 0;
+}
+.record-disclosure-body .record-log li:last-child {
+  border-bottom: 0;
 }
 .record-log li {
   padding: 12px 2px;

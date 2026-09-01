@@ -264,7 +264,7 @@ export function Capture() {
     dismissMisfiled,
     undo,
     learnedRules,
-    clearRule,
+    toggleLearnedRule,
   } = useBoard(now);
 
   /* The rollback days, read when Settings opens — a list this short is
@@ -859,7 +859,7 @@ export function Capture() {
             onWrapSeen={() => void dismissWrap()}
             onBack={() => setShowRecord(false)}
             rules={learnedRules}
-            onClearRule={(key) => void clearRule(key)}
+            onToggleRule={(key, enabled) => void toggleLearnedRule(key, enabled)}
             threads={data.threads}
             onRestore={(said) => {
               setText((x) => (x ? x + " " : "") + said);

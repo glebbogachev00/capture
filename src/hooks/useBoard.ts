@@ -156,7 +156,7 @@ import {
   type CorrectionEntry,
   type CaptureSource,
 } from "@/lib/ledger";
-import { deriveRules, type LearnedRule } from "@/lib/rules";
+import { deriveRules, setRuleEnabled, type RulePreference } from "@/lib/rules";
 import {
   scanBoard,
   scanStale,
@@ -4121,28 +4121,27 @@ export function useBoard(now: number) {
   const intention = data.intentions.find((i) => i.id === openIntention);
   const hits = useMemo(() => search(data, debouncedQuery), [data, debouncedQuery]);
   const searching = debouncedQuery.trim().length > 0;
-  /* The bounded personal model, derived fresh from the correction ledger:
-     advisory sentences the sort engine weighs, capped, clearable. */
-  const learnedRules: LearnedRule[] = useMemo(
-    () => deriveRules(data.corrections ?? [], forgottenRules, now),
+  /* All learned preferences remain visible so an off switch can be turned
+     back on. Only enabled rules reach the sort prompt above. */
+  const learnedRules: RulePreference[] = useMemo(
+    () =>
+      deriveRules(data.corrections ?? [], [], now).map((rule) => ({
+        ...rule,
+        enabled: !forgottenRules.includes(rule.key),
+      })),
     [data.corrections, forgottenRules, now]
   );
 
-  /** Forget a learned rule for good: it stops being injected into the sort
-      prompt and stops appearing here. The corrections stay — history is
-      never rewritten — the cleared key just filters them out. Remembered
-      on this device only (v1); the settings screen says so. */
-  const clearRule = async (key: string) => {
-    if (forgottenRules.includes(key)) return;
-    const next = [...forgottenRules, key];
+  /** Enable or disable one advisory sorting preference. The correction
+      history stays intact, and this device remembers only the switch state. */
+  const toggleLearnedRule = async (key: string, enabled: boolean) => {
+    const next = setRuleEnabled(forgottenRules, key, enabled);
     setForgottenRules(next);
     try {
       await set(FORGOTTEN_RULES_KEY, JSON.stringify(next));
     } catch {
-      /* disk hiccup; next clear retries */
+      /* disk hiccup; the next toggle retries */
     }
-    setNotice("That rule is forgotten — sorting won't follow it anymore.");
-    setTimeout(() => setNotice(null), 4000);
   };
 
   return {
@@ -4284,6 +4283,6 @@ export function useBoard(now: number) {
     sortAgainIntoThread,
     dismissMisfiled: () => setMisfiled(null),
     learnedRules,
-    clearRule,
+    toggleLearnedRule,
   };
 }

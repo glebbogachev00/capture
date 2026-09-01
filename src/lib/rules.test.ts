@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveRules, RULES_CAP } from "./rules";
+import { deriveRules, RULES_CAP, setRuleEnabled } from "./rules";
 import type { CorrectionEntry } from "./ledger";
 
 const correction = (
@@ -185,5 +185,15 @@ describe("deriveRules — an answer counts on its own", () => {
   it("still respects a rule the person chose to forget", () => {
     const rule = 'Captures about "cold brew" are an action, not a thread';
     expect(deriveRules([answered(rule)], [rule.toLowerCase()], 2000)).toEqual([]);
+  });
+});
+
+describe("setRuleEnabled", () => {
+  it("disables once and restores the same rule", () => {
+    const key = "merge threads into x";
+    const disabled = setRuleEnabled([], key, false);
+    expect(disabled).toEqual([key]);
+    expect(setRuleEnabled(disabled, key, false)).toEqual([key]);
+    expect(setRuleEnabled(disabled, key, true)).toEqual([]);
   });
 });

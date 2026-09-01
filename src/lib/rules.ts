@@ -31,8 +31,20 @@ export type LearnedRule = {
   lastAt: number;
 };
 
+export type RulePreference = LearnedRule & { enabled: boolean };
+
 /** How many rules the model may hold at once — the hard cap. */
 export const RULES_CAP = 5;
+
+/** Enable or disable one learned rule without changing its correction history. */
+export function setRuleEnabled(
+  disabledKeys: string[],
+  key: string,
+  enabled: boolean
+): string[] {
+  if (enabled) return disabledKeys.filter((item) => item !== key);
+  return disabledKeys.includes(key) ? disabledKeys : [...disabledKeys, key];
+}
 
 /** A rule needs at least this many signals before it is worth saying out
     loud; a single accept or dismiss is noise. */

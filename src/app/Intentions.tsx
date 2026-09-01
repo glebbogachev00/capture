@@ -11,10 +11,16 @@
    ============================================================ */
 
 import { useRef, useState } from "react";
-import { Copy, X, MoreHorizontal } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  X,
+  MoreHorizontal,
+} from "lucide-react";
 import { type Intention, type Principle, type Thread, fmt, pad } from "@/lib/model";
 import { snapshotLabel } from "@/lib/snapshots";
-import type { LearnedRule } from "@/lib/rules";
+import type { RulePreference } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { ReportBugForm } from "@/components/ReportBug";
 import { CaptureProfile } from "@/components/CaptureProfile";
@@ -477,7 +483,7 @@ export function RecordScreen({
   now,
   onBack,
   rules,
-  onClearRule,
+  onToggleRule,
   threads,
   onOpenThread,
   onRestore,
@@ -493,10 +499,9 @@ export function RecordScreen({
      clutter — a statement wedged into a stack of tools. */
   wrap?: DayWrap | null;
   onWrapSeen?: () => void;
-  /* The bounded personal model: what the sorter has come to expect, each
-     with a way to forget it. */
-  rules: LearnedRule[];
-  onClearRule: (key: string) => void;
+  /* Advisory sorting preferences remain reversible and hidden until asked. */
+  rules: RulePreference[];
+  onToggleRule: (key: string, enabled: boolean) => void;
   /** The threads used for both landing names and the recurring profile reading. */
   threads: Thread[];
   onOpenThread: (id: string) => void;
@@ -505,6 +510,8 @@ export function RecordScreen({
   onRestore: (said: string) => void;
 }) {
   const [openWrap, setOpenWrap] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   /* The page's real subject: ONE day. It opens on today, and any cell in
      the grid is a way to a different day — "the point is the story on the
      given day", not a feed of everything ever said. */
@@ -513,6 +520,8 @@ export function RecordScreen({
   const grid = heatGrid(ledger, now);
   const months = monthLabels(grid);
   const caught = caughtWords(ledger);
+  const selectedCaptures = dayCaptures(ledger, day);
+  const today = day === dayKey(now);
   const dayName = (day: string) =>
     new Date(day + "T12:00:00").toLocaleDateString(undefined, {
       month: "long",
@@ -553,11 +562,9 @@ export function RecordScreen({
 
 
       {!ledger.length ? (
-        <div className="empty">
-          <p className="big">Nothing on the record yet.</p>
-          <p>
-            Every capture lands here — what you said, and what became of it.
-          </p>
+        <div className="empty record-empty">
+          <p className="big">The record is quiet.</p>
+          <p>Your first capture will leave a trace here.</p>
         </div>
       ) : (
         <>
@@ -601,7 +608,10 @@ export function RecordScreen({
                           (cell.day === day ? " record-cell-open" : "")
                         }
                         aria-pressed={cell.day === day}
-                        onClick={() => setDay(cell.day)}
+                        onClick={() => {
+                          setDay(cell.day);
+                          setShowHistory(true);
+                        }}
                         title={`${dayName(cell.day)} · ${cell.count} capture${cell.count === 1 ? "" : "s"}`}
                       />
                     ))}
@@ -629,107 +639,139 @@ export function RecordScreen({
             />
           </div>
 
-          {/* The evidence — for the chosen day only, oldest first, the way
-              the day was lived. What landed is shown first, because that is
-              what you live with; what you actually said sits under it, and
-              only when the engine changed the words. */}
-          <div className="section-label" style={{ cursor: "default" }}>
-            {day === dayKey(now) ? "Today" : dayName(day)} — what you said,
-            and what became of it
-          </div>
-          {!dayCaptures(ledger, day).length && (
-            <p className="record-caption">
-              Nothing said this day. Tap a green cell above for a day that
-              has a story.
-            </p>
-          )}
-          <ul className="record-log">
-            {dayCaptures(ledger, day).map((e) => (
-              <li key={e.id} className={e.undone ? "record-undone" : undefined}>
-                <p className="record-filed">{e.filed || e.said}</p>
-                {e.differs && (
-                  <p className="record-said">
-                    <span>said</span> {e.said}
-                  </p>
+          <div className="record-section">
+            <button
+              className="record-disclosure"
+              onClick={() => setShowHistory((value) => !value)}
+              aria-expanded={showHistory}
+              aria-label={`${showHistory ? "Hide" : "Show"} ${
+                today ? "today's history" : `${dayName(day)} history`
+              }`}
+            >
+              <span className="record-disclosure-title">
+                {today ? "Today's history" : dayName(day)}
+              </span>
+              <span className="record-disclosure-meta">
+                {selectedCaptures.length
+                  ? `${selectedCaptures.length} capture${
+                      selectedCaptures.length === 1 ? "" : "s"
+                    }`
+                  : "quiet"}
+              </span>
+              {showHistory ? (
+                <ChevronUp size={21} strokeWidth={1.7} />
+              ) : (
+                <ChevronDown size={21} strokeWidth={1.7} />
+              )}
+            </button>
+
+            {showHistory && (
+              <div className="record-disclosure-body">
+                {!selectedCaptures.length && (
+                  <div className="record-empty-day">
+                    <p>A quiet day.</p>
+                    <span>Choose a green square to see another day.</span>
+                  </div>
                 )}
-                {e.undone && e.said && (
-                  /* The way back. An undone entry is a thought that was
-                     said and then not kept — restoring it is just saying it
-                     again, so that is literally what the button does: the
-                     words return to the composer and sort fresh. No new
-                     object kinds, no resurrection machinery. */
-                  <button
-                    className="record-restore"
-                    onClick={() => onRestore(e.said)}
-                  >
-                    Say it again
-                  </button>
-                )}
-                <p className="record-meta">
-                  {e.kind} · {e.undone && "undone · "}
-                  {(() => {
-                    /* The connection, where it exists: which thread this
-                       capture landed on, and a way to go there. A gone
-                       thread names nothing rather than a dead link. */
-                    const home = e.targetId
-                      ? threads.find((t) => t.id === e.targetId)
-                      : undefined;
-                    return home ? (
-                      <>
-                        in{" "}
+                <ul className="record-log">
+                  {selectedCaptures.map((e) => (
+                    <li
+                      key={e.id}
+                      className={e.undone ? "record-undone" : undefined}
+                    >
+                      <p className="record-filed">{e.filed || e.said}</p>
+                      {e.differs && (
+                        <p className="record-said">
+                          <span>said</span> {e.said}
+                        </p>
+                      )}
+                      {e.undone && e.said && (
                         <button
-                          className="record-home"
-                          onClick={() => onOpenThread(home.id)}
+                          className="record-restore"
+                          onClick={() => onRestore(e.said)}
                         >
-                          {home.name}
-                        </button>{" "}
-                        ·{" "}
-                      </>
-                    ) : null;
-                  })()}
-                  {fmt(e.at)}
-                </p>
-              </li>
-            ))}
-          </ul>
+                          Say it again
+                        </button>
+                      )}
+                      <p className="record-meta">
+                        {e.kind} · {e.undone && "undone · "}
+                        {(() => {
+                          const home = e.targetId
+                            ? threads.find((t) => t.id === e.targetId)
+                            : undefined;
+                          return home ? (
+                            <>
+                              in{" "}
+                              <button
+                                className="record-home"
+                                onClick={() => onOpenThread(home.id)}
+                              >
+                                {home.name}
+                              </button>{" "}
+                              ·{" "}
+                            </>
+                          ) : null;
+                        })()}
+                        {fmt(e.at)}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {rules.length > 0 && (
+            <div className="record-section">
+              <button
+                className="record-disclosure"
+                onClick={() => setShowRules((value) => !value)}
+                aria-expanded={showRules}
+                aria-label={`${showRules ? "Hide" : "Show"} sorting preferences`}
+              >
+                <span className="record-disclosure-title">
+                  Sorting preferences
+                </span>
+                <span className="record-disclosure-meta">
+                  {rules.length === 1
+                    ? rules[0].enabled
+                      ? "on"
+                      : "off"
+                    : `${rules.filter((rule) => rule.enabled).length} on`}
+                </span>
+                {showRules ? (
+                  <ChevronUp size={21} strokeWidth={1.7} />
+                ) : (
+                  <ChevronDown size={21} strokeWidth={1.7} />
+                )}
+              </button>
+
+              {showRules && (
+                <div className="record-disclosure-body">
+                  <ul className="learned-list">
+                    {rules.map((rule) => (
+                      <li key={rule.key} className={rule.enabled ? "" : "off"}>
+                        <span className="learned-text">{rule.text}</span>
+                        <button
+                          className={"rule-switch" + (rule.enabled ? " on" : "")}
+                          role="switch"
+                          aria-checked={rule.enabled}
+                          aria-label={rule.text}
+                          onClick={() =>
+                            onToggleRule(rule.key, !rule.enabled)
+                          }
+                        >
+                          <span />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
-
-          {/* What the engine has picked up from the suggestions you took or
-              waved off. It belongs here rather than in Settings: this is the
-              screen about what Capture knows, and Settings is for the knobs.
-              Nothing is shown until a tendency actually forms — an empty
-              explainer is just a paragraph asking to be skipped. */}
-      {rules.length > 0 && (
-            <>
-              <div className="section-label" style={{ cursor: "default" }}>
-                What it has learned about your filing
-              </div>
-              <ul className="learned-list">
-                {rules.map((r) => (
-                  <li key={r.key}>
-                    <span className="learned-body">
-                      <span className="learned-text">{r.text}</span>
-                      <span className="learned-signal">
-                        {r.accepts} accepted · {r.dismisses} dismissed
-                      </span>
-                    </span>
-                    <button
-                      className="ghost warn"
-                      onClick={() => onClearRule(r.key)}
-                      aria-label={"Forget: " + r.text}
-                    >
-                      Forget
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <p className="record-caption" style={{ marginBottom: 18 }}>
-                gentle tendencies the sorter weighs, never orders — forgetting
-                is remembered on this device
-              </p>
-            </>
-          )}
 
     </div>
   );
