@@ -16,6 +16,19 @@ import path from "node:path";
  * extraction lands, LOWER the ceiling to the new size — that is the
  * ratchet clicking. Raising a ceiling is a decision to be argued in a
  * commit message, not a side effect of a feature.
+ *
+ * Raised once, deliberately: 4,290 → 4,363, for Undo on Organize.
+ * Approving a tidy proposal used to be the only irreversible gesture in
+ * the app — one tap of Approve-all could drop actions, destroy their
+ * photos' bytes, and push the deletions to every other device with no way
+ * back. Closing that needed a deferred-delete queue, a second receipt
+ * window, and one snapshot per gesture rather than per row. Two modules
+ * were carved out to pay for it (lib/heldImages, lib/organizeOps, ~105
+ * lines with their own tests); the 73 that remain are the feature itself, including a generation guard
+ * that stops any of the twenty-two loose notice timers blanking a notice
+ * that is still carrying an Undo.
+ * The argument was: a safety net on the app's most destructive path is
+ * worth more than 56 lines of the extraction budget.
  */
 
 const lines = (p: string) =>
@@ -23,7 +36,7 @@ const lines = (p: string) =>
 
 describe("the two big files only shrink", () => {
   it("useBoard.ts stays under its ratchet", () => {
-    expect(lines("src/hooks/useBoard.ts")).toBeLessThanOrEqual(4290);
+    expect(lines("src/hooks/useBoard.ts")).toBeLessThanOrEqual(4363);
   });
 
   it("Capture.tsx stays under its ratchet", () => {

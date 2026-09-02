@@ -259,6 +259,7 @@ export function Capture() {
     sync,
     syncNow,
     canUndo,
+    noticeUndoable,
     misfiled,
     sortAgainAs,
     sortAgainIntoThread,
@@ -816,7 +817,18 @@ export function Capture() {
             <span className="suggest-why">{suggestion.reason}</span>
           </div>
         )}
-        {notice && <div className="landed">{notice}</div>}
+        {/* Tidy restructures the record itself, and a wrong one is noticed
+            only later — so its notice carries the way back while it is up. */}
+        {notice && (
+          <div className="landed">
+            <span>{notice}</span>
+            {noticeUndoable && (
+              <button className="undo-btn" onClick={() => void undo()}>
+                Undo
+              </button>
+            )}
+          </div>
+        )}
         {swept && !busy && (
           <div className="sweep">
             Cleanup ran on open.

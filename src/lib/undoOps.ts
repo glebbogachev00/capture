@@ -52,6 +52,20 @@ export function restoreCapture(
   const foreign = <T extends { id: string }>(a: T[], snapped: T[]) =>
     a.filter((x) => !mine.has(x.id) && !had(snapped, x.id));
 
+  /* Every fragment the snapshot held, ANYWHERE on the board.
+     A fragment is another device's work only if the snapshot has never
+     seen its id at all. Judging that per-thread — "not among this
+     thread's snapshot fragments, so it must be foreign" — misreads a note
+     that simply MOVED: undoing a tidy move restored it to the thread it
+     came from while the copy in the destination survived as foreign, and
+     the note ended up in both places. The undo that was supposed to repair
+     the board was duplicating it. */
+  const snappedFrags = new Set(
+    snap.board.threads.flatMap((t) => t.frags.map((f) => f.id))
+  );
+  const foreignFrags = <T extends { id: string }>(a: T[]) =>
+    a.filter((x) => !mine.has(x.id) && !snappedFrags.has(x.id));
+
   return {
     actions: [
       ...foreign(live.actions, snap.board.actions),
@@ -66,7 +80,7 @@ export function restoreCapture(
           ...t,
           frags: [
             ...t.frags.map((f) => (had(alive.frags, f.id) ? f : bump(f))),
-            ...foreign(alive.frags, t.frags),
+            ...foreignFrags(alive.frags),
           ],
         };
       }),

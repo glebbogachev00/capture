@@ -114,6 +114,8 @@ import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
 import { createPushGovernor, type PushGovernor } from "@/lib/pushGovernor";
 import { createReceiptWindow, type ReceiptWindow } from "@/lib/receiptWindow";
+import { createHeldImages, type HeldImages } from "@/lib/heldImages";
+import { organizeCorrection } from "@/lib/organizeOps";
 import {
   applyFragDelete,
   applyFragEdit,
@@ -462,6 +464,58 @@ export function useBoard(now: number) {
   } | null>(null);
   const [canUndo, setCanUndo] = useState(false);
 
+  /* Whether the notice line itself can be taken back. Organize applies its
+     changes away from the capture box, so its Undo cannot ride on the
+     "Landed in X" receipt — it sits on the notice that announced the
+     change, and leaves when that notice does. */
+  const [noticeUndoable, setNoticeUndoable] = useState(false);
+
+  /* Tidy's notices run on the capture receipt's clock rather than the four
+     seconds an ordinary notice gets. A change you can take back is only
+     takeable while the way back is on screen, and four seconds is not long
+     enough to read what moved and decide you disagree. Same machine as the
+     receipt, so two tidy changes in a row can't blank each other's window
+     early. */
+  const tidyNoticeWindow = useRef<ReceiptWindow | null>(null);
+  if (!tidyNoticeWindow.current)
+    tidyNoticeWindow.current = createReceiptWindow(() => {
+      setNotice(null);
+      setNoticeUndoable(false);
+    });
+  /* A notice clears on its own clock — and only if it is still the notice
+     that asked for the clear. Twenty-two call sites schedule a blank four
+     or five seconds out, and any of them landing after a LATER notice went
+     up would wipe it early. Harmless when a notice only reports; not
+     harmless once one carries an Undo, which would vanish seconds after
+     appearing and take the way back with it. */
+  const noticeGen = useRef(0);
+  const clearNoticeIn = (ms: number) => {
+    const gen = ++noticeGen.current;
+    setTimeout(() => {
+      if (noticeGen.current !== gen) return;
+      setNotice(null);
+      setNoticeUndoable(false);
+    }, ms);
+  };
+  const showTidyNotice = (text: string) => {
+    noticeGen.current++;
+    setNotice(text);
+    tidyNoticeWindow.current!.open();
+  };
+
+  /* Pictures belonging to something Undo can still bring back — the rule
+     for when one is safe to destroy lives in lib/heldImages. */
+  const heldImages = useRef<HeldImages | null>(null);
+  if (!heldImages.current) heldImages.current = createHeldImages();
+  const holdImages = (ids: string[] | undefined) =>
+    heldImages.current!.hold(ids);
+  /* The previous undo is being superseded: whatever it was protecting can
+     never be brought back now, so the bytes go. */
+  const releaseHeldImages = () => {
+    const stale = heldImages.current!.release();
+    if (stale.length) void dropImages(stale);
+  };
+
   /* What the last undo threw away, kept just long enough to ask one
      question about it. Undo on its own says the sorting was wrong and
      nothing about what was right, which is not enough to learn from — so
@@ -619,7 +673,7 @@ export function useBoard(now: number) {
         tombstones.current = adopted.tombstones;
         if (adopted.note) {
           setNotice(adopted.note);
-          setTimeout(() => setNotice(null), 5000);
+          clearNoticeIn(5000);
         }
         try {
           await setMany([
@@ -676,6 +730,10 @@ export function useBoard(now: number) {
     if (!snap) return;
     captureSnapshot.current = null;
     setCanUndo(false);
+    setNoticeUndoable(false);
+    /* The restore below brings back whatever was holding these, so the
+       bytes must stay exactly where they are. */
+    heldImages.current!.cancel();
 
     /* The capture's own push landed on the hub before the undo window
        opened, so restoring the board alone would let the next pull merge it
@@ -768,7 +826,7 @@ export function useBoard(now: number) {
       setPics(restored);
     }
     setNotice("Undone — back to how it was.");
-    setTimeout(() => setNotice(null), 4000);
+    clearNoticeIn(4000);
     /* Push now, not on the debounce: a pull landing in the debounce window
        would re-merge the hub's copy (which still holds the capture) before
        our tombstones go out. */
@@ -836,7 +894,7 @@ export function useBoard(now: number) {
        this says why that was the right shape for it. */
     if (m) {
       setNotice(SHAPE_NOTE[right]);
-      setTimeout(() => setNotice(null), 6000);
+      clearNoticeIn(6000);
     }
   };
 
@@ -896,7 +954,7 @@ export function useBoard(now: number) {
       setNotice(
         rule ? `Filed in ${home.name}. It will remember.` : `Filed in ${home.name}.`
       );
-      setTimeout(() => setNotice(null), 6000);
+      clearNoticeIn(6000);
     }
   };
 
@@ -1371,7 +1429,7 @@ export function useBoard(now: number) {
         )
       );
       setNotice("Summary refreshed.");
-      setTimeout(() => setNotice(null), 4000);
+      clearNoticeIn(4000);
     } catch (error) {
       setErr(reasonOf(error) + " The summary was left as it was.");
     }
@@ -1418,6 +1476,8 @@ export function useBoard(now: number) {
       ledgerIds: newLedgerIds(latest.current, next),
       addedIds: newIds(latest.current, next),
     };
+    releaseHeldImages();
+    setNoticeUndoable(false);
     setCanUndo(true);
     await commit(next);
     setErr(reason + " Saved as it is, so nothing is lost — sort it later.");
@@ -1469,6 +1529,8 @@ export function useBoard(now: number) {
         ledgerIds: newLedgerIds(latest.current, next),
       addedIds: newIds(latest.current, next),
       };
+      releaseHeldImages();
+      setNoticeUndoable(false);
       setCanUndo(true);
       await commit(next);
       setSuggestion(computeSuggestion(next, out.clean, source));
@@ -1571,6 +1633,8 @@ export function useBoard(now: number) {
       // on its own still goes through the sorter to learn the kind first.
       if (force === "intention") {
         captureSnapshot.current = null;
+        releaseHeldImages();
+        setNoticeUndoable(false);
         setCanUndo(false);
         setText("");
         setPics([]);
@@ -1600,6 +1664,8 @@ export function useBoard(now: number) {
       // nothing to undo — the draft is the undo.
       if (out.kind === "intention") {
         captureSnapshot.current = null;
+        releaseHeldImages();
+        setNoticeUndoable(false);
         setCanUndo(false);
         setText("");
         setPics([]);
@@ -1678,6 +1744,8 @@ export function useBoard(now: number) {
         ledgerIds: newLedgerIds(latest.current, recorded),
       addedIds: newIds(latest.current, recorded),
       };
+      releaseHeldImages();
+      setNoticeUndoable(false);
       setCanUndo(true);
       await commit(recorded);
       /* A quiet proposal, never applied: if this capture clearly belongs
@@ -1732,7 +1800,7 @@ export function useBoard(now: number) {
     const { context, rule } = suggestionOutcome(s, true);
     if (s.kind === "duplicate") {
       setNotice("Removed the duplicate.");
-      setTimeout(() => setNotice(null), 4000);
+      clearNoticeIn(4000);
       if (s.sourceKind === "thread") {
         /* The copy is a note; drop that fragment (or its whole fresh thread
            when it was the only note) and re-summarise. The original stays
@@ -2115,7 +2183,7 @@ export function useBoard(now: number) {
       const after = await regenerate(latest.current, t.pair.toId);
       if (!out.emptied) await regenerate(after, t.pair.fromId);
       setNotice(out.notice);
-      setTimeout(() => setNotice(null), 5000);
+      clearNoticeIn(5000);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tangle, commit]
@@ -2396,22 +2464,29 @@ export function useBoard(now: number) {
      it was when they asked; only the rows they act on (or wave off) leave
      the list. A fresh scan happens when they press the button again. */
 
-  /**
-   * Apply one Organize proposal. Each kind routes through the same handlers
-   * the capture suggestions use, so the outcome and its ledger record are
-   * consistent with the rest of the app — then the panel re-scans so a
-   * resolved pair never lingers.
-   */
+  /* Commit a tidy change together with whatever it teaches the sorter —
+     lib/organizeOps owns which kinds teach anything at all. */
+  const commitTidy = async (p: OrganizeProposal, next: Board) => {
+    const note = organizeCorrection(p);
+    await commit(note ? noteCorrection(next, note) : next);
+  };
+
   /**
    * Apply one Organize proposal. Each kind routes through the same handlers
    * the capture suggestions use, so the outcome and its ledger record are
    * consistent with the rest of the app. Returns whether the change was
    * applied — an extraction that failed leaves its card in the list so the
    * user can retry; everything else applies or is already resolved.
+   *
+   * The mutation on its own, with no undo bookkeeping: split out so that
+   * "Approve all" can wrap a whole run in a SINGLE snapshot, because the
+   * user watched one gesture change many rows and one Undo has to put all
+   * of them back.
    */
-  const acceptOrganize = async (id: string): Promise<boolean> => {
-    const p = organize?.find((x) => x.id === id);
-    if (!p) return false;
+  const applyOrganizeProposal = async (
+    p: OrganizeProposal
+  ): Promise<boolean> => {
+    const id = p.id;
     /* The row leaves the list immediately, and the applied change must not
        ride back in from the cached AI results on a future scan — a
        resolved proposal is resolved. */
@@ -2419,49 +2494,23 @@ export function useBoard(now: number) {
     setOrganize((cur) => (cur ? cur.filter((x) => x.id !== id) : cur));
     if (p.kind === "dup_action") {
       const a = latest.current.actions.find((x) => x.id === p.sourceId);
-      await dropImages(a?.imgs);
-      await commit(
-        noteCorrection(
-          {
-            ...latest.current,
-            actions: latest.current.actions.filter(
-              (x) => x.id !== p.sourceId
-            ),
-          },
-          {
-            proposalKind: "related_suggestion",
-            accepted: true,
-            context: `dropped a duplicate of ${p.targetName}`,
-            rule: `Drop duplicates of "${p.targetName}"`,
-          }
-        )
-      );
-      setNotice(`Removed the duplicate of ${p.targetName}.`);
-      setTimeout(() => setNotice(null), 4000);
+      /* Held, not dropped: this delete is undoable, and destroying the
+         bytes here would restore an action pointing at a missing photo. */
+      holdImages(a?.imgs);
+      await commitTidy(p, {
+        ...latest.current,
+        actions: latest.current.actions.filter((x) => x.id !== p.sourceId),
+      });
+      showTidyNotice(`Removed the duplicate of ${p.targetName}.`);
       return true;
     } else if (p.kind === "dup_fragment") {
-      setNotice(`Removed the duplicate of ${p.targetName}.`);
-      setTimeout(() => setNotice(null), 4000);
+      showTidyNotice(`Removed the duplicate of ${p.targetName}.`);
       await deleteFrag(p.sourceThreadId!, p.sourceFragId!);
-      await commit(
-        noteCorrection(latest.current, {
-          proposalKind: "related_suggestion",
-          accepted: true,
-          context: `dropped a duplicate of ${p.targetName}`,
-          rule: `Drop duplicates of "${p.targetName}"`,
-        })
-      );
+      await commitTidy(p, latest.current);
       return true;
     } else if (p.kind === "fold_action") {
       await foldActionIntoThread(p.sourceId, p.targetId);
-      await commit(
-        noteCorrection(latest.current, {
-          proposalKind: "related_suggestion",
-          accepted: true,
-          context: `moved an action into ${p.targetName}`,
-          rule: `Move actions into "${p.targetName}"`,
-        })
-      );
+      await commitTidy(p, latest.current);
       return true;
     } else if (p.kind === "looks_done") {
       /* The label, not a deletion: the note stays in its thread with a
@@ -2476,12 +2525,11 @@ export function useBoard(now: number) {
       );
       if (!out) return false;
       await commit(out.board);
-      setNotice(
+      showTidyNotice(
         out.tickedActionText
           ? "Labeled resolved — its action is ticked off too."
           : "Labeled resolved — the note stays in the thread."
       );
-      setTimeout(() => setNotice(null), 4500);
       return true;
     } else if (p.kind === "let_go") {
       /* Fade it, never delete it. The action moves to Faded exactly as it
@@ -2503,8 +2551,7 @@ export function useBoard(now: number) {
             : x
         ),
       });
-      setNotice("Let go — it sits in Faded for two weeks if you want it back.");
-      setTimeout(() => setNotice(null), 5000);
+      showTidyNotice("Let go — it sits in Faded for two weeks if you want it back.");
       return true;
     } else if (p.kind === "revisit_intention") {
       /* Saying it is still true IS the revisit. Nothing about the intention
@@ -2522,29 +2569,15 @@ export function useBoard(now: number) {
           x.id === p.sourceId ? { ...x, updatedAt: at } : x
         ),
       });
-      setNotice("Still yours. It won't ask again for a while.");
-      setTimeout(() => setNotice(null), 5000);
+      showTidyNotice("Still yours. It won't ask again for a while.");
       return true;
     } else if (p.kind === "move_fragment") {
       await moveFrag(p.sourceThreadId!, p.sourceFragId!, p.targetId);
-      await commit(
-        noteCorrection(latest.current, {
-          proposalKind: "related_suggestion",
-          accepted: true,
-          context: `moved a note into ${p.targetName}`,
-          rule: `Move notes into "${p.targetName}"`,
-        })
-      );
+      await commitTidy(p, latest.current);
       return true;
     } else if (p.kind === "split_fragment") {
       await moveFragToNew(p.sourceThreadId!, p.sourceFragId!);
-      await commit(
-        noteCorrection(latest.current, {
-          proposalKind: "related_suggestion",
-          accepted: true,
-          context: `split a note out of ${p.targetName}`,
-        })
-      );
+      await commitTidy(p, latest.current);
       return true;
     } else if (p.kind === "extract_action") {
       /* extractAction records its own correction and notice. Extraction leaves
@@ -2566,19 +2599,48 @@ export function useBoard(now: number) {
          thread that already holds it. moveFrag interleaves by date, carries
          images, re-summarises, and removes an emptied source thread. */
       await moveFrag(p.sourceThreadId!, p.sourceFragId!, p.targetId);
-      await commit(
-        noteCorrection(latest.current, {
-          proposalKind: "related_suggestion",
-          accepted: true,
-          context: `merged a note into ${p.targetName}`,
-          rule: `Move notes into "${p.targetName}"`,
-        })
-      );
+      await commitTidy(p, latest.current);
       return true;
     }
     /* The row is already gone from the list (removed above); the board
        change is committed, so a future scan will not re-propose it. */
     return true;
+  };
+
+  /**
+   * Arm Undo for a tidy change that has just landed.
+   *
+   * Organize is the one place the app makes structural changes to a record
+   * the user cannot re-derive — a note moves, a task is dropped, an idea is
+   * merged into another thread. Every one of those was reviewed and tapped,
+   * but "I approved it" and "I meant it" are not the same thing, and the
+   * damage from a wrong one shows up later, when the thought is looked for
+   * in the place it no longer is. So the same Undo a capture gets applies
+   * here: the board and this device's tombstones as they were, restored by
+   * the same pure code path.
+   */
+  const armOrganizeUndo = (before: Board, beforeTombstones: Tombstone[]) => {
+    captureSnapshot.current = {
+      board: before,
+      tombstones: beforeTombstones,
+      /* No ledgerIds: tidying writes corrections, not capture entries, so
+         there is no "what should this have been?" question to ask. */
+      addedIds: newIds(before, latest.current),
+    };
+    setCanUndo(true);
+    setNoticeUndoable(true);
+  };
+
+  const acceptOrganize = async (id: string): Promise<boolean> => {
+    const p = organize?.find((x) => x.id === id);
+    if (!p) return false;
+    const before = latest.current;
+    const beforeTombstones = tombstones.current;
+    /* Whatever the previous Undo was protecting is now unreachable. */
+    releaseHeldImages();
+    const ok = await applyOrganizeProposal(p);
+    if (ok) armOrganizeUndo(before, beforeTombstones);
+    return ok;
   };
 
   /**
@@ -2594,17 +2656,25 @@ export function useBoard(now: number) {
     if (!list.length || applyingOrganize.current) return;
     applyingOrganize.current = true;
     let applied = 0;
+    /* ONE snapshot for the whole run, taken before the first row lands.
+       Approve-all is the most destructive gesture in the app — a single tap
+       can drop duplicates, move notes and merge threads' contents together
+       — so Undo has to take the whole run back, not just the last row. */
+    const before = latest.current;
+    const beforeTombstones = tombstones.current;
+    releaseHeldImages();
     /* A row that throws must not brick the button for the rest of the
        session — the guard is cleared even when a handler misbehaves. */
     try {
       for (const p of list) {
-        if (await acceptOrganize(p.id)) applied++;
+        if (await applyOrganizeProposal(p)) applied++;
       }
     } finally {
       applyingOrganize.current = false;
     }
+    if (applied) armOrganizeUndo(before, beforeTombstones);
     const diff = list.length - applied;
-    setNotice(
+    showTidyNotice(
       applied === list.length
         ? `Applied all ${applied} ${applied === 1 ? "suggestion" : "suggestions"}.`
         : `Applied ${applied} of ${list.length} — ${diff} ${
@@ -2613,7 +2683,6 @@ export function useBoard(now: number) {
               : "couldn't be applied and are still listed"
           }.`
     );
-    setTimeout(() => setNotice(null), 6000);
   };
 
   /** Wave an Organize proposal off — remembered by id so it never reappears,
@@ -2710,7 +2779,7 @@ export function useBoard(now: number) {
         ? `${out.threadName} already has this note — task retired.`
         : `Moved into ${out.threadName}.`
     );
-    setTimeout(() => setNotice(null), 4500);
+    clearNoticeIn(4500);
     if (!out.already) await regenerate(latest.current, threadId);
   };
 
@@ -2772,7 +2841,7 @@ export function useBoard(now: number) {
           )
         );
         setNotice("Fixed a couple of typos.");
-        setTimeout(() => setNotice(null), 4000);
+        clearNoticeIn(4000);
       }
     }
   };
@@ -2889,7 +2958,7 @@ export function useBoard(now: number) {
           })
         );
         setNotice("Fixed a couple of typos.");
-        setTimeout(() => setNotice(null), 4000);
+        clearNoticeIn(4000);
       }
     }
     await regenerate(latest.current, threadId);
@@ -2938,7 +3007,7 @@ export function useBoard(now: number) {
           ? `Moved to ${out.toName} — noted for next time.`
           : `Moved to ${out.toName}.`
     );
-    setTimeout(() => setNotice(null), 4500);
+    clearNoticeIn(4500);
 
     if (out.emptied) setOpen(toId);
     const afterTo = await regenerate(next, toId);
@@ -2959,7 +3028,7 @@ export function useBoard(now: number) {
         ? "Labeled resolved — its action is ticked off too."
         : "Labeled resolved."
     );
-    setTimeout(() => setNotice(null), 4000);
+    clearNoticeIn(4000);
   };
 
   const unresolveFrag = async (threadId: string, fragId: string) => {
@@ -2974,7 +3043,7 @@ export function useBoard(now: number) {
     await commit(out.board);
     setOpen(out.freshId);
     setNotice(`Split into a new thread. Rename it if the name is wrong.`);
-    setTimeout(() => setNotice(null), 5000);
+    clearNoticeIn(5000);
 
     const afterNew = await regenerate(out.board, out.freshId);
     if (!out.emptied) await regenerate(afterNew, fromId);
@@ -2987,14 +3056,14 @@ export function useBoard(now: number) {
     if (!frag) return;
     const ok = await copyToClipboard(frag.text);
     setNotice(ok ? "Note copied." : "Couldn't reach the clipboard.");
-    setTimeout(() => setNotice(null), 3000);
+    clearNoticeIn(3000);
   };
 
   const copyWhole = async (s: { text: string; summary: string } | null) => {
     if (!s) return;
     const ok = await copyToClipboard(s.text);
     setNotice(ok ? `Copied — ${s.summary}.` : "Couldn't reach the clipboard.");
-    setTimeout(() => setNotice(null), 3000);
+    clearNoticeIn(3000);
   };
 
   /**
@@ -3049,7 +3118,7 @@ export function useBoard(now: number) {
         )
       );
       setNotice("Added to your actions.");
-      setTimeout(() => setNotice(null), 5000);
+      clearNoticeIn(5000);
     } catch (error) {
       setErr(reasonOf(error) + " Nothing was added.");
     }
@@ -3112,7 +3181,7 @@ export function useBoard(now: number) {
       setNotice(
         `${count(items.length, "action")} taken from this note. The note stays here.`
       );
-      setTimeout(() => setNotice(null), 5000);
+      clearNoticeIn(5000);
       setBusy(null);
       return true;
     } catch (error) {
@@ -3152,7 +3221,7 @@ export function useBoard(now: number) {
     };
     await commit(next);
     setNotice(from.name + " folded into " + into.name + ".");
-    setTimeout(() => setNotice(null), 4500);
+    clearNoticeIn(4500);
     await regenerate(next, intoId);
   };
 
@@ -3231,6 +3300,8 @@ export function useBoard(now: number) {
       ledgerIds: newLedgerIds(latest.current, next),
       addedIds: newIds(latest.current, next),
     };
+    releaseHeldImages();
+    setNoticeUndoable(false);
     setCanUndo(true);
     await commit(next);
     setDraft(null);
@@ -3311,7 +3382,7 @@ export function useBoard(now: number) {
       })
     );
     setNotice("Discarded — it's in the record if you want it back");
-    setTimeout(() => setNotice(null), 6000);
+    clearNoticeIn(6000);
   };
 
   const updateIntention = (next: Intention) =>
@@ -3445,7 +3516,7 @@ export function useBoard(now: number) {
           ? `Copied to the clipboard — ${shareable.summary}.`
           : "Couldn't share that."
     );
-    setTimeout(() => setNotice(null), 3500);
+    clearNoticeIn(3500);
   };
 
   /* ----------------------- getting data in/out ---------------------- */
@@ -3998,7 +4069,7 @@ export function useBoard(now: number) {
           `${count(items.length, "action")} distilled from the conversation.` +
             skipNote
         );
-        setTimeout(() => setNotice(null), 5000);
+        clearNoticeIn(5000);
         await resetDistill();
         setTab("actions");
       } else {
@@ -4048,7 +4119,7 @@ export function useBoard(now: number) {
         );
         await commit(next);
         setNotice("Distilled into a thread." + skipNote);
-        setTimeout(() => setNotice(null), 5000);
+        clearNoticeIn(5000);
         await regenerate(next, thread.id);
         await resetDistill();
         setTab("threads");
@@ -4272,6 +4343,7 @@ export function useBoard(now: number) {
     sync,
     syncNow,
     canUndo,
+    noticeUndoable,
     undo,
     misfiled,
     sortAgainAs,

@@ -121,3 +121,51 @@ describe("restoring after an undo", () => {
     }
   });
 });
+
+describe("undoing a tidy change that MOVED a note", () => {
+  const T = (id: string, frags: { id: string; at: number; text: string }[]) => ({
+    id,
+    name: id,
+    summary: "",
+    frags,
+  });
+  const board = (threads: Board["threads"]): Board => ({ ...EMPTY, threads });
+
+  it("takes the note out of the thread it was moved into", () => {
+    /* Organize's move_fragment keeps the fragment's id, so the copy in the
+       destination is indistinguishable from another device's work if
+       foreignness is judged one thread at a time. It was, and Undo left the
+       note in BOTH threads — the repair duplicating the record it repaired. */
+    const before = board([
+      T("a", [{ id: "f1", at: 1, text: "note" }]),
+      T("b", []),
+    ]);
+    const after = board([
+      T("a", []),
+      T("b", [{ id: "f1", at: 1, text: "note" }]),
+    ]);
+
+    const out = restoreCapture(after, { board: before, addedIds: new Set() }, 999);
+
+    expect(out.threads.map((t) => t.frags.map((f) => f.id))).toEqual([
+      ["f1"],
+      [],
+    ]);
+  });
+
+  it("still keeps a fragment another device added while the tidy ran", () => {
+    /* The guard the rule above must not break: an id the snapshot has never
+       seen anywhere is genuinely foreign and survives the undo. */
+    const before = board([T("a", [{ id: "f1", at: 1, text: "mine" }])]);
+    const after = board([
+      T("a", [
+        { id: "f1", at: 1, text: "mine" },
+        { id: "elsewhere", at: 2, text: "from the other device" },
+      ]),
+    ]);
+
+    const out = restoreCapture(after, { board: before, addedIds: new Set() }, 999);
+
+    expect(out.threads[0].frags.map((f) => f.id)).toEqual(["f1", "elsewhere"]);
+  });
+});
