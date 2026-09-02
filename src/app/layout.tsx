@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Fraunces, IBM_Plex_Mono, Instrument_Sans } from "next/font/google";
 import { FreshBuild } from "@/components/FreshBuild";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
@@ -64,6 +65,7 @@ export default function RootLayout({
         {children}
         <ServiceWorkerRegistrar />
         <FreshBuild />
+        <Analytics />
       </body>
     </html>
   );
