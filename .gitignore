@@ -53,7 +53,10 @@ CaptureVault/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-.next-retake/
-.next-playground/
-.next-lab/
-.next-check/
+# Next build dirs: the app is built under several names (retake, playground,
+# lab, check, eval, audit, prod), so match the family rather than chasing each
+# new one — several hundred MB leaked into `git status` before this.
+.next-*/
+
+# Generated screenshots and run artefacts.
+outputs/
