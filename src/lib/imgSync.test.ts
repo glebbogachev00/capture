@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Board } from "./model";
-import { isSafeImageId, referencedImageIds } from "./imgSync";
+import { ensureHubImage, isSafeImageId, referencedImageIds } from "./imgSync";
 
 const board = (over: Partial<Board> = {}): Board => ({
   actions: [],
@@ -97,5 +97,58 @@ describe("isSafeImageId", () => {
     for (const bad of ["../secret", "a/b", "..", "", "a".repeat(65), "a.b", "a b"]) {
       expect(isSafeImageId(bad), bad).toBe(false);
     }
+  });
+});
+
+describe("ensureHubImage", () => {
+  it("does not send image bytes when the hub already has the image", async () => {
+    const calls: { method: string; body: BodyInit | null | undefined }[] = [];
+    const request = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? "GET", body: init?.body });
+      return new Response(null, { status: 204 });
+    };
+
+    const confirmed = await ensureHubImage(
+      "photo-1",
+      "data:image/webp;base64,already-stored",
+      request
+    );
+
+    expect(confirmed).toBe(true);
+    expect(calls).toEqual([{ method: "HEAD", body: undefined }]);
+  });
+
+  it("sends image bytes only after the hub reports that they are missing", async () => {
+    const calls: { method: string; body: BodyInit | null | undefined }[] = [];
+    const request = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? "GET", body: init?.body });
+      return new Response(null, { status: calls.length === 1 ? 404 : 200 });
+    };
+    const src = "data:image/webp;base64,new-photo";
+
+    const confirmed = await ensureHubImage("photo-2", src, request);
+
+    expect(confirmed).toBe(true);
+    expect(calls).toEqual([
+      { method: "HEAD", body: undefined },
+      { method: "PUT", body: JSON.stringify({ src }) },
+    ]);
+  });
+
+  it("does not upload when the existence check fails", async () => {
+    const calls: { method: string; body: BodyInit | null | undefined }[] = [];
+    const request = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? "GET", body: init?.body });
+      return new Response(null, { status: 500 });
+    };
+
+    const confirmed = await ensureHubImage(
+      "photo-3",
+      "data:image/webp;base64,keep-local",
+      request
+    );
+
+    expect(confirmed).toBe(false);
+    expect(calls).toEqual([{ method: "HEAD", body: undefined }]);
   });
 });

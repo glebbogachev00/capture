@@ -135,7 +135,7 @@ import { applySaveDraft } from "@/lib/intentionOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
 import { assemblePanel } from "@/lib/tidyPanel";
 import { restoreCapture } from "@/lib/undoOps";
-import { referencedImageIds } from "@/lib/imgSync";
+import { ensureHubImage, referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
   boardSignature,
@@ -480,9 +480,9 @@ export function useBoard(now: number) {
       newer than N?" and get a two-field answer instead of the whole board. */
   const hubRev = useRef<number | null>(null);
 
-  /** Image ids this device has already handed to the hub, so a push does not
-      re-upload the same photo every time. Not persisted: after a reload the
-      first push re-offers them and the hub answers "already here". */
+  /** Image ids this device has already confirmed on the hub, so a push does
+      not check the same photo every time. Not persisted: after a reload the
+      first reconciliation asks with HEAD and sends bytes only when missing. */
   const imgsOnHub = useRef<Set<string>>(new Set());
 
   /**
@@ -516,12 +516,7 @@ export function useBoard(now: number) {
             continue;
           }
           if (imgsOnHub.current.has(id)) continue;
-          const res = await fetch(`/api/img/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ src: have }),
-          });
-          if (res.ok) imgsOnHub.current.add(id);
+          if (await ensureHubImage(id, have)) imgsOnHub.current.add(id);
         } catch {
           /* hub unreachable or disk hiccup — the next sync picks it up */
         }

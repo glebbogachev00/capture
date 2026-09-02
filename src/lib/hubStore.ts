@@ -31,11 +31,12 @@
  * `version` is an opaque compare-and-swap token. Blob hands back an ETag and
  * accepts `ifMatch`, so two instances racing to merge the same board cannot
  * silently overwrite each other. The filesystem backend is one machine whose
- * writes are already serialised in-process, so it has no version to give and
- * accepts every write.
+ * board writes are serialised in-process; its `local` token distinguishes an
+ * existing file from an absent one so create-if-absent stays meaningful.
  */
 
 import { promises as fs } from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Redis } from "@upstash/redis";
 import { redisEnv, redisStore, type RedisLike } from "./hubRedis";
@@ -64,39 +65,69 @@ export type HubStore = {
     body: string,
     expect?: WriteExpectation
   ): Promise<Written | false>;
+  /** False only when the key is known to be absent. Storage failures throw. */
   exists(key: string): Promise<boolean>;
 };
 
 const DIR = process.env.SYNC_DATA_DIR || path.join(process.cwd(), ".data");
 
-function fileStore(): HubStore {
-  const fileFor = (key: string) => path.join(DIR, key);
+/** A filesystem miss is expected. Permission and I/O failures must surface. */
+export function isMissingFileError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
+}
+
+export function fileStore(dir = DIR): HubStore {
+  const fileFor = (key: string) => path.join(dir, key);
   return {
     async read(key) {
       try {
-        return { body: await fs.readFile(fileFor(key), "utf8"), version: null };
+        return { body: await fs.readFile(fileFor(key), "utf8"), version: "local" };
       } catch {
         return null;
       }
     },
     /* One machine, and every read-modify-write is already serialised in
        process, so there is nothing to compare and swap against. */
-    async write(key, body) {
+    async write(key, body, expect) {
       const file = fileFor(key);
       await fs.mkdir(path.dirname(file), { recursive: true });
       /* Temp file then rename: a crash mid-write can never leave half a
-         board — or half a photo — under a real name. */
-      const tmp = file + ".tmp";
+          board — or half a photo — under a real name. */
+      const tmp = `${file}.${randomUUID()}.tmp`;
       await fs.writeFile(tmp, body, "utf8");
-      await fs.rename(tmp, file);
-      return { version: null };
+      try {
+        if (expect?.version === null) {
+          /* A hard link publishes the complete temp file only when the real
+             path is still absent. EEXIST means another writer won. */
+          try {
+            await fs.link(tmp, file);
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              "code" in error &&
+              (error as NodeJS.ErrnoException).code === "EEXIST"
+            ) return false;
+            throw error;
+          }
+        } else {
+          await fs.rename(tmp, file);
+        }
+        return { version: "local" };
+      } finally {
+        await fs.rm(tmp, { force: true });
+      }
     },
     async exists(key) {
       try {
         await fs.access(fileFor(key));
         return true;
-      } catch {
-        return false;
+      } catch (error) {
+        if (isMissingFileError(error)) return false;
+        throw error;
       }
     },
   };
@@ -136,9 +167,13 @@ function blobStore(): HubStore {
       }
     },
     async write(key, body, expect) {
-      const { put, BlobPreconditionFailedError, BlobError } = await import(
-        "@vercel/blob"
-      );
+      const {
+        put,
+        head,
+        BlobPreconditionFailedError,
+        BlobNotFoundError,
+        BlobError,
+      } = await import("@vercel/blob");
       const guard =
         expect === undefined
           ? { allowOverwrite: true }
@@ -155,19 +190,29 @@ function blobStore(): HubStore {
         return { version: null };
       } catch (error) {
         if (error instanceof BlobPreconditionFailedError) return false;
-        /* allowOverwrite:false against a blob that now exists — another
-           instance created it first, which is the same answer. */
-        if (expect?.version === null && error instanceof BlobError) return false;
+        /* Blob uses a generic BlobError when allowOverwrite:false finds an
+           existing path. Verify that path now exists before calling this a
+           harmless concurrent winner; an outage must still throw. */
+        if (expect?.version === null && error instanceof BlobError) {
+          try {
+            await head(key);
+            return false;
+          } catch (checkError) {
+            if (checkError instanceof BlobNotFoundError) throw error;
+            throw checkError;
+          }
+        }
         throw error;
       }
     },
     async exists(key) {
-      const { head } = await import("@vercel/blob");
+      const { head, BlobNotFoundError } = await import("@vercel/blob");
       try {
         await head(key);
         return true;
-      } catch {
-        return false;
+      } catch (error) {
+        if (error instanceof BlobNotFoundError) return false;
+        throw error;
       }
     },
   };

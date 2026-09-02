@@ -50,6 +50,24 @@ function tooMany(retryAfterSec: number) {
   );
 }
 
+/** Ask whether an immutable image id exists without transferring its body. */
+export async function HEAD(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const limit = gate(request);
+  if (!limit.allowed) return tooMany(limit.retryAfterSec);
+
+  const { id } = await params;
+  if (!isSafeImageId(id)) return new Response(null, { status: 400 });
+
+  const exists = await hubStore().exists(keyFor(id));
+  return new Response(null, {
+    status: exists ? 204 : 404,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -96,16 +114,12 @@ export async function PUT(
   const key = keyFor(id);
   const store = hubStore();
 
-  /* Already here: the bytes behind an id never change, so this is done. */
-  if (await store.exists(key)) {
-    return NextResponse.json({ ok: true, stored: false });
-  }
-
   try {
-    /* Unconditional: two devices racing to offer the SAME id are offering
-       the same bytes, so whoever lands second changes nothing. */
-    await store.write(key, src);
-    return NextResponse.json({ ok: true, stored: true });
+    /* Create-if-absent closes the race between HEAD and PUT. If another
+       device wrote the immutable id first, false means the same image is
+       already safe on the hub. */
+    const written = await store.write(key, src, { version: null });
+    return NextResponse.json({ ok: true, stored: Boolean(written) });
   } catch {
     return NextResponse.json({ error: "write failed" }, { status: 500 });
   }

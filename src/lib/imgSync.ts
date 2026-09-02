@@ -36,3 +36,29 @@ export function referencedImageIds(board: Board): string[] {
 export function isSafeImageId(id: string): boolean {
   return /^[A-Za-z0-9_-]{1,64}$/.test(id);
 }
+
+type ImageRequest = (
+  input: RequestInfo | URL,
+  init?: RequestInit
+) => Promise<Response>;
+
+/**
+ * Confirm that the hub holds an image. Ask with no body first, then send the
+ * bytes only when the hub says that exact id is missing.
+ */
+export async function ensureHubImage(
+  id: string,
+  src: string,
+  request: ImageRequest = fetch
+): Promise<boolean> {
+  const existing = await request(`/api/img/${id}`, { method: "HEAD" });
+  if (existing.ok) return true;
+  if (existing.status !== 404) return false;
+
+  const uploaded = await request(`/api/img/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ src }),
+  });
+  return uploaded.ok;
+}
