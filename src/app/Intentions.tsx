@@ -10,9 +10,10 @@
    action is finished, an intention is inhabited.
    ============================================================ */
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Copy,
   X,
@@ -777,6 +778,42 @@ export function RecordScreen({
   );
 }
 
+function SettingsDisclosure({
+  title,
+  meta,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  meta: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="settings-section">
+      <button
+        className="record-disclosure"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-label={`${open ? "Hide" : "Show"} ${title}`}
+      >
+        <span className="record-disclosure-title">{title}</span>
+        <span className="record-disclosure-meta">{meta}</span>
+        {open ? (
+          <ChevronUp size={21} strokeWidth={1.7} />
+        ) : (
+          <ChevronDown size={21} strokeWidth={1.7} />
+        )}
+      </button>
+      {open && (
+        <div className="record-disclosure-body settings-body">{children}</div>
+      )}
+    </div>
+  );
+}
+
 export function SettingsScreen({
   principles,
   counts,
@@ -823,8 +860,14 @@ export function SettingsScreen({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [showPrinciples, setShowPrinciples] = useState(false);
+  const [openSection, setOpenSection] = useState<
+    "data" | "restore" | "agent" | "principles" | "support" | null
+  >(null);
   const [reporting, setReporting] = useState(false);
+  const activePrinciples = principles.filter((p) => p.enabled).length;
+  const itemCount = counts.actions + counts.threads + counts.intentions;
+  const toggleSection = (section: NonNullable<typeof openSection>) =>
+    setOpenSection((current) => (current === section ? null : section));
 
   return (
     <div>
@@ -836,214 +879,246 @@ export function SettingsScreen({
         Settings
       </div>
 
-      <button
-        className="section-label"
-        style={{ margin: "0 0 14px" }}
-        onClick={onOpenRecord}
-      >
-        The record · {ledgerCount} said · twelve weeks of days
-      </button>
-
-      <div className="int-block">
-        <h4 className="int-label">Back up everything</h4>
-        <p className="int-note">
-          In this browser and nowhere else: {counts.actions} action
-          {counts.actions === 1 ? "" : "s"}, {counts.threads} thread
-          {counts.threads === 1 ? "" : "s"}, {counts.intentions} intention
-          {counts.intentions === 1 ? "" : "s"}. Clearing site data takes them.
-          Pictures are left out.
-        </p>
-        <div className="int-add">
-          <button className="capture-btn" onClick={onExport}>
-            Download backup
-          </button>
-        </div>
-      </div>
-
-      {!PLAYGROUND && (
-        <div className="int-block">
-          <h4 className="int-label">Keep devices in step</h4>
-          <p className="int-note">
-            Automatic, both ways. If two devices change the same thing, the
-            newer edit wins.
-          </p>
-          <div className="int-add">
-            <span
-              className={
-                "sync-dot" + (sync ? (sync.ok ? " on" : " bad") : "")
-              }
-            />
-            <span className="cap-hint" style={{ flex: 1 }}>
-              {sync
-                ? sync.ok
-                  ? "Synced " + fmt(sync.at) + "."
-                  : sync.note + "."
-                : "This device hasn't reached the hub yet."}
-            </span>
-            <button className="ghost" onClick={onSyncNow}>
-              Sync now
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* The rollback sync cannot give you: the hub mirrors this board,
-          damage included, so a copy from before the damage has to live
-          here. Written once a day, seven kept. */}
-      {snapshotDaysList.length > 0 && (
-        <div className="int-block">
-          <h4 className="int-label">Go back a day</h4>
-          <p className="int-note">
-            This device keeps a copy of the board from each of the last
-            {" "}
-            {snapshotDaysList.length === 1
-              ? "day"
-              : `${snapshotDaysList.length} days`}
-            . Restoring adds back what is missing; it never removes
-            anything.
-          </p>
-          <div className="snap-row">
-            {snapshotDaysList.map((day) => (
-              <button
-                key={day}
-                className="ghost snap-day"
-                onClick={() => onRestoreSnapshot(day)}
-              >
-                {snapshotLabel(day)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="int-block">
-        <h4 className="int-label">Hand the whole board to an agent</h4>
-        <p className="int-note">
-          Every thread with where it stands and the actions that belong
-          with it. The record hands over only what is new; this is the
-          cold start.
-        </p>
-        <button className="ghost" onClick={onCopyBoard}>
-          Copy the whole board
-        </button>
-      </div>
-
-      <div className="int-block">
-        <h4 className="int-label">Restore a capture backup</h4>
-        <p className="int-note">
-          Adds what is missing, matched by id. Restoring twice is safe.
-        </p>
-        <FileButton label="Upload a capture backup" onFile={onRestore} />
-      </div>
-
-      <div className="int-block">
-        <h4 className="int-label">Bring intentions across</h4>
-        <p className="int-note">
-          From the old intent app. Matched by id, so twice is safe.
-        </p>
-        <FileButton label="Upload an intent backup" onFile={onImportIntent} />
-      </div>
-
-      <Note note={ioNote} />
-
-      <div className="int-block">
-        <h4 className="int-label">Principles</h4>
-        <p className="int-note">
-          Shape how an <b>intention</b> is written. Nothing else sees them.{" "}
-          {principles.filter((p) => p.enabled).length} of {principles.length}{" "}
-          active.
-        </p>
-        {/* Fifteen of them, and they touch one rare flow — so the list is
-            folded away by default rather than filling the screen. */}
-        <button
-          className="section-label"
-          style={{ margin: "10px 0 0" }}
-          onClick={() => setShowPrinciples((v) => !v)}
-          aria-expanded={showPrinciples}
-        >
-          {showPrinciples ? "▾" : "▸"} {showPrinciples ? "Hide" : "Show"} the
-          fifteen
-        </button>
-      </div>
-
-      {showPrinciples && (
-      <ul className="prin-list">
-        {principles.map((p) => (
-          <li key={p.id} className={p.enabled ? "" : "off"}>
-            <button
-              className="prin-toggle"
-              onClick={() => onToggle(p.id)}
-              aria-label={(p.enabled ? "Disable " : "Enable ") + p.name}
-            >
-              <span className={"prin-dot" + (p.enabled ? " on" : "")} />
-              <span className="prin-body">
-                <span className="prin-name">{p.name}</span>
-                <span className="prin-desc">{p.description}</span>
-              </span>
-            </button>
-            {!p.builtin && (
-              <button className="ghost warn" onClick={() => onDelete(p.id)}>
-                Delete
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-      )}
-
-      {showPrinciples && (
-      <div className="int-block">
-        <h4 className="int-label">Add a principle</h4>
-        <div className="int-add" style={{ flexDirection: "column" }}>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Name"
-            aria-label="Principle name"
-          />
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="What it means"
-            aria-label="Principle description"
-          />
+      <div className="settings-list">
+        <div className="settings-section">
           <button
-            className="ghost"
-            disabled={!name.trim() || !description.trim()}
-            onClick={() => {
-              onAdd(name.trim(), description.trim());
-              setName("");
-              setDescription("");
-            }}
+            className="record-disclosure"
+            onClick={onOpenRecord}
+            aria-label="Open The Record"
           >
-            Add principle
+            <span className="record-disclosure-title">The Record</span>
+            <span className="record-disclosure-meta">{ledgerCount} said</span>
+            <ChevronRight size={21} strokeWidth={1.7} />
           </button>
         </div>
-      </div>
-      )}
 
-      {/* The bottom-of-the-board line is the door you find when something
-          has just gone wrong; this is the one you go looking for later,
-          when you have finally had enough of it. Same form either way. */}
-      <div className="int-block">
-        <h4 className="int-label">Caught a bug?</h4>
-        <p className="int-note">
-          Say what happened. No GitHub account needed.
-        </p>
-        <button className="ghost" onClick={() => setReporting(true)}>
-          Report a bug
-        </button>
-      </div>
-      {reporting && (
-        <ReportBugForm onClose={() => setReporting(false)} />
-      )}
+        <SettingsDisclosure
+          title="Data and sync"
+          meta={
+            PLAYGROUND
+              ? `${itemCount} item${itemCount === 1 ? "" : "s"}`
+              : sync
+                ? sync.ok
+                  ? "synced"
+                  : "offline"
+                : "not synced"
+          }
+          open={openSection === "data"}
+          onToggle={() => toggleSection("data")}
+        >
+          <div className="settings-group">
+            <h4 className="settings-group-title">Backup</h4>
+            <p className="settings-copy">
+              {counts.actions} action{counts.actions === 1 ? "" : "s"},{" "}
+              {counts.threads} thread{counts.threads === 1 ? "" : "s"}, and{" "}
+              {counts.intentions} intention
+              {counts.intentions === 1 ? "" : "s"}. Includes pictures and
+              history.
+            </p>
+            <button className="capture-btn" onClick={onExport}>
+              Download backup
+            </button>
+          </div>
 
-      <div className="int-block">
-        <h4 className="int-label">Session</h4>
-        <p className="int-note">Ends this login on this device.</p>
-        <button className="ghost warn" onClick={onLogout}>
-          Log out
-        </button>
+          {!PLAYGROUND && (
+            <div className="settings-group">
+              <h4 className="settings-group-title">Devices</h4>
+              <div className="settings-status">
+                <span
+                  className={
+                    "sync-dot" + (sync ? (sync.ok ? " on" : " bad") : "")
+                  }
+                />
+                <span>
+                  {sync
+                    ? sync.ok
+                      ? "Synced " + fmt(sync.at) + "."
+                      : sync.note + "."
+                    : "This device has not reached the hub yet."}
+                </span>
+              </div>
+              <button className="ghost" onClick={onSyncNow}>
+                Sync now
+              </button>
+            </div>
+          )}
+          <Note note={ioNote} />
+        </SettingsDisclosure>
+
+        <SettingsDisclosure
+          title="Restore"
+          meta={
+            snapshotDaysList.length
+              ? `${snapshotDaysList.length} daily ${
+                  snapshotDaysList.length === 1 ? "copy" : "copies"
+                }`
+              : "backup · import"
+          }
+          open={openSection === "restore"}
+          onToggle={() => toggleSection("restore")}
+        >
+          {snapshotDaysList.length > 0 && (
+            <div className="settings-group">
+              <h4 className="settings-group-title">Go back a day</h4>
+              <p className="settings-copy">
+                Adds missing items from a daily copy. It never removes what is
+                here now.
+              </p>
+              <div className="snap-row">
+                {snapshotDaysList.map((day) => (
+                  <button
+                    key={day}
+                    className="ghost snap-day"
+                    onClick={() => onRestoreSnapshot(day)}
+                  >
+                    {snapshotLabel(day)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="settings-group">
+            <h4 className="settings-group-title">Capture backup</h4>
+            <p className="settings-copy">
+              Adds missing data and pictures. Uploading the same backup twice
+              changes nothing the second time.
+            </p>
+            <FileButton label="Upload a Capture backup" onFile={onRestore} />
+          </div>
+
+          <div className="settings-group">
+            <h4 className="settings-group-title">Intentions</h4>
+            <p className="settings-copy">
+              Imports intentions from the old Intent app without duplicating
+              existing ones.
+            </p>
+            <FileButton label="Upload an Intent backup" onFile={onImportIntent} />
+          </div>
+          <Note note={ioNote} />
+        </SettingsDisclosure>
+
+        <SettingsDisclosure
+          title="Agent handoff"
+          meta="full context"
+          open={openSection === "agent"}
+          onToggle={() => toggleSection("agent")}
+        >
+          <div className="settings-group">
+            <p className="settings-copy">
+              Copies every thread, where it stands, and its related actions.
+              Use this when an agent has no Capture context yet.
+            </p>
+            <button className="ghost" onClick={onCopyBoard}>
+              Copy the whole board
+            </button>
+          </div>
+          <Note note={ioNote} />
+        </SettingsDisclosure>
+
+        <SettingsDisclosure
+          title="Principles"
+          meta={
+            activePrinciples === principles.length
+              ? `all ${principles.length} on`
+              : `${activePrinciples} of ${principles.length} on`
+          }
+          open={openSection === "principles"}
+          onToggle={() => toggleSection("principles")}
+        >
+          <p className="settings-copy">
+            These shape intention wording only. Nothing else in Capture uses
+            them.
+          </p>
+          <ul className="settings-principles">
+            {principles.map((principle) => (
+              <li key={principle.id} className={principle.enabled ? "" : "off"}>
+                <span className="settings-principle-copy">
+                  <span className="settings-principle-name">{principle.name}</span>
+                  <span className="settings-principle-description">
+                    {principle.description}
+                  </span>
+                  {!principle.builtin && (
+                    <button
+                      className="settings-principle-delete"
+                      onClick={() => onDelete(principle.id)}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </span>
+                <button
+                  className={
+                    "rule-switch" + (principle.enabled ? " on" : "")
+                  }
+                  role="switch"
+                  aria-checked={principle.enabled}
+                  aria-label={principle.name}
+                  onClick={() => onToggle(principle.id)}
+                >
+                  <span />
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <div className="settings-group settings-add-principle">
+            <h4 className="settings-group-title">Add a principle</h4>
+            <div className="int-add settings-form">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Name"
+                aria-label="Principle name"
+              />
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What it means"
+                aria-label="Principle description"
+              />
+              <button
+                className="ghost"
+                disabled={!name.trim() || !description.trim()}
+                onClick={() => {
+                  onAdd(name.trim(), description.trim());
+                  setName("");
+                  setDescription("");
+                }}
+              >
+                Add principle
+              </button>
+            </div>
+          </div>
+        </SettingsDisclosure>
+
+        <SettingsDisclosure
+          title="Support and session"
+          meta="help · logout"
+          open={openSection === "support"}
+          onToggle={() => toggleSection("support")}
+        >
+          <div className="settings-group">
+            <h4 className="settings-group-title">Caught a bug?</h4>
+            <p className="settings-copy">
+              Say what happened. No GitHub account is needed.
+            </p>
+            <button className="ghost" onClick={() => setReporting(true)}>
+              Report a bug
+            </button>
+            {reporting && (
+              <ReportBugForm onClose={() => setReporting(false)} />
+            )}
+          </div>
+
+          <div className="settings-group">
+            <h4 className="settings-group-title">Session</h4>
+            <p className="settings-copy">Ends this login on this device.</p>
+            <button className="ghost warn" onClick={onLogout}>
+              Log out
+            </button>
+          </div>
+        </SettingsDisclosure>
       </div>
     </div>
   );

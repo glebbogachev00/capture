@@ -3189,6 +3189,103 @@ body {
   border-color: var(--muted);
 }
 
+/* Settings uses the same disclosure language as The Record. The list stays
+   compact until a person asks for the rare controls inside one row. */
+.settings-list {
+  width: 100%;
+  max-width: 460px;
+}
+.settings-section {
+  width: 100%;
+  margin-top: 10px;
+}
+.settings-section:first-child {
+  margin-top: 0;
+}
+.settings-body {
+  padding: 4px 14px 14px;
+}
+.settings-group {
+  padding: 14px 0;
+  border-top: 1px solid var(--rule);
+}
+.settings-group:first-child {
+  border-top: 0;
+}
+.settings-group-title {
+  margin: 0 0 5px;
+  color: var(--ink);
+  font: 600 12px var(--font-mono), monospace;
+  letter-spacing: 0.04em;
+}
+.settings-copy {
+  margin: 0 0 11px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.settings-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 11px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.settings-principles {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.settings-principles li {
+  min-height: 62px;
+  padding: 9px 0;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.settings-principles li.off .settings-principle-copy {
+  opacity: 0.52;
+}
+.settings-principle-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-principle-name {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.settings-principle-description {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.settings-principle-delete {
+  width: max-content;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  font: 11px var(--font-mono), monospace;
+  cursor: pointer;
+}
+.settings-add-principle {
+  margin-top: 4px;
+}
+.settings-form {
+  flex-direction: column;
+  align-items: stretch;
+}
+.settings-form input {
+  width: 100%;
+}
+
 /* Record sections open only when asked. One row names the section, says how
    much is inside, and gives the chevron a full-width touch target. */
 .record-section {
