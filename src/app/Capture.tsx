@@ -176,7 +176,8 @@ export function Capture() {
     showSettings,
     showRecord,
     setShowRecord,
-    stampRecordCopy,
+    recordDay,
+    setRecordDay,
     setShowSettings,
     ioNote,
     setIoNote,
@@ -500,9 +501,7 @@ export function Capture() {
               <button
                 className="icon-btn"
                 onClick={doShare}
-                /* On the record the button stays live even with nothing
-                   new: tapping it is how you find out. */
-                disabled={!shareable && !showRecord}
+                disabled={!shareable}
                 aria-label={
                   shareable ? "Share " + shareable.title : "Nothing to share"
                 }
@@ -868,6 +867,8 @@ export function Capture() {
           <RecordScreen
             ledger={data.ledger ?? []}
             now={now}
+            day={recordDay}
+            onDayChange={setRecordDay}
             wrap={wrap}
             onWrapSeen={() => void dismissWrap()}
             onBack={() => setShowRecord(false)}
@@ -903,7 +904,6 @@ export function Capture() {
             onRestore={restoreFromFile}
             onCopyBoard={() => {
               copyWhole(shareRecord(data));
-              stampRecordCopy();
             }}
             snapshotDaysList={snapDays}
             onRestoreSnapshot={(day) => void restoreSnapshot(day)}

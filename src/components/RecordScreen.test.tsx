@@ -39,6 +39,8 @@ describe("RecordScreen disclosures", () => {
       <RecordScreen
         ledger={[entry]}
         now={now}
+        day="2026-09-02"
+        onDayChange={() => {}}
         onBack={() => {}}
         rules={[rule]}
         onToggleRule={onToggleRule}

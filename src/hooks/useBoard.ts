@@ -16,7 +16,7 @@
  * reactive state React renders and the ref the handlers read.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stamp } from "@/lib/clock";
 import { del, get, keys, set, setMany } from "@/lib/storage";
 import {
@@ -104,12 +104,7 @@ import {
   tangleProposalId,
   type TangleProposal,
 } from "@/lib/tangle";
-import {
-  recordCopiedAt as readRecordCopiedAt,
-  recordCopiedAtOnServer,
-  stampRecordCopied,
-  subscribeRecordCopied,
-} from "@/lib/recordCopied";
+import { dayKey } from "@/lib/record";
 import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
 import { createPushGovernor, type PushGovernor } from "@/lib/pushGovernor";
@@ -324,16 +319,14 @@ export function useBoard(now: number) {
   const [openIntention, setOpenIntention] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [showRecord, setShowRecord] = useState(false);
-  /* When the record last went out, per device: what this browser's person
-     already handed their agent is a fact about this browser, so it never
-     syncs. Re-read whenever the record opens. */
-  const recordCopiedAt = useSyncExternalStore(
-    subscribeRecordCopied,
-    readRecordCopiedAt,
-    recordCopiedAtOnServer
-  );
-  const stampRecordCopy = () => stampRecordCopied(Date.now());
+  const [showRecord, setShowRecordState] = useState(false);
+  /* The Record and its header share one selected calendar day. Opening the
+     Record starts at today, just as its formerly local state did. */
+  const [recordDay, setRecordDay] = useState(() => dayKey(now));
+  const setShowRecord = (show: boolean) => {
+    if (show) setRecordDay(dayKey(now));
+    setShowRecordState(show);
+  };
   const [ioNote, setIoNote] = useState<IoNote>(null);
   const [editing, setEditing] = useState<{ id: string; src: string } | null>(null);
   const [shelfFor, setShelfFor] = useState<string | null>(null);
@@ -3468,7 +3461,7 @@ export function useBoard(now: number) {
       shareableFor(
         data,
         showRecord
-          ? { kind: "record", since: recordCopiedAt }
+          ? { kind: "record", day: recordDay }
           : openIntention
             ? { kind: "intention", id: openIntention }
             : open
@@ -3476,7 +3469,7 @@ export function useBoard(now: number) {
               : { kind: "tab", tab },
         now
       ),
-    [data, showRecord, recordCopiedAt, openIntention, open, tab, now]
+    [data, showRecord, recordDay, openIntention, open, tab, now]
   );
 
   /* A thread share carries its photos as real files in the OS sheet — the
@@ -3507,8 +3500,6 @@ export function useBoard(now: number) {
       files: files.length ? files : undefined,
     });
     if (outcome === "cancelled") return;
-    /* The record going out is the thing the next diff measures from. */
-    if (showRecord) stampRecordCopy();
     setNotice(
       outcome === "shared"
         ? `Shared — ${shareable.summary}.`
@@ -4258,7 +4249,8 @@ export function useBoard(now: number) {
     showSettings,
     showRecord,
     setShowRecord,
-    stampRecordCopy,
+    recordDay,
+    setRecordDay,
     setShowSettings,
     ioNote,
     setIoNote,

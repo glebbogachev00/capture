@@ -7,6 +7,8 @@ import {
   pad,
 } from "./model";
 import { actionsForThread, type DoneItem } from "./threadActions";
+import type { CaptureEntry } from "./ledger";
+import { dayKey } from "./record";
 
 /**
  * Turning what is on screen into text someone else can read.
@@ -193,21 +195,11 @@ export function shareableFor(
     | { kind: "thread"; id: string }
     | { kind: "intention"; id: string }
     | { kind: "tab"; tab: "actions" | "threads" | "intentions" }
-    /* The record shares itself: what is new since the last time it went
-       out, or the whole board the first time. */
-    | { kind: "record"; since: number | null },
+    /* The Record shares the day selected in its heat map — never the board. */
+    | { kind: "record"; day: string },
   now: number
 ): Shareable | null {
-  if (view.kind === "record") {
-    /* Send the increment when there is one, the whole board when there is
-       not. It used to send nothing at all in that second case, which reads
-       as a broken button: the record plainly holds a hundred captures, and
-       the app answers "nothing new" — technically about the last handover,
-       and useless as an answer to "give me the record". Redundant text is
-       cheaper than a dead control. */
-    const delta = view.since ? shareRecordSince(board, view.since) : null;
-    return delta ?? shareRecord(board);
-  }
+  if (view.kind === "record") return shareRecordDay(board.ledger ?? [], view.day);
   if (view.kind === "thread") {
     const t = board.threads.find((x) => x.id === view.id);
     /* The same document the thread's own Copy produces: the standing, and
@@ -280,6 +272,47 @@ export async function shareText(s: Shareable): Promise<ShareOutcome> {
   } catch {
     return "failed";
   }
+}
+
+/**
+ * The selected day in The Record, as a self-contained capture history.
+ *
+ * This deliberately accepts the ledger rather than a Board. A day share is
+ * evidence of what was captured that day, not a handoff of current threads,
+ * actions, intentions, or another day's history. The full-board handoff lives
+ * behind its explicit Settings control.
+ */
+export function shareRecordDay(
+  ledger: CaptureEntry[],
+  day: string
+): Shareable | null {
+  const rows = ledger
+    .filter((entry) => dayKey(entry.at) === day)
+    .sort((a, b) => a.at - b.at);
+  if (!rows.length) return null;
+
+  const date = new Date(`${day}T12:00:00`).getTime();
+  const lines = [`# The record — ${shortDate(date)}`, ""];
+  for (const entry of rows) {
+    const said = (entry.transcript || entry.raw || "").trim();
+    const filed = (entry.clean || "").trim();
+    const time = new Date(entry.at).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    lines.push(
+      `- ${time} · ${entry.kind}${entry.undone ? " · undone" : ""}: ${
+        filed || said
+      }`
+    );
+    if (filed && said && filed !== said) lines.push(`  said: ${said}`);
+  }
+
+  return {
+    title: `The record · ${shortDate(date)}`,
+    summary: `${rows.length} capture${rows.length === 1 ? "" : "s"}`,
+    text: lines.join("\n"),
+  };
 }
 
 /**

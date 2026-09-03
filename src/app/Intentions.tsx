@@ -482,6 +482,8 @@ function sinceLine(stats: ReturnType<typeof recordStats>): string {
 export function RecordScreen({
   ledger,
   now,
+  day,
+  onDayChange,
   onBack,
   rules,
   onToggleRule,
@@ -493,6 +495,9 @@ export function RecordScreen({
 }: {
   ledger: CaptureEntry[];
   now: number;
+  /** The Record's selected heat-map day, shared with the header control. */
+  day: string;
+  onDayChange: (day: string) => void;
   onBack: () => void;
   /* Yesterday's reading. It lives here rather than on the board: the record
      is already the place days are looked back on, and the heat map right
@@ -513,10 +518,8 @@ export function RecordScreen({
   const [openWrap, setOpenWrap] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showRules, setShowRules] = useState(false);
-  /* The page's real subject: ONE day. It opens on today, and any cell in
-     the grid is a way to a different day — "the point is the story on the
-     given day", not a feed of everything ever said. */
-  const [day, setDay] = useState(() => dayKey(now));
+  /* The page's real subject: ONE day. Its owner is the Capture shell so the
+     global header and the heat map always use the same scope. */
   const stats = recordStats(ledger);
   const grid = heatGrid(ledger, now);
   const months = monthLabels(grid);
@@ -610,7 +613,7 @@ export function RecordScreen({
                         }
                         aria-pressed={cell.day === day}
                         onClick={() => {
-                          setDay(cell.day);
+                          onDayChange(cell.day);
                           setShowHistory(true);
                         }}
                         title={`${dayName(cell.day)} · ${cell.count} capture${cell.count === 1 ? "" : "s"}`}

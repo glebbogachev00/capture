@@ -134,6 +134,80 @@ describe("the header share carries the connections too", () => {
   });
 });
 
+describe("the Record header shares the selected day only", () => {
+  const at = (day: number, hour: number) => new Date(2026, 7, day, hour).getTime();
+
+  const board = {
+    ...EMPTY,
+    threads: [
+      {
+        id: "thread-outside-record",
+        name: "Unrelated thread name",
+        summary: "Unrelated thread summary",
+        frags: [{ id: "f1", at: at(20, 9), text: "Unrelated thread fragment" }],
+      },
+    ],
+    actions: [
+      {
+        id: "action-outside-record",
+        text: "Unrelated open action",
+        done: false,
+        at: at(20, 10),
+        imgs: [],
+        shelf: "keep",
+        expires: null,
+      },
+    ],
+    intentions: [
+      {
+        id: "intention-outside-record",
+        number: 1,
+        at: at(20, 11),
+        updatedAt: at(20, 11),
+        rawInput: "Unrelated intention raw input",
+        expandedIntention: "Unrelated intention",
+        recommendedActions: [],
+        counterIntentions: [],
+      },
+    ],
+    ledger: [
+      { id: "day-a", at: at(25, 9), raw: "Day A capture", clean: "Day A capture", kind: "thread", source: "typed", targetId: "thread-outside-record" },
+      { id: "day-b", at: at(26, 9), raw: "Day B capture", clean: "Day B capture", kind: "action", source: "typed", targetId: "" },
+      { id: "other-day", at: at(27, 9), raw: "Other day capture", clean: "Other day capture", kind: "intention", source: "typed", targetId: "" },
+    ],
+  } as Board;
+
+  it("switches the header payload with the heat-map day and never falls back to the board", () => {
+    const dayA = "2026-08-25";
+    const dayB = "2026-08-26";
+    const excluded = [
+      "Day B capture",
+      "Other day capture",
+      "Unrelated thread name",
+      "Unrelated thread summary",
+      "Unrelated thread fragment",
+      "Unrelated open action",
+      "Unrelated intention",
+    ];
+
+    const a = shareableFor(board, { kind: "record", day: dayA }, at(28, 12));
+    expect(a?.text).toContain("Day A capture");
+    for (const text of excluded) expect(a?.text).not.toContain(text);
+
+    const b = shareableFor(board, { kind: "record", day: dayB }, at(28, 12));
+    expect(b?.text).toContain("Day B capture");
+    for (const text of ["Day A capture", ...excluded.filter((text) => text !== "Day B capture")]) {
+      expect(b?.text).not.toContain(text);
+    }
+  });
+
+  it("has no header payload for a quiet selected day", () => {
+    expect(
+      shareableFor(board, { kind: "record", day: "2026-08-28" }, at(28, 12))
+    ).toBeNull();
+  });
+});
+
 describe("the record as a diff", () => {
   it("emits only what moved, and nothing when quiet", async () => {
     const { shareRecordSince } = await import("./share");
