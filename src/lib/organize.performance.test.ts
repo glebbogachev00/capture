@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { applyActionDone } from "./actionOps";
 import { EMPTY, type Action, type Board, type Frag, type Thread } from "./model";
 import { scanBoard, scanResolved, scanStale } from "./organize";
 
@@ -54,5 +55,31 @@ describe("scanStale performance boundary", () => {
     ];
 
     expect(scanStale(board, [], NOW)).toEqual(expected);
+  });
+
+  it("keeps twenty ordinary ticks inside the interaction budget on a large board", () => {
+    let board = largeBoard();
+    const started = performance.now();
+    let slowestTick = 0;
+
+    for (let index = 0; index < 20; index++) {
+      const tickStarted = performance.now();
+      const updated = applyActionDone(board, `a-${index}`, NOW + index);
+      expect(updated).not.toBeNull();
+      board = updated!.board;
+      /* The hook derives this on each board change for the header Tidy badge.
+         This is the interaction path that used to accidentally call scanBoard. */
+      scanStale(board, [], NOW + index);
+      slowestTick = Math.max(slowestTick, performance.now() - tickStarted);
+    }
+
+    const elapsed = performance.now() - started;
+    expect(board.actions).toHaveLength(80);
+    /* Full-suite worker contention makes an aggregate wall-clock threshold
+       noisy; a single tick must still stay below 20ms, and the full burst has
+       a deliberately looser 300ms ceiling. The former scanBoard path takes
+       hundreds of milliseconds for one scan on this fixture. */
+    expect(elapsed).toBeLessThan(300);
+    expect(slowestTick).toBeLessThan(20);
   });
 });

@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Action, Board } from "./model";
 import { EMPTY } from "./model";
-import { shareAction, shareableFor } from "./share";
+import { shareAction, shareableFor, shareRecordDay, shareText } from "./share";
 describe("shareAction — one task, on its way to an assistant", () => {
   const act = (over: Partial<Action> = {}): Action => ({
     id: "a1",
@@ -206,6 +206,78 @@ describe("the Record header shares the selected day only", () => {
       shareableFor(board, { kind: "record", day: "2026-08-28" }, at(28, 12))
     ).toBeNull();
   });
+});
+
+describe("selected-day Record handoff", () => {
+  const at = new Date(2026, 8, 2, 9, 30).getTime();
+  const entry = (over: Partial<import("./ledger").CaptureEntry> = {}) => ({
+    id: "record-entry",
+    at,
+    raw: "Buy oat milk tomorrow morning.",
+    clean: "Buy oat milk tomorrow morning.",
+    kind: "action" as const,
+    source: "typed" as const,
+    targetId: "",
+    ...over,
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("uses the dated text heading as the one Web Share title and keeps it in clipboard text", async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { share, clipboard: { writeText: vi.fn() } });
+
+    const handoff = shareRecordDay([entry()], "2026-09-02")!;
+    expect(handoff.title).toBe("");
+    expect(handoff.text).toMatch(/^# The record — Sep 2, 2026/m);
+
+    await expect(shareText(handoff)).resolves.toBe("shared");
+    expect(share).toHaveBeenCalledWith({ text: handoff.text });
+  });
+
+  it.each([
+    ["Buy oat milk tomorrow morning.", "Buy oat milk tomorrow morning"],
+    [
+      "I need to examine why the capture app lags so much.",
+      "i need to examine why the capture app lags so much",
+    ],
+    ["Clean up settings...", "Cleanup settings..."],
+  ])("does not emit said for cosmetic-only rewrite: %s", (filed, said) => {
+    const handoff = shareRecordDay(
+      [entry({ clean: filed, transcript: said })],
+      "2026-09-02"
+    )!;
+
+    expect(handoff.text).toContain(`: ${filed}`);
+    expect(handoff.text).not.toContain("said:");
+  });
+
+  it("preserves the original when the filed version lost distinct intent", () => {
+    const handoff = shareRecordDay(
+      [
+        entry({
+          clean: "Write a note about the espresso machine grinder.",
+          transcript: "Undo test: write a note about the espresso machine grinder",
+        }),
+        entry({
+          id: "decision-fatigue",
+          at: new Date(2026, 8, 2, 10, 30).getTime(),
+          clean: "Write about the monthly review.",
+          transcript:
+            "Write about the monthly review and why I am not saving anything because of decision fatigue.",
+        }),
+      ],
+      "2026-09-02"
+    )!;
+
+    expect(handoff.text).toContain(
+      "said: Undo test: write a note about the espresso machine grinder"
+    );
+    expect(handoff.text).toContain(
+      "said: Write about the monthly review and why I am not saving anything because of decision fatigue."
+    );
+  });
+
 });
 
 describe("the record as a diff", () => {

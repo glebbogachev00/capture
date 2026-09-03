@@ -253,11 +253,17 @@ export type ShareOutcome = "shared" | "copied" | "cancelled" | "failed";
 export async function shareText(s: Shareable): Promise<ShareOutcome> {
   if (typeof navigator !== "undefined" && navigator.share) {
     try {
-      await navigator.share(
-        s.files?.length
+      /* A Record already carries its single visible, dated heading in `text`.
+         Omitting the Web Share title for that one surface avoids receivers
+         rendering the same title above the markdown heading. */
+      const payload = s.files?.length
+        ? s.title
           ? { title: s.title, text: s.text, files: s.files }
-          : { title: s.title, text: s.text }
-      );
+          : { text: s.text, files: s.files }
+        : s.title
+          ? { title: s.title, text: s.text }
+          : { text: s.text };
+      await navigator.share(payload);
       return "shared";
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -272,6 +278,27 @@ export async function shareText(s: Shareable): Promise<ShareOutcome> {
   } catch {
     return "failed";
   }
+}
+
+/**
+ * Formatting-only equality for a Record row.
+ *
+ * This is intentionally narrower than language understanding: it ignores
+ * casing, whitespace, punctuation, and the one joined/spaced spelling that
+ * occurs in ordinary capture text ("clean up" / "cleanup"). It never
+ * removes, reorders, stems, or guesses words. When in doubt it returns false,
+ * so the raw transcript remains in the agent handoff.
+ */
+function sameSurfaceText(a: string, b: string): boolean {
+  const normalize = (text: string) =>
+    text
+      .normalize("NFKC")
+      .toLocaleLowerCase()
+      .replace(/clean[\s-]+up/g, "cleanup")
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+  return normalize(a) === normalize(b);
 }
 
 /**
@@ -305,11 +332,20 @@ export function shareRecordDay(
         filed || said
       }`
     );
-    if (filed && said && filed !== said) lines.push(`  said: ${said}`);
+    /* The raw transcript is audit context, not a second rendering of the
+       same sentence. Preserve it unless a deliberately surface-only compare
+       proves it adds no words or meaning. */
+    if (filed && said && !sameSurfaceText(filed, said)) {
+      lines.push(`  said: ${said}`);
+    }
   }
 
   return {
-    title: `The record · ${shortDate(date)}`,
+    /* Receivers render a Web Share title separately from text. The dated
+       markdown heading above is the Record's one visible title; keeping this
+       blank preserves that one-title contract while clipboard fallback still
+       receives the heading and date in `text`. */
+    title: "",
     summary: `${rows.length} capture${rows.length === 1 ? "" : "s"}`,
     text: lines.join("\n"),
   };

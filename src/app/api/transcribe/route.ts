@@ -2,6 +2,7 @@ import { generateText } from "ai";
 import { clientIp } from "@/lib/clientIp";
 import { transcribeRateLimit } from "@/lib/limiter";
 import { withFallback } from "@/lib/providers";
+import { CLEANUP_SYSTEM } from "@/lib/dictationCleanup";
 
 /**
  * Transcribe — recorded audio in, text out.
@@ -91,16 +92,6 @@ async function transcribeGroq(
  * show what the speaker meant to type. Any failure returns the raw text, so
  * cleanup can never cost a dictation.
  */
-const CLEANUP_SYSTEM =
-  "You clean up dictated speech for a note-taking box. Remove filler words " +
-  "(um, uh, like, you know), false starts, and stutters. When the speaker " +
-  "corrects themselves — mid-sentence or as an afterthought ('not AI, just " +
-  "Retake') — apply the correction and keep only the corrected version. " +
-  "Collapse restarts: a clause said twice while finding footing appears once. Fix " +
-  "punctuation and obvious grammar slips. Keep the speaker's own words, " +
-  "tone, and language — never summarise, interpret, reorder, or add " +
-  "anything. Reply with the cleaned text only, no commentary.";
-
 const CLEANUP_ON = process.env.CAPTURE_DICTATION_CLEANUP !== "0";
 
 async function cleanUp(raw: string): Promise<string> {
