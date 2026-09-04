@@ -1,6 +1,9 @@
 import { Capture } from "./Capture";
 import { Landing } from "./Landing";
 import { PLAYGROUND } from "@/lib/playground";
+import { landingMetadata } from "@/lib/seo";
+
+export const metadata = landingMetadata(PLAYGROUND);
 
 /**
  * The playground's front door is the landing page — a stranger gets the

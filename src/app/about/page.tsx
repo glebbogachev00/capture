@@ -1,12 +1,11 @@
-import type { Metadata } from "next";
+import { permanentRedirect } from "next/navigation";
 import { Landing } from "@/app/Landing";
+import { PLAYGROUND } from "@/lib/playground";
+import { landingMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "capture · thoughts that sort themselves",
-  description:
-    "Say it however it comes out. It lands as something to do, something you're thinking through, or something you're becoming — and when it lands wrong, you tell it once.",
-};
+export const metadata = landingMetadata(PLAYGROUND);
 
 export default function AboutPage() {
+  if (PLAYGROUND) permanentRedirect("/");
   return <Landing />;
 }

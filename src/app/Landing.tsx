@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { PLAYGROUND } from "@/lib/playground";
 import { CopyPrompt } from "@/components/CopyPrompt";
+import { siteHome, websiteSchema } from "@/lib/seo";
 
 /** Where "open the app" points: the playground serves the board at /app so
     this page can hold the front door; a personal instance keeps it at /. */
 const APP = PLAYGROUND ? "/app" : "/";
+const HOME = siteHome(PLAYGROUND);
 
 /* The sponsor page is still unfinished and carries a different nav, so the
    landing page does not send anyone to it yet. Flip to true to bring the
@@ -122,6 +124,7 @@ function Movement({
 }
 
 export function Landing() {
+  const schema = websiteSchema(PLAYGROUND);
   /* The posed "you say / it lands as" card. In the wide layouts the hero's
      second column belongs to the recording, and this drops to the slot the
      recording used to hold, so the page keeps both and repeats neither. */
@@ -159,9 +162,15 @@ export function Landing() {
   );
   return (
     <main className="capture-root site-page">
+      {schema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+        />
+      )}
       <div className="capture-wrap site-wrap">
         <header className="capture-head site-head">
-          <Link className="capture-mark funding-mark" href="/about">
+          <Link className="capture-mark funding-mark" href={HOME}>
             capture<span>.</span>
           </Link>
           <nav className="site-nav" aria-label="Capture links">

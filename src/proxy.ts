@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { PLAYGROUND, isClosedInPlayground } from "@/lib/playground";
 import { AUTH_COOKIE, isValidSession } from "@/lib/auth";
+import { isPublicHome } from "@/lib/seo";
 
 /** Paths that must stay reachable without the session cookie. */
 const PUBLIC_PATHS = [
@@ -10,6 +11,8 @@ const PUBLIC_PATHS = [
   "/sponsor",
   "/api/login",
   "/manifest.webmanifest",
+  "/robots.txt",
+  "/sitemap.xml",
   "/sw.js",
   "/icon.svg",
   "/icon-192.png",
@@ -30,12 +33,14 @@ export async function proxy(request: NextRequest) {
   if (PLAYGROUND && isClosedInPlayground(request.nextUrl.pathname)) {
     return NextResponse.json({ error: "not available in the playground" }, { status: 404 });
   }
+  const { pathname } = request.nextUrl;
+  if (isPublicHome(pathname, PLAYGROUND) || isPublic(pathname)) {
+    return NextResponse.next();
+  }
+
   const password = process.env.APP_PASSWORD;
   // No password configured — the gate is off entirely.
   if (!password) return NextResponse.next();
-
-  const { pathname } = request.nextUrl;
-  if (isPublic(pathname)) return NextResponse.next();
 
   const cookie = request.cookies.get(AUTH_COOKIE)?.value;
   if (await isValidSession(cookie, password)) return NextResponse.next();
