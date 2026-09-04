@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { QUICKSTART_URL } from "@/lib/playground";
+import { QUICKSTART_URL, type TrialState } from "@/lib/playground";
 
 /**
  * One line at the top of the board, on the public instance only.
@@ -36,31 +36,45 @@ const read = () => {
 };
 const readOnServer = () => true;
 
-export function PlaygroundNotice() {
+export function PlaygroundNotice({ trial }: { trial: TrialState | null }) {
   const dismissed = useSyncExternalStore(subscribe, read, readOnServer);
-  if (dismissed) return null;
+  const complete = !!trial?.exhausted;
+  if (dismissed && !complete) return null;
   return (
     <p className="playground-note">
       <span>
-        This is a playground — your board lives in this browser only.{" "}
-        <a href={QUICKSTART_URL} target="_blank" rel="noreferrer">
-          Run Capture yourself
-        </a>{" "}
-        to keep it.
+        {complete ? (
+          <>
+            You have used today&apos;s five captures. Your board stays in this
+            browser. Come back tomorrow, or{" "}
+            <a href="/about#install">install your own Capture</a> to keep using
+            it on your own keys.
+          </>
+        ) : (
+          <>
+            This is a playground — your board lives in this browser only.{" "}
+            <a href={QUICKSTART_URL} target="_blank" rel="noreferrer">
+              Run Capture yourself
+            </a>{" "}
+            to keep it.
+          </>
+        )}
       </span>
-      <button
-        aria-label="Dismiss"
-        onClick={() => {
-          try {
-            localStorage.setItem(KEY, "1");
-          } catch {
-            /* private mode — it just shows again next time */
-          }
-          window.dispatchEvent(new Event(EVENT));
-        }}
-      >
-        ×
-      </button>
+      {!complete && (
+        <button
+          aria-label="Dismiss"
+          onClick={() => {
+            try {
+              localStorage.setItem(KEY, "1");
+            } catch {
+              /* private mode — it just shows again next time */
+            }
+            window.dispatchEvent(new Event(EVENT));
+          }}
+        >
+          ×
+        </button>
+      )}
     </p>
   );
 }

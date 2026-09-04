@@ -1,3 +1,6 @@
+import type { CaptureEntry } from "./ledger";
+import { dayKey } from "./record";
+
 /**
  * Playground mode — the public instance a stranger can be pointed at.
  *
@@ -27,6 +30,96 @@
  * cannot touch the real hub even by accident.
  */
 export const PLAYGROUND = process.env.NEXT_PUBLIC_PLAYGROUND === "1";
+
+/**
+ * The five-capture daily browser allowance.
+ *
+ * This is a product boundary for ordinary visitors, not a security claim.
+ * Today's count comes from the local ledger and resets with the visitor's
+ * local calendar day. A determined person can clear site data and start over.
+ * That is fine: the goal is a coherent tutorial experience, not quota
+ * protection. The provider dashboard's daily spend ceiling remains the
+ * global hard cost boundary.
+ */
+export const TRIAL_LIMIT = 5;
+
+/**
+ * Count distinct utterances in the ledger.
+ *
+ * A split capture (one sentence → action + thread) shares a `captureId` across
+ * its two entries; without one, each entry is its own utterance. Undo changes
+ * what landed, not whether a trial capture was used, so undone entries count.
+ */
+export function trialUsed(
+  ledger: CaptureEntry[],
+  now = Date.now()
+): number {
+  const today = dayKey(now);
+  const firstSeen = new Map<string, number>();
+  for (const e of ledger) {
+    /* Imports and restores describe data movement, not a thought captured in
+       the playground, so they do not spend today's allowance. */
+    if (e.source === "import" || e.restored) continue;
+    const id = e.captureId ?? e.id;
+    const first = firstSeen.get(id);
+    if (first === undefined || e.at < first) firstSeen.set(id, e.at);
+  }
+  return [...firstSeen.values()].filter((at) => dayKey(at) === today).length;
+}
+
+export function trialRemaining(
+  ledger: CaptureEntry[],
+  now = Date.now()
+): number {
+  return Math.max(0, TRIAL_LIMIT - trialUsed(ledger, now));
+}
+
+export function isTrialExhausted(
+  ledger: CaptureEntry[],
+  now = Date.now()
+): boolean {
+  return trialUsed(ledger, now) >= TRIAL_LIMIT;
+}
+
+export type TrialState = {
+  exhausted: boolean;
+  remaining: number;
+  hint: string;
+};
+
+/** One reading of the trial for the submit guard, composer, and notice. */
+export function trialState(
+  ledger: CaptureEntry[],
+  now = Date.now()
+): TrialState {
+  const remaining = trialRemaining(ledger, now);
+  return {
+    exhausted: remaining === 0,
+    remaining,
+    hint:
+      remaining === 0
+        ? "today's five captures are used"
+        : remaining < TRIAL_LIMIT
+          ? `${remaining} of ${TRIAL_LIMIT} captures left today — say it messy`
+          : "five captures available today — say it messy",
+  };
+}
+
+/** A synchronous one-flight gate. React state updates later; this closes the
+ * same-tick window where button and keyboard submission could both start. */
+export function createCaptureGate() {
+  let active = false;
+  return {
+    enter() {
+      if (active) return false;
+      active = true;
+      return true;
+    },
+    leave() {
+      active = false;
+    },
+  };
+}
 
 /** Routes that reach past the browser. Refused outright in playground mode. */
 export const PLAYGROUND_CLOSED = [

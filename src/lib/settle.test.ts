@@ -86,6 +86,14 @@ describe("settling a capture the sorter could not sort", () => {
     expect(out.board.ledger![0].imgs).toEqual(["img1"]);
   });
 
+  it("keeps the original capture identity when a correction is saved unsorted", () => {
+    const out = settleUnsortedCapture(board(), input(), {
+      ...ids,
+      captureId: "original-capture",
+    });
+    expect(out.board.ledger![0].captureId).toBe("original-capture");
+  });
+
   it("carries every field the Board declares", () => {
     const b = board({ wraps: [{ day: "2026-08-30", text: "short", at: 5 }] as never, historyEpoch: 3 });
     const out = settleUnsortedCapture(b, input(), ids).board as unknown as Record<string, unknown>;

@@ -96,7 +96,7 @@ import {
 import { expiryFor, parseDue } from "@/lib/due";
 import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
-import { PLAYGROUND, playgroundError } from "@/lib/playground";
+import { createCaptureGate, PLAYGROUND, isTrialExhausted, playgroundError, trialState } from "@/lib/playground";
 import { degradedTier, type Answered } from "@/lib/degraded";
 import { planTidy, keepProposals, type TidyRead } from "@/lib/tidyChanged";
 import {
@@ -128,7 +128,7 @@ import { suggestionOutcome } from "@/lib/suggestionRecord";
 import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
-import { applySaveDraft } from "@/lib/intentionOps";
+import { applySaveDraft, type CaptureOrigin } from "@/lib/intentionOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
 import { assemblePanel } from "@/lib/tidyPanel";
 import { restoreCapture } from "@/lib/undoOps";
@@ -151,7 +151,6 @@ import {
   withCorrection,
   withLedger,
   type CorrectionEntry,
-  type CaptureSource,
 } from "@/lib/ledger";
 import { deriveRules, setRuleEnabled, type RulePreference } from "@/lib/rules";
 import {
@@ -340,12 +339,7 @@ export function useBoard(now: number) {
   /* What an in-flight intention draft should record in the ledger when it is
      saved: set by whichever flow opened the draft (a typed/dictated capture,
      or a Distill settlement), consumed by saveDraft, cleared on discard. */
-  const intentionLedger = useRef<{
-    raw: string;
-    source: CaptureSource;
-    via?: string;
-  } | null>(null);
-
+  const intentionLedger = useRef<CaptureOrigin | null>(null);
   /* ----------------------- learned rules ------------------------ */
 
   /* Rules the user cleared in Settings, by normalised key. Device-local on
@@ -396,6 +390,7 @@ export function useBoard(now: number) {
   /* Mirrors distillBusy in a ref so two taps in the same tick can't both
      start a request before React has re-rendered. */
   const distillBusyRef = useRef(false);
+  const captureGate = useRef(createCaptureGate());
   /* The saved session is hydrated asynchronously; a turn sent before that
      resolves must not be clobbered by the stale copy from disk. */
   const distillLoadedRef = useRef(false);
@@ -403,7 +398,12 @@ export function useBoard(now: number) {
   /* The latest board, read by handlers so async work never builds on stale
      state. `commit` (and the loader) are the only writers. */
   const latest = useRef<Board>(data);
-
+  const trialExhaustedNow = () => PLAYGROUND && isTrialExhausted(latest.current.ledger ?? [], Date.now());
+  const rejectDistillAtLimit = () => {
+    if (!trialExhaustedNow()) return false;
+    setDistillErr("You have used today's five captures. Come back tomorrow.");
+    return true;
+  };
   /* Append a proposal-outcome record to a board about to be committed: what
      the user did with the engine's suggestion — accepted, dismissed, or
      corrected. Invisible in the UI; the correction ledger is the learning
@@ -517,6 +517,7 @@ export function useBoard(now: number) {
   const [misfiled, setMisfiled] = useState<{
     text: string;
     wrong: SortKind;
+    captureId: string;
     /* The thread it landed in, when it landed in one. Right kind, wrong
        home is a different mistake from the wrong kind, and the strip can
        only offer to fix it if it knows which thread to move away from. */
@@ -788,6 +789,7 @@ export function useBoard(now: number) {
       setMisfiled({
         text: undoneEntry!.raw || undoneEntry!.clean,
         wrong: wrongKind,
+        captureId: undoneEntry!.captureId ?? undoneEntry!.id,
         thread: landedIn ? { id: landedIn.id, name: landedIn.name } : undefined,
       });
     }
@@ -836,15 +838,6 @@ export function useBoard(now: number) {
    * subject so two corrections about the same subject aggregate instead of
    * splitting — and then re-runs the capture with the destination pinned,
    * so answering the question also does the thing.
-   */
-  /**
-   * The answer to "then what was it?".
-   *
-   * One tap, no typing. It writes the lesson the undo could not write on
-   * its own — the wrong kind and the right one, anchored on the capture's
-   * subject so two corrections about the same subject aggregate instead of
-   * splitting — and then re-runs the capture with the destination pinned,
-   * so answering the question also does the thing.
    *
    * Deliberately NOT memoised. Undo restores the draft text one tick after
    * it raises this question, so a useCallback keyed on the question would
@@ -882,7 +875,7 @@ export function useBoard(now: number) {
          still right here. */
       if (!text.trim()) setText(m.text);
     }
-    await submit(false, right, words || undefined);
+    await submit(false, right, words || undefined, undefined, m?.captureId);
     /* After the capture lands, not before — the banner says where it went,
        this says why that was the right shape for it. */
     if (m) {
@@ -940,7 +933,7 @@ export function useBoard(now: number) {
       }
       if (!text.trim()) setText(m.text);
     }
-    await submit(false, "thread", words || undefined, threadId);
+    await submit(false, "thread", words || undefined, threadId, m?.captureId);
     if (home) {
       /* "It will remember" only when a rule was actually written: with no
          shared subject there is nothing to remember by. */
@@ -1443,7 +1436,8 @@ export function useBoard(now: number) {
     imgIds: string[],
     at: number,
     reason: string,
-    dictated = false
+    dictated = false,
+    captureId?: string
   ) => {
     /* One computation decides everything — board, history entry, receipt,
        target — so they cannot disagree. The old inline version computed
@@ -1454,7 +1448,7 @@ export function useBoard(now: number) {
     const settled = settleUnsortedCapture(
       latest.current,
       { raw, imgIds, at, dictated, openThreadId: open ?? undefined },
-      { itemId: uid(), ledgerId: uid() }
+      { itemId: uid(), ledgerId: uid(), captureId }
     );
     const next = settled.board;
     showReceipt(settled.receipt);
@@ -1588,13 +1582,22 @@ export function useBoard(now: number) {
     /* The thread the person picked by hand. Unlike the series hint, this
        is not a default the model may talk itself out of: they were asked
        and they answered, so it is applied to whatever comes back. */
-    pinnedThread?: string
+    pinnedThread?: string,
+    /* Undo-and-correct is the same capture, not another use of the trial. */
+    existingCaptureId?: string
   ) => {
     const raw = (override ?? text).trim();
     /* What the capture's opening decides — command prefix, undo-answer
        precedence, and whether it teaches — lives in lib/command. */
     const { payload, force, commandLesson } = resolveCapture(raw, pinned);
     if (!payload && !pics.length) return;
+    if (!captureGate.current.enter()) return;
+    if (!existingCaptureId && trialExhaustedNow()) {
+      captureGate.current.leave();
+      setErr("You have used today's five captures. Your board is still here.");
+      return;
+    }
+    try {
     setErr("");
     setSwept(null);
     // A new capture takes over the banner: no stale proposal survives.
@@ -1608,6 +1611,7 @@ export function useBoard(now: number) {
     setBusy("Sorting");
 
     const at = stamp();
+    const captureId = existingCaptureId ?? uid();
     // Stored before the sort so both outcomes keep the pictures.
     const imgIds: string[] = [];
     for (const p of pics) {
@@ -1637,6 +1641,7 @@ export function useBoard(now: number) {
         await expandIntention(payload, {
           raw: payload,
           source: sourceOf(payload, dictated, imgIds.length > 0),
+          captureId,
         });
         setTimeout(() => setLanded(null), 4500);
         return;
@@ -1665,6 +1670,7 @@ export function useBoard(now: number) {
         await expandIntention(payload, {
           raw: payload,
           source: sourceOf(payload, dictated, imgIds.length > 0),
+          captureId,
         });
         setTimeout(() => setLanded(null), 4500);
         return;
@@ -1691,7 +1697,7 @@ export function useBoard(now: number) {
           dictated,
           imgIds,
           transcript,
-          captureId: uid(),
+          captureId,
           kind: out.kind,
           clean: out.clean,
           primaryText: out.primaryText,
@@ -1758,10 +1764,12 @@ export function useBoard(now: number) {
          stale description. */
       for (const id of summaryTargets) scheduleSummary(id);
     } catch (error) {
-      await saveUnsorted(raw, imgIds, at, reasonOf(error), dictated);
+      await saveUnsorted(raw, imgIds, at, reasonOf(error), dictated, captureId);
     }
-
-    setBusy(null);
+    } finally {
+      setBusy(null);
+      captureGate.current.leave();
+    }
     /* No timer. The banner is the receipt — where the capture went, with
        the only Undo button in it — and a receipt that shreds itself after
        nine seconds is how "it filed somewhere and I never saw where"
@@ -3226,7 +3234,7 @@ export function useBoard(now: number) {
       things already captured (an action made into an intention). */
   const expandIntention = async (
     rawInput: string,
-    ledger?: { raw: string; source: CaptureSource } | null
+    ledger?: CaptureOrigin | null
   ) => {
     intentionLedger.current = ledger ?? null;
     setErr("");
@@ -3327,10 +3335,11 @@ export function useBoard(now: number) {
   const draftToThread = async () => {
     const d = draft;
     if (!d?.rawInput.trim()) return;
+    const opened = intentionLedger.current;
     setPendingSource(null);
     intentionLedger.current = null;
     setDraft(null);
-    await submit(false, "thread", d.rawInput);
+    await submit(false, "thread", d.rawInput, undefined, opened?.captureId);
   };
 
   const discardDraft = async () => {
@@ -3363,6 +3372,7 @@ export function useBoard(now: number) {
     await commit(
       withLedger(latest.current, {
         id: uid(),
+        captureId: opened?.captureId,
         at: stamp(),
         raw: opened?.raw ?? d.rawInput,
         clean: d.rawInput,
@@ -3775,6 +3785,7 @@ export function useBoard(now: number) {
   const sendDistill = async (raw?: string) => {
     const text = (raw ?? distillInput).trim();
     if (!text || distillBusyRef.current) return;
+    if (rejectDistillAtLimit()) return;
     setDistillErr("");
     setSettled(null);
     // A fresh reply re-judges readiness from scratch.
@@ -3926,6 +3937,7 @@ export function useBoard(now: number) {
   /** Run the whole conversation through the settling engine. */
   const settleDistill = async () => {
     if (!distillSession.turns.length || distillBusyRef.current) return;
+    if (rejectDistillAtLimit()) return;
     setDistillErr("");
     distillBusyRef.current = true;
     setDistillBusy(true);
@@ -3971,6 +3983,7 @@ export function useBoard(now: number) {
     shelfLife: string
   ) => {
     if (!settled || distillBusyRef.current) return;
+    if (rejectDistillAtLimit()) return;
     const { kind, title } = settled;
     setDistillErr("");
     distillBusyRef.current = true;
@@ -4203,6 +4216,7 @@ export function useBoard(now: number) {
 
   return {
     data,
+    trial: PLAYGROUND ? trialState(data.ledger ?? [], now) : null,
     loaded,
     corrupt,
     text,

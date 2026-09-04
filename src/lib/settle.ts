@@ -46,7 +46,7 @@ export function settleUnsortedCapture(
         Undefined means no destination was chosen by anyone. */
     openThreadId?: string;
   },
-  ids: { itemId: string; ledgerId: string }
+  ids: { itemId: string; ledgerId: string; captureId?: string }
 ): Settlement {
   const body = input.raw || "(image only)";
   const openThread = input.openThreadId
@@ -78,6 +78,7 @@ export function settleUnsortedCapture(
       },
       {
         id: ids.ledgerId,
+        captureId: ids.captureId,
         at: input.at,
         raw: input.raw,
         clean: body,
@@ -115,6 +116,7 @@ export function settleUnsortedCapture(
     { ...board, actions: [action, ...board.actions] },
     {
       id: ids.ledgerId,
+      captureId: ids.captureId,
       at: input.at,
       raw: input.raw,
       clean: body,

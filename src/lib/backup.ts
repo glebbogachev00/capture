@@ -145,7 +145,13 @@ export function restoreBackup(parsed: unknown, board: Board): RestoreResult {
   merged.principles = [...board.principles, ...newPrinciples];
 
   // Ledger entries are immutable and id-unique, so a restore is add-only.
-  merged.ledger = mergeLedgers(board.ledger ?? [], incoming.ledger ?? []);
+  // Mark only entries introduced here: restoring the same backup must not
+  // relabel captures that were already made in this browser.
+  const haveLedger = new Set((board.ledger ?? []).map((e) => e.id));
+  const restoredLedger = (incoming.ledger ?? [])
+    .filter((e) => !haveLedger.has(e.id))
+    .map((e) => ({ ...e, restored: true }));
+  merged.ledger = mergeLedgers(board.ledger ?? [], restoredLedger);
   // Same for corrections: a restore never rewrites what this device learned.
   merged.corrections = mergeCorrections(
     board.corrections ?? [],

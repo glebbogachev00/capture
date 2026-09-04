@@ -20,22 +20,31 @@ survives you walking away.
 git clone https://github.com/glebbogachev00/capture.git
 cd capture
 npm install
-cp .env.example .env.local
+npm run setup
 ```
 
-Edit `.env.local` and add at least one key:
+`npm run setup` prompts for your Groq key without showing it. The wizard writes
+`.env.local`, then reports only the file path and the next command. To set the
+key by hand instead, copy the example file and edit it:
 
-| Provider | Get a key | Env var |
-|---|---|---|
-| OpenRouter | https://openrouter.ai/keys | `OPENROUTER_API_KEY` |
-| Groq | https://console.groq.com/keys | `GROQ_API_KEY` |
-| Google AI Studio | https://aistudio.google.com/apikey | `GOOGLE_GENERATIVE_AI_API_KEY` |
+```bash
+cp .env.example .env.local
+# uncomment GROQ_API_KEY= and paste your key
+```
 
-Tiers are tried in that order (OpenRouter → Groq → Gemini last, since a free
-Gemini tier is the most likely to be spent); a missing key just skips that
-tier, so one key is a complete setup. If every provider fails, captures are still saved
-verbatim and flagged unsorted — nothing is ever lost, it just waits to be
-sorted.
+Provider order (fastest first):
+
+| Order | Provider | Get a key | Env var |
+|---|---|---|---|
+| 1 | Groq | https://console.groq.com/keys | `GROQ_API_KEY` |
+| 2 | Groq (second key) | https://console.groq.com/keys | `GROQ_API_KEY_2` |
+| 3 | Mistral | https://console.mistral.ai | `MISTRAL_API_KEY` |
+| 4 | Google AI Studio | https://aistudio.google.com/apikey | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| 5 | OpenRouter | https://openrouter.ai/keys | `OPENROUTER_API_KEY` |
+
+A missing key just skips that tier — one key is a complete setup. If every
+provider fails, captures are still saved verbatim and flagged unsorted —
+nothing is ever lost, it just waits to be sorted.
 
 ## 2. Run it
 

@@ -61,6 +61,23 @@ describe("saving a reviewed intention draft", () => {
     expect(conversion.board.ledger ?? []).toHaveLength(0);
   });
 
+  it("keeps the original capture identity when a correction becomes an intention", () => {
+    const out = applySaveDraft(
+      board(),
+      draft,
+      {
+        capture: {
+          raw: draft.rawInput,
+          source: "typed",
+          captureId: "original-capture",
+        },
+      },
+      ids,
+      100
+    );
+    expect(out.board.ledger![0].captureId).toBe("original-capture");
+  });
+
   it("carries every field the Board declares", () => {
     const b = board({
       wraps: [{ day: "2026-08-29", text: "short", at: 5 }] as never,

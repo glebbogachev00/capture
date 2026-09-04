@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PLAYGROUND } from "@/lib/playground";
+import { CopyPrompt } from "@/components/CopyPrompt";
 
 /** Where "open the app" points: the playground serves the board at /app so
     this page can hold the front door; a personal instance keeps it at /. */
@@ -113,7 +114,7 @@ function Movement({
   gloss?: string;
 }) {
   return (
-    <div className="movement" data-move={id}>
+    <div className="movement" data-move={id} id={id}>
       <h2>{title}</h2>
       {gloss && <p>{gloss}</p>}
     </div>
@@ -165,7 +166,7 @@ export function Landing() {
           </Link>
           <nav className="site-nav" aria-label="Capture links">
             <a href="https://github.com/glebbogachev00/capture">GitHub</a>
-                        <Link href={APP}>Open app</Link>
+            <Link href={APP}>{PLAYGROUND ? "Try 5 captures today" : "Open Capture"}</Link>
           </nav>
         </header>
 
@@ -179,7 +180,7 @@ export function Landing() {
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
-              Sort a thought
+              {PLAYGROUND ? "Try 5 captures today" : "Open Capture"}
             </Link>
             <a
               className="ghost site-ghost"
@@ -190,7 +191,7 @@ export function Landing() {
           </div>
           {PLAYGROUND && (
             <p className="site-cue">
-              No account. The board you make stays in this browser.
+              Five captures a day. No account. This board stays in your browser.
             </p>
           )}
         </section>
@@ -444,6 +445,59 @@ export function Landing() {
         </section>
 
         <Movement
+          id="install"
+          title="Install your own"
+          gloss="One prompt to a coding agent. Three steps in your terminal."
+        />
+        <section
+          className="site-card site-install"
+          aria-label="Install Capture yourself"
+        >
+          <p className="funding-card-label">Self-install</p>
+          <h2>Your board, your keys, your machine.</h2>
+          <p>
+            Paste this prompt into Claude Code, Codex, Hermes, or the coding
+            agent you already use. It installs Capture, then stops before the
+            model key.
+          </p>
+          <p className="site-install-maker">
+            How I run it: Capture stays on my always-on Mac and reaches my
+            phone privately through Tailscale.
+          </p>
+          <CopyPrompt />
+          <ol className="site-install-steps">
+            <li>
+              Get a free key from{" "}
+              <a
+                href="https://console.groq.com/keys"
+                target="_blank"
+                rel="noreferrer"
+              >
+                the Groq console
+              </a>
+              .
+            </li>
+            <li>
+              Run <code>npm run setup</code> in your own terminal. Paste the
+              key there, not into a chat message or this website.
+            </li>
+            <li>
+              Run <code>npm run dev</code>, then open{" "}
+              <code>http://localhost:3000</code>.
+            </li>
+          </ol>
+          <p className="site-install-links">
+            <a
+              href="https://github.com/glebbogachev00/capture/blob/main/SETUP.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Phone, hosting, and fallback-provider setup
+            </a>
+          </p>
+        </section>
+
+        <Movement
             id="05"
             title="Yours to keep"
           />
@@ -456,7 +510,7 @@ export function Landing() {
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
-              Sort a thought
+              {PLAYGROUND ? "Try 5 captures today" : "Open Capture"}
             </Link>
             {SHOW_SPONSOR && (
               <Link className="ghost site-ghost" href="/sponsor">

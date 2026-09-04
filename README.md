@@ -97,13 +97,19 @@ Needs Node 20 or newer. Two minutes, one key:
 git clone https://github.com/glebbogachev00/capture.git
 cd capture
 npm install
-cp .env.example .env.local
-# open .env.local, uncomment GROQ_API_KEY= and paste a key (free at console.groq.com), then:
+npm run setup       # prompts for your Groq key (free at console.groq.com/keys), writes .env.local
 npm run dev
 ```
 
 Then open http://localhost:3000. Nothing sorts until you add at least one
 model key.
+
+If you prefer to set the key by hand, copy the example file and edit it directly:
+
+```bash
+cp .env.example .env.local
+# uncomment GROQ_API_KEY= and paste your key, then: npm run dev
+```
 
 ## The full setup
 
@@ -131,9 +137,10 @@ own is a complete setup.
 | Order | Provider | Get a key | Notes |
 |---|---|---|---|
 | 1 | Groq | [console.groq.com/keys](https://console.groq.com/keys) | Very fast, generous free tier |
-| 2 | Mistral | [console.mistral.ai](https://console.mistral.ai) | Fast fallback once configured; test account/model access directly, and the chain falls through on 429s |
-| 3 | Google AI Studio | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Reliable free tier — the quality fallback |
-| 4 | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | Last resort — defaults to a `:free` model; paid models need a funded account |
+| 2 | Groq (second key) | [console.groq.com/keys](https://console.groq.com/keys) | Optional: `GROQ_API_KEY_2` doubles the daily allowance; same model, twice the headroom |
+| 3 | Mistral | [console.mistral.ai](https://console.mistral.ai) | Fast fallback once configured; test account/model access directly, and the chain falls through on 429s |
+| 4 | Google AI Studio | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Reliable free tier — the quality fallback |
+| 5 | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | Last resort — defaults to a `:free` model; paid models need a funded account |
 
 Model ids are overridable (`GROQ_MODEL`, `MISTRAL_MODEL`, `GEMINI_MODEL`,
 `OPENROUTER_MODEL`), so a retired model can be swapped without editing source.

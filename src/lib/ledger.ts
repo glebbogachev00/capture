@@ -47,6 +47,9 @@ export type CaptureEntry = {
    * threshold on its own. Absent on entries written before splits existed,
    * and on every ordinary capture, where the entry is the utterance. */
   captureId?: string;
+  /** Added by a backup/snapshot restore on this device. Restored history is
+   * visible in The Record but never spends the public playground allowance. */
+  restored?: boolean;
   /** Undone after it landed. The entry stays — the record is what was
       said — but it is counted out and shown folded. */
   undone?: boolean;

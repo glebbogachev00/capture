@@ -28,11 +28,18 @@ export type SaveDraftInput = {
   counterIntentions: string[];
 };
 
+export type CaptureOrigin = {
+  raw: string;
+  source: CaptureSource;
+  via?: string;
+  captureId?: string;
+};
+
 export type DraftOrigin = {
   /** The action this draft was converted from, if any — retired at save. */
   pendingSource?: string | null;
   /** The capture that opened this draft, if any — ledgered at save. */
-  capture?: { raw: string; source: CaptureSource; via?: string } | null;
+  capture?: CaptureOrigin | null;
 };
 
 export function applySaveDraft(
@@ -65,6 +72,7 @@ export function applySaveDraft(
   if (origin.capture) {
     next = withLedger(next, {
       id: ids.ledgerId,
+      captureId: origin.capture.captureId,
       at,
       raw: origin.capture.raw,
       clean: draft.expandedIntention,

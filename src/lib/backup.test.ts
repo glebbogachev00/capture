@@ -144,6 +144,24 @@ describe("restoreBackup", () => {
     expect(r.board.actions).toEqual([]);
   });
 
+  it("marks newly restored history so it cannot spend the local daily allowance", () => {
+    const incoming = backup({
+      ledger: [
+        {
+          id: "remote-ledger",
+          at: Date.now(),
+          raw: "captured elsewhere",
+          clean: "Captured elsewhere",
+          kind: "action",
+          source: "typed",
+          targetId: "a1",
+        } as never,
+      ],
+    });
+    const r = restoreBackup(incoming, board({}));
+    expect(r.board.ledger![0].restored).toBe(true);
+  });
+
   it("v2 carries the images through a restore", () => {
     const incoming = backupV2(
       { actions: [{ id: "a1", imgs: ["img-1"] } as never] },

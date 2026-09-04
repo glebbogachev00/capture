@@ -111,8 +111,6 @@ export function Capture() {
   const [pickingThread, setPickingThread] = useState(false);
   /* The record opens from the masthead count — the line that is always on
      screen becomes the door to what it summarises. */
-
-
   /* Grouped view of the Actions tab — a lens, not a structure: nothing is
      written to the board, and toggling off restores the flat list untouched.
      Remembered across visits; read in an effect so hydration stays clean. */
@@ -134,6 +132,7 @@ export function Capture() {
      surface of the screen. */
   const {
     data,
+    trial,
     loaded,
     corrupt,
     text,
@@ -440,7 +439,7 @@ export function Capture() {
   return (
     <div className="capture-root">
       <div className="capture-wrap">
-        {PLAYGROUND && <PlaygroundNotice />}
+        {PLAYGROUND && <PlaygroundNotice trial={trial} />}
       {/* Only once the board has loaded: the first-sight check must see
           the real capture count, not the empty board of a loading one. */}
         <div className="capture-head">
@@ -649,7 +648,7 @@ export function Capture() {
             )}
             <div className="cap-hint">
               {PLAYGROUND
-                ? "say it messy — it gets sorted"
+                ? trial?.hint
                 : transcribing
                   ? "transcribing…"
                   : listening
@@ -661,6 +660,7 @@ export function Capture() {
             <button
               className="icon-btn"
               onClick={openDistill}
+              disabled={!!trial?.exhausted}
               aria-label="Distill instead of capture"
               title="Distill instead of capture"
             >
@@ -672,7 +672,7 @@ export function Capture() {
                 submit(dictatedRef.current);
                 dictatedRef.current = false;
               }}
-              disabled={!!busy || (!text.trim() && !pics.length)}
+              disabled={!!busy || (!text.trim() && !pics.length) || !!trial?.exhausted}
             >
               {busy ? "…" : "Capture"}
             </button>

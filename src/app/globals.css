@@ -1445,6 +1445,90 @@ body {
   color: var(--ink);
 }
 
+/* The maker's real setup turns "self-hosted" into a concrete example,
+   without making an always-on Mac or Tailscale part of the quickstart. */
+.site-card p.site-install-maker {
+  margin-top: 12px;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+/* CopyPrompt — the install prompt block on the landing page. */
+.copy-prompt {
+  margin: 18px 0 10px;
+}
+.copy-prompt-text {
+  display: block;
+  margin: 0 0 14px;
+  padding: 16px 18px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  /* Selectable by mouse when clipboard fails. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+.copy-prompt-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.copy-prompt-ok {
+  font-size: 13px;
+  color: var(--muted);
+}
+.copy-prompt-err {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Three manual steps below the copyable agent prompt. */
+.site-install-steps {
+  margin: 18px 0 0;
+  padding-left: 22px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.site-install-steps li + li {
+  margin-top: 8px;
+}
+.site-install-steps code {
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.site-install-steps a,
+.site-install-links a {
+  color: var(--accent);
+}
+
+/* Full setup path after the three local steps. */
+.site-install-links {
+  margin: 18px 0 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.site-install-links a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 1px;
+}
+.site-install-links a:hover {
+  color: var(--ink);
+}
+
 /* inline editing */
 .act-edit {
   width: 100%;
@@ -4170,8 +4254,10 @@ body {
 .site-wrap > .site-note       { order: 12; }
 .site-wrap > [data-move="04b"]{ order: 13; }
 .site-wrap > .site-day        { order: 14; }
-.site-wrap > [data-move="05"] { order: 15; }
-.site-wrap > .site-proof      { order: 16; }
+.site-wrap > [data-move="install"] { order: 15; }
+.site-wrap > .site-install    { order: 16; }
+.site-wrap > [data-move="05"] { order: 17; }
+.site-wrap > .site-proof      { order: 18; }
 
 /* Polish, once the sections exist.
 
