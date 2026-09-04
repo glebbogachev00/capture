@@ -10,22 +10,37 @@
 
 let value = Date.now();
 const listeners = new Set<() => void>();
-let timer: ReturnType<typeof setInterval> | null = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
 
 const TICK = 60_000;
+
+function scheduleTick() {
+  if (timer || !listeners.size) return;
+  const delay = TICK - (Date.now() % TICK);
+  timer = setTimeout(() => {
+    timer = null;
+    value = Date.now();
+    for (const listener of [...listeners]) {
+      try {
+        listener();
+      } catch {
+        /* One subscriber cannot stop the shared clock. */
+      }
+    }
+    scheduleTick();
+  }, delay);
+}
 
 export function subscribeToClock(onChange: () => void) {
   listeners.add(onChange);
   if (!timer) {
-    timer = setInterval(() => {
-      value = Date.now();
-      listeners.forEach((l) => l());
-    }, TICK);
+    value = Date.now();
+    scheduleTick();
   }
   return () => {
     listeners.delete(onChange);
     if (!listeners.size && timer) {
-      clearInterval(timer);
+      clearTimeout(timer);
       timer = null;
     }
   };
