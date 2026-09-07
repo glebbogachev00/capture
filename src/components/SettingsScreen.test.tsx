@@ -49,6 +49,7 @@ describe("SettingsScreen disclosures", () => {
     renderSettings();
 
     expect(screen.getByRole("button", { name: "Open The Record" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show Signature" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show Data and sync" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show Restore" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show Agent handoff" })).toBeTruthy();
@@ -76,6 +77,16 @@ describe("SettingsScreen disclosures", () => {
 
   it("keeps card signatures off by default and changes them from Settings", () => {
     const { onProfileChange } = renderSettings();
+    const description =
+      "Adds your personal tag to the bottom of Intention and Thread cards.";
+    expect(screen.queryByText(description)).toBeNull();
+    expect(
+      screen.queryByRole("switch", {
+        name: "Show signature on intentions and threads",
+      })
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show Signature" }));
+    expect(screen.getByText(description)).toBeTruthy();
     const toggle = screen.getByRole("switch", {
       name: "Show signature on intentions and threads",
     });

@@ -889,7 +889,7 @@ export function SettingsScreen({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [openSection, setOpenSection] = useState<
-    "data" | "restore" | "agent" | "principles" | "support" | null
+    "signature" | "data" | "restore" | "agent" | "principles" | "support" | null
   >(null);
   const [reporting, setReporting] = useState(false);
   const activePrinciples = principles.filter((p) => p.enabled).length;
@@ -920,26 +920,37 @@ export function SettingsScreen({
           </button>
         </div>
 
-        <div className="settings-section settings-signature-setting">
-          <span className="settings-signature-copy">
-            <span className="record-disclosure-title">Signature</span>
-            <span className="record-disclosure-meta">Intentions and threads</span>
-          </span>
-          <button
-            className={"rule-switch" + (profile?.showSignature ? " on" : "")}
-            role="switch"
-            aria-checked={!!profile?.showSignature}
-            aria-label="Show signature on intentions and threads"
-            onClick={() =>
-              void onProfileChange((current) => ({
-                ...current,
-                showSignature: !current.showSignature,
-              }))
-            }
-          >
-            <span />
-          </button>
-        </div>
+        <SettingsDisclosure
+          title="Signature"
+          meta={profile?.showSignature ? "on" : "off"}
+          open={openSection === "signature"}
+          onToggle={() => toggleSection("signature")}
+        >
+          <ul className="settings-principles">
+            <li className={profile?.showSignature ? "" : "off"}>
+              <span className="settings-principle-copy">
+                <span className="settings-principle-name">Show personal tag</span>
+                <span className="settings-principle-description">
+                  Adds your personal tag to the bottom of Intention and Thread cards.
+                </span>
+              </span>
+              <button
+                className={"rule-switch" + (profile?.showSignature ? " on" : "")}
+                role="switch"
+                aria-checked={!!profile?.showSignature}
+                aria-label="Show signature on intentions and threads"
+                onClick={() =>
+                  void onProfileChange((current) => ({
+                    ...current,
+                    showSignature: !current.showSignature,
+                  }))
+                }
+              >
+                <span />
+              </button>
+            </li>
+          </ul>
+        </SettingsDisclosure>
 
         <SettingsDisclosure
           title="Data and sync"
