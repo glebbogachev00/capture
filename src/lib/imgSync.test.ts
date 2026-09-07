@@ -62,6 +62,18 @@ describe("referencedImageIds", () => {
     expect(referencedImageIds(b)).toEqual(["cov1"]);
   });
 
+  it("collects the synced profile photo", () => {
+    const b = board({
+      profile: {
+        name: "Gleb",
+        imageId: "profile-photo",
+        updatedAt: 100,
+      },
+    });
+
+    expect(referencedImageIds(b)).toEqual(["profile-photo"]);
+  });
+
   it("ignores a tone cover, which carries no photo", () => {
     const b = board({
       threads: [

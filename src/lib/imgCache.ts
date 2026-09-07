@@ -25,6 +25,11 @@ import { del, get, set } from "./storage";
  */
 
 const mem = new Map<string, string>();
+const listeners = new Map<string, Set<() => void>>();
+
+function notify(id: string) {
+  for (const listener of listeners.get(id) ?? []) listener();
+}
 
 /** ~40 photos × a few hundred KB ≈ tens of MB, the most a tab should carry. */
 const CAP = 40;
@@ -52,7 +57,10 @@ export async function imgLoad(id: string): Promise<string | null> {
   const hit = imgNow(id);
   if (hit) return hit;
   const stored = await get(IMG(id));
-  if (stored) remember(id, stored);
+  if (stored) {
+    remember(id, stored);
+    notify(id);
+  }
   return stored ?? null;
 }
 
@@ -61,6 +69,19 @@ export async function imgLoad(id: string): Promise<string | null> {
 export async function imgSave(id: string, src: string): Promise<void> {
   remember(id, src);
   await set(IMG(id), src);
+  notify(id);
+}
+
+/** Re-render a mounted consumer when sync supplies bytes for an id it
+    already knows. The unsubscribe keeps long boards from retaining cards. */
+export function onImageAvailable(id: string, listener: () => void): () => void {
+  const own = listeners.get(id) ?? new Set<() => void>();
+  own.add(listener);
+  listeners.set(id, own);
+  return () => {
+    own.delete(listener);
+    if (!own.size) listeners.delete(id);
+  };
 }
 
 /** Delete bytes. Memory goes first, so a copy can never outlive the store. */
@@ -76,4 +97,5 @@ export async function imgDrop(id: string): Promise<void> {
 /** Test hook. */
 export function _clearImgCache(): void {
   mem.clear();
+  listeners.clear();
 }

@@ -28,6 +28,9 @@ export function referencedImageIds(board: Board): string[] {
     const cover = parseCover(t.cover);
     if (cover?.kind === "img") ids.add(cover.id);
   }
+  /* A profile photo uses the same immutable-image path as every captured
+     picture. The board syncs only this id; reconcile carries the bytes. */
+  if (board.profile?.imageId) ids.add(board.profile.imageId);
   return [...ids];
 }
 

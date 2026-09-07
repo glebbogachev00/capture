@@ -180,6 +180,9 @@ export function restoreBackup(parsed: unknown, board: Board): RestoreResult {
     board.historyEpoch ?? 0,
     incoming.historyEpoch ?? 0
   );
+  /* Restore is add-only. Keep this device's profile when it has one; an
+     older backup may supply a profile only when this board has none. */
+  merged.profile = board.profile ?? incoming.profile;
 
   return { board: merged, ...counts, images };
 }

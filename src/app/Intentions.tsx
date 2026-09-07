@@ -19,11 +19,20 @@ import {
   X,
   MoreHorizontal,
 } from "lucide-react";
-import { type Intention, type Principle, type Thread, fmt, pad } from "@/lib/model";
+import {
+  type Intention,
+  type Principle,
+  type ProfileIdentity,
+  type ProfileUpdate,
+  type Thread,
+  fmt,
+  pad,
+} from "@/lib/model";
 import { snapshotLabel } from "@/lib/snapshots";
 import type { RulePreference } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { ReportBugForm } from "@/components/ReportBug";
+import { ProfileSignature } from "@/components/ProfileSignature";
 import { CaptureProfile } from "@/components/CaptureProfile";
 import { PLAYGROUND } from "@/lib/playground";
 import type { CaptureEntry } from "@/lib/ledger";
@@ -224,9 +233,11 @@ export function IntentionDraft({
 export function IntentionCard({
   intention,
   onOpen,
+  profile,
 }: {
   intention: Intention;
   onOpen: () => void;
+  profile?: ProfileIdentity;
 }) {
   return (
     <button className="tcard" onClick={onOpen}>
@@ -238,6 +249,7 @@ export function IntentionCard({
         {intention.counterIntentions.length} counter ·{" "}
         {fmt(intention.at)}
       </div>
+      <ProfileSignature profile={profile} />
     </button>
   );
 }
@@ -489,6 +501,9 @@ export function RecordScreen({
   onToggleRule,
   threads,
   onOpenThread,
+  profile,
+  onProfileChange,
+  profileMigrationReady,
   onRestore,
   wrap,
   onWrapSeen,
@@ -511,6 +526,9 @@ export function RecordScreen({
   /** The threads used for both landing names and the recurring profile reading. */
   threads: Thread[];
   onOpenThread: (id: string) => void;
+  profile?: ProfileIdentity;
+  onProfileChange?: (profile: ProfileUpdate) => Promise<void>;
+  profileMigrationReady?: boolean;
   /** Put an undone capture's words back in the composer — the way back for
       anything discarded: said again, sorted fresh. */
   onRestore: (said: string) => void;
@@ -640,6 +658,9 @@ export function RecordScreen({
               threads={threads}
               onOpenThread={onOpenThread}
               defaults={PROFILE_DEFAULTS}
+              profile={profile}
+              onProfileChange={onProfileChange}
+              migrationReady={profileMigrationReady}
             />
           </div>
 
@@ -836,6 +857,8 @@ export function SettingsScreen({
   onSyncNow,
   onOpenRecord,
   ledgerCount,
+  profile,
+  onProfileChange,
 }: {
   principles: Principle[];
   counts: { actions: number; threads: number; intentions: number };
@@ -860,6 +883,8 @@ export function SettingsScreen({
       the header count is hidden. */
   onOpenRecord: () => void;
   ledgerCount: number;
+  profile?: ProfileIdentity;
+  onProfileChange: (profile: ProfileUpdate) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -892,6 +917,27 @@ export function SettingsScreen({
             <span className="record-disclosure-title">The Record</span>
             <span className="record-disclosure-meta">{ledgerCount} said</span>
             <ChevronRight size={21} strokeWidth={1.7} />
+          </button>
+        </div>
+
+        <div className="settings-section settings-signature-setting">
+          <span className="settings-signature-copy">
+            <span className="record-disclosure-title">Signature</span>
+            <span className="record-disclosure-meta">Intentions and threads</span>
+          </span>
+          <button
+            className={"rule-switch" + (profile?.showSignature ? " on" : "")}
+            role="switch"
+            aria-checked={!!profile?.showSignature}
+            aria-label="Show signature on intentions and threads"
+            onClick={() =>
+              void onProfileChange((current) => ({
+                ...current,
+                showSignature: !current.showSignature,
+              }))
+            }
+          >
+            <span />
           </button>
         </div>
 

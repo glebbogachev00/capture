@@ -25,7 +25,7 @@ import type { Board } from "./model";
  *   - History is append-only: the other device's entries stay, and only
  *     this capture's own entries are marked undone — marked, never
  *     deleted, because the record is what was said.
- *   - Wraps, completions, and the history epoch are none of this
+ *   - Wraps, completions, the profile, and the history epoch are none of this
  *     capture's business and merge through, never rebuild.
  */
 
@@ -110,6 +110,7 @@ export function restoreCapture(
       snap.board.completions ?? [],
       live.completions ?? []
     ),
+    profile: live.profile,
     historyEpoch: Math.max(
       snap.board.historyEpoch ?? 0,
       live.historyEpoch ?? 0

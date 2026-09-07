@@ -12,7 +12,8 @@ import { memo, useEffect, useState } from "react";
 import { Check, MoreHorizontal } from "lucide-react";
 import { imgLoad, imgNow } from "@/lib/imgCache";
 import { parseCover, toneColour, type Cover } from "@/lib/cover";
-import { DAY, GRACE, fmt, fmtDue, left, type Action, type ShelfLife, type Thread } from "@/lib/model";
+import { DAY, GRACE, fmt, fmtDue, left, type Action, type ProfileIdentity, type ShelfLife, type Thread } from "@/lib/model";
+import { ProfileSignature } from "./ProfileSignature";
 
 const TICK_MS = 420;
 
@@ -331,12 +332,14 @@ export function TCard({
   t,
   resting,
   landed,
+  profile,
   onOpen,
 }: {
   t: Thread;
   resting?: boolean;
   /** This thread is where the last capture went — wash it once. */
   landed?: boolean;
+  profile?: ProfileIdentity;
   onOpen: () => void;
 }) {
   const last = t.frags.at(-1);
@@ -383,6 +386,7 @@ export function TCard({
         {t.frags.length} layer{t.frags.length > 1 ? "s" : ""}
         {last ? " · last " + fmt(last.at) : ""}
       </div>
+      <ProfileSignature profile={profile} />
     </button>
   );
 }

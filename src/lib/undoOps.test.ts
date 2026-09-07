@@ -92,6 +92,21 @@ describe("restoring after an undo", () => {
     expect(out.historyEpoch).toBe(3);
   });
 
+  it("keeps the current synced profile when undoing an older capture", () => {
+    const snap = { board: base(), addedIds: new Set<string>() };
+    const live: Board = {
+      ...base(),
+      profile: {
+        name: "Gleb",
+        imageId: "profile-photo",
+        showSignature: true,
+        updatedAt: NOW - 1,
+      },
+    };
+
+    expect(restoreCapture(live, snap, NOW).profile).toEqual(live.profile);
+  });
+
   it("a foreign fragment inside a snapped thread survives", () => {
     const thread = (frags: { id: string; text: string; at: number }[]) =>
       ({ id: "t1", name: "T", at: 1, frags }) as never;

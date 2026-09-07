@@ -141,6 +141,11 @@ export function mergeBoards(a: Board, b: Board): Board {
   const empty = { ledger: [], corrections: [], wraps: [], completions: [] };
   const ha = ea >= eb ? a : empty;
   const hb = eb >= ea ? b : empty;
+  const profile = !a.profile
+    ? b.profile
+    : !b.profile || ts(a.profile) >= ts(b.profile)
+      ? a.profile
+      : b.profile;
   return {
     historyEpoch: Math.max(ea, eb),
     actions: mergeList(a.actions, b.actions, (x, y) => y.at - x.at),
@@ -156,6 +161,7 @@ export function mergeBoards(a: Board, b: Board): Board {
     wraps: mergeWraps(ha.wraps ?? [], hb.wraps ?? []),
     /* Ticks are union by action id — recorded once, never changed. */
     completions: mergeCompletions(ha.completions ?? [], hb.completions ?? []),
+    profile,
   };
 }
 
@@ -234,6 +240,12 @@ export function boardSignature(board: Board, tombstones: Tombstone[]): string {
   }
   for (const i of board.intentions) parts.push(`i:${i.id}:${ts(i)}`);
   for (const p of board.principles) parts.push(`p:${p.id}:${p.updatedAt ?? 0}`);
+  if (board.profile)
+    parts.push(
+      `P:${board.profile.updatedAt ?? 0}:${hashOf(board.profile.name)}:${
+        board.profile.imageId ?? ""
+      }:${board.profile.showSignature ? 1 : 0}`
+    );
   for (const tb of tombstones) parts.push(`x:${tb.kind}:${tb.id}:${tb.deletedAt}`);
 
   /* History counts as change. It did not, and the omission was invisible
@@ -314,6 +326,14 @@ export function stampChanges(
     updatedAt: x.updatedAt ?? x.at ?? now,
   });
   const same = <T>(a: T, b: T) => JSON.stringify(a) === JSON.stringify(b);
+
+  const profile = !next.profile
+    ? undefined
+    : !prev.profile
+      ? fresh(next.profile)
+      : same(prev.profile, next.profile)
+        ? next.profile
+        : stamp(next.profile);
 
   /* Actions. */
   const actions = next.actions.map((a) => {
@@ -418,6 +438,7 @@ export function stampChanges(
       corrections: next.corrections,
       wraps: next.wraps,
       completions: next.completions,
+      profile,
     },
     tombstones,
   };

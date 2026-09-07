@@ -23,7 +23,7 @@ import {
   type Action,
   type Board,
   type Frag,
-  type Intention,
+  type Intention, type ProfileDraft, type ProfileUpdate,
   type ShelfLife,
   type Thread,
   DORMANT,
@@ -646,11 +646,11 @@ export function useBoard(now: number) {
       );
       if (!res.ok) return false;
       const remote = (await res.json()) as SyncStore & { unchanged?: boolean };
-      /* Nothing new on the hub since we last looked: the poll is over before
-         any parse-and-merge work begins. Local edits still push on their own
-         debounce, so skipping here loses nothing. */
+      /* Nothing new in the board document since the last pull. Skip the
+         parse-and-merge work, but retry referenced images because their bytes
+         arrive separately and do not move the board revision. */
       if (remote.unchanged) {
-        setSync({ ok: true, at: stamp() });
+        setSync({ ok: true, at: stamp() }); void reconcileImages(latest.current);
         return false;
       }
       hubRev.current = remote.rev ?? null;
@@ -3626,21 +3626,12 @@ export function useBoard(now: number) {
          always wins", same rule as the board merge), and a stray id the
          board doesn't reference is skipped. */
       if (result.images) {
-        const boardIds = new Set<string>();
-        for (const a of result.board.actions)
-          for (const i of a.imgs || []) boardIds.add(i);
-        for (const t of result.board.threads)
-          for (const f of t.frags) for (const i of f.imgs || []) boardIds.add(i);
-        const preexisting = new Set<string>();
-        for (const a of latest.current.actions)
-          for (const i of a.imgs || []) preexisting.add(i);
-        for (const t of latest.current.threads)
-          for (const f of t.frags)
-            for (const i of f.imgs || []) preexisting.add(i);
+        const boardIds = new Set(referencedImageIds(result.board));
+        const preexisting = new Set(referencedImageIds(latest.current));
         await Promise.all(
           Object.entries(result.images).map(([id, url]) =>
             boardIds.has(id) && !preexisting.has(id)
-              ? set(IMG(id), url).catch(() => {
+              ? imgSave(id, url).catch(() => {
                   /* photo skipped; board still restored */
                 })
               : Promise.resolve()
@@ -4316,7 +4307,14 @@ export function useBoard(now: number) {
     discardDraft,
     draftToThread,
     refreshSummary,
-    updateIntention,
+    updateIntention, updateProfile: (update: ProfileUpdate) => {
+      const p = latest.current.profile;
+      const current: ProfileDraft = {
+        name: p?.name ?? "", imageId: p?.imageId,
+        showSignature: p?.showSignature,
+      };
+      return commit({ ...latest.current, profile: typeof update === "function" ? update(current) : update });
+    },
     deleteIntention,
     makeIntention,
     logout,

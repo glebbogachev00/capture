@@ -6,9 +6,10 @@
  * program: Capture.tsx keeps orchestration only.
  */
 
-import { fmt, left } from "@/lib/model";
+import { fmt, left, type ProfileIdentity } from "@/lib/model";
 import type { Hits } from "@/lib/search";
 import { IntentionCard } from "@/app/Intentions";
+import { ProfileSignature } from "./ProfileSignature";
 
 /**
  * What a query turned up, across all three kinds at once.
@@ -22,11 +23,13 @@ export function SearchResults({
   now,
   onOpenThread,
   onOpenIntention,
+  profile,
 }: {
   hits: Hits;
   now: number;
   onOpenThread: (id: string, fragId?: string | null) => void;
   onOpenIntention: (id: string) => void;
+  profile?: ProfileIdentity;
 }) {
   if (!hits.total) {
     return (
@@ -88,6 +91,7 @@ export function SearchResults({
                     ? `${frags.length} matching note${frags.length === 1 ? "" : "s"}`
                     : "matches the thread itself"}
                 </div>
+                <ProfileSignature profile={profile} />
               </button>
               {frags.map((f) => (
                 <button
@@ -115,6 +119,7 @@ export function SearchResults({
               key={i.id}
               intention={i}
               onOpen={() => onOpenIntention(i.id)}
+              profile={profile}
             />
           ))}
         </>

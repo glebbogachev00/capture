@@ -72,6 +72,30 @@ describe("mergeBoards", () => {
     expect(out.actions[0].text).toBe("a");
   });
 
+  it("adopts a newer profile from the other device", () => {
+    const desktop = board({
+      profile: {
+        name: "Desktop name",
+        imageId: "desktop-photo",
+        showSignature: false,
+        updatedAt: 100,
+      },
+    });
+    const phone = board({
+      profile: {
+        name: "Gleb",
+        imageId: "phone-photo",
+        showSignature: true,
+        updatedAt: 200,
+      },
+    });
+
+    const merged = mergeBoards(desktop, phone);
+
+    expect(merged.profile).toEqual(phone.profile);
+    expect(boardSignature(merged, [])).not.toBe(boardSignature(desktop, []));
+  });
+
   it("merges fragments structurally — both devices' notes on the same thread survive", () => {
     const a = board({
       threads: [thread("t1", [frag("f1", { text: "phone note" })])],

@@ -1,18 +1,27 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
-import type { Thread } from "@/lib/model";
 import {
+  type ProfileDraft,
+  type ProfileIdentity,
+  type ProfileUpdate,
+  type Thread,
+  uid,
+} from "@/lib/model";
+import {
+  EMPTY_PROFILE_IDENTITY,
   parseProfileIdentity,
   recurringThreads,
-  type ProfileIdentity,
+  type ProfileDefaults,
 } from "@/lib/profile";
+import { imgSave } from "@/lib/imgCache";
+import { useStoredImage } from "@/hooks/useStoredImage";
 import { shrinkFile } from "@/lib/shrink";
 
-function readSaved(key: string, defaults: ProfileIdentity): ProfileIdentity {
-  if (typeof window === "undefined") return defaults;
-  return parseProfileIdentity(window.localStorage.getItem(key), defaults);
+function readSaved(key: string): ProfileDefaults {
+  if (typeof window === "undefined") return EMPTY_PROFILE_IDENTITY;
+  return parseProfileIdentity(window.localStorage.getItem(key));
 }
 
 function readOpen(key: string): boolean {
@@ -33,21 +42,65 @@ export function CaptureProfile({
   threads,
   onOpenThread,
   defaults,
+  profile,
+  onProfileChange,
+  migrationReady = true,
   storageKey = "capture:profile:v1",
 }: {
   threads: Thread[];
   onOpenThread: (id: string) => void;
-  defaults: ProfileIdentity;
+  defaults: ProfileDefaults;
+  profile?: ProfileIdentity;
+  onProfileChange?: (profile: ProfileUpdate) => Promise<void>;
+  migrationReady?: boolean;
+  /** Kept for the open preference and one-time migration of v1 local data. */
   storageKey?: string;
 }) {
   const [open, setOpen] = useState(() => readOpen(storageKey));
-  const [identity, setIdentity] = useState(() => readSaved(storageKey, defaults));
+  const [legacy] = useState(() => readSaved(storageKey));
+  const storedImage = useStoredImage(profile?.imageId);
+  const imageSrc = profile?.imageId
+    ? storedImage
+    : legacy.image || defaults.image;
   const fileRef = useRef<HTMLInputElement>(null);
+  const migrationStarted = useRef(false);
   const recurring = useMemo(() => recurringThreads(threads, 3), [threads]);
+  const identity: ProfileDraft = {
+    name: profile?.name ?? (legacy.name || defaults.name),
+    imageId: profile?.imageId,
+    showSignature: profile?.showSignature ?? false,
+  };
 
-  const saveIdentity = (next: ProfileIdentity) => {
-    setIdentity(next);
-    window.localStorage.setItem(storageKey, JSON.stringify(next));
+
+  /* A profile created before board sync lived only in localStorage. Move it
+     once into the board and put its photo bytes on the normal image path. */
+  useEffect(() => {
+    if (
+      migrationStarted.current ||
+      !migrationReady ||
+      profile ||
+      !onProfileChange ||
+      (!legacy.name && !legacy.image)
+    )
+      return;
+    migrationStarted.current = true;
+    void (async () => {
+      const imageId = legacy.image ? uid() : undefined;
+      if (imageId) await imgSave(imageId, legacy.image);
+      await onProfileChange((current) =>
+        current.name || current.imageId || current.showSignature !== undefined
+          ? current
+          : { name: legacy.name, imageId, showSignature: false }
+      );
+    })().catch(() => {
+      /* Keep the local copy so the next mount can try the migration again. */
+      migrationStarted.current = false;
+    });
+  }, [legacy, migrationReady, onProfileChange, profile, storageKey]);
+
+
+  const saveIdentity = (next: ProfileDraft) => {
+    if (onProfileChange) void onProfileChange(next);
   };
 
   const toggle = () => {
@@ -58,10 +111,12 @@ export function CaptureProfile({
 
   const pickImage = async (files: FileList | null) => {
     const file = files?.[0];
-    if (!file) return;
+    if (!file || !onProfileChange) return;
     try {
       const image = await shrinkFile(file);
-      saveIdentity({ ...identity, image });
+      const imageId = uid();
+      await imgSave(imageId, image);
+      await onProfileChange((current) => ({ ...current, imageId }));
     } catch {
       /* Keep the current portrait when the device cannot read the file. */
     }
@@ -89,16 +144,13 @@ export function CaptureProfile({
             <button
               className="record-profile-photo"
               onClick={() => fileRef.current?.click()}
-              aria-label={identity.image ? "Change profile image" : "Add profile image"}
+              aria-label={imageSrc ? "Change profile image" : "Add profile image"}
             >
-              {identity.image ? (
+              {imageSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={identity.image} alt="" />
+                <img src={imageSrc} alt="" />
               ) : (
-                <>
-                  <ImageIcon size={18} strokeWidth={1.7} />
-                  <span>Add photo</span>
-                </>
+                <ImageIcon size={20} strokeWidth={1.6} />
               )}
             </button>
             <input

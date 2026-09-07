@@ -227,7 +227,7 @@ export function Capture() {
     discardDraft,
     draftToThread,
     refreshSummary,
-    updateIntention,
+    updateIntention, updateProfile,
     deleteIntention,
     makeIntention,
     logout,
@@ -874,7 +874,7 @@ export function Capture() {
             onBack={() => setShowRecord(false)}
             rules={learnedRules}
             onToggleRule={(key, enabled) => void toggleLearnedRule(key, enabled)}
-            threads={data.threads}
+            threads={data.threads} profile={data.profile} onProfileChange={updateProfile} profileMigrationReady={PLAYGROUND || sync?.ok === true}
             onRestore={(said) => {
               setText((x) => (x ? x + " " : "") + said);
               setShowRecord(false);
@@ -916,7 +916,7 @@ export function Capture() {
               setShowSettings(false);
               setShowRecord(true);
             }}
-            ledgerCount={(data.ledger ?? []).length}
+            ledgerCount={(data.ledger ?? []).length} profile={data.profile} onProfileChange={updateProfile}
           />
         ) : draft ? (
           <IntentionDraft
@@ -1010,7 +1010,7 @@ export function Capture() {
                   setOpen(id);
                   setOpenFrag(fragId || null);
                 }}
-                onOpenIntention={(id) => setOpenIntention(id)}
+                onOpenIntention={(id) => setOpenIntention(id)} profile={data.profile}
               />
             ) : showTangle && tangle ? (
               <TangleReview
@@ -1155,7 +1155,7 @@ export function Capture() {
                   <TCard
                     key={t.id}
                     t={t}
-                    landed={landedIds.includes(t.id)}
+                    landed={landedIds.includes(t.id)} profile={data.profile}
                     onOpen={() => setOpen(t.id)}
                   />
                 ))}
@@ -1174,7 +1174,7 @@ export function Capture() {
                         <TCard
                           key={t.id}
                           t={t}
-                          resting
+                          resting profile={data.profile}
                           onOpen={() => setOpen(t.id)}
                         />
                       ))}
@@ -1206,7 +1206,7 @@ export function Capture() {
                   <IntentionCard
                     key={i.id}
                     intention={i}
-                    onOpen={() => setOpenIntention(i.id)}
+                    onOpen={() => setOpenIntention(i.id)} profile={data.profile}
                   />
                 ))}
                 <button

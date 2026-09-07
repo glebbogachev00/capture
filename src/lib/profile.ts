@@ -1,22 +1,23 @@
 import type { Thread } from "./model";
 
-export type ProfileIdentity = {
+/** Environment defaults and the legacy local-only profile shape. */
+export type ProfileDefaults = {
   name: string;
   image: string;
 };
 
-export const EMPTY_PROFILE_IDENTITY: ProfileIdentity = {
+export const EMPTY_PROFILE_IDENTITY: ProfileDefaults = {
   name: "",
   image: "",
 };
 
 export function parseProfileIdentity(
   saved: string | null,
-  defaults: ProfileIdentity = EMPTY_PROFILE_IDENTITY
-): ProfileIdentity {
+  defaults: ProfileDefaults = EMPTY_PROFILE_IDENTITY
+): ProfileDefaults {
   if (!saved) return defaults;
   try {
-    const value = JSON.parse(saved) as Partial<ProfileIdentity>;
+    const value = JSON.parse(saved) as Partial<ProfileDefaults>;
     return {
       name: typeof value.name === "string" ? value.name : defaults.name,
       image: typeof value.image === "string" ? value.image : defaults.image,

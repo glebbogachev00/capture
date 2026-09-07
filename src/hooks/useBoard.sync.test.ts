@@ -5,6 +5,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { set } from "@/lib/storage";
 import { KEY, type Board } from "@/lib/model";
 import { useBoard } from "./useBoard";
+import { imgLoad } from "@/lib/imgCache";
 
 /**
  * The hook itself, running — not a grep of its source.
@@ -167,6 +168,116 @@ describe("the real hook, pushing to the real seam", () => {
     await waitFor(() => expect(result.current.sync?.ok).toBe(true));
 
     expect(result.current.data).toBe(afterEdit);
+    unmount();
+  });
+
+  it("pushes a profile edit through the board sync path", async () => {
+    const { result, unmount } = renderHook(() => useBoard(T0 + 60_000));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+
+    await act(async () => {
+      await result.current.updateProfile({
+        name: "Gleb",
+        imageId: "profile-photo",
+        showSignature: true,
+      });
+    });
+
+    await waitFor(() => expect(sync.posts).toHaveLength(1), {
+      timeout: 4000,
+    });
+    expect(sync.posts[0].body.board.profile).toMatchObject({
+      name: "Gleb",
+      imageId: "profile-photo",
+      showSignature: true,
+    });
+
+    await act(async () => sync.release());
+    unmount();
+  });
+
+  it("retries a missing profile photo when the board revision is unchanged", async () => {
+    sync.restore();
+    const withProfile = {
+      ...seedBoard(),
+      profile: {
+        name: "Gleb",
+        imageId: "retry-profile-photo",
+        showSignature: true,
+        updatedAt: T0,
+      },
+    };
+    await set(KEY, JSON.stringify(withProfile));
+    let syncGets = 0;
+    let imageGets = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/img/retry-profile-photo")) {
+        imageGets++;
+        return imageGets === 1
+          ? new Response("", { status: 503 })
+          : new Response(
+              JSON.stringify({ src: "data:image/webp;base64,RETRY" }),
+              { status: 200, headers: { "Content-Type": "application/json" } }
+            );
+      }
+      if (url.includes("/api/sync") && (!init || init.method !== "POST")) {
+        syncGets++;
+        return new Response(
+          JSON.stringify(
+            syncGets === 1
+              ? { board: withProfile, tombstones: [], rev: 1 }
+              : { unchanged: true, rev: 1 }
+          ),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      return new Response("", { status: 503 });
+    }) as typeof fetch;
+
+    const { unmount } = renderHook(() => useBoard(T0 + 60_000));
+    await waitFor(() => expect(imageGets).toBe(1));
+
+    act(() => window.dispatchEvent(new Event("focus")));
+
+    await waitFor(() => expect(syncGets).toBe(2));
+    await waitFor(() => expect(imageGets).toBe(2));
+    unmount();
+  });
+
+  it("restores profile photo bytes from a Capture backup", async () => {
+    const { result, unmount } = renderHook(() => useBoard(T0 + 60_000));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    const src = "data:image/webp;base64,PROFILE-BACKUP";
+    const file = {
+      name: "capture-backup.json",
+      text: async () =>
+        JSON.stringify({
+          app: "capture",
+          version: 2,
+          exportedAt: new Date(T0).toISOString(),
+          board: {
+            actions: [],
+            threads: [],
+            intentions: [],
+            principles: [],
+            ledger: [],
+            corrections: [],
+            profile: {
+              name: "Gleb",
+              imageId: "backup-profile-photo",
+              showSignature: true,
+              updatedAt: T0,
+            },
+          },
+          images: { "backup-profile-photo": src },
+        }),
+    } as File;
+
+    await act(async () => result.current.restoreFromFile(file));
+
+    expect(result.current.data.profile?.imageId).toBe("backup-profile-photo");
+    expect(await imgLoad("backup-profile-photo")).toBe(src);
     unmount();
   });
 });

@@ -16,6 +16,7 @@ afterEach(cleanup);
 
 function renderSettings() {
   const onToggle = vi.fn();
+  const onProfileChange = vi.fn();
   render(
     <SettingsScreen
       principles={[principle]}
@@ -36,9 +37,11 @@ function renderSettings() {
       onSyncNow={() => {}}
       onOpenRecord={() => {}}
       ledgerCount={12}
+      profile={undefined}
+      onProfileChange={onProfileChange}
     />
   );
-  return { onToggle };
+  return { onToggle, onProfileChange };
 }
 
 describe("SettingsScreen disclosures", () => {
@@ -69,5 +72,20 @@ describe("SettingsScreen disclosures", () => {
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(toggle);
     expect(onToggle).toHaveBeenCalledWith(principle.id);
+  });
+
+  it("keeps card signatures off by default and changes them from Settings", () => {
+    const { onProfileChange } = renderSettings();
+    const toggle = screen.getByRole("switch", {
+      name: "Show signature on intentions and threads",
+    });
+
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(toggle);
+    const update = onProfileChange.mock.calls[0][0];
+    expect(update({ name: "Gleb", showSignature: false })).toEqual({
+      name: "Gleb",
+      showSignature: true,
+    });
   });
 });

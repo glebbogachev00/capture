@@ -180,6 +180,17 @@ export type Completion = {
   threadId?: string;
 };
 
+/** The personal identity shown in Capture. The image bytes stay in the
+    existing image store; the synced board carries only their immutable id. */
+export type ProfileIdentity = {
+  name: string;
+  imageId?: string;
+  showSignature?: boolean;
+  updatedAt?: number;
+};
+export type ProfileDraft = Omit<ProfileIdentity, "updatedAt">;
+export type ProfileUpdate = ProfileDraft | ((current: ProfileDraft) => ProfileDraft);
+
 export type Board = {
   actions: Action[];
   threads: Thread[];
@@ -207,6 +218,8 @@ export type Board = {
       tab that synced. A wipe bumps this instead; on merge, the side with
       the older epoch drops its history. Absent means zero. */
   historyEpoch?: number;
+  /** One profile shared by every synced device. */
+  profile?: ProfileIdentity;
 };
 
 /** The engine principles intent shipped with, carried over unchanged. */
@@ -301,6 +314,21 @@ export function hydrate(raw: Partial<Board> | null | undefined): Board {
         typeof c.at === "number" &&
         typeof c.text === "string"
     ),
+    profile:
+      raw?.profile && typeof raw.profile.name === "string"
+        ? {
+            name: raw.profile.name,
+            imageId:
+              typeof raw.profile.imageId === "string"
+                ? raw.profile.imageId
+                : undefined,
+            showSignature: raw.profile.showSignature === true,
+            updatedAt:
+              typeof raw.profile.updatedAt === "number"
+                ? raw.profile.updatedAt
+                : 0,
+          }
+        : undefined,
   };
 }
 
