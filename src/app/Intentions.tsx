@@ -929,9 +929,9 @@ export function SettingsScreen({
           <ul className="settings-principles">
             <li className={profile?.showSignature ? "" : "off"}>
               <span className="settings-principle-copy">
-                <span className="settings-principle-name">Show personal tag</span>
+                <span className="settings-principle-name">Show signature</span>
                 <span className="settings-principle-description">
-                  Adds your personal tag to the bottom of Intention and Thread cards.
+                  Shows your profile photo or initials and name at the bottom of Intention and Thread cards.
                 </span>
               </span>
               <button

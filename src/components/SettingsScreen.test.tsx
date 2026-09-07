@@ -78,7 +78,7 @@ describe("SettingsScreen disclosures", () => {
   it("keeps card signatures off by default and changes them from Settings", () => {
     const { onProfileChange } = renderSettings();
     const description =
-      "Adds your personal tag to the bottom of Intention and Thread cards.";
+      "Shows your profile photo or initials and name at the bottom of Intention and Thread cards.";
     expect(screen.queryByText(description)).toBeNull();
     expect(
       screen.queryByRole("switch", {

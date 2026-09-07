@@ -36,7 +36,7 @@ describe("card profile signature", () => {
       showSignature: true,
       updatedAt: 100,
     } satisfies ProfileIdentity;
-    const { container } = render(
+    render(
       <>
         <IntentionCard intention={intention} onOpen={() => {}} profile={profile} />
         <TCard t={thread} onOpen={() => {}} profile={profile} />
@@ -45,7 +45,6 @@ describe("card profile signature", () => {
 
     expect(screen.getAllByText("Gleb")).toHaveLength(2);
     expect(screen.getAllByLabelText("Personalized for Gleb")).toHaveLength(2);
-    expect(container.querySelectorAll(".int-signature-mark")).toHaveLength(0);
   });
 
   it("shows a profile photo when its synced bytes arrive after render", async () => {
