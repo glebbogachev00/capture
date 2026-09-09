@@ -5,6 +5,9 @@ export const SITE_TITLE = "Capture — messy thoughts that sort themselves";
 export const SITE_DESCRIPTION =
   "Capture rough thoughts by voice or text. It sorts them into actions, threads, or intentions without making you choose first.";
 export const INSTALL_URL = new URL("install", SITE_URL).toString();
+export const OG_IMAGE_URL = new URL("og.png", SITE_URL).toString();
+const OG_IMAGE_ALT =
+  "Capture turning a rough thought into an action and a continuing thread";
 const INSTALL_TITLE = "Install Capture locally";
 const INSTALL_DESCRIPTION =
   "Run Capture on your own computer with your own model keys and data.";
@@ -24,11 +27,20 @@ export function landingMetadata(playground: boolean): Metadata {
       url: SITE_URL,
       siteName: "Capture",
       type: "website",
+      images: [
+        {
+          url: OG_IMAGE_URL,
+          width: 1200,
+          height: 630,
+          alt: OG_IMAGE_ALT,
+        },
+      ],
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title: SITE_TITLE,
       description: SITE_DESCRIPTION,
+      images: [OG_IMAGE_URL],
     },
   };
 }

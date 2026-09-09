@@ -26,6 +26,18 @@ describe("TryCapture search identity", () => {
       url: SITE,
       siteName: "Capture",
       type: "website",
+      images: [
+        {
+          url: "https://www.trycapture.app/og.png",
+          width: 1200,
+          height: 630,
+          alt: "Capture turning a rough thought into an action and a continuing thread",
+        },
+      ],
+    });
+    expect(metadata.twitter).toMatchObject({
+      card: "summary_large_image",
+      images: ["https://www.trycapture.app/og.png"],
     });
   });
 
