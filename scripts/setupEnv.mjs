@@ -18,15 +18,14 @@
  *    collapsed: the first is replaced, the rest removed.
  *  - The key value is never included in any returned status string.
  */
-export function setGroqKey(content, key) {
-  const newLine = `GROQ_API_KEY=${key}`;
+function setApiKey(content, name, key) {
+  const newLine = `${name}=${key}`;
   const lines = content.split("\n");
   let replaced = false;
   const out = [];
   for (const line of lines) {
     const trimmed = line.trimStart();
-    const isActive =
-      trimmed.startsWith("GROQ_API_KEY=") && !line.trimStart().startsWith("#");
+    const isActive = trimmed.startsWith(`${name}=`) && !trimmed.startsWith("#");
     if (isActive) {
       if (!replaced) {
         out.push(newLine);
@@ -44,6 +43,14 @@ export function setGroqKey(content, key) {
     out.push("");
   }
   return out.join("\n");
+}
+
+export function setGroqKey(content, key) {
+  return setApiKey(content, "GROQ_API_KEY", key);
+}
+
+export function setCerebrasKey(content, key) {
+  return setApiKey(content, "CEREBRAS_API_KEY", key);
 }
 
 /**

@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { PLAYGROUND } from "@/lib/playground";
-import { CopyPrompt } from "@/components/CopyPrompt";
+import { PLAYGROUND, TRIAL_LIMIT } from "@/lib/playground";
 import { siteHome, websiteSchema } from "@/lib/seo";
+import { LandingDemo } from "@/components/LandingDemo";
 
 /** Where "open the app" points: the playground serves the board at /app so
     this page can hold the front door; a personal instance keeps it at /. */
@@ -83,20 +83,6 @@ const hidden = [
   "It shows its working in the record and in the file you export.",
 ];
 
-const personas = [
-  "You notice a bug while fixing a different one",
-  "A decision keeps coming back and never gets made",
-  "You dictate on a walk and never listen back",
-  "You have hundreds of notes and trust twelve",
-]
-
-const rejects = [
-  "A dashboard",
-  "A folder system",
-  "A graph to stare at",
-  "A streak machine",
-  "A chatbot that talks forever",
-];
 
 /** A page-level signpost. Every heading on this page lived inside a card,
     all at one size, so the page had no sections — just a stack of boxes a
@@ -174,33 +160,26 @@ export function Landing() {
             capture<span>.</span>
           </Link>
           <nav className="site-nav" aria-label="Capture links">
-            <a href="https://github.com/glebbogachev00/capture">GitHub</a>
-            <Link href={APP}>{PLAYGROUND ? "Try 5 captures today" : "Open Capture"}</Link>
+            <Link href="/install">Install locally</Link>
+            <Link href={APP}>{PLAYGROUND ? `Try ${TRIAL_LIMIT} captures today` : "Open Capture"}</Link>
           </nav>
         </header>
 
         <section className="site-hero">
-          <p className="funding-kicker">Your notes app became a junk drawer</p>
-          <h1>Thoughts that sort themselves.</h1>
+          <p className="funding-kicker">Thought capture</p>
+          <h1>Messy thoughts that sort themselves.</h1>
           <p className="funding-lede site-lede">
-            Built to catch and sort a thought in as few moves as it can get
-            away with. Say it messy: the task lands on your list, the
-            question becomes a thread you keep.
+            Say it however it comes out. Capture turns it into an Action,
+            Thread, or Intention without making you choose first.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
-              {PLAYGROUND ? "Try 5 captures today" : "Open Capture"}
+              {PLAYGROUND ? `Try ${TRIAL_LIMIT} captures today` : "Open Capture"}
             </Link>
-            <a
-              className="ghost site-ghost"
-              href="https://github.com/glebbogachev00/capture"
-            >
-              View source
-            </a>
           </div>
           {PLAYGROUND && (
             <p className="site-cue">
-              Five captures a day. No account. This board stays in your browser.
+              {TRIAL_LIMIT} captures a day. No account. This board stays in your browser.
             </p>
           )}
         </section>
@@ -215,17 +194,7 @@ export function Landing() {
             a still is an empty rectangle, so the poster is the payoff
             frame instead. */}
         <div className="site-card site-demo hero-clip">
-          <video
-            controls
-            muted
-            playsInline
-            preload="none"
-            poster="/demos/two-places.jpg"
-            width={1440}
-            height={1000}
-          >
-            <source src="/demos/two-places.mp4" type="video/mp4" />
-          </video>
+          <LandingDemo />
         </div>
 
         {/* One demo at a size worth watching, then the other two. Three
@@ -277,13 +246,44 @@ export function Landing() {
           </details>
         </section>
 
+        <Movement
+          id="use-cases"
+          title="From a thought in motion to useful work"
+          gloss="Three places where Capture earns its place."
+        />
+        <section className="site-card site-day" aria-label="Capture use cases">
+          <dl className="note-beats">
+            <div>
+              <dt>On a walk</dt>
+              <dd>
+                You remember the signup bug and reconsider pricing in the same
+                sentence. Capture lands the fix as an Action and pricing as a Thread.
+              </dd>
+            </div>
+            <div>
+              <dt>When the idea returns</dt>
+              <dd>
+                Another pricing thought arrives later. Say it rough. Capture
+                adds it to the same Thread and keeps the summary current.
+              </dd>
+            </div>
+            <div>
+              <dt>Take it to your agent</dt>
+              <dd>
+                Copy and paste the Thread into Claude, Hermes, or Codex when
+                you are ready to turn the pricing decision into a plan.
+              </dd>
+            </div>
+          </dl>
+        </section>
+
         {/* The only proof on the page about a person rather than the
             software. It opens by naming the convention it is breaking,
             because a maker's note dressed up as a stranger's review would
             be worth less than nothing. The face goes first, so a reader
             knows a person is talking before reading a word of it. */}
         <Movement
-            id="04"
+            id="maker"
             title="Who built it, and on what"
             gloss="No reviews yet. Here is the honest version instead."
           />
@@ -350,53 +350,17 @@ export function Landing() {
           </div>
         </section>
 
-        {/* Two ideas were sharing one card under a heading that named only
-            the first: who built it, and then how a day with it actually
-            goes. A reader could not tell what the second half was for. */}
-        <Movement
-          id="04b"
-          title="How a day with it goes"
-          gloss="Three moments. The same sentence, travelling."
-        />
-        <section className="site-card site-day">
-          <dl className="note-beats">
-            <div>
-              <dt>On a walk</dt>
-              <dd>Ideas arrive when I am out. I say them into the box unformed.</dd>
-            </div>
-            <div>
-              <dt>Back home</dt>
-              <dd>
-                The tasks are on a list I actually close. The thinking has
-                gathered into threads.
-              </dd>
-            </div>
-            <div>
-              <dt>To an agent</dt>
-              <dd>
-                A thread copies out in one tap, straight into Claude or
-                whatever you build with. What is readable for me turns out
-                to be readable for an agent.
-              </dd>
-            </div>
-          </dl>
-
-          <p className="site-note-claim">
-            It cleared my head, and a clear head builds faster.
-          </p>
-        </section>
-
         <section className="site-card site-problem">
           <p className="funding-card-label">The point</p>
-          <h2>It works best when you don&apos;t perform clarity.</h2>
+          <h2>The thought can arrive unfinished.</h2>
           <p>
-            Most tools want a clean prompt. This one is built for the
-            sentence you actually produce. Nothing here is called a note.
+            Capture is built for the sentence you actually produce, not a
+            clean prompt. Nothing here is called a note.
           </p>
         </section>
 
         <Movement
-            id="02"
+            id="three-kinds"
             title="Three kinds of thing"
             gloss="Everything you say becomes one of these, and you never pick which one."
           />
@@ -423,91 +387,47 @@ export function Landing() {
           </ul>
         </section>
 
-        <Movement
-            id="03"
-            title="Who it is for, and what it refuses"
-            gloss="Two short lists. The second one is why the first one works."
-          />
-        <section className="site-card site-split">
-          <div>
-            <p className="funding-card-label">Who this is for</p>
-            <p className="site-condition">
-              People whose thoughts arrive before they are ready to be
-              filed.
-            </p>
-            <ul className="funding-list">
-              {personas.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p className="funding-card-label">
-              What Capture refuses to become
-            </p>
-            <ul className="funding-list">
-              {rejects.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <Movement
-          id="install"
-          title="Install your own"
-          gloss="One prompt to a coding agent. Three steps in your terminal."
-        />
         <section
-          className="site-card site-install"
-          aria-label="Install Capture yourself"
+          className="site-card site-voice"
+          aria-label="Voice typing compatibility"
         >
-          <p className="funding-card-label">Self-install</p>
-          <h2>Your board, your keys, your machine.</h2>
+          <p className="funding-card-label">Speech to text</p>
+          <h2>Use the voice typing you already have.</h2>
           <p>
-            Paste this prompt into Claude Code, Codex, Hermes, or the coding
-            agent you already use. It installs Capture, then stops before the
-            model key.
-          </p>
-          <p className="site-install-maker">
-            How I run it: Capture stays on my always-on Mac and reaches my
-            phone privately through Tailscale.
-          </p>
-          <CopyPrompt />
-          <ol className="site-install-steps">
-            <li>
-              Get a free key from{" "}
-              <a
-                href="https://console.groq.com/keys"
-                target="_blank"
-                rel="noreferrer"
-              >
-                the Groq console
-              </a>
-              .
-            </li>
-            <li>
-              Run <code>npm run setup</code> in your own terminal. Paste the
-              key there, not into a chat message or this website.
-            </li>
-            <li>
-              Run <code>npm run dev</code>, then open{" "}
-              <code>http://localhost:3000</code>.
-            </li>
-          </ol>
-          <p className="site-install-links">
+            Apple Dictation works out of the box. For longer thoughts, you can
+            also use{" "}
             <a
-              href="https://github.com/glebbogachev00/capture/blob/main/SETUP.md"
+              href="https://apps.apple.com/app/localwhisper/id6760680371"
               target="_blank"
               rel="noreferrer"
             >
-              Phone, hosting, and fallback-provider setup
-            </a>
+              LocalWhisper
+            </a>{" "}
+            or{" "}
+            <a href="https://wisprflow.ai/" target="_blank" rel="noreferrer">
+              Wispr Flow
+            </a>{" "}
+            on iPhone,{" "}
+            <a
+              href="https://github.com/kitlangton/Hex"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Hex
+            </a>{" "}
+            on an Apple-silicon Mac, or{" "}
+            <a href="https://handy.computer/" target="_blank" rel="noreferrer">
+              Handy
+            </a>{" "}
+            on Windows, Mac, and Linux.
+          </p>
+          <p className="site-voice-point">
+            If it can type into the box, Capture can organize it.
           </p>
         </section>
 
         <Movement
-            id="05"
+            id="ownership"
             title="Yours to keep"
           />
         <section className="site-card site-proof">
@@ -519,7 +439,10 @@ export function Landing() {
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
-              {PLAYGROUND ? "Try 5 captures today" : "Open Capture"}
+              {PLAYGROUND ? `Try ${TRIAL_LIMIT} captures today` : "Open Capture"}
+            </Link>
+            <Link className="ghost site-ghost" href="/install">
+              Install locally
             </Link>
             {SHOW_SPONSOR && (
               <Link className="ghost site-ghost" href="/sponsor">

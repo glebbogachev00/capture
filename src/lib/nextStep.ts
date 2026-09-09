@@ -40,6 +40,11 @@ export function splitNext(text: string): {
     break;
   }
 
+  /* A model may put a blank Markdown line between NEXT and BELONGS. Once the
+     BELONGS line is removed, that blank becomes the apparent last line and
+     hides the valid NEXT line underneath it. */
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+
   const last = lines[lines.length - 1]?.trim() ?? "";
   const m = /^\**\s*next\s*:\**\s*(.*)$/i.exec(last);
   if (!m) return { summary: lines.join("\n").trim(), next: null, belongs };

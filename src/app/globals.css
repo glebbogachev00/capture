@@ -122,6 +122,66 @@ body {
   color: var(--muted);
   line-height: 1.35;
 }
+.trial-meter {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 10px -14px 0;
+  padding: 11px 14px;
+  border-block: 1px solid var(--rule);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.trial-meter-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.trial-meter-head strong {
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.trial-meter-track {
+  display: flex;
+  gap: 5px;
+}
+.trial-meter-step {
+  height: 6px;
+  flex: 1;
+  min-width: 10px;
+  border: 1px solid #6f7c6d;
+  border-radius: 999px;
+  background: var(--card);
+}
+.trial-meter-step.is-used {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.trial-meter-count {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.trial-meter-next {
+  grid-column: 1 / -1;
+  text-align: right;
+  color: var(--ink);
+}
+.trial-meter-next a {
+  color: var(--accent);
+  font-weight: 600;
+  text-underline-offset: 2px;
+}
 
 .icon-btn {
   border: 1px solid var(--rule);
@@ -141,6 +201,10 @@ body {
 .icon-btn:hover {
   color: var(--ink);
   border-color: var(--muted);
+}
+.icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 .icon-btn.live {
   background: var(--accent);
@@ -3023,6 +3087,38 @@ body {
   margin: 0;
   color: var(--muted);
 }
+.site-voice h2 {
+  max-width: 560px;
+  margin: 0 0 10px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  font-variation-settings: "SOFT" 35;
+}
+.site-voice p:not(.funding-card-label) {
+  max-width: 690px;
+  line-height: 1.6;
+}
+.site-voice a {
+  color: var(--ink);
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+}
+.site-card p.site-voice-point {
+  margin-top: 14px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.site-install-voice {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid var(--rule);
+}
+.site-install-voice.site-voice h2 {
+  font-size: 25px;
+}
 .site-problem {
   border-color: var(--accent);
   background: var(--accent-soft);
@@ -4000,7 +4096,7 @@ body {
 }
 .note-beats dt {
   font-family: var(--font-mono), monospace;
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--accent);
@@ -4214,13 +4310,47 @@ body {
    around it: a box around a recording of a boxy app is a second frame. */
 .hero-clip {
   margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
 }
-.hero-clip > video {
+.hero-clip > video,
+.hero-demo-poster {
   display: block;
   width: 100%;
   height: auto;
+  border: 0;
   border-radius: 12px;
   background: #000;
+}
+.hero-demo-poster {
+  position: relative;
+  padding: 0;
+  color: var(--card);
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+.hero-demo-poster img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.hero-demo-play {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  min-height: 44px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--card);
+  font-family: var(--font-sans), sans-serif;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 /* 4 — the level the page never had.
@@ -4272,24 +4402,40 @@ body {
   display: flex;
   flex-direction: column;
 }
-.site-wrap > .site-head       { order: 0; }
-.site-wrap > .site-hero       { order: 1; }
-.site-wrap > .hero-clip       { order: 3; }
-.site-wrap > .demo-reel       { order: 4; }
-.site-wrap > .site-problem    { order: 5; }
-.site-wrap > [data-move="02"] { order: 6; }
-.site-wrap > .site-kind-grid  { order: 7; }
-.site-wrap > .site-quiet      { order: 8; }
-.site-wrap > [data-move="03"] { order: 9; }
-.site-wrap > .site-split      { order: 10; }
-.site-wrap > [data-move="04"] { order: 11; }
-.site-wrap > .site-note       { order: 12; }
-.site-wrap > [data-move="04b"]{ order: 13; }
-.site-wrap > .site-day        { order: 14; }
-.site-wrap > [data-move="install"] { order: 15; }
-.site-wrap > .site-install    { order: 16; }
-.site-wrap > [data-move="05"] { order: 17; }
-.site-wrap > .site-proof      { order: 18; }
+.site-page:not(.install-page) .site-wrap > .site-head { order: 0; }
+.site-page:not(.install-page) .site-wrap > .site-hero { order: 1; }
+.site-page:not(.install-page) .site-wrap > .hero-clip { order: 2; }
+.site-page:not(.install-page) .site-wrap > .demo-reel { order: 3; }
+.site-page:not(.install-page) .site-wrap > [data-move="use-cases"] { order: 4; }
+.site-page:not(.install-page) .site-wrap > .site-day { order: 5; }
+.site-page:not(.install-page) .site-wrap > .site-problem { order: 6; }
+.site-page:not(.install-page) .site-wrap > [data-move="three-kinds"] { order: 7; }
+.site-page:not(.install-page) .site-wrap > .site-kind-grid { order: 8; }
+.site-page:not(.install-page) .site-wrap > .site-quiet { order: 9; }
+.site-page:not(.install-page) .site-wrap > [data-move="maker"] { order: 10; }
+.site-page:not(.install-page) .site-wrap > .site-note { order: 11; }
+/* Compatibility is supporting setup detail, so it stays beside ownership and
+   installation at the end of the story. Without an explicit order, flex puts
+   a new section at 0, ahead of the hero, regardless of its DOM position. */
+.site-page:not(.install-page) .site-wrap > .site-voice { order: 12; }
+.site-page:not(.install-page) .site-wrap > [data-move="ownership"] { order: 13; }
+.site-page:not(.install-page) .site-wrap > .site-proof { order: 14; }
+.install-page .site-wrap > .site-head { order: 0; }
+.install-page .site-wrap > .site-hero { order: 1; }
+.install-page .site-wrap > .site-install { order: 2; }
+
+.install-hero h1 {
+  max-width: 720px;
+  font-size: clamp(48px, 9vw, 78px);
+  line-height: 0.95;
+}
+.install-page .copy-prompt-text,
+.install-page .site-install-steps {
+  font-size: 14.5px;
+}
+.install-page .copy-prompt .capture-btn {
+  min-height: 44px;
+}
 
 /* Polish, once the sections exist.
 

@@ -7,7 +7,11 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { setGroqKey, successMessage } from "../../scripts/setupEnv.mjs";
+import {
+  setCerebrasKey,
+  setGroqKey,
+  successMessage,
+} from "../../scripts/setupEnv.mjs";
 
 const EXAMPLE = [
   "# Model keys",
@@ -65,6 +69,29 @@ describe("setGroqKey — duplicate active lines", () => {
   });
 });
 
+describe("setCerebrasKey", () => {
+  it("adds the Cerebras key without changing the Groq key", () => {
+    const existing = "GROQ_API_KEY=gsk_existing\n# CEREBRAS_API_KEY=\n";
+    const result = setCerebrasKey(existing, "csk_test");
+
+    expect(result).toContain("GROQ_API_KEY=gsk_existing");
+    expect(result).toContain("# CEREBRAS_API_KEY=");
+    expect(result).toContain("CEREBRAS_API_KEY=csk_test");
+  });
+
+  it("replaces duplicate active Cerebras keys with one value", () => {
+    const existing =
+      "CEREBRAS_API_KEY=old\nAPP_PASSWORD=\nCEREBRAS_API_KEY=older\n";
+    const result = setCerebrasKey(existing, "csk_new");
+    const active = result
+      .split("\n")
+      .filter((line: string) => line.startsWith("CEREBRAS_API_KEY="));
+
+    expect(active).toEqual(["CEREBRAS_API_KEY=csk_new"]);
+    expect(result).toContain("APP_PASSWORD=");
+  });
+});
+
 describe("successMessage", () => {
   it("mentions the file path and next command", () => {
     const msg = successMessage(".env.local");
@@ -92,5 +119,19 @@ describe("setup terminal boundary", () => {
       "run 'npm run setup' in your own terminal"
     );
     expect(result.stdout).not.toContain("gsk_must_not_be_read");
+  });
+
+  it("refuses a piped Cerebras key before reading it", () => {
+    const setup = resolve(process.cwd(), "scripts/setup-cerebras.mjs");
+    const result = spawnSync(process.execPath, [setup], {
+      cwd: process.cwd(),
+      input: "csk_must_not_be_read\n",
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr.toLowerCase()).toContain(
+      "run 'npm run setup:cerebras' in your own terminal"
+    );
+    expect(result.stdout).not.toContain("csk_must_not_be_read");
   });
 });

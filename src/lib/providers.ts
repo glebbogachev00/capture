@@ -1,4 +1,5 @@
 import { google } from "@ai-sdk/google";
+import { cerebras } from "@ai-sdk/cerebras";
 import { createGroq, groq } from "@ai-sdk/groq";
 import { mistral } from "@ai-sdk/mistral";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -50,6 +51,16 @@ export function chain(): Tier[] {
     tiers.push({
       name: "groq-2",
       model: createGroq({ apiKey: process.env.GROQ_API_KEY_2 })(groqModel),
+    });
+  }
+
+  if (process.env.CEREBRAS_API_KEY) {
+    tiers.push({
+      name: "cerebras",
+      model: cerebras(process.env.CEREBRAS_MODEL || "gpt-oss-120b"),
+      providerOptions: {
+        cerebras: { reasoningEffort: "low", reasoningFormat: "hidden" },
+      },
     });
   }
 

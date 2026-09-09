@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CopyPrompt } from "./CopyPrompt";
 import { Landing } from "@/app/Landing";
+import InstallPage from "@/app/install/page";
 import {
   GROQ_KEYS_URL,
   INSTALL_PROMPT,
@@ -123,7 +124,10 @@ describe("CopyPrompt — copy failure", () => {
 
 describe("install section links", () => {
   it("renders the official Groq key page and the full setup guide", () => {
-    render(<Landing />);
+    render(<InstallPage />);
+    expect(
+      screen.getByRole("link", { name: "View on GitHub" }).getAttribute("href")
+    ).toBe("https://github.com/glebbogachev00/capture");
     expect(
       screen.getByRole("link", { name: "the Groq console" }).getAttribute("href")
     ).toBe(GROQ_KEYS_URL);
@@ -134,5 +138,48 @@ describe("install section links", () => {
         })
         .getAttribute("href")
     ).toBe(SETUP_GUIDE_URL);
+  });
+
+  it("includes optional voice-typing guidance on the install page", () => {
+    render(<InstallPage />);
+    expect(
+      screen.getByRole("heading", { name: "Add voice typing when you want it." })
+    ).toBeTruthy();
+    expect(screen.getByText(/apple dictation works without extra setup/i)).toBeTruthy();
+    for (const name of ["LocalWhisper", "Wispr Flow", "Hex", "Handy"]) {
+      expect(screen.getByRole("link", { name })).toBeTruthy();
+    }
+  });
+
+  it("keeps setup off the sales page and links to the local-install page", () => {
+    render(<Landing />);
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Messy thoughts that sort themselves.",
+      })
+    ).toBeTruthy();
+    expect(screen.queryByLabelText(/install prompt/i)).toBeNull();
+    expect(
+      screen
+        .getAllByRole("link", { name: "Install locally" })
+        .every((link) => link.getAttribute("href") === "/install")
+    ).toBe(true);
+  });
+
+  it("shows compatible voice-typing tools without claiming integrations", () => {
+    render(<Landing />);
+    expect(
+      screen.getByRole("heading", { name: "Use the voice typing you already have." })
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "LocalWhisper" }).getAttribute("href"))
+      .toBe("https://apps.apple.com/app/localwhisper/id6760680371");
+    expect(screen.getByRole("link", { name: "Wispr Flow" }).getAttribute("href"))
+      .toBe("https://wisprflow.ai/");
+    expect(screen.getByRole("link", { name: "Hex" }).getAttribute("href"))
+      .toBe("https://github.com/kitlangton/Hex");
+    expect(screen.getByRole("link", { name: "Handy" }).getAttribute("href"))
+      .toBe("https://handy.computer/");
+    expect(screen.queryByText(/works best with/i)).toBeNull();
   });
 });

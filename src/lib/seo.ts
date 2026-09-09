@@ -1,9 +1,13 @@
 import type { Metadata, MetadataRoute } from "next";
 
 export const SITE_URL = "https://www.trycapture.app/";
-export const SITE_TITLE = "Capture — thoughts that sort themselves";
+export const SITE_TITLE = "Capture — messy thoughts that sort themselves";
 export const SITE_DESCRIPTION =
-  "Say a rough thought once. Capture sorts it into an action, a thread, or an intention without making you choose first.";
+  "Capture rough thoughts by voice or text. It sorts them into actions, threads, or intentions without making you choose first.";
+export const INSTALL_URL = new URL("install", SITE_URL).toString();
+const INSTALL_TITLE = "Install Capture locally";
+const INSTALL_DESCRIPTION =
+  "Run Capture on your own computer with your own model keys and data.";
 
 export function landingMetadata(playground: boolean): Metadata {
   const shared: Metadata = {
@@ -25,6 +29,25 @@ export function landingMetadata(playground: boolean): Metadata {
       card: "summary",
       title: SITE_TITLE,
       description: SITE_DESCRIPTION,
+    },
+  };
+}
+
+export function installMetadata(playground: boolean): Metadata {
+  const shared: Metadata = {
+    title: INSTALL_TITLE,
+    description: INSTALL_DESCRIPTION,
+  };
+  if (!playground) return shared;
+  return {
+    ...shared,
+    alternates: { canonical: INSTALL_URL },
+    openGraph: {
+      title: INSTALL_TITLE,
+      description: INSTALL_DESCRIPTION,
+      url: INSTALL_URL,
+      siteName: "Capture",
+      type: "website",
     },
   };
 }
@@ -51,7 +74,14 @@ export function robotsFor(playground: boolean): MetadataRoute.Robots {
 
 export function sitemapFor(playground: boolean): MetadataRoute.Sitemap {
   return playground
-    ? [{ url: SITE_URL, changeFrequency: "weekly", priority: 1 }]
+    ? [
+        { url: SITE_URL, changeFrequency: "weekly", priority: 1 },
+        {
+          url: INSTALL_URL,
+          changeFrequency: "monthly",
+          priority: 0.6,
+        },
+      ]
     : [];
 }
 

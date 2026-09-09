@@ -32,7 +32,7 @@ import { dayKey } from "./record";
 export const PLAYGROUND = process.env.NEXT_PUBLIC_PLAYGROUND === "1";
 
 /**
- * The five-capture daily browser allowance.
+ * The fifteen-capture daily browser allowance.
  *
  * This is a product boundary for ordinary visitors, not a security claim.
  * Today's count comes from the local ledger and resets with the visitor's
@@ -41,7 +41,7 @@ export const PLAYGROUND = process.env.NEXT_PUBLIC_PLAYGROUND === "1";
  * protection. The provider dashboard's daily spend ceiling remains the
  * global hard cost boundary.
  */
-export const TRIAL_LIMIT = 5;
+export const TRIAL_LIMIT = 15;
 
 /**
  * Count distinct utterances in the ledger.
@@ -98,10 +98,10 @@ export function trialState(
     remaining,
     hint:
       remaining === 0
-        ? "today's five captures are used"
+        ? `today's ${TRIAL_LIMIT} captures are used`
         : remaining < TRIAL_LIMIT
           ? `${remaining} of ${TRIAL_LIMIT} captures left today — say it messy`
-          : "five captures available today — say it messy",
+          : `${TRIAL_LIMIT} captures available today — say it messy`,
   };
 }
 
@@ -137,8 +137,7 @@ export function isClosedInPlayground(pathname: string): boolean {
 }
 
 /** Where "run it yourself" points. */
-export const QUICKSTART_URL =
-  "https://github.com/glebbogachev00/capture#quickstart";
+export const QUICKSTART_URL = "/install";
 
 /**
  * A rate limit, said to a stranger.

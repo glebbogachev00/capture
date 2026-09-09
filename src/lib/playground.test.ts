@@ -48,25 +48,25 @@ describe("playground — what the server refuses", () => {
 });
 
 describe("daily trial limit", () => {
-  it("TRIAL_LIMIT is 5", () => {
-    expect(TRIAL_LIMIT).toBe(5);
+  it("TRIAL_LIMIT is 15", () => {
+    expect(TRIAL_LIMIT).toBe(15);
   });
 
-  it("starts with five captures available today", () => {
+  it("starts with fifteen captures available today", () => {
     expect(used([])).toBe(0);
     expect(remaining([])).toBe(TRIAL_LIMIT);
     expect(exhausted([])).toBe(false);
     expect(state([])).toEqual({
       exhausted: false,
-      remaining: 5,
-      hint: "five captures available today — say it messy",
+      remaining: 15,
+      hint: "15 captures available today — say it messy",
     });
   });
 
   it("counts each ordinary entry from today as one utterance", () => {
     const ledger = [entry("a"), entry("b"), entry("c")];
     expect(used(ledger)).toBe(3);
-    expect(remaining(ledger)).toBe(2);
+    expect(remaining(ledger)).toBe(12);
     expect(exhausted(ledger)).toBe(false);
   });
 
@@ -95,19 +95,19 @@ describe("daily trial limit", () => {
     expect(used(ledger)).toBe(0);
   });
 
-  it("exhausts today's allowance at five distinct utterances", () => {
-    const ledger = Array.from({ length: 5 }, (_, i) => entry(String(i)));
+  it("exhausts today's allowance at fifteen distinct utterances", () => {
+    const ledger = Array.from({ length: 15 }, (_, i) => entry(String(i)));
     expect(exhausted(ledger)).toBe(true);
     expect(remaining(ledger)).toBe(0);
     expect(state(ledger)).toEqual({
       exhausted: true,
       remaining: 0,
-      hint: "today's five captures are used",
+      hint: "today's 15 captures are used",
     });
   });
 
   it("does not make the remaining count negative", () => {
-    const ledger = Array.from({ length: 6 }, (_, i) => entry(String(i)));
+    const ledger = Array.from({ length: 16 }, (_, i) => entry(String(i)));
     expect(remaining(ledger)).toBe(0);
   });
 
@@ -137,9 +137,9 @@ describe("daily trial limit", () => {
     const ledger = [
       entry("e1", { captureId: "cap1", undone: true }),
       entry("e2", { captureId: "cap1", undone: true }),
-      ...Array.from({ length: 4 }, (_, i) => entry("x" + i)),
+      ...Array.from({ length: 14 }, (_, i) => entry("x" + i)),
     ];
-    expect(used(ledger)).toBe(5);
+    expect(used(ledger)).toBe(15);
     expect(exhausted(ledger)).toBe(true);
   });
 
@@ -147,14 +147,14 @@ describe("daily trial limit", () => {
     const today = new Date(2026, 8, 4, 12).getTime();
     const yesterday = new Date(2026, 8, 3, 12).getTime();
     const ledger = [
-      ...Array.from({ length: 5 }, (_, i) =>
+      ...Array.from({ length: 15 }, (_, i) =>
         entry(`old-${i}`, { at: yesterday })
       ),
       entry("today", { at: today }),
     ];
 
     expect(trialUsed(ledger, today)).toBe(1);
-    expect(trialRemaining(ledger, today)).toBe(4);
+    expect(trialRemaining(ledger, today)).toBe(14);
     expect(isTrialExhausted(ledger, today)).toBe(false);
   });
 });

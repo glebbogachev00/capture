@@ -96,7 +96,7 @@ import {
 import { expiryFor, parseDue } from "@/lib/due";
 import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
-import { createCaptureGate, PLAYGROUND, isTrialExhausted, playgroundError, trialState } from "@/lib/playground";
+import { createCaptureGate, PLAYGROUND, TRIAL_LIMIT, isTrialExhausted, playgroundError, trialState } from "@/lib/playground";
 import { degradedTier, type Answered } from "@/lib/degraded";
 import { planTidy, keepProposals, type TidyRead } from "@/lib/tidyChanged";
 import {
@@ -401,7 +401,7 @@ export function useBoard(now: number) {
   const trialExhaustedNow = () => PLAYGROUND && isTrialExhausted(latest.current.ledger ?? [], Date.now());
   const rejectDistillAtLimit = () => {
     if (!trialExhaustedNow()) return false;
-    setDistillErr("You have used today's five captures. Come back tomorrow.");
+    setDistillErr(`You have used today's ${TRIAL_LIMIT} captures. Come back tomorrow.`);
     return true;
   };
   /* Append a proposal-outcome record to a board about to be committed: what
@@ -1594,7 +1594,7 @@ export function useBoard(now: number) {
     if (!captureGate.current.enter()) return;
     if (!existingCaptureId && trialExhaustedNow()) {
       captureGate.current.leave();
-      setErr("You have used today's five captures. Your board is still here.");
+      setErr(`You have used today's ${TRIAL_LIMIT} captures. Your board is still here.`);
       return;
     }
     try {
@@ -4066,6 +4066,7 @@ export function useBoard(now: number) {
         );
         clearNoticeIn(5000);
         await resetDistill();
+        if (trialExhaustedNow()) setDistillOpen(false);
         setTab("actions");
       } else {
         /* Continue the thread this conversation was actually about. Distill
@@ -4117,6 +4118,7 @@ export function useBoard(now: number) {
         clearNoticeIn(5000);
         await regenerate(next, thread.id);
         await resetDistill();
+        if (trialExhaustedNow()) setDistillOpen(false);
         setTab("threads");
       }
     } catch (error) {
@@ -4127,7 +4129,6 @@ export function useBoard(now: number) {
   };
 
   const discardSettled = () => setSettled(null);
-
   /** Leave Distill entirely without filing anything.
 
       The settled review is cleared and the view closes — same effect as the

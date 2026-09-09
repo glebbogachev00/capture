@@ -66,6 +66,15 @@ describe("the sorter's boundary line", () => {
     expect(out.summary).toBe("Prose here.");
   });
 
+  it("ignores blank markdown lines left after removing BELONGS", () => {
+    const out = splitNext(
+      "Prose here.  \n\nNEXT: do the thing  \n\nBELONGS: bugs and requests only"
+    );
+    expect(out.belongs).toBe("bugs and requests only");
+    expect(out.next).toBe("do the thing");
+    expect(out.summary).toBe("Prose here.");
+  });
+
   it("is simply absent on a board that never had one", () => {
     const out = splitNext("Prose here.\nNEXT: do the thing");
     expect(out.belongs).toBeNull();

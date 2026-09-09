@@ -23,7 +23,6 @@ import { SearchResults } from "@/components/SearchResults";
 import { ThreadView } from "@/components/ThreadView";
 import { degradedNote } from "@/lib/degraded";
 import { TangleCallout, TangleReview } from "./Tangle";
-
 import { DistillView } from "./Distill";
 import {
   clockServerSnapshot,
@@ -56,10 +55,10 @@ import { actionsForThread } from "@/lib/threadActions";
 import { useBoard } from "@/hooks/useBoard";
 import { ReportBug } from "@/components/ReportBug";
 import { PlaygroundNotice } from "@/components/PlaygroundNotice";
+import { TrialMeter } from "@/components/TrialMeter";
 import { PLAYGROUND } from "@/lib/playground";
 import { groupActions } from "@/lib/group";
 import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
-
 /** Where the grouped-view toggle is remembered, in the same kv store as the
     board — a view preference that survives reloads on this device. */
 const GROUP_VIEW_KEY = "capture:groupView:v1";
@@ -439,7 +438,7 @@ export function Capture() {
   return (
     <div className="capture-root">
       <div className="capture-wrap">
-        {PLAYGROUND && <PlaygroundNotice trial={trial} />}
+        {PLAYGROUND && <PlaygroundNotice />}
       {/* Only once the board has loaded: the first-sight check must see
           the real capture count, not the empty board of a loading one. */}
         <div className="capture-head">
@@ -580,7 +579,6 @@ export function Capture() {
             onDiscardConversation={discardDistill}
           />
         )}
-
         {!distillOpen && (
         <div className="cap">
           <textarea
@@ -619,6 +617,7 @@ export function Capture() {
               ))}
             </div>
           )}
+          {PLAYGROUND && trial && <TrialMeter trial={trial} />}
           <div className="cap-bar">
             <button
               className="icon-btn"
@@ -648,7 +647,7 @@ export function Capture() {
             )}
             <div className="cap-hint">
               {PLAYGROUND
-                ? trial?.hint
+                ? null
                 : transcribing
                   ? "transcribing…"
                   : listening
@@ -662,6 +661,7 @@ export function Capture() {
               onClick={openDistill}
               disabled={!!trial?.exhausted}
               aria-label="Distill instead of capture"
+              aria-describedby={PLAYGROUND ? "trial-meter-status" : undefined}
               title="Distill instead of capture"
             >
               <MessagesSquare size={18} strokeWidth={1.7} />
@@ -673,13 +673,13 @@ export function Capture() {
                 dictatedRef.current = false;
               }}
               disabled={!!busy || (!text.trim() && !pics.length) || !!trial?.exhausted}
+              aria-describedby={PLAYGROUND ? "trial-meter-status" : undefined}
             >
               {busy ? "…" : "Capture"}
             </button>
           </div>
         </div>
         )}
-
         {busy && (
           <div className="status">
             <span className="pulse" />

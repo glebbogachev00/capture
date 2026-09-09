@@ -7,6 +7,7 @@ import { isPublicHome } from "@/lib/seo";
 const PUBLIC_PATHS = [
   "/login",
   "/about",
+  "/install",
   "/funding",
   "/sponsor",
   "/api/login",

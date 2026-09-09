@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   appMetadata,
   appStartUrl,
+  installMetadata,
   isPublicHome,
   landingMetadata,
   robotsFor,
@@ -15,10 +16,13 @@ const SITE = "https://www.trycapture.app/";
 describe("TryCapture search identity", () => {
   it("gives the public home a descriptive canonical identity", () => {
     const metadata = landingMetadata(true);
-    expect(metadata.title).toBe("Capture — thoughts that sort themselves");
+    expect(metadata.title).toBe("Capture — messy thoughts that sort themselves");
+    expect(metadata.description).toBe(
+      "Capture rough thoughts by voice or text. It sorts them into actions, threads, or intentions without making you choose first."
+    );
     expect(metadata.alternates?.canonical).toBe(SITE);
     expect(metadata.openGraph).toMatchObject({
-      title: "Capture — thoughts that sort themselves",
+      title: "Capture — messy thoughts that sort themselves",
       url: SITE,
       siteName: "Capture",
       type: "website",
@@ -36,6 +40,14 @@ describe("TryCapture search identity", () => {
     expect(isPublicHome("/app", true)).toBe(false);
   });
 
+  it("gives the public install page its own canonical identity", () => {
+    expect(installMetadata(true)).toMatchObject({
+      title: "Install Capture locally",
+      alternates: { canonical: "https://www.trycapture.app/install" },
+    });
+    expect(installMetadata(false).alternates).toBeUndefined();
+  });
+
   it("keeps the local playground out of search while allowing Google to crawl the directive", () => {
     expect(appMetadata.robots).toMatchObject({ index: false, follow: true });
     expect(robotsFor(true)).toEqual({
@@ -51,9 +63,14 @@ describe("TryCapture search identity", () => {
     expect(sitemapFor(false)).toEqual([]);
   });
 
-  it("lists only the canonical public landing page", () => {
+  it("lists the public landing and local-install pages", () => {
     expect(sitemapFor(true)).toEqual([
       { url: SITE, changeFrequency: "weekly", priority: 1 },
+      {
+        url: "https://www.trycapture.app/install",
+        changeFrequency: "monthly",
+        priority: 0.6,
+      },
     ]);
   });
 
