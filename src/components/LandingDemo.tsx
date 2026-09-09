@@ -15,10 +15,10 @@ export function LandingDemo() {
         onClick={() => setStarted(true)}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/demos/two-places.jpg" alt="" width={1440} height={1000} />
+        <img src="/demos/two-places.jpg" alt="" width={1920} height={1230} />
         <span className="hero-demo-play">
           <Play size={17} strokeWidth={1.8} fill="currentColor" />
-          Watch the 10-second demo
+          Watch the 25-second demo
         </span>
       </button>
     );
@@ -33,8 +33,8 @@ export function LandingDemo() {
       playsInline
       preload="metadata"
       poster="/demos/two-places.jpg"
-      width={1440}
-      height={1000}
+      width={1920}
+      height={1230}
     >
       <source src="/demos/two-places.mp4" type="video/mp4" />
     </video>

@@ -20,6 +20,8 @@ const PUBLIC_PATHS = [
   "/icon-512.png",
   "/apple-icon.png",
   "/og.png",
+  "/gleb.jpg",
+  "/demos",
 ];
 
 function isPublic(pathname: string): boolean {
