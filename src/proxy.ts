@@ -20,6 +20,7 @@ const PUBLIC_PATHS = [
   "/icon-512.png",
   "/apple-icon.png",
   "/og.png",
+  "/og-v2.png",
   "/gleb.jpg",
   "/demos",
 ];

@@ -5,7 +5,7 @@ export const SITE_TITLE = "Capture — messy thoughts that sort themselves";
 export const SITE_DESCRIPTION =
   "Capture rough thoughts by voice or text. It sorts them into actions, threads, or intentions without making you choose first.";
 export const INSTALL_URL = new URL("install", SITE_URL).toString();
-export const OG_IMAGE_URL = new URL("og.png", SITE_URL).toString();
+export const OG_IMAGE_URL = new URL("og-v2.png", SITE_URL).toString();
 const OG_IMAGE_ALT =
   "Capture turning a rough thought into an action and a continuing thread";
 const INSTALL_TITLE = "Install Capture locally";
