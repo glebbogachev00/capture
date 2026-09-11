@@ -1,11 +1,10 @@
-import type { Metadata } from "next";
 import Link from "next/link";
+import { utilityMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Funding · capture",
-  description:
-    "Capture stays free and open source. Paid Cloud covers hosting, sync, backup, and managed AI.",
-};
+export const metadata = utilityMetadata(
+  "Funding",
+  "Capture stays free and open source. Paid Cloud covers hosting, sync, backup, and managed AI."
+);
 
 const freeItems = [
   "Fast capture",

@@ -8,6 +8,7 @@ export default defineConfig({
       "src/lib/**/*.test.ts",
       "src/hooks/**/*.test.ts",
       "src/components/**/*.test.tsx",
+      "src/content/**/*.test.ts",
     ],
   },
   resolve: {

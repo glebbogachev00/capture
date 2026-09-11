@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   appMetadata,
   appStartUrl,
+  articleMetadata,
   installMetadata,
   isPublicHome,
   landingMetadata,
   robotsFor,
   siteHome,
   sitemapFor,
+  utilityMetadata,
   websiteSchema,
+  writingMetadata,
 } from "./seo";
 
 const SITE = "https://www.trycapture.app/";
@@ -75,15 +78,45 @@ describe("TryCapture search identity", () => {
     expect(sitemapFor(false)).toEqual([]);
   });
 
-  it("lists the public landing and local-install pages", () => {
-    expect(sitemapFor(true)).toEqual([
-      { url: SITE, changeFrequency: "weekly", priority: 1 },
-      {
-        url: "https://www.trycapture.app/install",
-        changeFrequency: "monthly",
-        priority: 0.6,
+  it("lists the public landing, install, writing index, and every article", () => {
+    const urls = sitemapFor(true).map((entry) => entry.url);
+    expect(urls).toContain(SITE);
+    expect(urls).toContain("https://www.trycapture.app/install");
+    expect(urls).toContain("https://www.trycapture.app/writing");
+    expect(urls).toContain(
+      "https://www.trycapture.app/writing/software-i-can-use-while-running"
+    );
+    expect(urls).toHaveLength(6);
+  });
+
+  it("gives the writing index and each article a canonical search identity", () => {
+    expect(writingMetadata(true)).toMatchObject({
+      title: "Written with Capture",
+      alternates: { canonical: "https://www.trycapture.app/writing" },
+    });
+    expect(articleMetadata(true, {
+      slug: "software-i-can-use-while-running",
+      title: "The Software I Can Use While Running",
+      description: "A field note.",
+    })).toMatchObject({
+      title: "The Software I Can Use While Running",
+      alternates: {
+        canonical: "https://www.trycapture.app/writing/software-i-can-use-while-running",
       },
-    ]);
+      openGraph: { type: "article" },
+    });
+    expect(articleMetadata(false, {
+      slug: "software-i-can-use-while-running",
+      title: "The Software I Can Use While Running",
+      description: "A field note.",
+    }).robots).toMatchObject({ index: false, follow: false });
+  });
+
+  it("keeps utility routes out of search", () => {
+    expect(utilityMetadata("Login").robots).toMatchObject({
+      index: false,
+      follow: true,
+    });
   });
 
   it("publishes only a truthful WebSite identity", () => {

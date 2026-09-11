@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PLAYGROUND, TRIAL_LIMIT } from "@/lib/playground";
 import { siteHome, websiteSchema } from "@/lib/seo";
 import { LandingDemo } from "@/components/LandingDemo";
+import { SiteNav } from "@/components/SiteNav";
 
 /** Where "open the app" points: the playground serves the board at /app so
     this page can hold the front door; a personal instance keeps it at /. */
@@ -159,29 +160,33 @@ export function Landing() {
           <Link className="capture-mark funding-mark" href={HOME}>
             capture<span>.</span>
           </Link>
-          <nav className="site-nav" aria-label="Capture links">
-            <Link href="/install">Install locally</Link>
-            <Link href={APP}>{PLAYGROUND ? `Try ${TRIAL_LIMIT} captures today` : "Open Capture"}</Link>
-          </nav>
+          <SiteNav current="about" homeHref={HOME} />
         </header>
 
-        <section className="site-hero">
-          <p className="funding-kicker">Thought capture</p>
-          <h1>Messy thoughts that sort themselves.</h1>
-          <p className="funding-lede site-lede">
-            Say it however it comes out. Capture turns it into an Action,
-            Thread, or Intention without making you choose first.
-          </p>
-          <div className="site-actions">
-            <Link className="capture-btn" href={APP}>
-              {PLAYGROUND ? `Try ${TRIAL_LIMIT} captures today` : "Open Capture"}
-            </Link>
+        <section className="site-hero site-hero-split">
+          <div className="site-hero-heading">
+            <p className="funding-kicker">Thought capture</p>
+            <h1>Messy thoughts that sort themselves.</h1>
           </div>
-          {PLAYGROUND && (
-            <p className="site-cue">
-              {TRIAL_LIMIT} captures a day. No account. This board stays in your browser.
+          <div className="site-hero-aside">
+            <p className="funding-lede site-lede">
+              Say it however it comes out. Capture turns it into an Action,
+              Thread, or Intention without making you choose first.
             </p>
-          )}
+            <div className="site-actions">
+              <Link className="capture-btn" href={APP}>
+                {PLAYGROUND ? "Try Capture" : "Open Capture"}
+              </Link>
+              <Link className="ghost site-ghost" href="/install">
+                Install locally
+              </Link>
+            </div>
+            {PLAYGROUND && (
+              <p className="site-cue">
+                {TRIAL_LIMIT} captures a day. No account. This board stays in your browser.
+              </p>
+            )}
+          </div>
         </section>
 
         {/* The transformation is the product, so it is the first object on
@@ -209,7 +214,7 @@ export function Landing() {
               {[
                 {
                   src: "/demos/it-learns.mp4",
-                  poster: "/demos/it-learns.jpg",
+                  poster: "/demos/it-learns.webp",
                   w: 1440,
                   h: 1230,
                   title: "It got it wrong. You told it once.",
@@ -217,7 +222,7 @@ export function Landing() {
                 },
                 {
                   src: "/demos/next-step.mp4",
-                  poster: "/demos/next-step.jpg",
+                  poster: "/demos/next-step.webp",
                   w: 1440,
                   h: 1230,
                   title: "It names the next move",
@@ -276,6 +281,29 @@ export function Landing() {
             </div>
           </dl>
         </section>
+
+        {PLAYGROUND && (
+          <>
+            <Movement
+              id="writing"
+              title="What the rough thought became"
+              gloss="Articles spoken in motion and finished in public."
+            />
+            <section className="site-card site-writing" aria-label="Writing made with Capture">
+              <p className="funding-card-label">Written with Capture</p>
+              <h2>I started writing while walking and running.</h2>
+              <p>
+                The finished articles sit beside selected source moments, so you
+                can see what Capture kept and what the thought became.
+              </p>
+              <div className="site-actions">
+                <Link className="ghost site-ghost" href="/writing">
+                  Read the articles
+                </Link>
+              </div>
+            </section>
+          </>
+        )}
 
         {/* The only proof on the page about a person rather than the
             software. It opens by naming the convention it is breaking,
@@ -387,42 +415,65 @@ export function Landing() {
           </ul>
         </section>
 
+        <Movement
+          id="how-to"
+          title="How to use Capture best"
+          gloss="Start with the voice typing already on your device."
+        />
         <section
           className="site-card site-voice"
           aria-label="Voice typing compatibility"
         >
           <p className="funding-card-label">Speech to text</p>
           <h2>Use the voice typing you already have.</h2>
-          <p>
-            Apple Dictation works out of the box. For longer thoughts, you can
-            also use{" "}
-            <a
-              href="https://apps.apple.com/app/localwhisper/id6760680371"
-              target="_blank"
-              rel="noreferrer"
-            >
-              LocalWhisper
-            </a>{" "}
-            or{" "}
-            <a href="https://wisprflow.ai/" target="_blank" rel="noreferrer">
-              Wispr Flow
-            </a>{" "}
-            on iPhone,{" "}
-            <a
-              href="https://github.com/kitlangton/Hex"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Hex
-            </a>{" "}
-            on an Apple-silicon Mac, or{" "}
-            <a href="https://handy.computer/" target="_blank" rel="noreferrer">
-              Handy
-            </a>{" "}
-            on Windows, Mac, and Linux.
+          <p className="site-voice-intro">
+            Capture does not need a special recording workflow. If a tool can
+            type into the box, Capture can organize what you say.
           </p>
+          <dl className="voice-options" aria-label="Voice typing options by device">
+            <div>
+              <dt>Built into Apple devices</dt>
+              <dd>Apple Dictation</dd>
+            </div>
+            <div>
+              <dt>iPhone</dt>
+              <dd>
+                <a
+                  href="https://apps.apple.com/app/localwhisper/id6760680371"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  LocalWhisper
+                </a>
+                <span aria-hidden="true"> · </span>
+                <a href="https://wisprflow.ai/" target="_blank" rel="noreferrer">
+                  Wispr Flow
+                </a>
+              </dd>
+            </div>
+            <div>
+              <dt>Apple-silicon Mac</dt>
+              <dd>
+                <a
+                  href="https://github.com/kitlangton/Hex"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Hex
+                </a>
+              </dd>
+            </div>
+            <div>
+              <dt>Windows, Mac, and Linux</dt>
+              <dd>
+                <a href="https://handy.computer/" target="_blank" rel="noreferrer">
+                  Handy
+                </a>
+              </dd>
+            </div>
+          </dl>
           <p className="site-voice-point">
-            If it can type into the box, Capture can organize it.
+            Start speaking before you decide how polished the thought should be.
           </p>
         </section>
 

@@ -1,11 +1,10 @@
-import type { Metadata } from "next";
 import Link from "next/link";
+import { utilityMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Sponsor · capture",
-  description:
-    "Sponsor Capture's development while the full thinking system stays free and open source.",
-};
+export const metadata = utilityMetadata(
+  "Sponsor",
+  "Sponsor Capture's development while the full thinking system stays free and open source."
+);
 
 const reasons = [
   {

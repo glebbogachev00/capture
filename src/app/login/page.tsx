@@ -1,5 +1,8 @@
 import { Suspense } from "react";
+import { utilityMetadata } from "@/lib/seo";
 import { LoginForm } from "./LoginForm";
+
+export const metadata = utilityMetadata("Login");
 
 export default function LoginPage() {
   return (

@@ -2,12 +2,12 @@ import Link from "next/link";
 import { CopyPrompt } from "@/components/CopyPrompt";
 import { GROQ_KEYS_URL, SETUP_GUIDE_URL } from "@/lib/install";
 import { PLAYGROUND } from "@/lib/playground";
-import { appStartUrl, installMetadata, siteHome } from "@/lib/seo";
+import { installMetadata, siteHome } from "@/lib/seo";
+import { SiteNav } from "@/components/SiteNav";
 
 export const metadata = installMetadata(PLAYGROUND);
 
 const HOME = siteHome(PLAYGROUND);
-const APP = appStartUrl(PLAYGROUND);
 
 export default function InstallPage() {
   return (
@@ -17,11 +17,7 @@ export default function InstallPage() {
           <Link className="capture-mark funding-mark" href={HOME}>
             capture<span>.</span>
           </Link>
-          <nav className="site-nav" aria-label="Capture links">
-            <Link href={HOME}>About</Link>
-            <a href="https://github.com/glebbogachev00/capture">GitHub</a>
-            <Link href={APP}>{PLAYGROUND ? "Try Capture" : "Open Capture"}</Link>
-          </nav>
+          <SiteNav current="install" homeHref={HOME} />
         </header>
 
         <section className="site-hero install-hero">

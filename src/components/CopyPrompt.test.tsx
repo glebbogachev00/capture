@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CopyPrompt } from "./CopyPrompt";
 import { Landing } from "@/app/Landing";
@@ -152,7 +152,7 @@ describe("install section links", () => {
   });
 
   it("keeps setup off the sales page and links to the local-install page", () => {
-    render(<Landing />);
+    const { container } = render(<Landing />);
     expect(
       screen.getByRole("heading", {
         level: 1,
@@ -165,13 +165,46 @@ describe("install section links", () => {
         .getAllByRole("link", { name: "Install locally" })
         .every((link) => link.getAttribute("href") === "/install")
     ).toBe(true);
+
+    const navigation = screen.getByRole("navigation", { name: "Capture links" });
+    expect(within(navigation).queryByRole("button")).toBeNull();
+    expect(within(navigation).getByRole("link", { name: "About" }).getAttribute("aria-current"))
+      .toBe("page");
+    const heroActions = container.querySelector(".site-hero .site-actions");
+    expect(heroActions).toBeTruthy();
+    expect(within(heroActions as HTMLElement).getByRole("link", { name: "Open Capture" }))
+      .toBeTruthy();
+    expect(within(heroActions as HTMLElement).getByRole("link", { name: "Install locally" }))
+      .toBeTruthy();
   });
 
-  it("shows compatible voice-typing tools without claiming integrations", () => {
-    render(<Landing />);
+  it("serves lightweight poster images for the folded demos", () => {
+    const { container } = render(<Landing />);
+    const posters = [...container.querySelectorAll(".reel-more video")].map((video) =>
+      video.getAttribute("poster")
+    );
+
+    expect(posters).toEqual(["/demos/it-learns.webp", "/demos/next-step.webp"]);
+  });
+
+  it("presents voice typing as its own scannable usage section", () => {
+    const { container } = render(<Landing />);
+
+    expect(
+      screen.getByRole("heading", { name: "How to use Capture best" })
+    ).toBeTruthy();
+    expect(container.querySelector('[data-move="how-to"]')).toBeTruthy();
     expect(
       screen.getByRole("heading", { name: "Use the voice typing you already have." })
     ).toBeTruthy();
+    for (const platform of [
+      "Built into Apple devices",
+      "iPhone",
+      "Apple-silicon Mac",
+      "Windows, Mac, and Linux",
+    ]) {
+      expect(screen.getByText(platform)).toBeTruthy();
+    }
     expect(screen.getByRole("link", { name: "LocalWhisper" }).getAttribute("href"))
       .toBe("https://apps.apple.com/app/localwhisper/id6760680371");
     expect(screen.getByRole("link", { name: "Wispr Flow" }).getAttribute("href"))

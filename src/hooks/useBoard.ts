@@ -15,7 +15,6 @@
  * the component is free to be purely presentational. `commit` sets both the
  * reactive state React renders and the ref the handlers read.
  */
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stamp } from "@/lib/clock";
 import { del, get, keys, set, setMany } from "@/lib/storage";
@@ -163,10 +162,9 @@ import {
   mapAiProposals,
   type RawAiProposal,
 } from "@/lib/organizeAi";
-
+import { playgroundUsage } from "@/lib/playgroundUsageClient";
 /* Carries the server's explanation so the board can show it verbatim. */
 class SortError extends Error {}
-
 /* Which learned rules this device has cleared, by normalised key. */
 const FORGOTTEN_RULES_KEY = "capture:forgotten-rules";
 
@@ -1594,6 +1592,7 @@ export function useBoard(now: number) {
     if (!captureGate.current.enter()) return;
     if (!existingCaptureId && trialExhaustedNow()) {
       captureGate.current.leave();
+      playgroundUsage.trialLimitReached();
       setErr(`You have used today's ${TRIAL_LIMIT} captures. Your board is still here.`);
       return;
     }
@@ -1747,6 +1746,7 @@ export function useBoard(now: number) {
       setNoticeUndoable(false);
       setCanUndo(true);
       await commit(recorded);
+      playgroundUsage.captureSorted(out.via);
       /* A quiet proposal, never applied: if this capture clearly belongs
          with an existing thread, offer the fold. An explicit /action,
          /thread or /intention command is respected — only the model's
@@ -1764,7 +1764,9 @@ export function useBoard(now: number) {
          stale description. */
       for (const id of summaryTargets) scheduleSummary(id);
     } catch (error) {
-      await saveUnsorted(raw, imgIds, at, reasonOf(error), dictated, captureId);
+      const reason = reasonOf(error);
+      await saveUnsorted(raw, imgIds, at, reason, dictated, captureId);
+      playgroundUsage.captureFailed(reason);
     }
     } finally {
       setBusy(null);
