@@ -123,6 +123,7 @@ export function createCaptureGate() {
 
 /** Routes that reach past the browser. Refused outright in playground mode. */
 export const PLAYGROUND_CLOSED = [
+  "/api/cloud",
   "/api/sync",
   "/api/img",
   "/api/transcribe",

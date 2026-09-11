@@ -39,6 +39,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.json({ error: "not available in the playground" }, { status: 404 });
   }
   const { pathname } = request.nextUrl;
+  // Cloud has its own Supabase identity boundary, never the deployment password.
+  if (pathname === "/api/cloud" || pathname.startsWith("/api/cloud/")) {
+    return NextResponse.next();
+  }
   if (isPublicHome(pathname, PLAYGROUND) || isPublic(pathname)) {
     return NextResponse.next();
   }
