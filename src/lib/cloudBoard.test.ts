@@ -239,8 +239,10 @@ describe("cloud board boundary", () => {
     expect(repo.documents).toEqual(new Map());
   });
 
-  it("returns 401 when the route is flagged but real adapters are not composed", async () => {
+  it("returns 503 when Cloud is enabled without provider configuration", async () => {
     vi.stubEnv("CAPTURE_CLOUD", "1");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "");
     try {
       const response = await defaultCloudRoute(new Request("https://capture.test/api/cloud/board"));
       expect(response.status).toBe(503);

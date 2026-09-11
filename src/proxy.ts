@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { PLAYGROUND, isClosedInPlayground } from "@/lib/playground";
 import { AUTH_COOKIE, isValidSession } from "@/lib/auth";
 import { isPublicHome } from "@/lib/seo";
+import { getCloudConfig } from "@/lib/supabase/config";
+import { refreshCloudSession } from "@/lib/supabase/proxy";
 
 /** Paths that must stay reachable without the session cookie. */
 const PUBLIC_PATHS = [
@@ -31,6 +33,11 @@ function isPublic(pathname: string): boolean {
   );
 }
 
+function preserveCloudCookies(response: NextResponse, cloudResponse: NextResponse): NextResponse {
+  cloudResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+  return response;
+}
+
 export async function proxy(request: NextRequest) {
   /* Playground first, before the password gate it runs without: the routes
      that reach past the browser are refused for everyone, so a hand-built
@@ -39,20 +46,25 @@ export async function proxy(request: NextRequest) {
     return NextResponse.json({ error: "not available in the playground" }, { status: 404 });
   }
   const { pathname } = request.nextUrl;
+  const cloudConfig = getCloudConfig();
+  const passThrough = cloudConfig?.status === "ready"
+    ? await refreshCloudSession(request, cloudConfig)
+    : NextResponse.next();
+
   // Cloud has its own Supabase identity boundary, never the deployment password.
   if (pathname === "/api/cloud" || pathname.startsWith("/api/cloud/")) {
-    return NextResponse.next();
+    return passThrough;
   }
   if (isPublicHome(pathname, PLAYGROUND) || isPublic(pathname)) {
-    return NextResponse.next();
+    return passThrough;
   }
 
   const password = process.env.APP_PASSWORD;
   // No password configured — the gate is off entirely.
-  if (!password) return NextResponse.next();
+  if (!password) return passThrough;
 
   const cookie = request.cookies.get(AUTH_COOKIE)?.value;
-  if (await isValidSession(cookie, password)) return NextResponse.next();
+  if (await isValidSession(cookie, password)) return passThrough;
 
   // API callers get a status code; browsers get the login page.
   if (pathname.startsWith("/api/")) {
@@ -66,13 +78,16 @@ export async function proxy(request: NextRequest) {
       pathname,
       cookie ? "(stale or invalid session cookie)" : "(no session cookie)"
     );
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return preserveCloudCookies(
+      NextResponse.json({ error: "unauthorized" }, { status: 401 }),
+      passThrough,
+    );
   }
 
   const url = request.nextUrl.clone();
   url.pathname = "/login";
   url.searchParams.set("next", pathname);
-  return NextResponse.redirect(url);
+  return preserveCloudCookies(NextResponse.redirect(url), passThrough);
 }
 
 export const config = {

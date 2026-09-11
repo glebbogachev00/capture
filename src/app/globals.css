@@ -2772,6 +2772,73 @@ body {
 .gate input:focus {
   border-color: var(--accent);
 }
+.cloud-gate .gate-in {
+  max-width: 430px;
+  gap: 20px;
+}
+.cloud-login {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  padding: 24px;
+}
+.cloud-login-copy {
+  margin-bottom: 22px;
+}
+.cloud-login-kicker,
+.cloud-login label {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cloud-login-kicker {
+  color: var(--accent);
+  margin: 0 0 10px;
+}
+.cloud-login-copy h1 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(30px, 8vw, 42px);
+  font-weight: 500;
+  font-variation-settings: "SOFT" 45, "WONK" 1;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  margin: 0;
+}
+.cloud-login-copy > p:last-child {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 14px 0 0;
+}
+.cloud-login label {
+  color: var(--muted);
+}
+.cloud-login input[name="code"] {
+  font-family: var(--font-mono), monospace;
+  font-size: 28px;
+  letter-spacing: 0.2em;
+  text-align: center;
+  padding-left: calc(12px + 0.2em);
+}
+.cloud-login-link {
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.cloud-login-link:hover {
+  color: var(--accent);
+}
+.cloud-login .err {
+  color: #7b2f2f;
+  font-size: 14px;
+}
 
 /* funding page */
 .funding-page {

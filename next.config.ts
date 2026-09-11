@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import type { NextConfig } from "next";
+import { getCloudConfig } from "./src/lib/supabase/config";
 
 /* A name for this exact build, so a running app can tell whether the server
    has moved on without it.
@@ -33,6 +34,11 @@ const BUILD_ID =
       return "dev";
     }
   })();
+
+const cloudConfig = getCloudConfig();
+const CLOUD_CONNECT_ORIGIN = cloudConfig?.status === "ready"
+  ? new URL(cloudConfig.url).origin
+  : null;
 
 const nextConfig: NextConfig = {
   env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
@@ -102,7 +108,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self' data:",
-              "connect-src 'self'",
+              `connect-src 'self'${CLOUD_CONNECT_ORIGIN ? ` ${CLOUD_CONNECT_ORIGIN}` : ""}`,
               "worker-src 'self'",
               "frame-ancestors 'none'",
               "base-uri 'self'",
