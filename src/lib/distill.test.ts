@@ -1,14 +1,55 @@
 import { describe, expect, it } from "vitest";
 import {
   countAssistantQuestions,
+  distillParagraphs,
   findMarker,
   hydrateDistill,
   markerHold,
   openDistillDraft,
   closeDistillDraft,
+  replyCanBeReady,
   resolveSettled,
   EMPTY_DISTILL,
 } from "./distill";
+
+describe("Distill reply paragraphs", () => {
+  it("keeps a short conversational reply together", () => {
+    expect(distillParagraphs("That trade-off depends on how often you need it.")).toEqual([
+      "That trade-off depends on how often you need it.",
+    ]);
+  });
+
+  it("preserves explicit paragraphs and normalizes soft line breaks", () => {
+    expect(distillParagraphs("The useful question is frequency.\nNot abstract value.\n\nHow often would you use it?")).toEqual([
+      "The useful question is frequency. Not abstract value.",
+      "How often would you use it?",
+    ]);
+  });
+
+  it.each(["3.14", "example.com"])("retains all text in a long reply containing %s", (value) => {
+    const reply = [
+      `Keep the original reference ${value} in the explanation so that the reader can check it without losing the surrounding context.`,
+      "The next sentence explains why preserving every word matters when a long model reply is divided into smaller conversational paragraphs.",
+      "Keep this final sentence too.",
+    ].join(" ");
+
+    expect(reply.length).toBeGreaterThan(220);
+    expect(distillParagraphs(reply).join(" ")).toBe(reply);
+  });
+
+  it("breaks a provider's long prose block into readable sentence groups", () => {
+    const reply = [
+      "Fast access matters when the thought needs to return while you are already working, because the interruption costs more than the subscription.",
+      "Occasional retrieval changes that calculation because a free, slower option may be enough.",
+      "Estimate how many times you would reach for it in a normal week before deciding.",
+    ].join(" ");
+
+    expect(distillParagraphs(reply)).toEqual([
+      "Fast access matters when the thought needs to return while you are already working, because the interruption costs more than the subscription.",
+      "Occasional retrieval changes that calculation because a free, slower option may be enough. Estimate how many times you would reach for it in a normal week before deciding.",
+    ]);
+  });
+});
 
 describe("Distill draft handoff", () => {
   it("moves a capture draft into an empty Distill composer", () => {
@@ -75,6 +116,16 @@ describe("findMarker", () => {
       kind: "nothing",
       at: full.indexOf("[nothing]"),
     });
+  });
+});
+
+describe("replyCanBeReady", () => {
+  it("rejects a ready marker attached to an unanswered question", () => {
+    expect(replyCanBeReady("How often would you use it? ")).toBe(false);
+  });
+
+  it("accepts a closed conversational reply", () => {
+    expect(replyCanBeReady("That is enough to make the decision.")).toBe(true);
   });
 });
 

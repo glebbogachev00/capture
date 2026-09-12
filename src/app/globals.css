@@ -2322,6 +2322,7 @@ body {
 }
 .distill-turn.assistant {
   align-self: flex-start;
+  max-width: min(84%, 640px);
 }
 @keyframes turn-in {
   from {
@@ -2350,17 +2351,22 @@ body {
   text-transform: uppercase;
   color: var(--muted);
 }
-.distill-turn p {
-  margin: 0;
+.distill-bubble {
   background: var(--card);
   border: 1px solid var(--rule);
   border-radius: 12px;
   padding: 10px 13px;
   font-size: 14.5px;
   line-height: 1.55;
+}
+.distill-bubble p {
+  margin: 0;
   white-space: pre-wrap;
 }
-.distill-turn.user p {
+.distill-bubble p + p {
+  margin-top: 0.8em;
+}
+.distill-turn.user .distill-bubble {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;

@@ -62,7 +62,7 @@ import {
   EMPTY_DISTILL,
   hydrateDistill,
   findMarker,
-  markerHold, openDistillDraft, closeDistillDraft, NOTHING_MARKER,
+  markerHold, openDistillDraft, closeDistillDraft, replyCanBeReady, NOTHING_MARKER,
   READY_MARKER,
 } from "@/lib/distill";
 import {
@@ -3848,7 +3848,8 @@ export function useBoard(now: number) {
           if (marker) {
             // Only [ready] means anything; [nothing] is stripped like any
             // other marker and the conversation simply continues.
-            if (marker.kind === "ready") setDistillReady(true);
+            if (marker.kind === "ready" && replyCanBeReady(acc + raw.slice(0, marker.at)))
+              setDistillReady(true);
             const markerText =
               marker.kind === "ready" ? READY_MARKER : NOTHING_MARKER;
             carry = raw.slice(marker.at + markerText.length);

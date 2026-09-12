@@ -21,7 +21,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AudioLines, Keyboard, Mic } from "lucide-react";
-import type { DistillResult, DistillSession } from "@/lib/distill";
+import {
+  distillParagraphs,
+  type DistillResult,
+  type DistillSession,
+} from "@/lib/distill";
 import { type ShelfLife, SHELF } from "@/lib/model";
 import { useVoiceConversation } from "@/hooks/useVoiceConversation";
 import { PLAYGROUND } from "@/lib/playground";
@@ -190,7 +194,7 @@ export function DistillView({
               <span className="distill-who">
                 {t.role === "user" ? "You" : "capture"}
               </span>
-              <p>
+              <div className="distill-bubble">
                 {thinking ? (
                   <span className="distill-dots" aria-hidden="true">
                     <i />
@@ -198,14 +202,18 @@ export function DistillView({
                     <i />
                   </span>
                 ) : (
-                  <>
-                    {t.text}
-                    {streaming && (
-                      <span className="distill-caret" aria-hidden="true" />
-                    )}
-                  </>
+                  (t.role === "assistant" ? distillParagraphs(t.text) : [t.text]).map(
+                    (paragraph, paragraphIndex, paragraphs) => (
+                      <p key={paragraphIndex}>
+                        {paragraph}
+                        {streaming && paragraphIndex === paragraphs.length - 1 && (
+                          <span className="distill-caret" aria-hidden="true" />
+                        )}
+                      </p>
+                    )
+                  )
                 )}
-              </p>
+              </div>
             </div>
           );
         })}

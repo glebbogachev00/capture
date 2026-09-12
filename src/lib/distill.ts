@@ -23,6 +23,49 @@ export type DistillSession = {
 
 export const EMPTY_DISTILL: DistillSession = { id: "", at: 0, turns: [] };
 
+const DISTILL_PARAGRAPH_LIMIT = 220;
+
+/**
+ * Turn a model reply into readable conversational paragraphs.
+ *
+ * Explicit blank lines always win. If a provider ignores the prompt and sends
+ * one long block, sentence groups keep the chat from becoming a prose wall.
+ * Short replies remain untouched, so ordinary conversation does not become a
+ * stack of dramatic one-line fragments.
+ */
+export function distillParagraphs(text: string): string[] {
+  const blocks = text
+    .split(/\n\s*\n/)
+    .map((block) => block.replace(/\s*\n\s*/g, " ").trim())
+    .filter(Boolean);
+
+  return blocks.flatMap((block) => {
+    if (block.length <= DISTILL_PARAGRAPH_LIMIT) return [block];
+
+    const sentences =
+      block.match(/.+?(?:[.!?]+[”’"')\]]*(?=\s|$)|$)/g)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
+    if (sentences.length < 2) return [block];
+
+    const paragraphs: string[] = [];
+    let current = "";
+    let sentenceCount = 0;
+
+    for (const sentence of sentences) {
+      const next = current ? `${current} ${sentence}` : sentence;
+      if (current && (next.length > DISTILL_PARAGRAPH_LIMIT || sentenceCount >= 2)) {
+        paragraphs.push(current);
+        current = sentence;
+        sentenceCount = 1;
+      } else {
+        current = next;
+        sentenceCount += 1;
+      }
+    }
+    if (current) paragraphs.push(current);
+    return paragraphs;
+  });
+}
+
 /** Move an unsent capture draft into Distill without duplicating or dropping it. */
 export function openDistillDraft(capture: string, distill: string) {
   if (distill.trim() || !capture.trim()) return { capture, distill };
@@ -103,6 +146,11 @@ export function findMarker(
     if (at !== -1 && (!best || at < best.at)) best = { kind, at };
   }
   return best;
+}
+
+/** A clarifier cannot be finished while it is still asking the user something. */
+export function replyCanBeReady(text: string): boolean {
+  return !text.trimEnd().endsWith("?");
 }
 
 /**
