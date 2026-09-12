@@ -3692,6 +3692,23 @@ body {
     font-size: 10px;
     letter-spacing: 0.045em;
   }
+  .site-head .site-nav a {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    padding-block: 10px;
+  }
+  .site-page:not(.install-page) .site-wrap > .site-hero h1 {
+    max-width: 100%;
+    font-size: clamp(40px, 10.8vw, 44px);
+    line-height: 0.96;
+    text-wrap: balance;
+  }
+  .site-page:not(.install-page) .site-wrap > .site-hero .site-lede {
+    max-width: 100%;
+    font-size: 17px;
+    text-wrap: pretty;
+  }
   .mobile-site-actions {
     display: flex;
   }
@@ -4873,41 +4890,54 @@ body {
     text-align: center;
     padding-bottom: 26px;
   }
-  /* The hero is one centred composition, but it uses the desktop canvas.
-     The statement owns the larger field and the existing explanation fills
-     the formerly empty upper-right corner. No new copy or navigation is
-     invented merely to balance the page. */
+  /* The landing statement is one centred composition. The previous desktop
+     split forced the headline into four lines while leaving the second column
+     floating in empty space. */
   .site-page:not(.install-page) .site-wrap > .site-hero.site-hero-split {
-    display: grid;
-    grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
-    align-items: start;
-    column-gap: clamp(32px, 4vw, 56px);
-    text-align: left;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 1040px;
+    margin-inline: auto;
+    padding-top: 48px;
+    text-align: center;
   }
   .site-page:not(.install-page) .site-hero-split .site-hero-heading {
-    text-align: left;
+    width: 100%;
+    text-align: center;
   }
   .site-page:not(.install-page) .site-hero-split .site-hero-aside {
-    padding-top: 2px;
-    align-self: start;
+    width: min(100%, 640px);
+    margin-top: 30px;
+    text-align: center;
   }
   .site-page:not(.install-page) .site-hero-split .site-lede {
-    max-width: 38ch;
-    margin-inline: 0;
+    max-width: 42ch;
+    margin-inline: auto;
     font-size: 17px;
     line-height: 1.6;
   }
   .site-page:not(.install-page) .site-hero-split .site-actions {
-    justify-content: flex-start;
+    justify-content: center;
   }
   .site-wrap .site-hero h1 {
-    font-size: clamp(64px, 6.7vw, 96px);
-    max-width: none;
+    max-width: 980px;
+    margin-inline: auto;
+    font-size: clamp(68px, 6.2vw, 88px);
+    line-height: 0.94;
+    text-wrap: balance;
+  }
+  .writing-index-page .site-wrap.writing-wrap {
+    max-width: 940px;
   }
   .writing-index-page .site-wrap .writing-index-hero h1 {
-    max-width: 15ch;
-    font-size: clamp(62px, 5.5vw, 80px);
-    line-height: 0.94;
+    max-width: 940px;
+    font-size: clamp(64px, 5.2vw, 76px);
+    line-height: 0.98;
+  }
+  .writing-index-page .public-thread-card h2,
+  .writing-index-page .public-thread-card > p {
+    max-width: none;
   }
   .site-wrap .site-lede {
     margin-left: auto;
