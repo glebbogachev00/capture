@@ -1199,18 +1199,17 @@ body {
 }
 
 /*
- * The revealed set. Two equal columns keep every menu deliberate on a phone,
- * while the 430px cap anchors the same block beneath the right-edge overflow
- * control on desktop. An odd final command spans both columns rather than
- * hanging alone on the left.
+ * The revealed set. Two equal, compact columns keep every menu deliberate
+ * without turning secondary commands into a wall of large buttons. The block
+ * centres under the row; an odd final command centres at one-column width.
  */
 .row-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  width: min(100%, 430px);
+  width: min(100%, 320px);
   margin-top: 8px;
-  margin-left: auto;
+  margin-inline: auto;
   padding-top: 8px;
   border-top: 1px solid var(--rule);
 }
@@ -1221,12 +1220,18 @@ body {
 }
 .row-actions > .ghost:last-child:nth-child(odd) {
   grid-column: 1 / -1;
+  width: calc((100% - 8px) / 2);
+  justify-self: center;
 }
 
-/* The action menu is a full-width flex item instead of being squeezed into
- * the text column beside the shelf and overflow controls. */
+/* The action menu owns a full flex row, while only its two button tracks stay
+ * compact. This prevents a wide desktop row from placing the menu beside the
+ * shelf controls. */
 .act > .row-actions {
-  flex: 0 0 min(100%, 430px);
+  flex: 0 0 100%;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 156px));
+  justify-content: center;
 }
 
 /* Saved verbatim because no model would answer. */
@@ -3965,6 +3970,23 @@ body {
     font-size: 10px;
     letter-spacing: 0.045em;
   }
+  .site-head .site-nav a {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    padding-block: 10px;
+  }
+  .site-page:not(.install-page) .site-wrap > .site-hero h1 {
+    max-width: 100%;
+    font-size: clamp(40px, 10.8vw, 44px);
+    line-height: 0.96;
+    text-wrap: balance;
+  }
+  .site-page:not(.install-page) .site-wrap > .site-hero .site-lede {
+    max-width: 100%;
+    font-size: 17px;
+    text-wrap: pretty;
+  }
   .mobile-site-actions {
     display: flex;
   }
@@ -5154,34 +5176,42 @@ body {
     text-align: center;
     padding-bottom: 26px;
   }
-  /* Keep the editorial split without leaving the action column stranded in
-     the upper-right. The columns sit closer together and align by visual
-     centre, so the copy and controls balance the three-line statement. */
+  /* The landing statement is one centred composition. The previous desktop
+     split forced the headline into four lines while leaving the second column
+     floating in empty space. */
   .site-page:not(.install-page) .site-wrap > .site-hero.site-hero-split {
-    display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr);
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    column-gap: clamp(36px, 3.5vw, 52px);
-    text-align: left;
+    max-width: 1040px;
+    margin-inline: auto;
+    padding-top: 48px;
+    text-align: center;
   }
   .site-page:not(.install-page) .site-hero-split .site-hero-heading {
-    text-align: left;
+    width: 100%;
+    text-align: center;
   }
   .site-page:not(.install-page) .site-hero-split .site-hero-aside {
-    align-self: center;
+    width: min(100%, 640px);
+    margin-top: 30px;
+    text-align: center;
   }
   .site-page:not(.install-page) .site-hero-split .site-lede {
     max-width: 42ch;
-    margin-inline: 0;
+    margin-inline: auto;
     font-size: 17px;
     line-height: 1.6;
   }
   .site-page:not(.install-page) .site-hero-split .site-actions {
-    justify-content: flex-start;
+    justify-content: center;
   }
   .site-wrap .site-hero h1 {
-    font-size: clamp(64px, 6.7vw, 96px);
-    max-width: none;
+    max-width: 980px;
+    margin-inline: auto;
+    font-size: clamp(68px, 6.2vw, 88px);
+    line-height: 0.94;
+    text-wrap: balance;
   }
   .writing-index-page .site-wrap.writing-wrap {
     max-width: 940px;

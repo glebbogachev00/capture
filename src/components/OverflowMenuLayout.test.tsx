@@ -49,7 +49,7 @@ describe("overflow menu layout", () => {
     expect(menu?.previousElementSibling?.classList.contains("act-tools")).toBe(true);
   });
 
-  it("uses an equal two-column grid anchored to the right edge", () => {
+  it("uses a compact, centered two-column grid", () => {
     const css = readFileSync("src/app/globals.css", "utf8");
     const actionRule = css.match(/\.act\s*\{([\s\S]*?)\}/)?.[1] ?? "";
     const moreRule = css.match(/\.more-btn\s*\{([\s\S]*?)\}/)?.[1] ?? "";
@@ -63,13 +63,18 @@ describe("overflow menu layout", () => {
     expect(moreRule).toMatch(/height:\s*40px/);
     expect(menuRule).toMatch(/display:\s*grid/);
     expect(menuRule).toMatch(/grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
-    expect(menuRule).toMatch(/width:\s*min\(100%,\s*430px\)/);
+    expect(menuRule).toMatch(/width:\s*min\(100%,\s*320px\)/);
     expect(menuRule).toMatch(/margin-top:\s*8px/);
-    expect(menuRule).toMatch(/margin-left:\s*auto/);
+    expect(menuRule).toMatch(/margin-inline:\s*auto/);
     expect(menuRule).toMatch(/padding-top:\s*8px/);
-    expect(actionMenuRule).toMatch(/flex:\s*0\s+0\s+min\(100%,\s*430px\)/);
+    expect(actionMenuRule).toMatch(/flex:\s*0\s+0\s+100%/);
+    expect(actionMenuRule).toMatch(/width:\s*100%/);
+    expect(actionMenuRule).toMatch(/grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*156px\)\)/);
+    expect(actionMenuRule).toMatch(/justify-content:\s*center/);
     expect(buttonRule).toMatch(/width:\s*100%/);
     expect(buttonRule).toMatch(/justify-content:\s*center/);
     expect(oddRule).toMatch(/grid-column:\s*1\s*\/\s*-1/);
+    expect(oddRule).toMatch(/width:\s*calc\(\(100%\s*-\s*8px\)\s*\/\s*2\)/);
+    expect(oddRule).toMatch(/justify-self:\s*center/);
   });
 });
