@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createCaptureGate,
+  captureLimitFromSubscriptionResponse,
   isClosedInPlayground,
   PLAYGROUND_CLOSED,
   TRIAL_LIMIT,
@@ -48,6 +49,18 @@ describe("playground — what the server refuses", () => {
 });
 
 describe("daily trial limit", () => {
+  it("limits signed-out and free Cloud accounts but not paid or self-hosted boards", () => {
+    expect(captureLimitFromSubscriptionResponse(401, { captureLimit: 15 })).toBe(15);
+    expect(captureLimitFromSubscriptionResponse(200, { captureLimit: 15 })).toBe(15);
+    expect(captureLimitFromSubscriptionResponse(200, { captureLimit: null })).toBeNull();
+    expect(captureLimitFromSubscriptionResponse(404, { error: "not found" })).toBeNull();
+  });
+
+  it("fails to the public limit when a Cloud access check is malformed or unavailable", () => {
+    expect(captureLimitFromSubscriptionResponse(503, { error: "unavailable" })).toBe(15);
+    expect(captureLimitFromSubscriptionResponse(200, {})).toBe(15);
+  });
+
   it("TRIAL_LIMIT is 15", () => {
     expect(TRIAL_LIMIT).toBe(15);
   });

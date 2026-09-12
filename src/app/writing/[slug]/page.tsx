@@ -19,7 +19,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ArticlePage({ params }: Props) {
-  if (!PLAYGROUND) notFound();
   const { slug } = await params;
   const article = articleBySlug(slug);
   if (!article) notFound();

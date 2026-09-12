@@ -50,6 +50,7 @@ describe("SettingsScreen disclosures", () => {
 
     expect(screen.getByRole("button", { name: "Open The Record" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show Signature" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show Capture Cloud" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show Data and sync" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show Restore" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show Agent handoff" })).toBeTruthy();

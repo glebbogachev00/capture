@@ -1,28 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { ARTICLES } from "@/content/articles";
 import { PublicThreadCard } from "@/components/PublicThreadArticle";
 import { SiteNav } from "@/components/SiteNav";
 import { PLAYGROUND } from "@/lib/playground";
-import { writingMetadata } from "@/lib/seo";
+import { siteHome, writingMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = writingMetadata(PLAYGROUND);
+const HOME = siteHome(PLAYGROUND);
 
 export default function WritingPage() {
-  if (!PLAYGROUND) notFound();
-
   return (
     <main className="capture-root site-page writing-index-page">
       <div className="capture-wrap site-wrap writing-wrap">
         <header className="capture-head site-head">
-          <Link className="capture-mark funding-mark" href="/">
+          <Link className="capture-mark funding-mark" href={HOME}>
             capture<span>.</span>
           </Link>
-          <SiteNav current="writing" />
+          <SiteNav current="writing" homeHref={HOME} />
         </header>
 
-        <section className="site-hero site-hero-split writing-index-hero">
+        <section className="site-hero writing-index-hero">
           <div className="site-hero-heading">
             <p className="funding-kicker">Written with Capture</p>
             <h1>How I Started Writing Articles While Walking and Running</h1>

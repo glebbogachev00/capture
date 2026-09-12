@@ -27,6 +27,7 @@
     "@ai-sdk/groq": "^4.0.16",
     "@ai-sdk/mistral": "^4.0.23",
     "@openrouter/ai-sdk-provider": "^3.0.0",
+    "@polar-sh/sdk": "^1.0.0-alpha.21",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
     "@upstash/redis": "^1.38.2",

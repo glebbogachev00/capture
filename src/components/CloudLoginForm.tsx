@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { CloudConfig } from "@/lib/supabase/config";
 import { createCloudBrowserClient } from "@/lib/supabase/browser";
-import { safeNext } from "@/lib/safeNext";
+import { cloudCheckoutDestinationAfterLogin } from "@/lib/cloudCheckoutClient";
 
 type Props = {
   config: CloudConfig;
@@ -75,7 +75,13 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
         onAuthenticated();
         return;
       }
-      window.location.href = safeNext(nextPath || "/app");
+
+      try {
+        const destination = await cloudCheckoutDestinationAfterLogin(nextPath);
+        window.location.href = destination;
+      } catch {
+        setError("You’re signed in, but checkout could not open. Try again.");
+      }
     } catch {
       setError("We couldn't verify that code. Request a new one.");
     } finally {

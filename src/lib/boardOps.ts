@@ -108,7 +108,7 @@ export function applySorted(
   const share = out.primaryText?.trim();
   const splitting = pieces.length > 0 && !!share;
   const sorted = splitting ? { ...out, clean: share! } : out;
-  const primary = applyPrimary(sorted, imgIds, at, board);
+  const primary = applyPrimary(sorted, imgIds, at, board, !splitting);
   return splitting ? foldAlso(primary, pieces, at, board) : primary;
 }
 
@@ -173,7 +173,8 @@ function applyPrimary(
   out: SortResult,
   imgIds: string[],
   at: number,
-  board: Board
+  board: Board,
+  linkActionsToPrimary: boolean
 ): Applied {
   if (out.kind === "action") {
     const span = SHELF[out.shelfLife as ShelfLife] ?? null;
@@ -292,9 +293,13 @@ function applyPrimary(
         ];
     const homeId = home ? home.id : threads[0].id;
     const homeName = home ? home.name : threads[0].name;
-    /* The action and the layer are two halves of one capture; the action
-       remembers which thread holds the other half. */
-    const linked = items.map((i) => ({ ...i, threadId: homeId }));
+    /* Provenance is only a real relationship when this capture has one
+       thinking destination. In a multi-subject split, "primary" is merely
+       the first serialized thread; attaching every action to it invents a
+       relationship and makes the UI depend on array order. */
+    const linked = linkActionsToPrimary
+      ? items.map((item) => ({ ...item, threadId: homeId }))
+      : items;
     return {
       next: { ...board, actions: [...linked, ...board.actions], threads },
       targetId: homeId,

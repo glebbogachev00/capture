@@ -44,6 +44,25 @@ export const PLAYGROUND = process.env.NEXT_PUBLIC_PLAYGROUND === "1";
 export const TRIAL_LIMIT = 15;
 
 /**
+ * Translate the server-owned billing decision into the browser's local
+ * allowance. A disabled Cloud route means a private/self-hosted board and is
+ * intentionally unlimited. Every malformed or unavailable Cloud response
+ * fails to the public allowance instead of silently granting paid access.
+ */
+export function captureLimitFromSubscriptionResponse(
+  status: number,
+  body: unknown,
+): number | null {
+  if (status === 404) return null;
+  if (body && typeof body === "object" && "captureLimit" in body) {
+    const limit = (body as { captureLimit?: unknown }).captureLimit;
+    if (limit === null) return null;
+    if (limit === TRIAL_LIMIT) return TRIAL_LIMIT;
+  }
+  return TRIAL_LIMIT;
+}
+
+/**
  * Count distinct utterances in the ledger.
  *
  * A split capture (one sentence → action + thread) shares a `captureId` across

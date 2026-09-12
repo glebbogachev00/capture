@@ -194,6 +194,25 @@ export function pendingWrap(wraps: DayWrap[], now: number): DayWrap | null {
 
 /** Union by action id — a tick is recorded once and never changes. */
 export function mergeCompletions(a: Completion[], b: Completion[]): Completion[] {
+  if (a === b) return a;
+  if (a.length <= b.length) {
+    let appended = true;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) {
+        appended = false;
+        break;
+      }
+    }
+    if (appended) {
+      for (let i = 1; i < b.length; i++) {
+        if (b[i - 1].at > b[i].at) {
+          appended = false;
+          break;
+        }
+      }
+    }
+    if (appended) return b;
+  }
   const by = new Map<string, Completion>();
   for (const c of [...(a ?? []), ...(b ?? [])]) if (!by.has(c.id)) by.set(c.id, c);
   return [...by.values()].sort((x, y) => x.at - y.at);

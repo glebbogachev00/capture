@@ -49,6 +49,14 @@ describe("legacy proxy and Cloud boundary", () => {
     } finally { vi.unstubAllEnvs(); }
   });
 
+  it("lets Polar reach signature verification without the deployment password", async () => {
+    vi.stubEnv("APP_PASSWORD", "configured");
+    try {
+      const response = await proxy(new NextRequest("https://capture.test/api/webhooks/polar"));
+      expect(response.status).toBe(200);
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it("still gates existing private APIs", async () => {
     vi.stubEnv("APP_PASSWORD", "configured");
     try {

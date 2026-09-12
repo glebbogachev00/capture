@@ -25,10 +25,10 @@ describe("Cloud login page", () => {
     const page = await (LoginPage as unknown as (props: {
       searchParams: Promise<{ next?: string }>;
     }) => Promise<React.ReactNode>)({
-      searchParams: Promise.resolve({ next: "/funding?from=login" }),
+      searchParams: Promise.resolve({ next: "/pricing?from=login" }),
     });
 
     render(page);
-    expect(screen.getByTestId("cloud-next").textContent).toBe("/funding?from=login");
+    expect(screen.getByTestId("cloud-next").textContent).toBe("/pricing?from=login");
   });
 });

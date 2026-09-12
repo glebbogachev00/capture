@@ -1,11 +1,12 @@
 import Link from "next/link";
 
-type SiteSection = "about" | "writing" | "install";
+type SiteSection = "about" | "writing" | "install" | "pricing";
 
 const sections: Array<{ id: SiteSection; label: string; href: string }> = [
   { id: "about", label: "About", href: "/" },
   { id: "writing", label: "Writing", href: "/writing" },
   { id: "install", label: "Install", href: "/install" },
+  { id: "pricing", label: "Pricing", href: "/pricing" },
 ];
 
 export function SiteNav({

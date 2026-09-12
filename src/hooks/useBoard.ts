@@ -62,8 +62,7 @@ import {
   EMPTY_DISTILL,
   hydrateDistill,
   findMarker,
-  markerHold,
-  NOTHING_MARKER,
+  markerHold, openDistillDraft, closeDistillDraft, NOTHING_MARKER,
   READY_MARKER,
 } from "@/lib/distill";
 import {
@@ -87,7 +86,6 @@ import {
 } from "@/lib/boardOps";
 import { resolveCapture } from "@/lib/command";
 import {
-  isRefile,
   refileRule,
   undoRule,
   type SortKind,
@@ -96,6 +94,7 @@ import { expiryFor, parseDue } from "@/lib/due";
 import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
 import { createCaptureGate, PLAYGROUND, TRIAL_LIMIT, isTrialExhausted, playgroundError, trialState } from "@/lib/playground";
+import { useCaptureLimit } from "@/hooks/useCaptureLimit";
 import { degradedTier, type Answered } from "@/lib/degraded";
 import { planTidy, keepProposals, type TidyRead } from "@/lib/tidyChanged";
 import {
@@ -153,7 +152,6 @@ import {
 } from "@/lib/ledger";
 import { deriveRules, setRuleEnabled, type RulePreference } from "@/lib/rules";
 import {
-  scanBoard,
   scanStale,
   type OrganizeProposal,
 } from "@/lib/organize";
@@ -283,7 +281,6 @@ export function useBoard(now: number) {
   const [summarising, setSummarising] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [landed, setLanded] = useState<string | null>(null);
-
   /* How long a receipt stays, and why a second one is never blanked by the
      first one's clock — lib/receiptWindow owns the timing. Everything that
      leaves with the banner leaves through its one close channel. */
@@ -339,7 +336,6 @@ export function useBoard(now: number) {
      or a Distill settlement), consumed by saveDraft, cleared on discard. */
   const intentionLedger = useRef<CaptureOrigin | null>(null);
   /* ----------------------- learned rules ------------------------ */
-
   /* Rules the user cleared in Settings, by normalised key. Device-local on
      purpose (v1): the correction ledger itself syncs, so both devices learn
      the same rules, but a clearing is a personal "stop telling me that"
@@ -396,7 +392,8 @@ export function useBoard(now: number) {
   /* The latest board, read by handlers so async work never builds on stale
      state. `commit` (and the loader) are the only writers. */
   const latest = useRef<Board>(data);
-  const trialExhaustedNow = () => PLAYGROUND && isTrialExhausted(latest.current.ledger ?? [], Date.now());
+  const dailyTrialApplies = useCaptureLimit();
+  const trialExhaustedNow = () => dailyTrialApplies && isTrialExhausted(latest.current.ledger ?? [], Date.now());
   const rejectDistillAtLimit = () => {
     if (!trialExhaustedNow()) return false;
     setDistillErr(`You have used today's ${TRIAL_LIMIT} captures. Come back tomorrow.`);
@@ -3428,7 +3425,7 @@ export function useBoard(now: number) {
     } catch {
       /* server unreachable; the reload below still clears the local view */
     }
-    window.location.href = "/";
+    window.location.href = "/login";
   };
 
   /* --------------------------- principles -------------------------- */
@@ -3749,12 +3746,13 @@ export function useBoard(now: number) {
 
   const openDistill = () => {
     setDistillErr("");
-    setDistillOpen(true);
+    const drafts = openDistillDraft(text, distillInput);
+    setText(drafts.capture); setDistillInput(drafts.distill); setDistillOpen(true);
   };
 
   const closeDistill = () => {
-    setDistillOpen(false);
-    setDistillInput("");
+    const drafts = closeDistillDraft(text, distillInput);
+    setText(drafts.capture); setDistillInput(drafts.distill); setDistillOpen(false);
   };
 
   /** Start a fresh conversation, clearing the saved session. */
@@ -4210,7 +4208,7 @@ export function useBoard(now: number) {
 
   return {
     data,
-    trial: PLAYGROUND ? trialState(data.ledger ?? [], now) : null,
+    trial: dailyTrialApplies ? trialState(data.ledger ?? [], now) : null,
     loaded,
     corrupt,
     text,

@@ -66,7 +66,13 @@ function repository(): CloudBoardRepository & {
 }
 
 function deps(identity: VerifiedIdentity | null, repo: CloudBoardRepository) {
-  return { isEnabled: () => true, verifyIdentity: async () => identity, repository: repo };
+  return {
+    isEnabled: () => true,
+    verifyIdentity: async () => identity,
+    requiresEntitlement: () => false,
+    hasEntitlement: async () => true,
+    repository: repo,
+  };
 }
 
 const put = (value: SyncState, identity: VerifiedIdentity, repo: CloudBoardRepository) =>
@@ -107,6 +113,30 @@ describe("cloud board boundary", () => {
     const repo = repository();
     const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), deps({ userId: "   " }, repo));
     expect(response.status).toBe(401);
+    expect(repo.documents).toEqual(new Map());
+  });
+
+  it("enforces a paid entitlement on the server when the production switch is on", async () => {
+    const repo = repository();
+    const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), {
+      ...deps({ userId: "alice" }, repo),
+      requiresEntitlement: () => true,
+      hasEntitlement: vi.fn().mockResolvedValue(false),
+    });
+    expect(response.status).toBe(402);
+    expect(await response.json()).toEqual({ error: "capture cloud subscription required" });
+    expect(repo.documents).toEqual(new Map());
+  });
+
+  it("fails closed when entitlement state cannot be checked", async () => {
+    const repo = repository();
+    const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), {
+      ...deps({ userId: "alice" }, repo),
+      requiresEntitlement: () => true,
+      hasEntitlement: vi.fn().mockRejectedValue(new Error("database unavailable")),
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "subscription status is unavailable" });
     expect(repo.documents).toEqual(new Map());
   });
 

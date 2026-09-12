@@ -9,11 +9,6 @@ import { SiteNav } from "@/components/SiteNav";
 const APP = PLAYGROUND ? "/app" : "/";
 const HOME = siteHome(PLAYGROUND);
 
-/* The sponsor page is still unfinished and carries a different nav, so the
-   landing page does not send anyone to it yet. Flip to true to bring the
-   button and its line back — nothing else has to change. */
-const SHOW_SPONSOR = false;
-
 /*
  * The public page is allowed to be strange, because the app is not.
  *
@@ -495,17 +490,7 @@ export function Landing() {
             <Link className="ghost site-ghost" href="/install">
               Install locally
             </Link>
-            {SHOW_SPONSOR && (
-              <Link className="ghost site-ghost" href="/sponsor">
-                Sponsor Capture
-              </Link>
-            )}
           </div>
-          {SHOW_SPONSOR && (
-            <p className="site-cue">
-              Sponsor once or regularly. The full thinking system stays free.
-            </p>
-          )}
         </section>
       </div>
     </main>

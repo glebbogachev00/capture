@@ -23,6 +23,18 @@ export type DistillSession = {
 
 export const EMPTY_DISTILL: DistillSession = { id: "", at: 0, turns: [] };
 
+/** Move an unsent capture draft into Distill without duplicating or dropping it. */
+export function openDistillDraft(capture: string, distill: string) {
+  if (distill.trim() || !capture.trim()) return { capture, distill };
+  return { capture: "", distill: capture };
+}
+
+/** Return an unsent Distill draft when leaving, unless newer capture text exists. */
+export function closeDistillDraft(capture: string, distill: string) {
+  if (capture.trim() || !distill.trim()) return { capture, distill };
+  return { capture: distill, distill: "" };
+}
+
 /** What the settling engine decided the conversation became. */
 export type DistillResult = {
   clean: string;

@@ -6,9 +6,9 @@ import { explain } from "@/lib/aiError";
 import { captionPrompt, mergeCaption, tidyCaption } from "@/lib/caption";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
-import { visionChain, withFallback } from "@/lib/providers";
+import { sanitizeProviderError, visionChain, withFallback } from "@/lib/providers";
 import { DUE_RULE, ROUTING_RULE, todayLine } from "@/lib/engineRules";
-import { reconcileSorted } from "@/lib/sort";
+import { enforceStandingDecision, reconcileSorted } from "@/lib/sort";
 
 /**
  * The sorting engine.
@@ -450,16 +450,24 @@ export async function POST(request: Request) {
     }
     // Collapse a self-contradicting "both" (no task, or no thinking) to the
     // single kind its fields actually support.
+    const standing =
+      !body.force && !ruled
+        ? enforceStandingDecision(raw, { kind, actions, threadId, threadName })
+        : { kind, actions, threadId, threadName };
+    /* A model can understand an explicit lasting decision yet still choose a
+       Thread because the prompt's uncertainty rule is deliberately
+       conservative. Clear durable commitments get one deterministic final
+       check; learned filing rules and typed commands still outrank it. */
     const reconciled = reconcileSorted({
       ...value,
-      kind,
-      actions,
-      threadId,
-      threadName,
+      ...standing,
     });
     return Response.json({ ...value, ...reconciled, via });
   } catch (error) {
-    console.error("sort failed", error);
+    /* AI SDK errors can carry the full request body, including the person's
+       capture. Keep server logs useful without turning them into a second,
+       invisible copy of what someone said. */
+    console.error("sort failed", sanitizeProviderError(error));
     const { message, status } = explain(error);
     return Response.json({ error: message }, { status });
   }

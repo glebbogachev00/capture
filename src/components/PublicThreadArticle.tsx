@@ -1,7 +1,12 @@
 import Link from "next/link";
 import type { CaptureArticle } from "@/content/articles";
 import { articleReadingMinutes, articleWordCount } from "@/content/articles";
+import { PLAYGROUND } from "@/lib/playground";
+import { appStartUrl, siteHome } from "@/lib/seo";
 import { SiteNav } from "./SiteNav";
+
+const HOME = siteHome(PLAYGROUND);
+const APP = appStartUrl(PLAYGROUND);
 
 function Sediment({ count = 3 }: { count?: number }) {
   return (
@@ -29,10 +34,10 @@ export function PublicThreadArticle({ article }: { article: CaptureArticle }) {
     <main className="capture-root site-page writing-page">
       <div className="capture-wrap site-wrap writing-wrap">
         <header className="capture-head site-head">
-          <Link className="capture-mark funding-mark" href="/">
+          <Link className="capture-mark funding-mark" href={HOME}>
             capture<span>.</span>
           </Link>
-          <SiteNav current="writing" />
+          <SiteNav current="writing" homeHref={HOME} />
         </header>
 
         <div className="thread-route" aria-label="Article location">
@@ -114,7 +119,7 @@ export function PublicThreadArticle({ article }: { article: CaptureArticle }) {
             <p>Say it before you decide where it belongs.</p>
           </div>
           <div className="site-actions article-end-actions">
-            <Link className="capture-btn" href="/app">Try Capture</Link>
+            <Link className="capture-btn" href={APP}>{PLAYGROUND ? "Try Capture" : "Open Capture"}</Link>
             <Link className="ghost site-ghost" href="/install">Install locally</Link>
           </div>
         </footer>

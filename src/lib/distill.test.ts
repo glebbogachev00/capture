@@ -4,9 +4,41 @@ import {
   findMarker,
   hydrateDistill,
   markerHold,
+  openDistillDraft,
+  closeDistillDraft,
   resolveSettled,
   EMPTY_DISTILL,
 } from "./distill";
+
+describe("Distill draft handoff", () => {
+  it("moves a capture draft into an empty Distill composer", () => {
+    expect(openDistillDraft("A thought I do not want to lose", "")).toEqual({
+      capture: "",
+      distill: "A thought I do not want to lose",
+    });
+  });
+
+  it("does not overwrite a Distill draft already in progress", () => {
+    expect(openDistillDraft("New capture text", "Existing Distill draft")).toEqual({
+      capture: "New capture text",
+      distill: "Existing Distill draft",
+    });
+  });
+
+  it("returns an unsent Distill draft when the person goes back", () => {
+    expect(closeDistillDraft("", "A thought I do not want to lose")).toEqual({
+      capture: "A thought I do not want to lose",
+      distill: "",
+    });
+  });
+
+  it("does not overwrite newer text already in the capture composer", () => {
+    expect(closeDistillDraft("Newer text", "Older Distill draft")).toEqual({
+      capture: "Newer text",
+      distill: "Older Distill draft",
+    });
+  });
+});
 
 describe("findMarker", () => {
   it("finds nothing in a plain reply", () => {

@@ -10,8 +10,8 @@ const PUBLIC_PATHS = [
   "/login",
   "/about",
   "/install",
+  "/pricing",
   "/funding",
-  "/sponsor",
   "/api/login",
   "/manifest.webmanifest",
   "/robots.txt",
@@ -52,7 +52,12 @@ export async function proxy(request: NextRequest) {
     : NextResponse.next();
 
   // Cloud has its own Supabase identity boundary, never the deployment password.
-  if (pathname === "/api/cloud" || pathname.startsWith("/api/cloud/")) {
+  // Polar signs its webhook request, so it must also bypass the browser gate.
+  if (
+    pathname === "/api/cloud" ||
+    pathname.startsWith("/api/cloud/") ||
+    pathname === "/api/webhooks/polar"
+  ) {
     return passThrough;
   }
   if (isPublicHome(pathname, PLAYGROUND) || isPublic(pathname)) {

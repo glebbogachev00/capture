@@ -34,6 +34,7 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { ReportBugForm } from "@/components/ReportBug";
 import { ProfileSignature } from "@/components/ProfileSignature";
 import { CaptureProfile } from "@/components/CaptureProfile";
+import { CloudAccountPanel } from "@/components/CloudBilling";
 import { PLAYGROUND } from "@/lib/playground";
 import type { CaptureEntry } from "@/lib/ledger";
 import type { DayWrap } from "@/lib/wrap";
@@ -889,7 +890,7 @@ export function SettingsScreen({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [openSection, setOpenSection] = useState<
-    "signature" | "data" | "restore" | "agent" | "principles" | "support" | null
+    "signature" | "cloud" | "data" | "restore" | "agent" | "principles" | "support" | null
   >(null);
   const [reporting, setReporting] = useState(false);
   const activePrinciples = principles.filter((p) => p.enabled).length;
@@ -950,6 +951,15 @@ export function SettingsScreen({
               </button>
             </li>
           </ul>
+        </SettingsDisclosure>
+
+        <SettingsDisclosure
+          title="Capture Cloud"
+          meta="plan · billing"
+          open={openSection === "cloud"}
+          onToggle={() => toggleSection("cloud")}
+        >
+          <CloudAccountPanel />
         </SettingsDisclosure>
 
         <SettingsDisclosure

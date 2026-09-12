@@ -78,6 +78,7 @@ describe("Cloud board route composition", () => {
 
   it("composes a fresh configured client, verified identity, and tenant-scoped repository", async () => {
     vi.stubEnv("CAPTURE_CLOUD", "1");
+    vi.stubEnv("CAPTURE_CLOUD_REQUIRE_SUBSCRIPTION", "0");
     const client = { auth: { getClaims: vi.fn() } };
     mocks.getCloudConfig.mockReturnValue(readyConfig);
     mocks.createCloudServerClient.mockResolvedValue(client);

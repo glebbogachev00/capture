@@ -2668,6 +2668,162 @@ body {
   color: var(--muted);
 }
 
+/* Offered only after Capture has worked once. It stays outside the crowded
+   masthead and disappears entirely when iOS reports standalone mode. */
+.install-invite-trigger {
+  position: fixed;
+  z-index: 40;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 8px 24px rgba(25, 29, 25, 0.12);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.install-invite-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  background: rgba(25, 29, 25, 0.34);
+}
+
+.install-invite-sheet {
+  position: relative;
+  width: min(100%, 390px);
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  background: var(--card);
+  color: var(--ink);
+  padding: 22px 20px 14px;
+  box-shadow: 0 20px 60px rgba(25, 29, 25, 0.22);
+}
+
+.install-invite-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.install-invite-kicker {
+  margin: 0 42px 7px 0;
+  font-family: var(--font-mono), monospace;
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.install-invite-sheet h2 {
+  margin: 0;
+  max-width: 290px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 26px;
+  line-height: 1.08;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.install-invite-steps {
+  list-style: none;
+  margin: 17px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.install-invite-steps li {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 11px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.install-invite-step-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+}
+
+.install-invite-steps strong,
+.install-invite-steps small {
+  display: block;
+}
+
+.install-invite-steps strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.install-invite-steps strong b {
+  margin-right: 5px;
+  color: var(--accent);
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+}
+
+.install-invite-steps small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.install-invite-help {
+  margin: 12px 2px 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.install-invite-later {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .install-invite-trigger,
+  .install-invite-sheet {
+    animation: none;
+  }
+}
+
 /* Sorting preferences stay behind one disclosure. Each rule has a reversible
    switch instead of a destructive Forget button. */
 .learned-list {
@@ -2845,6 +3001,7 @@ body {
   padding-bottom: 56px;
 }
 .funding-wrap {
+  max-width: 960px;
   padding-bottom: 24px;
 }
 .funding-head {
@@ -2856,6 +3013,7 @@ body {
 }
 .funding-hero {
   padding: 40px 0 28px;
+  text-align: center;
 }
 .funding-kicker,
 .funding-card-label {
@@ -2873,12 +3031,12 @@ body {
   line-height: 0.9;
   letter-spacing: -0.055em;
   font-variation-settings: "SOFT" 45, "WONK" 1;
-  max-width: 560px;
-  margin: 0;
+  max-width: 900px;
+  margin: 0 auto;
 }
 .funding-lede {
-  max-width: 500px;
-  margin: 22px 0 0;
+  max-width: 620px;
+  margin: 22px auto 0;
   color: var(--muted);
   font-size: 19px;
   line-height: 1.45;
@@ -2975,9 +3133,35 @@ body {
   display: flex;
   flex-direction: column;
 }
+.pricing-card.featured {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 .pricing-card p {
   font-weight: 600;
   color: var(--ink) !important;
+}
+.pricing-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pricing-card-head p {
+  margin: 0 !important;
+}
+.pricing-badge {
+  flex: none;
+  padding: 3px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent) !important;
+  font-family: var(--font-mono), monospace;
+  font-size: 9px !important;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.2 !important;
+  text-transform: uppercase;
 }
 .pricing-card strong {
   display: block;
@@ -2993,6 +3177,62 @@ body {
   font-size: 13.5px;
   line-height: 1.35;
 }
+.cloud-action {
+  margin-top: auto;
+  padding-top: 18px;
+}
+.cloud-checkout-btn,
+.cloud-inline-link {
+  width: 100%;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  text-decoration: none;
+}
+.cloud-action-note {
+  margin: 9px 0 0 !important;
+  color: #7b2f2f !important;
+  font-size: 12.5px !important;
+  font-weight: 400 !important;
+  line-height: 1.4 !important;
+}
+.cloud-account-copy {
+  align-items: flex-start;
+}
+.cloud-account-copy .cloud-inline-link {
+  width: auto;
+  margin-top: 4px;
+}
+.cloud-return {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: baseline;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.cloud-return strong {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.cloud-return span {
+  color: var(--muted);
+}
+.cloud-return.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 .supporter-card h2 {
   font-family: var(--font-display), Georgia, serif;
   font-size: 28px;
@@ -3001,88 +3241,6 @@ body {
   letter-spacing: -0.025em;
   font-variation-settings: "SOFT" 35;
   margin: 0 0 12px;
-}
-
-/* Sponsor page: Capture owns the argument; Ko-fi is only the payment rail. */
-.sponsor-hero h1 {
-  max-width: 620px;
-  line-height: 1;
-}
-.sponsor-checkout-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-  align-items: stretch;
-}
-.sponsor-checkout-grid .funding-card {
-  margin-bottom: 0;
-}
-.sponsor-promise {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.sponsor-promise .funding-rule-text {
-  color: var(--ink);
-}
-.sponsor-note {
-  margin-top: 22px !important;
-  font-size: 14px;
-  line-height: 1.5;
-}
-.sponsor-action-card {
-  display: flex;
-  flex-direction: column;
-}
-.sponsor-action-card h2 {
-  font-family: var(--font-display), Georgia, serif;
-  font-size: 34px;
-  font-weight: 500;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  font-variation-settings: "SOFT" 35;
-  margin: 0 0 12px;
-}
-.sponsor-action-card .site-actions {
-  margin-top: auto;
-  padding-top: 24px;
-}
-.sponsor-fallback {
-  margin-top: 14px !important;
-  font-size: 13px;
-  line-height: 1.4;
-}
-.sponsor-reasons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-.sponsor-reasons .funding-card {
-  margin-bottom: 0;
-}
-.sponsor-reasons h2,
-.sponsor-close h2 {
-  font-family: var(--font-display), Georgia, serif;
-  font-size: 25px;
-  font-weight: 500;
-  line-height: 1.12;
-  letter-spacing: -0.02em;
-  font-variation-settings: "SOFT" 35;
-  margin: 0 0 10px;
-}
-.sponsor-reasons p {
-  font-size: 14px;
-  line-height: 1.48;
-}
-.sponsor-close {
-  margin-top: 12px;
-}
-@media (max-width: 720px) {
-  .sponsor-checkout-grid,
-  .sponsor-reasons {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* public one-page site */
@@ -3372,19 +3530,26 @@ body {
 .writing-index-hero {
   width: 100%;
   margin-inline: auto;
-  padding-bottom: 34px;
+  padding: 52px 0 38px;
   text-align: center;
 }
 .writing-index-hero h1 {
-  max-width: 17ch;
+  max-width: 1000px;
   margin-inline: auto;
-  font-size: clamp(46px, 7vw, 64px);
-  line-height: 1;
+  font-size: clamp(46px, 6vw, 76px);
+  line-height: 0.98;
   letter-spacing: -0.045em;
   text-wrap: balance;
 }
+.writing-index-hero .site-hero-aside {
+  max-width: 720px;
+  margin: 24px auto 0;
+}
 .writing-index-hero .site-lede {
+  max-width: 640px;
   margin-inline: auto;
+  font-size: 17px;
+  line-height: 1.6;
 }
 .writing-index-hero .site-actions {
   justify-content: center;
@@ -3401,7 +3566,8 @@ body {
   color: var(--ink);
 }
 .writing-index-hero .writing-index-note {
-  margin: 24px 0 0;
+  max-width: 680px;
+  margin: 22px auto 0;
   text-align: left;
 }
 .writing-index-note p {
@@ -3810,6 +3976,13 @@ body {
   .pricing-card {
     min-height: 118px;
   }
+  .funding-wrap {
+    max-width: 620px;
+  }
+  .cloud-return {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
   .site-head {
     align-items: flex-start;
     gap: 14px;
@@ -3830,20 +4003,21 @@ body {
     min-height: 44px;
     padding: 9px 11px;
   }
-  /* Public pages keep their three lightweight section links beside the
-     wordmark. The older app-header rule above stacks richer utility navs, but
-     this nav has room and should continue to balance the upper-right corner. */
+  /* Four public destinations no longer fit beside the wordmark on a phone.
+     Give the mark its own line, then make every public page use the same
+     full-width navigation row. Tablet and desktop keep the compact header. */
   .site-page .site-head {
-    align-items: center;
-    flex-direction: row;
-    gap: 12px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
   }
   .site-page .site-nav {
-    width: auto;
+    width: 100%;
+    justify-content: space-between;
     flex-wrap: nowrap;
-    gap: 11px;
-    font-size: 13px;
-    letter-spacing: 0.055em;
+    gap: 8px;
+    font-size: 12.5px;
+    letter-spacing: 0.05em;
   }
   .site-page .site-nav > a {
     min-height: 44px;
@@ -4078,11 +4252,11 @@ body {
   border-color: var(--muted);
 }
 
-/* Settings uses the same disclosure language as The Record. The list stays
-   compact until a person asks for the rare controls inside one row. */
+/* Settings uses the same disclosure language as The Record. Every row follows
+   the full Capture column so the screen does not leave an arbitrary empty
+   strip on the right at tablet and desktop widths. */
 .settings-list {
   width: 100%;
-  max-width: 460px;
 }
 .settings-section {
   width: 100%;
@@ -4940,26 +5114,24 @@ body {
     text-align: center;
     padding-bottom: 26px;
   }
-  /* The hero is one centred composition, but it uses the desktop canvas.
-     The statement owns the larger field and the existing explanation fills
-     the formerly empty upper-right corner. No new copy or navigation is
-     invented merely to balance the page. */
+  /* Keep the editorial split without leaving the action column stranded in
+     the upper-right. The columns sit closer together and align by visual
+     centre, so the copy and controls balance the three-line statement. */
   .site-page:not(.install-page) .site-wrap > .site-hero.site-hero-split {
     display: grid;
-    grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.9fr);
-    align-items: start;
-    column-gap: clamp(32px, 4vw, 56px);
+    grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr);
+    align-items: center;
+    column-gap: clamp(36px, 3.5vw, 52px);
     text-align: left;
   }
   .site-page:not(.install-page) .site-hero-split .site-hero-heading {
     text-align: left;
   }
   .site-page:not(.install-page) .site-hero-split .site-hero-aside {
-    padding-top: 2px;
-    align-self: start;
+    align-self: center;
   }
   .site-page:not(.install-page) .site-hero-split .site-lede {
-    max-width: 38ch;
+    max-width: 42ch;
     margin-inline: 0;
     font-size: 17px;
     line-height: 1.6;
@@ -4971,10 +5143,17 @@ body {
     font-size: clamp(64px, 6.7vw, 96px);
     max-width: none;
   }
+  .writing-index-page .site-wrap.writing-wrap {
+    max-width: 940px;
+  }
   .writing-index-page .site-wrap .writing-index-hero h1 {
-    max-width: 15ch;
-    font-size: clamp(62px, 5.5vw, 80px);
-    line-height: 0.94;
+    max-width: 940px;
+    font-size: clamp(64px, 5.2vw, 76px);
+    line-height: 0.98;
+  }
+  .writing-index-page .public-thread-card h2,
+  .writing-index-page .public-thread-card > p {
+    max-width: none;
   }
   .site-wrap .site-lede {
     margin-left: auto;

@@ -109,6 +109,25 @@ const AFTER_DUE = DAY_MS;
 const LONG_CARRY = 45 * DAY_MS;
 export const MEDIUM_CAP = 8;
 
+const threeWordRunCache = new WeakMap<object, { text: string; runs: string[] }>();
+
+function threeWordRuns(entry: { text: string }): string[] {
+  const cached = threeWordRunCache.get(entry);
+  if (cached?.text === entry.text) return cached.runs;
+  const words = contentWords(entry.text);
+  const runs: string[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i <= words.length - 3; i++) {
+    const run = words.slice(i, i + 3).join(" ");
+    if (!seen.has(run)) {
+      seen.add(run);
+      runs.push(run);
+    }
+  }
+  threeWordRunCache.set(entry, { text: entry.text, runs });
+  return runs;
+}
+
 /** Normalised note text — trimmed, lowercased, whitespace collapsed. The
     unit of note-equality for the fold-back guard. */
 const normNote = (s: string): string =>
@@ -396,13 +415,10 @@ export function scanResolved(
      receipt on every board render. */
   const byRun = new Map<string, typeof receipts>();
   for (const receipt of receipts) {
-    const words = contentWords(receipt.text);
-    const seen = new Set<string>();
-    for (let i = 0; i <= words.length - 3; i++) {
-      const run = words.slice(i, i + 3).join(" ");
-      if (seen.has(run)) continue;
-      seen.add(run);
-      byRun.set(run, [...(byRun.get(run) ?? []), receipt]);
+    for (const run of threeWordRuns(receipt)) {
+      const receiptsForRun = byRun.get(run);
+      if (receiptsForRun) receiptsForRun.push(receipt);
+      else byRun.set(run, [receipt]);
     }
   }
   const out: OrganizeProposal[] = [];
@@ -412,9 +428,8 @@ export function scanResolved(
       const id = `done:${f.id}`;
       if (dropped.has(id)) continue;
       const candidates = new Set<(typeof receipts)[number]>();
-      const words = contentWords(f.text);
-      for (let i = 0; i <= words.length - 3; i++)
-        for (const receipt of byRun.get(words.slice(i, i + 3).join(" ")) ?? [])
+      for (const run of threeWordRuns(f))
+        for (const receipt of byRun.get(run) ?? [])
           candidates.add(receipt);
       const receipt = [...candidates].find((c) => sameNoteText(f.text, c.text));
       if (!receipt) continue;

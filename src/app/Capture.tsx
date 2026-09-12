@@ -1,5 +1,4 @@
 "use client";
-
 /* ============================================================
    CAPTURE — one capture surface, three destinations, self-clearing.
    Everything you say goes in one place. The system decides whether
@@ -13,8 +12,7 @@
    and operations live in useBoard(); the components below just
    render what it hands back.
    ============================================================ */
-
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BrushCleaning, Image as ImageIcon, Layers, MessagesSquare, Mic, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
 import { BusyLine, Row, TCard } from "@/components/cards";
@@ -56,6 +54,8 @@ import { useBoard } from "@/hooks/useBoard";
 import { ReportBug } from "@/components/ReportBug";
 import { PlaygroundNotice } from "@/components/PlaygroundNotice";
 import { TrialMeter } from "@/components/TrialMeter";
+import { InstallInvitation } from "@/components/InstallInvitation";
+import { CheckoutReturnNotice } from "@/components/CloudBilling";
 import { PLAYGROUND } from "@/lib/playground";
 import { groupActions } from "@/lib/group";
 import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
@@ -439,6 +439,7 @@ export function Capture() {
     <div className="capture-root">
       <div className="capture-wrap">
         {PLAYGROUND && <PlaygroundNotice />}
+        <Suspense fallback={null}><CheckoutReturnNotice /></Suspense>
       {/* Only once the board has loaded: the first-sight check must see
           the real capture count, not the empty board of a loading one. */}
         <div className="capture-head">
@@ -617,7 +618,7 @@ export function Capture() {
               ))}
             </div>
           )}
-          {PLAYGROUND && trial && <TrialMeter trial={trial} />}
+          {trial && <TrialMeter trial={trial} />}
           <div className="cap-bar">
             <button
               className="icon-btn"
@@ -1227,7 +1228,7 @@ export function Capture() {
           </>
         ))}
       </div>
-
+      <InstallInvitation successfulCapture={Boolean(landed && !/unsorted/i.test(landed))} hasExistingCapture={loaded && (data.ledger?.length ?? 0) > 0} />
       {/* Last thing on the page, under every note — where you end up when
           something has already gone wrong and you want to tell someone. */}
       <ReportBug />
@@ -1247,4 +1248,3 @@ export function Capture() {
     </div>
   );
 }
-

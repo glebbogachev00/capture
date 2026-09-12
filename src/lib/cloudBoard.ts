@@ -17,6 +17,8 @@ export interface CloudBoardDependencies {
   isEnabled: () => boolean;
   isConfigured?: () => boolean;
   verifyIdentity: (request: Request) => Promise<VerifiedIdentity | null>;
+  requiresEntitlement?: () => boolean;
+  hasEntitlement?: (identity: VerifiedIdentity) => Promise<boolean>;
   repository: CloudBoardRepository;
 }
 
@@ -127,6 +129,23 @@ async function identityOr401(
     : json({ error: "unauthorized" }, 401);
 }
 
+async function entitlementOrResponse(
+  identity: VerifiedIdentity,
+  deps: CloudBoardDependencies
+): Promise<true | Response> {
+  if (!deps.requiresEntitlement?.()) return true;
+  if (!deps.hasEntitlement) {
+    return json({ error: "subscription status is unavailable" }, 503);
+  }
+  try {
+    return (await deps.hasEntitlement(identity))
+      ? true
+      : json({ error: "capture cloud subscription required" }, 402);
+  } catch {
+    return json({ error: "subscription status is unavailable" }, 503);
+  }
+}
+
 export async function handleCloudBoardGet(
   request: Request,
   deps: CloudBoardDependencies
@@ -136,6 +155,8 @@ export async function handleCloudBoardGet(
 
   const identity = await identityOr401(request, deps);
   if (identity instanceof Response) return identity;
+  const entitlement = await entitlementOrResponse(identity, deps);
+  if (entitlement instanceof Response) return entitlement;
 
   try {
     const document = await deps.repository.get(identity.userId);
@@ -154,6 +175,8 @@ export async function handleCloudBoardPut(
 
   const identity = await identityOr401(request, deps);
   if (identity instanceof Response) return identity;
+  const entitlement = await entitlementOrResponse(identity, deps);
+  if (entitlement instanceof Response) return entitlement;
 
   const body = await readBoundedBody(request);
   if (body.status === "too-large") {

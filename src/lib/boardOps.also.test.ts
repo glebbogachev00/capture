@@ -77,6 +77,24 @@ describe("a capture that is about two subjects", () => {
     ).toBe(true);
   });
 
+  it("does not arbitrarily attach an action to the primary thread in a multi-subject capture", () => {
+    const out: SortResult = {
+      ...base,
+      kind: "both",
+      actions: ["Test Capture on mobile today"],
+      primaryText: "Capture pricing should remain simple.",
+      threadId: "t-capture",
+      also: [
+        { text: "Retake demos need a better rhythm.", threadId: "t-retake" },
+      ],
+    };
+
+    const { next } = applySorted(out, [], 1, board());
+
+    expect(next.actions).toHaveLength(1);
+    expect(next.actions[0].threadId).toBeUndefined();
+  });
+
   it("changes nothing at all for the ordinary one-subject capture", () => {
     const plain = applySorted(base, [], 1, board());
     const withEmpty = applySorted({ ...base, also: [] }, [], 1, board());

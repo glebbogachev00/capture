@@ -12,6 +12,50 @@
 
 export type SortKind = "action" | "thread" | "intention" | "both";
 
+/**
+ * Detect an explicit rule the person is setting beyond a single task.
+ *
+ * Models reliably understand the sentence but often file it as a Thread
+ * because the general prompt deliberately prefers Threads when uncertain.
+ * Requiring both a declaration and durable language keeps one-off decisions
+ * ("I decided to buy milk tomorrow") out of Intentions.
+ */
+export function explicitStandingDecision(raw: string): boolean {
+  const text = raw.toLowerCase().replaceAll("’", "'");
+  const declared =
+    /\b(?:i(?:'ve| have) decided|i commit|i(?:'m| am) committed|my rule is|from now on)\b/.test(
+      text
+    );
+  const durable =
+    /\b(?:always|never|every|each time|whenever|from now on|no longer)\b/.test(text);
+  return declared && durable;
+}
+
+export function enforceStandingDecision<
+  T extends {
+    kind: SortKind;
+    actions?: string[];
+    threadId?: string | null;
+    threadName?: string | null;
+  },
+>(raw: string, out: T): T {
+  if (
+    !explicitStandingDecision(raw) ||
+    out.kind === "intention" ||
+    out.kind === "both" ||
+    (out.kind === "thread" && (out.actions ?? []).some((action) => action.trim()))
+  ) {
+    return out;
+  }
+  return {
+    ...out,
+    kind: "intention",
+    actions: [],
+    threadId: null,
+    threadName: null,
+  };
+}
+
 export function reconcileSorted<
   T extends {
     kind: SortKind;

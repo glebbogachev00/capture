@@ -8,6 +8,7 @@ import { getCloudConfig } from "@/lib/supabase/config";
 import { createCloudServerClient } from "@/lib/supabase/server";
 import { identityFromClaims } from "@/lib/supabase/identity";
 import { CloudBoardRepository, type SupabaseQueryClient } from "@/lib/supabase/repository";
+import { isSubscriptionRequired } from "@/lib/cloudSubscription";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,18 @@ async function dependencies(): Promise<CloudBoardDependencies> {
     isEnabled: () => isCloudEnabled(),
     isConfigured: () => true,
     verifyIdentity: async () => identityFromClaims(client),
+    requiresEntitlement: () => isSubscriptionRequired(),
+    hasEntitlement: async ({ userId }) => {
+      const { data, error } = await client
+        .from("capture_cloud_subscriptions")
+        .select("polar_subscription_id")
+        .eq("user_id", userId)
+        .eq("is_entitled", true)
+        .gt("access_expires_at", new Date().toISOString())
+        .limit(1);
+      if (error) throw new Error("subscription status is unavailable");
+      return Array.isArray(data) && data.length > 0;
+    },
     repository: new CloudBoardRepository(client as unknown as SupabaseQueryClient),
   };
 }

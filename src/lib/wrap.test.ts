@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { dayKey, dayStats, wrapDue, mergeWraps, pendingWrap, type DayWrap } from "./wrap";
-import type { Board } from "./model";
+import { dayKey, dayStats, wrapDue, mergeCompletions, mergeWraps, pendingWrap, type DayWrap } from "./wrap";
+import type { Board, Completion } from "./model";
 import type { CaptureEntry } from "./ledger";
 
 const at = (d: string, h: number, m = 0) => new Date(`${d}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00`).getTime();
@@ -15,6 +15,14 @@ function board(ledger: CaptureEntry[], threads = [{ id: "t1", name: "Bugs" }, { 
 describe("dayKey", () => {
   it("uses the local day, so a late-night capture stays on its own day", () => {
     expect(dayKey(at("2026-08-26", 23, 29))).toBe("2026-08-26");
+  });
+});
+
+describe("mergeCompletions", () => {
+  it("keeps an immutable append-only completion list without rebuilding it", () => {
+    const existing: Completion[] = [{ id: "a", text: "Done", at: 1 }];
+    const appended = [...existing, { id: "b", text: "Also done", at: 2 }];
+    expect(mergeCompletions(existing, appended)).toBe(appended);
   });
 });
 

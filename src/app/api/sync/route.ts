@@ -5,6 +5,11 @@ import { hydrate } from "@/lib/model";
 import { getSync, pushSync } from "@/lib/syncStore";
 import { usingBlob } from "@/lib/hubStore";
 import { type SyncState, type Tombstone } from "@/lib/sync";
+import { isCloudEnabled } from "@/lib/cloudBoard";
+import {
+  GET as getCloudBoard,
+  PUT as putCloudBoard,
+} from "@/app/api/cloud/board/route";
 
 /** Why the hub could not store the board, in terms of the thing to fix.
     Serverless hosts have no writable disk, so a deployment without a blob
@@ -43,6 +48,11 @@ function gate(request: Request) {
 }
 
 export async function GET(request: Request) {
+  /* Cloud keeps the browser's long-standing sync contract, but changes the
+     backing store and tenant boundary. Never let a Cloud deployment fall
+     through to the single-user filesystem hub. */
+  if (isCloudEnabled()) return getCloudBoard(request);
+
   const gateResult = gate(request);
   if (!gateResult.allowed) {
     return NextResponse.json(
@@ -76,6 +86,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (isCloudEnabled()) return putCloudBoard(request);
+
   const gateResult = gate(request);
   if (!gateResult.allowed) {
     return NextResponse.json(
