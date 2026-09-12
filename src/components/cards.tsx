@@ -154,44 +154,6 @@ export const Row = memo(function Row({
           )}
         </div>
 
-        {more && !editing && (
-          <div className="row-actions">
-            <button className="ghost" onClick={() => setEditing(true)}>
-              Edit
-            </button>
-            {/* Tried on the meta line as a one-tap chip and it read as
-                clutter on a row that is otherwise just words and a date.
-                Back here with the other per-card verbs: a tap further away,
-                but the list stays a list. */}
-            <button className="ghost" onClick={onCopy}>
-              Copy
-            </button>
-            {a.unsorted && (
-              <button className="ghost" onClick={onResort} disabled={busy}>
-                Sort now
-              </button>
-            )}
-            {faded ? (
-              <button className="ghost" onClick={onRestore}>
-                Restore
-              </button>
-            ) : (
-              <>
-                <button className="ghost" onClick={onMakeThread}>
-                  Make a thread
-                </button>
-                <button
-                  className="ghost"
-                  onClick={onMakeIntention}
-                  disabled={busy}
-                >
-                  Make an intention
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
         {shelfOpen && (
           <div className="shelf">
             <button onClick={() => onSetShelf(DAY, "hours")}>1 day</button>
@@ -225,6 +187,43 @@ export const Row = memo(function Row({
           </button>
         )}
       </div>
+      {more && !editing && (
+        <div className="row-actions">
+          <button className="ghost" onClick={() => setEditing(true)}>
+            Edit
+          </button>
+          {/* Tried on the meta line as a one-tap chip and it read as
+              clutter on a row that is otherwise just words and a date.
+              Back here with the other per-card verbs: a tap further away,
+              but the list stays a list. */}
+          <button className="ghost" onClick={onCopy}>
+            Copy
+          </button>
+          {a.unsorted && (
+            <button className="ghost" onClick={onResort} disabled={busy}>
+              Sort now
+            </button>
+          )}
+          {faded ? (
+            <button className="ghost" onClick={onRestore}>
+              Restore
+            </button>
+          ) : (
+            <>
+              <button className="ghost" onClick={onMakeThread}>
+                Make a thread
+              </button>
+              <button
+                className="ghost"
+                onClick={onMakeIntention}
+                disabled={busy}
+              >
+                Make an intention
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 },

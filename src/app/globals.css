@@ -392,6 +392,7 @@ body {
 
 .act {
   display: flex;
+  flex-wrap: wrap;
   gap: 11px;
   align-items: flex-start;
   padding: 13px 2px;
@@ -1134,9 +1135,11 @@ body {
   font-size: 15px;
   line-height: 1;
   letter-spacing: 0.12em;
-  min-height: 38px;
-  min-width: 46px;
-  padding: 0 10px;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  min-width: 40px;
+  padding: 0;
   border-radius: 10px;
   cursor: pointer;
   display: inline-flex;
@@ -1195,14 +1198,35 @@ body {
   flex: none;
 }
 
-/* The revealed set. Expands in place, like the move and merge pickers. */
+/*
+ * The revealed set. Two equal columns keep every menu deliberate on a phone,
+ * while the 430px cap anchors the same block beneath the right-edge overflow
+ * control on desktop. An odd final command spans both columns rather than
+ * hanging alone on the left.
+ */
 .row-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 14px;
-  padding-top: 14px;
+  width: min(100%, 430px);
+  margin-top: 8px;
+  margin-left: auto;
+  padding-top: 8px;
   border-top: 1px solid var(--rule);
+}
+.row-actions > .ghost {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+}
+.row-actions > .ghost:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* The action menu is a full-width flex item instead of being squeezed into
+ * the text column beside the shelf and overflow controls. */
+.act > .row-actions {
+  flex: 0 0 min(100%, 430px);
 }
 
 /* Saved verbatim because no model would answer. */
