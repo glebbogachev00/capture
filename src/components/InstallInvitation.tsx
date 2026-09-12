@@ -113,15 +113,24 @@ export function InstallInvitation({
             <ol className="install-invite-steps">
               <li>
                 <span className="install-invite-step-icon"><Share size={19} /></span>
-                <span><strong><b>1</b> Open Share</strong><small>Tap Share, or choose Share from the browser menu.</small></span>
+                <span className="install-invite-step-copy">
+                  <span className="install-invite-step-heading"><b>1</b><strong>Open Share</strong></span>
+                  <small>Tap Share, or choose Share from the browser menu.</small>
+                </span>
               </li>
               <li>
                 <span className="install-invite-step-icon"><SquarePlus size={19} /></span>
-                <span><strong><b>2</b> Add to Home Screen</strong><small>Scroll through the actions if needed.</small></span>
+                <span className="install-invite-step-copy">
+                  <span className="install-invite-step-heading"><b>2</b><strong>Add to Home Screen</strong></span>
+                  <small>Scroll through the actions if needed.</small>
+                </span>
               </li>
               <li>
                 <span className="install-invite-step-icon"><Check size={19} /></span>
-                <span><strong><b>3</b> Tap Add</strong><small>Keep “Open as Web App” on if shown.</small></span>
+                <span className="install-invite-step-copy">
+                  <span className="install-invite-step-heading"><b>3</b><strong>Tap Add</strong></span>
+                  <small>Keep “Open as Web App” on if shown.</small>
+                </span>
               </li>
             </ol>
 
