@@ -19,28 +19,28 @@ const SITE = "https://www.trycapture.app/";
 describe("TryCapture search identity", () => {
   it("gives the public home a descriptive canonical identity", () => {
     const metadata = landingMetadata(true);
-    expect(metadata.title).toBe("Capture — messy thoughts that sort themselves");
+    expect(metadata.title).toBe("Capture | One place for all your thoughts");
     expect(metadata.description).toBe(
-      "Capture rough thoughts by voice or text. It sorts them into actions, threads, or intentions without making you choose first."
+      "One place for all your thoughts, organized for you and easy to find."
     );
     expect(metadata.alternates?.canonical).toBe(SITE);
     expect(metadata.openGraph).toMatchObject({
-      title: "Capture — messy thoughts that sort themselves",
+      title: "Capture | One place for all your thoughts",
       url: SITE,
       siteName: "Capture",
       type: "website",
       images: [
         {
-          url: "https://www.trycapture.app/og-v2.png",
+          url: "https://www.trycapture.app/og-clarity.png",
           width: 1200,
           height: 630,
-          alt: "Capture turning a rough thought into an action and a continuing thread",
+          alt: "Capture: one place for all your thoughts, organized for you and easy to find",
         },
       ],
     });
     expect(metadata.twitter).toMatchObject({
       card: "summary_large_image",
-      images: ["https://www.trycapture.app/og-v2.png"],
+      images: ["https://www.trycapture.app/og-clarity.png"],
     });
   });
 

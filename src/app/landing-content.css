@@ -1,0 +1,17 @@
+.landing-content .site-other-apps { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--rule); }
+.landing-content .site-other-apps h3 { margin: 0 0 10px; font: 500 24px/1.15 var(--font-display), Georgia, serif; letter-spacing: -.025em; }
+.site-page.landing-content .site-problem .site-other-apps p { font: 400 16px/1.55 var(--font-sans), sans-serif; letter-spacing: normal; }
+.landing-content .site-app-logos { display: flex; flex-wrap: wrap; gap: 24px; list-style: none; padding: 0; margin: 18px 0 0; }
+.landing-content .site-app-logos li { display: flex; align-items: center; gap: 9px; font-size: 14px; }
+.landing-content .site-app-logos img { width: 28px; height: 28px; object-fit: contain; }
+.site-page.landing-content .site-wrap > .site-distill { order: 8; }
+.landing-content .site-distill h2 { margin: 0 0 10px; font: 500 30px/1.08 var(--font-display), Georgia, serif; letter-spacing: -.025em; }
+
+.landing-content .feature-card-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: center; gap: 32px; }
+.landing-content .feature-card-copy { min-width: 0; }
+.landing-content .feature-card-image { min-width: 0; margin: 0; }
+.landing-content .feature-card-image img { display: block; width: 100%; height: auto; border-radius: 12px; }
+.landing-content .feature-card-image figcaption { margin-top: 10px; font: 400 12px/1.5 var(--font-sans), sans-serif; color: var(--muted); }
+@media (max-width: 760px) {
+  .landing-content .feature-card-layout { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+}

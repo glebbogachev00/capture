@@ -1,8 +1,10 @@
 import Link from "next/link";
+import Image from "next/image";
 import { PLAYGROUND, TRIAL_LIMIT } from "@/lib/playground";
 import { siteHome, websiteSchema } from "@/lib/seo";
 import { LandingDemo } from "@/components/LandingDemo";
 import { SiteNav } from "@/components/SiteNav";
+import "./landing-content.css";
 
 /** Where "open the app" points: the playground serves the board at /app so
     this page can hold the front door; a personal instance keeps it at /. */
@@ -58,26 +60,21 @@ const DEMO_OUT = [
 const kinds = [
   {
     name: "Actions",
-    label: "Mayflies",
-    copy: "They exist to be closed. Each one gets a shelf life, and fades on its own if it stops mattering.",
+    label: "What you need to do.",
+    copy: "Tasks have a shelf life and fade when it ends. Keep the ones you still need.",
   },
   {
     name: "Threads",
-    label: "Sediment",
-    copy: "An idea rarely arrives whole. Each fragment adds a layer, and the summary stays current.",
+    label: "Thoughts you’re still developing.",
+    copy: "Related thoughts collect in one place, with a summary that updates as you add to them.",
   },
   {
     name: "Intentions",
-    label: "Standing decisions",
-    copy: "Not goals. No checkbox, no due date. Every couple of months it asks whether you still mean it.",
+    label: "Goals that guide your choices.",
+    copy: "A direction to return to, not another task to finish. For example: “I build businesses that run without me.”",
   },
 ];
 
-const hidden = [
-  "It learns when you correct it. Answer once and the sorter carries it.",
-  "It proposes only when there is a decision. No graph of what it knows, no dashboard of what it noticed.",
-  "It shows its working in the record and in the file you export.",
-];
 
 
 /** A page-level signpost. Every heading on this page lived inside a card,
@@ -137,13 +134,12 @@ export function Landing() {
             </div>
           </div>
           <p className="demo-caption">
-            One sentence, two different species of thing. You did not have to
-            decide which, or tidy it first, or pick a folder.
+            One capture can hold several thoughts. Capture separates them, so you do not have to choose a folder or tidy them first.
           </p>
         </section>
   );
   return (
-    <main className="capture-root site-page">
+    <main className="capture-root site-page landing-content">
       {schema && (
         <script
           type="application/ld+json"
@@ -158,16 +154,16 @@ export function Landing() {
           <SiteNav current="about" homeHref={HOME} />
         </header>
 
-        <section className="site-hero site-hero-split">
+        <section className="site-hero site-hero-split" aria-labelledby="landing-title">
           <div className="site-hero-heading">
-            <p className="funding-kicker">Thought capture</p>
-            <h1>Messy thoughts that sort themselves.</h1>
+            <p className="funding-kicker">Never lose a valuable thought or idea</p>
+            <h1 id="landing-title">One place for all your thoughts, organized for you and easy to find.</h1>
           </div>
           <div className="site-hero-aside">
             <p className="funding-lede site-lede">
-              Say it however it comes out. Capture turns it into an Action,
-              Thread, or Intention without making you choose first.
+              Speak or type what’s on your mind. Capture separates things to do from ideas to keep, and brings related thoughts together.
             </p>
+            <p className="site-cue">No folders to manage. No old tasks to clear out.</p>
             <div className="site-actions">
               <Link className="capture-btn" href={APP}>
                 {PLAYGROUND ? "Try Capture" : "Open Capture"}
@@ -248,30 +244,27 @@ export function Landing() {
 
         <Movement
           id="use-cases"
-          title="From a thought in motion to useful work"
-          gloss="Three places where Capture earns its place."
+          title="No deciding where to save it."
+          gloss="Save a thought, find it later, and keep building on it."
         />
         <section className="site-card site-day" aria-label="Capture use cases">
           <dl className="note-beats">
             <div>
-              <dt>On a walk</dt>
+              <dt>Speak freely across topics</dt>
               <dd>
-                You remember the signup bug and reconsider pricing in the same
-                sentence. Capture lands the fix as an Action and pricing as a Thread.
+                Talk through several ideas and plans in one capture. Capture separates topics into new or existing threads and pulls out the things to do.
               </dd>
             </div>
             <div>
-              <dt>When the idea returns</dt>
+              <dt>No wondering where you put it.</dt>
               <dd>
-                Another pricing thought arrives later. Say it rough. Capture
-                adds it to the same Thread and keeps the summary current.
+                Search the words you remember. Find the thought and the context around it, without checking several apps.
               </dd>
             </div>
             <div>
-              <dt>Take it to your agent</dt>
+              <dt>Give your AI the whole idea.</dt>
               <dd>
-                Copy and paste the Thread into Claude, Hermes, or Codex when
-                you are ready to turn the pricing decision into a plan.
+                Copy a thread into Claude, Hermes, or the AI you already use. It includes the summary and everything you’ve added, with dates. You choose what to copy and paste.
               </dd>
             </div>
           </dl>
@@ -329,7 +322,7 @@ export function Landing() {
           <p>
             I do not have any yet, so here is the honest version. I built
             it for myself at the end of July, and I have used it every day
-            since. The four below are not customers — they are the work I
+            since. The four below are not customers. They are the work I
             was carrying while I used it.
           </p>
 
@@ -375,17 +368,30 @@ export function Landing() {
 
         <section className="site-card site-problem">
           <p className="funding-card-label">The point</p>
-          <h2>The thought can arrive unfinished.</h2>
+          <h2>No folders to manage. No old tasks to clear out.</h2>
           <p>
-            Capture is built for the sentence you actually produce, not a
-            clean prompt. Nothing here is called a note.
+            Short-lived tasks fade. Developing ideas stay together. You don’t need to file every new thought or delete every expired task.
           </p>
+          <div className="site-other-apps" aria-labelledby="other-apps-title">
+            <h3 id="other-apps-title">Keep the apps you already use.</h3>
+            <p>Capture is not a replacement for Notion or Obsidian. It makes thoughts easy to capture, organize, and find. Develop them in Capture, or copy them into the app you choose.</p>
+            <ul className="site-app-logos" aria-label="Apps you can keep using">
+              <li>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/brands/notion.png" width={28} height={28} alt="" /><span>Notion</span>
+              </li>
+              <li>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/brands/obsidian.svg" width={28} height={28} alt="" /><span>Obsidian</span>
+              </li>
+            </ul>
+          </div>
         </section>
 
         <Movement
             id="three-kinds"
-            title="Three kinds of thing"
-            gloss="Everything you say becomes one of these, and you never pick which one."
+            title="Different thoughts need different places."
+            gloss="Capture chooses where they belong. You don’t have to choose first."
           />
         <section className="site-kind-grid" aria-label="The three kinds">
           {kinds.map((kind) => (
@@ -397,17 +403,32 @@ export function Landing() {
           ))}
         </section>
 
-        <section className="site-card site-quiet">
-          <p className="funding-card-label">The sorting layer</p>
-          <h2>The app is quiet because the sorting is not.</h2>
-          <p>
-            It notices, files, fades and learns without narrating any of it.
-          </p>
-          <ul className="funding-list">
-            {hidden.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
+        <section className="site-card site-distill feature-card-layout" aria-labelledby="distill-title">
+          <div className="feature-card-copy">
+            <p className="funding-card-label">Distill mode</p>
+            <h2 id="distill-title">When you need to think it through.</h2>
+            <p>Not sure what you mean yet? Distill is a short AI conversation that helps you clarify an idea or decision. Review the result, then save it as an Action, Thread, or Intention.</p>
+          </div>
+          <figure className="feature-card-image">
+            <Image src="/screenshots/distill-mode.png" alt="Distill in Capture, with an app idea ready to discuss" width={1168} height={1140} unoptimized />
+            <figcaption>Start with what’s unclear.</figcaption>
+          </figure>
+        </section>
+
+        <section className="site-card site-quiet feature-card-layout" aria-labelledby="handoff-title">
+          <div className="feature-card-copy">
+            <p className="funding-card-label">Agent handoff</p>
+            <h2 id="handoff-title">Your history, ready for your agent.</h2>
+            <dl className="note-beats">
+              <div><dt>Pick a day</dt><dd>Open The Record. Its heat map shows your capture history. Click any day to revisit what you captured that day.</dd></div>
+              <div><dt>Share what you’re viewing</dt><dd>Click Share. In The Record, it shares that day’s captures. In a thread, it shares the summary and dated notes. On a tab, it shares that tab’s list.</dd></div>
+              <div><dt>Continue with your agent</dt><dd>Use your device’s share menu, or copy and paste into Claude, Hermes, or another agent. No collecting scattered notes or explaining everything again.</dd></div>
+            </dl>
+          </div>
+          <figure className="feature-card-image">
+            <Image src="/screenshots/record-heatmap.png" alt="The Record heat map in Capture, showing sample history with one day selected" width={920} height={536} unoptimized />
+            <figcaption>Example capture history, with a day selected.</figcaption>
+          </figure>
         </section>
 
         <Movement
@@ -422,8 +443,7 @@ export function Landing() {
           <p className="funding-card-label">Speech to text</p>
           <h2>Use the voice typing you already have.</h2>
           <p className="site-voice-intro">
-            Capture does not need a special recording workflow. If a tool can
-            type into the box, Capture can organize what you say.
+            Type it, or use your device’s voice typing. You don’t need to tidy it first.
           </p>
           <dl className="voice-options" aria-label="Voice typing options by device">
             <div>
@@ -480,8 +500,7 @@ export function Landing() {
           <p className="funding-card-label">Yours</p>
           <h2>Your thinking stays yours.</h2>
           <p>
-            It runs locally, on your own keys, and exports to a file you
-            keep. The product can disappear. Your thinking does not.
+            Your thoughts stay in this browser. Export a backup before clearing browser data.
           </p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>

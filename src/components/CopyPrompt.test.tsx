@@ -156,7 +156,7 @@ describe("install section links", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "Messy thoughts that sort themselves.",
+        name: "One place for all your thoughts, organized for you and easy to find.",
       })
     ).toBeTruthy();
     expect(screen.queryByLabelText(/install prompt/i)).toBeNull();
@@ -167,7 +167,7 @@ describe("install section links", () => {
     ).toBe(true);
 
     const navigation = screen.getByRole("navigation", { name: "Capture links" });
-    expect(within(navigation).queryByRole("button")).toBeNull();
+    expect(within(navigation).getByRole("button", { name: "Open navigation" }).getAttribute("aria-expanded")).toBe("false");
     expect(within(navigation).getByRole("link", { name: "About" }).getAttribute("aria-current"))
       .toBe("page");
     const heroActions = container.querySelector(".site-hero .site-actions");
