@@ -70,6 +70,20 @@ describe("Landing copy within the existing page", () => {
     expect(distill.textContent).toContain("clarify an idea or decision");
     expect(distill.textContent).toContain("Review the result, then save");
   });
+  it("gives Distill and handoff their own page sections above the cards", () => {
+    render(<Landing />);
+    for (const [title, card] of [["Distill mode", ".site-distill"], ["Agent handoff", ".site-quiet"]]) {
+      const section = screen.getByRole("region", { name: title });
+      const heading = within(section).getByRole("heading", { name: title, level: 2 });
+      expect(section.parentElement?.classList.contains("site-wrap")).toBe(true);
+      expect(heading.closest(".site-card")).toBeNull();
+      expect(section.querySelector(card)).not.toBeNull();
+      expect(heading.compareDocumentPosition(section.querySelector(card)!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    }
+    expect(document.querySelector(".site-distill .feature-screenshot-frame img")).not.toBeNull();
+    expect(screen.getByText(/Tap this icon beside Capture/)).toBeTruthy();
+    expect(screen.getByText(/Tap the counts below Capture/)).toBeTruthy();
+  });
   it("places real app screenshots in the matching feature cards", () => {
     render(<Landing />);
     const handoff = screen.getByRole("region", { name: "Your history, ready for your agent." });

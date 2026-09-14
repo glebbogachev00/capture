@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { MessagesSquare, Share2 } from "lucide-react";
 import { PLAYGROUND, TRIAL_LIMIT } from "@/lib/playground";
 import { siteHome, websiteSchema } from "@/lib/seo";
 import { LandingDemo } from "@/components/LandingDemo";
@@ -96,7 +97,7 @@ function Movement({
 }) {
   return (
     <div className="movement" data-move={id} id={id}>
-      <h2>{title}</h2>
+      <h2 id={`${id}-heading`}>{title}</h2>
       {gloss && <p>{gloss}</p>}
     </div>
   );
@@ -403,22 +404,28 @@ export function Landing() {
           ))}
         </section>
 
+        <section className="feature-chapter" aria-labelledby="distill-heading">
+          <Movement id="distill" title="Distill mode" />
         <section className="site-card site-distill feature-card-layout" aria-labelledby="distill-title">
           <div className="feature-card-copy">
-            <p className="funding-card-label">Distill mode</p>
-            <h2 id="distill-title">When you need to think it through.</h2>
+            <h3 id="distill-title">When you need to think it through.</h3>
             <p>Not sure what you mean yet? Distill is a short AI conversation that helps you clarify an idea or decision. Review the result, then save it as an Action, Thread, or Intention.</p>
           </div>
           <figure className="feature-card-image">
-            <Image src="/screenshots/distill-mode.png" alt="Distill in Capture, with an app idea ready to discuss" width={1168} height={1140} unoptimized />
-            <figcaption>Start with what’s unclear.</figcaption>
+            <div className="feature-screenshot-frame">
+              <Image src="/screenshots/distill-mode.png" alt="Distill in Capture, with an app idea ready to discuss" width={1168} height={1140} unoptimized />
+            </div>
+            <figcaption className="feature-access-cue"><span className="feature-control-icon"><MessagesSquare size={18} strokeWidth={1.7} aria-hidden="true" /></span><span>Tap this icon beside Capture to open Distill.</span></figcaption>
           </figure>
         </section>
 
+        </section>
+
+        <section className="feature-chapter" aria-labelledby="handoff-heading">
+          <Movement id="handoff" title="Agent handoff" />
         <section className="site-card site-quiet feature-card-layout" aria-labelledby="handoff-title">
           <div className="feature-card-copy">
-            <p className="funding-card-label">Agent handoff</p>
-            <h2 id="handoff-title">Your history, ready for your agent.</h2>
+            <h3 id="handoff-title">Your history, ready for your agent.</h3>
             <dl className="note-beats">
               <div><dt>Pick a day</dt><dd>Open The Record. Its heat map shows your capture history. Click any day to revisit what you captured that day.</dd></div>
               <div><dt>Share what you’re viewing</dt><dd>Click Share. In The Record, it shares that day’s captures. In a thread, it shares the summary and dated notes. On a tab, it shares that tab’s list.</dd></div>
@@ -428,7 +435,10 @@ export function Landing() {
           <figure className="feature-card-image">
             <Image src="/screenshots/record-heatmap.png" alt="The Record heat map in Capture, showing sample history with one day selected" width={920} height={536} unoptimized />
             <figcaption>Example capture history, with a day selected.</figcaption>
+            <div className="feature-access-cue"><span className="feature-control-icon"><Share2 size={18} strokeWidth={1.7} aria-hidden="true" /></span><span>Tap the counts below Capture’s name to open The Record. Pick a day, then tap Share.</span></div>
           </figure>
+        </section>
+
         </section>
 
         <Movement

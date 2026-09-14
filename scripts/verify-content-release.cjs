@@ -18,6 +18,17 @@ fs.mkdirSync(dir,{recursive:true});
   const text=await page.locator('body').innerText();
   for(const term of ['Never lose a valuable thought or idea','new or existing threads','pulls out the things to do','not a replacement for Notion or Obsidian','Distill mode','Your history, ready for your agent.','Export a backup before clearing browser data.'])assert(text.toLowerCase().includes(term.toLowerCase()),term);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'horizontal overflow');
+  const sections=await page.evaluate(()=>{
+   const kinds=document.querySelector('.site-kind-grid').getBoundingClientRect();
+   const d=document.querySelector('[aria-labelledby="distill-heading"]');
+   const h=document.querySelector('[aria-labelledby="handoff-heading"]');
+   const frame=d.querySelector('.feature-screenshot-frame').getBoundingClientRect();
+   const img=d.querySelector('.feature-screenshot-frame img').getBoundingClientRect();
+   return {topLevel:[d,h].every(e=>e.parentElement.classList.contains('site-wrap')),ordered:kinds.bottom<=d.getBoundingClientRect().top&&d.getBoundingClientRect().bottom<=h.getBoundingClientRect().top,headingsAbove:[d,h].every(e=>e.querySelector('.movement').getBoundingClientRect().bottom<=e.querySelector('.site-card').getBoundingClientRect().top),left:img.left-frame.left,right:frame.right-img.right};
+  });
+  assert(sections.topLevel&&sections.ordered&&sections.headingsAbove,JSON.stringify(sections));
+  assert(sections.left>=24&&sections.right>=24,JSON.stringify(sections));
+  results.push({width,sections});
   for(const img of await page.locator('.site-app-logos img').all()) assert(await img.evaluate(i=>i.complete&&i.naturalWidth>0),'brand image');
   await page.screenshot({path:`${dir}/hero-${width}.png`});
   if(width<=760) {
@@ -34,7 +45,7 @@ fs.mkdirSync(dir,{recursive:true});
    await page.goto(base,{waitUntil:'networkidle'});
   } else assert(!(await page.locator('.site-nav-toggle').isVisible()));
   if(width===390||width===1440){
-   for(const [name,selector] of [['topics','.site-day'],['apps','.site-other-apps'],['distill','.site-distill'],['handoff','[aria-labelledby="handoff-title"]']]) {
+   for(const [name,selector] of [['topics','.site-day'],['apps','.site-other-apps'],['distill','[aria-labelledby="distill-heading"]'],['handoff','[aria-labelledby="handoff-heading"]']]) {
     const element=page.locator(selector);await element.scrollIntoViewIfNeeded();for(const img of await element.locator('.feature-card-image img').all()){await img.evaluate(i=>i.decode());assert(await img.evaluate(i=>i.complete&&i.naturalWidth>0));}await element.screenshot({path:`${dir}/${name}-${width}.png`});
    }
    await page.getByRole('button',{name:'Watch the 25-second demo'}).click();
