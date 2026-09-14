@@ -72,14 +72,17 @@ describe("Landing copy within the existing page", () => {
   });
   it("gives Distill and handoff their own page sections above the cards", () => {
     render(<Landing />);
-    for (const [title, card] of [["Distill mode", ".site-distill"], ["Agent handoff", ".site-quiet"]]) {
+    for (const [title, card] of [["When you need to think it through.", ".site-distill"], ["Your history, ready for your agent.", ".site-quiet"]]) {
       const section = screen.getByRole("region", { name: title });
       const heading = within(section).getByRole("heading", { name: title, level: 2 });
       expect(section.parentElement?.classList.contains("site-wrap")).toBe(true);
       expect(heading.closest(".site-card")).toBeNull();
+      expect(heading.parentElement?.querySelector("p")?.textContent?.trim()).toBeTruthy();
       expect(section.querySelector(card)).not.toBeNull();
       expect(heading.compareDocumentPosition(section.querySelector(card)!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     }
+    expect(screen.getByRole("heading", {name: "Distill mode", level: 3})).toBeTruthy();
+    expect(screen.getByRole("heading", {name: "Agent handoff", level: 3})).toBeTruthy();
     expect(document.querySelector(".site-distill .feature-screenshot-frame img")).not.toBeNull();
     expect(screen.getByText(/Tap this icon beside Capture/)).toBeTruthy();
     expect(screen.getByText(/Tap the counts below Capture/)).toBeTruthy();

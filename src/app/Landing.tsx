@@ -405,10 +405,10 @@ export function Landing() {
         </section>
 
         <section className="feature-chapter" aria-labelledby="distill-heading">
-          <Movement id="distill" title="Distill mode" />
+          <Movement id="distill" title="When you need to think it through." gloss="Clarify an idea or decision before you save it." />
         <section className="site-card site-distill feature-card-layout" aria-labelledby="distill-title">
           <div className="feature-card-copy">
-            <h3 id="distill-title">When you need to think it through.</h3>
+            <h3 id="distill-title">Distill mode</h3>
             <p>Not sure what you mean yet? Distill is a short AI conversation that helps you clarify an idea or decision. Review the result, then save it as an Action, Thread, or Intention.</p>
           </div>
           <figure className="feature-card-image">
@@ -422,10 +422,10 @@ export function Landing() {
         </section>
 
         <section className="feature-chapter" aria-labelledby="handoff-heading">
-          <Movement id="handoff" title="Agent handoff" />
+          <Movement id="handoff" title="Your history, ready for your agent." gloss="Share the thoughts you choose, with their context included." />
         <section className="site-card site-quiet feature-card-layout" aria-labelledby="handoff-title">
           <div className="feature-card-copy">
-            <h3 id="handoff-title">Your history, ready for your agent.</h3>
+            <h3 id="handoff-title">Agent handoff</h3>
             <dl className="note-beats">
               <div><dt>Pick a day</dt><dd>Open The Record. Its heat map shows your capture history. Click any day to revisit what you captured that day.</dd></div>
               <div><dt>Share what you’re viewing</dt><dd>Click Share. In The Record, it shares that day’s captures. In a thread, it shares the summary and dated notes. On a tab, it shares that tab’s list.</dd></div>

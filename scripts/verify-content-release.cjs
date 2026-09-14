@@ -18,6 +18,11 @@ fs.mkdirSync(dir,{recursive:true});
   const text=await page.locator('body').innerText();
   for(const term of ['Never lose a valuable thought or idea','new or existing threads','pulls out the things to do','not a replacement for Notion or Obsidian','Distill mode','Your history, ready for your agent.','Export a backup before clearing browser data.'])assert(text.toLowerCase().includes(term.toLowerCase()),term);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'horizontal overflow');
+  assert.equal(await page.locator('#distill-heading').innerText(),'When you need to think it through.');
+  assert.equal(await page.locator('#handoff-heading').innerText(),'Your history, ready for your agent.');
+  assert.equal(await page.locator('#distill-title').innerText(),'Distill mode');
+  assert.equal(await page.locator('#handoff-title').innerText(),'Agent handoff');
+  for(const id of ['distill','handoff']) assert((await page.locator(`#${id} > p`).innerText()).trim());
   const sections=await page.evaluate(()=>{
    const kinds=document.querySelector('.site-kind-grid').getBoundingClientRect();
    const d=document.querySelector('[aria-labelledby="distill-heading"]');
