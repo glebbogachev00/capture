@@ -157,14 +157,13 @@ export function Landing() {
 
         <section className="site-hero site-hero-split" aria-labelledby="landing-title">
           <div className="site-hero-heading">
-            <p className="funding-kicker">Never lose a valuable thought or idea</p>
-            <h1 id="landing-title">One place for all your thoughts, organized for you and easy to find.</h1>
+            <p className="funding-kicker">Thought capture</p>
+            <h1 id="landing-title">Messy thoughts that sort themselves.</h1>
           </div>
           <div className="site-hero-aside">
             <p className="funding-lede site-lede">
-              Speak or type what’s on your mind. Capture separates things to do from ideas to keep, and brings related thoughts together.
+              Say what’s on your mind. Capture keeps related ideas together, separates out tasks, and helps you find your thoughts later.
             </p>
-            <p className="site-cue">No folders to manage. No old tasks to clear out.</p>
             <div className="site-actions">
               <Link className="capture-btn" href={APP}>
                 {PLAYGROUND ? "Try Capture" : "Open Capture"}

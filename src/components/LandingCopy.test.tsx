@@ -5,7 +5,7 @@ import { Landing } from "@/app/Landing";
 vi.mock("@/lib/playground", () => ({ PLAYGROUND: true, TRIAL_LIMIT: 15 }));
 afterEach(cleanup);
 
-const HEADLINE = "One place for all your thoughts, organized for you and easy to find.";
+const HEADLINE = "Messy thoughts that sort themselves.";
 
 describe("Landing copy within the existing page", () => {
   it("explains multi-topic capture without a length or accuracy guarantee", () => {
@@ -17,8 +17,8 @@ describe("Landing copy within the existing page", () => {
     render(<Landing />);
     const hero = screen.getByRole("region", { name: HEADLINE });
     expect(within(hero).getByRole("heading", { level: 1 }).textContent).toBe(HEADLINE);
-    expect(hero.textContent).toContain("Speak or type");
-    expect(hero.textContent).toContain("No folders to manage. No old tasks to clear out.");
+    expect(hero.querySelector(".site-lede")?.textContent?.trim()).toBe("Say what’s on your mind. Capture keeps related ideas together, separates out tasks, and helps you find your thoughts later.");
+    expect(hero.querySelector(".site-lede")?.textContent).not.toMatch(/Action|Thread|Intention/);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
   it("retains the existing page sections and demo instead of a new layout", () => {
