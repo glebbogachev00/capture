@@ -8,7 +8,7 @@ fs.mkdirSync(dir,{recursive:true});
  const browser=await chromium.launch();
  const results=[];
  try {
- for(const width of [390,760,761,1440]) {
+ for(const width of [390,760,761,900,901,1440]) {
   const context=await browser.newContext({viewport:{width,height:1000},reducedMotion:'reduce'});
   const page=await context.newPage();const errors=[];const failed=[];
   page.on('pageerror',e=>errors.push(e.message));
@@ -18,24 +18,42 @@ fs.mkdirSync(dir,{recursive:true});
   assert.equal(await page.locator('.site-hero .site-lede').innerText(),'Say what’s on your mind. Capture keeps related ideas together, separates out tasks, and helps you find your thoughts later.');
   assert.equal(await page.locator('.capture-walkthrough').count(),0);
   const text=await page.locator('body').innerText();
-  for(const term of ['Thought capture','new or existing threads','pulls out the things to do','not a replacement for Notion or Obsidian','Distill mode','Your history, ready for your agent.','Export a backup before clearing browser data.'])assert(text.toLowerCase().includes(term.toLowerCase()),term);
+  for(const term of ['Thought capture','new or existing threads','pulls out the things to do','not a replacement for Notion or Obsidian','Distill mode','When you need to do more with a thought.','Export a backup before clearing browser data.'])assert(text.toLowerCase().includes(term.toLowerCase()),term);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'horizontal overflow');
-  assert.equal(await page.locator('#distill-heading').innerText(),'When you need to think it through.');
-  assert.equal(await page.locator('#handoff-heading').innerText(),'Your history, ready for your agent.');
+  assert.equal(await page.locator('#more-with-a-thought-heading').innerText(),'When you need to do more with a thought.');
+  assert.equal(await page.locator('#more-with-a-thought > p').innerText(),'Work through an idea, or share it with your agent.');
   assert.equal(await page.locator('#distill-title').innerText(),'Distill mode');
   assert.equal(await page.locator('#handoff-title').innerText(),'Agent handoff');
-  for(const id of ['distill','handoff']) assert((await page.locator(`#${id} > p`).innerText()).trim());
+  const headingStyles=await page.locator('.feature-card-copy h3').evaluateAll(headings=>headings.map(h=>{const s=getComputedStyle(h);return [s.fontFamily,s.fontSize,s.lineHeight]}));
+  assert.deepEqual(headingStyles[0],headingStyles[1],'paired card headings use the same typography');
   const sections=await page.evaluate(()=>{
    const kinds=document.querySelector('.site-kind-grid').getBoundingClientRect();
-   const d=document.querySelector('[aria-labelledby="distill-heading"]');
-   const h=document.querySelector('[aria-labelledby="handoff-heading"]');
-   const frame=d.querySelector('.feature-screenshot-frame').getBoundingClientRect();
-   const img=d.querySelector('.feature-screenshot-frame img').getBoundingClientRect();
-   return {topLevel:[d,h].every(e=>e.parentElement.classList.contains('site-wrap')),ordered:kinds.bottom<=d.getBoundingClientRect().top&&d.getBoundingClientRect().bottom<=h.getBoundingClientRect().top,headingsAbove:[d,h].every(e=>e.querySelector('.movement').getBoundingClientRect().bottom<=e.querySelector('.site-card').getBoundingClientRect().top),left:img.left-frame.left,right:frame.right-img.right};
+   const section=document.querySelector('.feature-chapter');
+   const d=section.querySelector('#distill').getBoundingClientRect();
+   const h=section.querySelector('#handoff').getBoundingClientRect();
+   const frame=section.querySelector('.feature-screenshot-frame').getBoundingClientRect();
+   const img=section.querySelector('.feature-screenshot-frame img').getBoundingClientRect();
+   const paired=innerWidth>900;
+   const layout=paired?Math.abs(d.top-h.top)<1&&d.right<h.left&&Math.abs(d.width-h.width)<1:d.bottom<h.top;
+   return {topLevel:section.parentElement.classList.contains('site-wrap'),ordered:kinds.bottom<=section.getBoundingClientRect().top,headingsAbove:section.querySelector('.movement').getBoundingClientRect().bottom<=Math.min(d.top,h.top),paired,layout,left:img.left-frame.left,right:frame.right-img.right};
   });
-  assert(sections.topLevel&&sections.ordered&&sections.headingsAbove,JSON.stringify(sections));
+  assert(sections.topLevel&&sections.ordered&&sections.headingsAbove&&sections.layout,JSON.stringify(sections));
   assert(sections.left>=24&&sections.right>=24,JSON.stringify(sections));
-  results.push({width,sections});
+  const cards=await page.locator('.feature-card-layout').evaluateAll(elements=>elements.map(card=>{
+   const copy=card.querySelector('.feature-card-copy').getBoundingClientRect();
+   const image=card.querySelector('.feature-card-image').getBoundingClientRect();
+   const bounds=card.getBoundingClientRect();
+   const parent=card.parentElement.getBoundingClientRect();
+   return {stacked:copy.bottom<=image.top,gap:image.top-copy.bottom,width:image.width,cardWidth:bounds.width,compact:bounds.width<=560,centered:Math.abs((bounds.left+bounds.right)-(parent.left+parent.right))<1,aligned:Math.abs(copy.left-image.left)<1&&Math.abs(copy.width-image.width)<1};
+  }));
+  assert.equal(cards.length,2);
+  assert(cards.every(card=>card.stacked&&card.aligned&&card.compact&&card.gap===24),JSON.stringify({width,cards}));
+  assert(await page.locator('.site-quiet .note-beats > div').evaluateAll(steps=>steps.length===3&&steps.every(step=>{
+   const label=step.querySelector('dt').getBoundingClientRect();
+   const text=step.querySelector('dd').getBoundingClientRect();
+   return label.bottom<=text.top&&Math.abs(label.left-text.left)<1;
+  })),'handoff labels stack above explanations');
+  results.push({width,sections,cards});
   for(const img of await page.locator('.site-app-logos img').all()) assert(await img.evaluate(i=>i.complete&&i.naturalWidth>0),'brand image');
   await page.screenshot({path:`${dir}/hero-${width}.png`});
   if(width<=760) {
@@ -52,7 +70,7 @@ fs.mkdirSync(dir,{recursive:true});
    await page.goto(base,{waitUntil:'networkidle'});
   } else assert(!(await page.locator('.site-nav-toggle').isVisible()));
   if(width===390||width===1440){
-   for(const [name,selector] of [['topics','.site-day'],['apps','.site-other-apps'],['distill','[aria-labelledby="distill-heading"]'],['handoff','[aria-labelledby="handoff-heading"]']]) {
+   for(const [name,selector] of [['topics','.site-day'],['apps','.site-other-apps'],['features','.feature-chapter'],['distill','#distill'],['handoff','#handoff']]) {
     const element=page.locator(selector);await element.scrollIntoViewIfNeeded();for(const img of await element.locator('.feature-card-image img').all()){await img.evaluate(i=>i.decode());assert(await img.evaluate(i=>i.complete&&i.naturalWidth>0));}await element.screenshot({path:`${dir}/${name}-${width}.png`});
    }
    await page.getByRole('button',{name:'Watch the 25-second demo'}).click();

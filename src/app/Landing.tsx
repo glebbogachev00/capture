@@ -403,9 +403,10 @@ export function Landing() {
           ))}
         </section>
 
-        <section className="feature-chapter" aria-labelledby="distill-heading">
-          <Movement id="distill" title="When you need to think it through." gloss="Clarify an idea or decision before you save it." />
-        <section className="site-card site-distill feature-card-layout" aria-labelledby="distill-title">
+        <section className="feature-chapter" aria-labelledby="more-with-a-thought-heading">
+          <Movement id="more-with-a-thought" title="When you need to do more with a thought." gloss="Work through an idea, or share it with your agent." />
+          <div className="feature-card-grid">
+        <section id="distill" className="site-card site-distill feature-card-layout" aria-labelledby="distill-title">
           <div className="feature-card-copy">
             <h3 id="distill-title">Distill mode</h3>
             <p>Not sure what you mean yet? Distill is a short AI conversation that helps you clarify an idea or decision. Review the result, then save it as an Action, Thread, or Intention.</p>
@@ -418,11 +419,7 @@ export function Landing() {
           </figure>
         </section>
 
-        </section>
-
-        <section className="feature-chapter" aria-labelledby="handoff-heading">
-          <Movement id="handoff" title="Your history, ready for your agent." gloss="Share the thoughts you choose, with their context included." />
-        <section className="site-card site-quiet feature-card-layout" aria-labelledby="handoff-title">
+        <section id="handoff" className="site-card site-quiet feature-card-layout" aria-labelledby="handoff-title">
           <div className="feature-card-copy">
             <h3 id="handoff-title">Agent handoff</h3>
             <dl className="note-beats">
@@ -437,7 +434,7 @@ export function Landing() {
             <div className="feature-access-cue"><span className="feature-control-icon"><Share2 size={18} strokeWidth={1.7} aria-hidden="true" /></span><span>Tap the counts below Capture’s name to open The Record. Pick a day, then tap Share.</span></div>
           </figure>
         </section>
-
+          </div>
         </section>
 
         <Movement

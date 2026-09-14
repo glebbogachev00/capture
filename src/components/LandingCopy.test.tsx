@@ -40,7 +40,7 @@ describe("Landing copy within the existing page", () => {
   it("explains thread handoff and original captures without an automatic integration", () => {
     render(<Landing />);
     expect(screen.getByText(/everything you’ve added, with dates/)).toBeTruthy();
-    const handoff = screen.getByRole("region", { name: "Your history, ready for your agent." });
+    const handoff = screen.getByRole("region", { name: "Agent handoff" });
     expect(handoff.textContent).toContain("heat map");
     expect(handoff.textContent).toContain("Click any day");
     expect(handoff.textContent).toContain("Click Share");
@@ -65,22 +65,24 @@ describe("Landing copy within the existing page", () => {
   });
   it("explains Distill as clarification with review before saving", () => {
     render(<Landing />);
-    const distill = screen.getByRole("region", { name: "When you need to think it through." });
+    const distill = screen.getByRole("region", { name: "Distill mode" });
     expect(distill.textContent).toContain("short AI conversation");
     expect(distill.textContent).toContain("clarify an idea or decision");
     expect(distill.textContent).toContain("Review the result, then save");
   });
-  it("gives Distill and handoff their own page sections above the cards", () => {
+  it("groups both feature cards under the approved heading and supporting sentence", () => {
     render(<Landing />);
-    for (const [title, card] of [["When you need to think it through.", ".site-distill"], ["Your history, ready for your agent.", ".site-quiet"]]) {
-      const section = screen.getByRole("region", { name: title });
-      const heading = within(section).getByRole("heading", { name: title, level: 2 });
-      expect(section.parentElement?.classList.contains("site-wrap")).toBe(true);
-      expect(heading.closest(".site-card")).toBeNull();
-      expect(heading.parentElement?.querySelector("p")?.textContent?.trim()).toBeTruthy();
-      expect(section.querySelector(card)).not.toBeNull();
-      expect(heading.compareDocumentPosition(section.querySelector(card)!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    }
+    const title = "When you need to do more with a thought.";
+    const section = screen.getByRole("region", { name: title });
+    const heading = within(section).getByRole("heading", { name: title, level: 2 });
+    expect(section.parentElement?.classList.contains("site-wrap")).toBe(true);
+    expect(heading.closest(".site-card")).toBeNull();
+    expect(heading.parentElement?.querySelector("p")?.textContent).toBe("Work through an idea, or share it with your agent.");
+    const cards = section.querySelectorAll(".feature-card-grid > .feature-card-layout");
+    expect(cards).toHaveLength(2);
+    expect([...cards].map(card => card.id)).toEqual(["distill", "handoff"]);
+    for (const card of cards) expect(heading.compareDocumentPosition(card)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelectorAll(".feature-chapter")).toHaveLength(1);
     expect(screen.getByRole("heading", {name: "Distill mode", level: 3})).toBeTruthy();
     expect(screen.getByRole("heading", {name: "Agent handoff", level: 3})).toBeTruthy();
     expect(document.querySelector(".site-distill .feature-screenshot-frame img")).not.toBeNull();
@@ -89,8 +91,8 @@ describe("Landing copy within the existing page", () => {
   });
   it("places real app screenshots in the matching feature cards", () => {
     render(<Landing />);
-    const handoff = screen.getByRole("region", { name: "Your history, ready for your agent." });
-    const distill = screen.getByRole("region", { name: "When you need to think it through." });
+    const handoff = screen.getByRole("region", { name: "Agent handoff" });
+    const distill = screen.getByRole("region", { name: "Distill mode" });
     expect(within(handoff).getByRole("img").getAttribute("src")).toBe("/screenshots/record-heatmap.png");
     expect(within(handoff).getByText(/Example capture history/)).toBeTruthy();
     expect(within(distill).getByRole("img").getAttribute("src")).toBe("/screenshots/distill-mode.png");
