@@ -5,6 +5,8 @@ import { PLAYGROUND, TRIAL_LIMIT } from "@/lib/playground";
 import { siteHome, websiteSchema } from "@/lib/seo";
 import { LandingDemo } from "@/components/LandingDemo";
 import { SiteNav } from "@/components/SiteNav";
+import { LandingMotion } from "@/components/LandingMotion";
+import motion from "@/components/LandingMotion.module.css";
 import "./landing-content.css";
 
 /** Where "open the app" points: the playground serves the board at /app so
@@ -140,7 +142,8 @@ export function Landing() {
         </section>
   );
   return (
-    <main className="capture-root site-page landing-content">
+    <main className={`capture-root site-page landing-content ${motion.root}`}>
+      <LandingMotion />
       {schema && (
         <script
           type="application/ld+json"
@@ -158,7 +161,13 @@ export function Landing() {
         <section className="site-hero site-hero-split" aria-labelledby="landing-title">
           <div className="site-hero-heading">
             <p className="funding-kicker">Thought capture</p>
-            <h1 id="landing-title">Messy thoughts that sort themselves.</h1>
+            <h1 id="landing-title" aria-label="Messy thoughts that sort themselves.">
+              <span aria-hidden="true">Messy</span>{" "}
+              <span aria-hidden="true">thoughts</span>{" "}
+              <span aria-hidden="true">that</span>{" "}
+              <span aria-hidden="true">sort</span>{" "}
+              <span aria-hidden="true">themselves.</span>
+            </h1>
           </div>
           <div className="site-hero-aside">
             <p className="funding-lede site-lede">
