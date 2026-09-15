@@ -12,9 +12,11 @@
   animation: settle 700ms cubic-bezier(.22, 1, .36, 1) var(--landing-delay, 0ms) both;
 }
 @keyframes scrollFlow {
-  0% { opacity: .35; transform: translateY(20px); }
-  16%, 84% { opacity: 1; transform: translateY(0); }
-  100% { opacity: .35; transform: translateY(-20px); }
+  0% { opacity: .18; transform: translateY(64px) scale(.92); }
+  25% { opacity: 1; transform: translateY(24px) scale(.98); }
+  50% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; transform: translateY(-24px) scale(.98); }
+  100% { opacity: .18; transform: translateY(-64px) scale(.92); }
 }
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
+import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LandingMotion } from "./LandingMotion";
@@ -27,6 +28,16 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe("LandingMotion", () => {
+  it("keeps scroll keyframes moving across the reading region, not only at the edges", () => {
+    const css = readFileSync("src/components/LandingMotion.module.css", "utf8");
+    const flow = css.split("@keyframes scrollFlow {")[1].split("@supports")[0];
+    const frames = [...flow.matchAll(/([\d%,\s]+)\s*\{[^}]*transform:\s*translateY\((-?[\d.]+)(?:px)?\)/g)];
+    expect(frames.length).toBeGreaterThanOrEqual(2);
+    const positions = frames.flatMap((frame) => frame[1].trim().split(",").map(() => Number(frame[2])));
+    for (let i = 1; i < positions.length; i++) {
+      expect(positions[i], "Each later scroll keyframe must continue moving upward").toBeLessThan(positions[i - 1]);
+    }
+  });
   it("uses only scroll progress for cards when native timelines exist", () => {
     vi.stubGlobal('CSS', { supports: () => true });
     const { container, unmount } = render(<Fixture />);
