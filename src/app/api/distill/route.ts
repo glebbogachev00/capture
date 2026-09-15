@@ -137,7 +137,7 @@ Be conservative, not eager. Only make an action when the conversation actually s
 
 The "clean" field is the whole conversation distilled: what it settled on, written in their voice, with their specifics kept and nothing invented. Break it into short paragraphs or bullets where it lists things, like the sort engine does.
 
-Set "actions" to the one to three imperative items actually agreed on when kind is action, otherwise empty.
+Set "actions" to every distinct task actually agreed on, each as an imperative one-line item, when kind is action, otherwise empty. Never pad or duplicate the list: keep clauses describing the same task together, and return one item when only one task was agreed on.
 
 When kind is "thread", decide where it lives. The person's existing threads are listed below: set threadId to the one this conversation genuinely continues, or set threadId to null and give a short threadName for a new one. A conversation that developed a subject already on the board belongs IN that thread — a second thread on the same subject splits the thinking in half. When kind is not "thread", set both to null.
 
