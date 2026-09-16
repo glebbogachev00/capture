@@ -4,6 +4,7 @@ import {
   type CloudSubscriptionDependencies,
   type CloudSubscriptionRow,
 } from "@/lib/cloudSubscription";
+import { retryPolarSubscriptionsForUser } from "@/lib/polarServer";
 import { isCloudEnabled } from "@/lib/cloudBoard";
 import { getCloudConfig } from "@/lib/supabase/config";
 import { identityFromClaims } from "@/lib/supabase/identity";
@@ -32,14 +33,29 @@ async function dependencies(): Promise<CloudSubscriptionDependencies> {
     requiresSubscription: () => isSubscriptionRequired(),
     verifyIdentity: async () => identityFromClaims(client),
     getSubscriptions: async (userId) => {
-      const { data, error } = await client
+      // Recovery after Polar's finite delivery retries, on authenticated demand.
+      // A failed fetch leaves the durable pending row denied; other subscriptions
+      // can still supply legitimate access. No polling job/new infrastructure.
+      await retryPolarSubscriptionsForUser(userId).catch(() => undefined);
+      const select = () => client
         .from("capture_cloud_subscriptions")
-        .select("status, plan, is_entitled, current_period_end, access_expires_at, cancel_at_period_end, last_event_at")
-        .eq("user_id", userId)
+        .select("status, plan, is_entitled, reconciliation_required, current_period_end, access_expires_at, cancel_at_period_end, last_event_at")
+        .eq("user_id", userId);
+      // Filter before limiting: newer inactive subscriptions must not hide access.
+      const current = await select()
+        .eq("is_entitled", true)
+        .gt("access_expires_at", new Date().toISOString())
         .order("last_event_at", { ascending: false })
-        .limit(20);
-      if (error) throw new Error("subscription status is unavailable");
-      return (Array.isArray(data) ? data : []) as CloudSubscriptionRow[];
+        .limit(1);
+      if (current.error) throw new Error("subscription status is unavailable");
+      if (Array.isArray(current.data) && current.data.length) return current.data as CloudSubscriptionRow[];
+      // A newer terminal row must not hide unresolved billing management.
+      const pending = await select().eq("reconciliation_required", true).order("last_event_at", { ascending: false }).limit(1);
+      if (pending.error) throw new Error("subscription status is unavailable");
+      if (Array.isArray(pending.data) && pending.data.length) return pending.data as CloudSubscriptionRow[];
+      const latest = await select().order("last_event_at", { ascending: false }).limit(1);
+      if (latest.error) throw new Error("subscription status is unavailable");
+      return (Array.isArray(latest.data) ? latest.data : []) as CloudSubscriptionRow[];
     },
   };
 }

@@ -34,12 +34,15 @@ const Sorted = z.object({
     .describe(
       "imperative one-line items, each readable on its own a week later with none of the capture around it — the subject goes IN the line, never left behind as \"this\" or \"that\""
     ),
+  primaryActions: z.array(z.string()).describe(
+    "Exact strings from actions that are genuinely about the PRIMARY thread subject; empty for unrelated tasks. Co-occurrence in one capture is NOT a relationship. With annual pricing thinking plus a Stripe webhook retry bug and call mom this weekend, primaryActions is empty. Select only a pricing task if one is also present. Never include tasks about an also subject."
+  ),
   shelfLife: z.enum(["hours", "days", "weeks", "keep"]),
   due: z
     .string()
     .nullable()
     .describe(
-      "ISO date or date-time the capture explicitly names as its deadline (resolve relative words like 'friday' or 'tomorrow' against today's date given in the prompt), or null when no date is stated"
+      "ISO date or date-time explicitly named for a single action (resolve relative words against today). Null with multiple actions: this scalar cannot identify which task owns the deadline. Preserve each task's stated timing in its action text. Never broadcast one task's date to siblings"
     ),
   threadId: z
     .string()
@@ -66,7 +69,7 @@ const Sorted = z.object({
     .string()
     .nullable()
     .describe(
-      "when `also` is used, ONLY the part of the capture that stays with the primary destination — the words in `also` must not appear here. Null when `also` is empty"
+      "For kind both, ONLY the thinking about the primary thread, excluding unrelated errands even when also is empty. When also is used, ONLY the primary subject; the words in also must not appear here. Keep clean as the whole capture. Null only for an unsplit single-kind capture."
     ),
   also: z
     .array(
@@ -94,7 +97,7 @@ const Sorted = z.object({
          almost always no, so the field stayed empty even where the capture
          plainly changed subject halfway through. The question that gets an
          honest answer is how many subjects are IN it. */
-      "one entry per FURTHER SUBJECT present in this capture, carrying only the words that belong to that subject — not places the whole capture belongs. Empty when everything said is about one subject"
+      "one entry per FURTHER THINKING SUBJECT, not per task. Never duplicate extracted actions here, even with null destinations. A genuine secondary deliberation may open a new thread. Empty when there is only one thinking subject, even if there are unrelated errands"
     ),
 });
 
@@ -243,6 +246,18 @@ function seriesContext(series: z.infer<typeof Body>["series"]) {
 }
 
 
+const SUBJECT_CHECK = `
+Final subject check:
+- Identify each independent subject before choosing its destination. Shared timing, an attachment, or a general label such as "improvements" does not make subjects related.
+- For kind "thread" or "both", separate subjects that have different goals and would be read in different places. A website's navbar and a posting strategy are separate subjects. Navbar spacing and its mobile menu are parts of one navigation goal.
+- The absence of existing threads does not change the subject count. Reuse a fitting thread for each share. Otherwise give that share its own short threadName. Never invent an umbrella name to avoid a split.
+- For a split, put the primary subject's words in primaryText and each other subject's words in also. Each share needs a valid threadId or a specific threadName. Name the primary thread only for its share, not the whole capture.
+- Keep clean as the whole capture. Preserve every idea across the shares without copying unrelated material between them.
+- An attached-photo description is evidence for the subject it depicts, not another subject. Make that subject primary and keep its photo description in primaryText. Do not omit the description or put it in the unrelated share.
+- A list of steps toward one goal stays together. Ordinary errands stay separate actions, not artificial threads. Never put action-only material in also, even with null destinations; it already lives in actions. A forced kind chooses the kind, not the number of subjects.
+- With multiple actions, set due to null: the single date field cannot identify its owner. Keep each stated date in the corresponding action line, never inherit a sibling task's date.
+`;
+
 function prompt(
   raw: string,
   threads: z.infer<typeof Body>["threads"],
@@ -283,7 +298,8 @@ function prompt(
       "\n" +
       ROUTING_RULE +
       seriesContext(series) +
-      "\nSet clean to the excerpt tidied up, and title to at most six words."
+      "\nSet clean to the excerpt tidied up, and title to at most six words." +
+      SUBJECT_CHECK
     );
   }
   if (force === "intention") {
@@ -292,7 +308,7 @@ function prompt(
       'Excerpt:\n"""' +
       raw +
       '"""\n\n' +
-      'Set kind to "intention". Leave "actions" and both thread fields null.\n' +
+      'Set kind to "intention". Set "actions" and "primaryActions" to []. Leave both thread fields null.\n' +
       "Set clean to the intention rewritten so it reads as something they are already living into, keeping their voice and every idea, and title to at most six words."
     );
   }
@@ -317,9 +333,9 @@ function prompt(
     'There are four kinds. The reference examples below are your guide for telling them apart.\n' +
     'kind = "action" when this is a task, errand, reminder, or decision that gets closed out — there is a concrete thing to do. Fill "actions" with the one to three items actually being asked for, and leave the thread fields null. Never pad the list: if only one thing is genuinely doable, return one.\n' +
     'kind = "thread" when this is thinking, worldbuilding, an idea being developed, or material that accumulates — a subject to keep adding to, with no single thing to do. Set threadId if one clearly fits, otherwise invent a short threadName. Leave "actions" empty.\n' +
-    'kind = "intention" only when they are declaring something they are calling into being about themselves or their life — a state they want to be living in, spoken as a wish, a resolve, or an aspiration. "I want to wake at 6 and actually feel rested", "I live somewhere with light", "I stop taking on work I resent". These are about how they want to be, not tasks to close or subjects to think about. Leave "actions" and the thread fields null.\n' +
+    'kind = "intention" only when they are declaring something they are calling into being about themselves or their life — a state they want to be living in, spoken as a wish, a resolve, or an aspiration. "I want to wake at 6 and actually feel rested", "I live somewhere with light", "I stop taking on work I resent". These are about how they want to be, not tasks to close or subjects to think about. Set "actions" and "primaryActions" to []. Leave the thread fields null.\n' +
     'An intention is the ESSENCE of a state — a sentence or two. A detailed PLAN is not one, however much it is spoken in "I will": the moment the words carry schedules, counts, quantities, exercise lists, or step-by-step structure ("I will run twice a week for 30 to 40 minutes, do push-ups, dips and pull-ups, walk 10,000 steps, keep to 500-600 calories, and organize my schedule around it"), the person is DESIGNING a routine, not declaring a state — that is thinking that accumulates, so it is a thread. Filing a plan as an intention throws the plan away: the intention keeps only a condensed sentence, and paragraphs of specifics the person dictated are lost. When a capture holds both a true declaration AND its detailed plan, the plan is the primary thing — file it as the thread, and let the person declare the one-line intention separately if they want it. Length is the cheapest tell: multiple paragraphs are almost never an intention.\n' +
-    'kind = "both" when the capture carries a line of thinking the person is still turning over AND a concrete task to close — typically a deadline or a commitment to someone. Filing it as only an action throws the thinking away; filing it as only a thread buries the task. So do both: fill "actions" with the task(s), set threadId (route to an existing thread when one fits) or threadName for the thinking, and "clean" holds the thinking for the thread fragment. The tell is a capture where one part is a decision/idea/deliberation and another part is a dated or promised thing to do. Do not use "both" for pure thinking with no committed task (that is a thread), or for a plain task with no real deliberation around it (that is an action).\nA capture can hold MORE than two kinds — a task, a question being turned over, and a rule the person is setting for themselves, all in one breath. There is no shape for three, and the failure to avoid is quietly picking one and dropping the rest: a capture that plainly contains something to do must never come back as a bare thread with an empty actions list. When a capture holds a task and anything else at all, use "both", put every task in "actions", and let "clean" carry the whole of the rest — the thinking and any standing rule — so nothing the person said loses its place.\n' +
+    'kind = "both" when the capture carries a line of thinking the person is still turning over AND a concrete task to close — typically a deadline or a commitment to someone. Filing it as only an action throws the thinking away; filing it as only a thread buries the task. So do both: fill "actions" with the task(s), set threadId (route to an existing thread when one fits) or threadName for the thinking, and "primaryText" holds only the thinking for the thread fragment while "clean" retains the whole capture, including every task. The tell is a capture where one part is a decision/idea/deliberation and another part is a dated or promised thing to do. Do not use "both" for pure thinking with no committed task (that is a thread), or for a plain task with no real deliberation around it (that is an action).\nA capture can hold MORE than two kinds — a task, a question being turned over, and a rule the person is setting for themselves, all in one breath. There is no shape for three, and the failure to avoid is quietly picking one and dropping the rest: a capture that plainly contains something to do must never come back as a bare thread with an empty actions list. When a capture holds a task and anything else at all, use "both", put every task in "actions", and let "primaryText" carry the primary thinking and any standing rule about that subject. Keep every subject and task in "clean", with other thinking subjects in "also", so nothing the person said loses its place.\n' +
     'Every action must stand on its own. A week from now it will be read as a single line on a list, with none of the words around it — so it has to carry its own subject. Take the context from the capture and put it IN the action: not "Have engineering handle this" but "Have engineering handle the verification workflow"; not "Create workflows" but "Create workflows so agents ship without me reviewing"; not "Fix this bug" but "Fix the mis-sorting into the wrong threads". If you cannot tell what an action refers to when you read it alone, it is not finished.\n' +
     'This is the most common way the list goes wrong: a sentence gets chopped at its clauses and each fragment becomes an item. "Stop over building. Create workflows and have engineering handle this. Do all the verification and checks." is ONE thought about how to work — at most one action, carrying the whole of what it asks. Three stubs from three clauses is a worse answer than one complete line.\n' +
     'Do NOT choose "intention" for an ordinary errand phrased as a want ("I want to get milk" is an action), or for thinking about a topic ("been reading about sleep cycles" is a thread).\n' +
@@ -340,7 +356,8 @@ function prompt(
     '- "days" for ordinary errands and small follow-ups.\n' +
     '- "weeks" for real work that takes a while: drafting, building, contacting someone properly.\n' +
     '- "keep" for commitments to other people, money, deadlines, or anything with consequences if it silently vanished. When unsure, choose "keep".' +
-    DUE_RULE
+    DUE_RULE +
+    SUBJECT_CHECK
   );
 }
 
@@ -383,6 +400,7 @@ export async function POST(request: Request) {
         // wait out the backoff.
         maxRetries: 0,
         schema: Sorted,
+        temperature: 0,
         prompt: prompt(raw, body.threads, body.force, body.recent, body.rules, body.series),
         providerOptions: tier.providerOptions,
       });
@@ -461,6 +479,10 @@ export async function POST(request: Request) {
     const reconciled = reconcileSorted({
       ...value,
       ...standing,
+      // A rule/series override can change the thinking destination. The
+      // model's action selection vouched for its original home, not this one.
+      primaryActions: standing.threadId === value.threadId && standing.threadName === value.threadName
+        ? value.primaryActions : [],
     });
     return Response.json({ ...value, ...reconciled, via });
   } catch (error) {

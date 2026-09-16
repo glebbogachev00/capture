@@ -1,0 +1,56 @@
+[
+  {
+    "id": "mixed-new",
+    "request": {
+      "raw": "Two of the following things need to be fixed. First, the navbar looks bad and second I get this message. Also find a way to refine my Askde posting strategy so that the posts that are made actually sound human.\n\nAttached photo: a screenshot of the pricing page for trycapture.app showing Free ($0 self-hosted), Cloud monthly ($5/mo), Cloud yearly ($50/yr, labeled Best default for Cloud), and an Optional Supporter Program section.",
+      "threads": [],
+      "force": "thread"
+    },
+    "expect": "split"
+  },
+  {
+    "id": "mixed-existing",
+    "request": {
+      "raw": "Two of the following things need to be fixed. First, the navbar looks bad and second I get this message. Also find a way to refine my Askde posting strategy so that the posts that are made actually sound human.\n\nAttached photo: a screenshot of the pricing page for trycapture.app showing Free ($0 self-hosted), Cloud monthly ($5/mo), Cloud yearly ($50/yr, labeled Best default for Cloud), and an Optional Supporter Program section.",
+      "threads": [
+        {
+          "id": "capture-ui",
+          "name": "Capture UI",
+          "about": "Navbar, navigation layout and pricing page presentation for trycapture.app."
+        },
+        {
+          "id": "askde-posts",
+          "name": "Askde posting strategy",
+          "about": "How Askde posts can sound human, with a natural voice and tone."
+        }
+      ],
+      "force": "thread"
+    },
+    "expect": "split-reuse"
+  },
+  {
+    "id": "deliberation",
+    "request": {
+      "raw": "I am turning over why the navbar on trycapture.app feels awkward and whether the pricing page makes Cloud yearly at $50/yr clear enough. I am not sure what the right layout is yet.\n\nSeparately, I am wondering why my Askde posts sound robotic. Maybe the tone is too polished, but I am still thinking about what sounding human would mean for the posting strategy.",
+      "threads": []
+    },
+    "expect": "split"
+  },
+  {
+    "id": "same-goal",
+    "request": {
+      "raw": "The navbar feels cramped, and the mobile navigation spacing seems too tight. These are two observations about the same goal: making Capture navigation comfortable to use.",
+      "threads": [],
+      "force": "thread"
+    },
+    "expect": "single"
+  },
+  {
+    "id": "errands",
+    "request": {
+      "raw": "I need to call the dentist and buy milk on the way home.",
+      "threads": []
+    },
+    "expect": "actions"
+  }
+]

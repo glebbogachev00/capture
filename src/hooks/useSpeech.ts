@@ -1,4 +1,5 @@
 "use client";
+import { ownedFetch as fetch } from "@/lib/ownership";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DistillTurn } from "@/lib/distill";

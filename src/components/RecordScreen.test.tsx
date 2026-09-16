@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RecordScreen } from "@/app/Intentions";
 import type { CaptureEntry } from "@/lib/ledger";
 import type { RulePreference } from "@/lib/rules";
@@ -32,7 +32,35 @@ const rule: RulePreference = {
   enabled: true,
 };
 
+afterEach(cleanup);
+
 describe("RecordScreen disclosures", () => {
+  it("keeps the word total without rendering a word-count comparison", () => {
+    const longLedger = Array.from({ length: 120 }, (_, index) => ({
+      ...entry,
+      id: `l${index}`,
+      raw: "word",
+      clean: "word",
+    }));
+    render(
+      <RecordScreen
+        ledger={longLedger}
+        now={now}
+        day="2026-09-02"
+        onDayChange={() => {}}
+        onBack={() => {}}
+        rules={[]}
+        onToggleRule={() => {}}
+        threads={[thread]}
+        onOpenThread={() => {}}
+        onRestore={() => {}}
+      />
+    );
+
+    expect(screen.getByText(/about 120 words caught/)).toBeTruthy();
+    expect(screen.queryByText(/a long text message/)).toBeNull();
+  });
+
   it("keeps history and sorting preferences quiet until opened", () => {
     const onToggleRule = vi.fn();
     render(

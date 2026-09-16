@@ -1,9 +1,11 @@
+import { OwnershipBoundary } from "@/components/OwnershipBoundary";
+import { isCloudEnabled } from "@/lib/cloudBoard";
 import { Capture } from "./Capture";
 import { Landing } from "./Landing";
-import { PLAYGROUND } from "@/lib/playground";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 import { landingMetadata } from "@/lib/seo";
 
-export const metadata = landingMetadata(PLAYGROUND);
+export const metadata = landingMetadata(PUBLIC_SITE);
 
 /**
  * The playground's front door is the landing page — a stranger gets the
@@ -12,5 +14,5 @@ export const metadata = landingMetadata(PLAYGROUND);
  * the app, and the landing stays at /about.
  */
 export default function Home() {
-  return PLAYGROUND ? <Landing /> : <Capture />;
+  return PUBLIC_SITE ? <Landing /> : <OwnershipBoundary cloud={isCloudEnabled()}><Capture /></OwnershipBoundary>;
 }

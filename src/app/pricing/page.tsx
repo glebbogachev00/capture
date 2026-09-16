@@ -2,7 +2,7 @@ import Link from "next/link";
 import { utilityMetadata } from "@/lib/seo";
 import { CloudCheckoutButton } from "@/components/CloudBilling";
 import { SiteNav } from "@/components/SiteNav";
-import { PLAYGROUND } from "@/lib/playground";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 import { siteHome } from "@/lib/seo";
 
 export const metadata = utilityMetadata(
@@ -64,7 +64,7 @@ const plans = [
   },
 ];
 
-const HOME = siteHome(PLAYGROUND);
+const HOME = siteHome(PUBLIC_SITE);
 
 export default async function PricingPage({
   searchParams,

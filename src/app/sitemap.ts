@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
-import { PLAYGROUND } from "@/lib/playground";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 import { sitemapFor } from "@/lib/seo";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return sitemapFor(PLAYGROUND);
+  return sitemapFor(PUBLIC_SITE);
 }

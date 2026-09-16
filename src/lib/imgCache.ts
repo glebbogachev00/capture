@@ -1,3 +1,4 @@
+import { getDocumentLifetime } from "./ownership";
 import { IMG } from "./model";
 import { del, get, set } from "./storage";
 
@@ -25,6 +26,7 @@ import { del, get, set } from "./storage";
  */
 
 const mem = new Map<string, string>();
+const watched = new WeakSet<object>();
 const listeners = new Map<string, Set<() => void>>();
 
 function notify(id: string) {
@@ -35,6 +37,12 @@ function notify(id: string) {
 const CAP = 40;
 
 function remember(id: string, src: string) {
+  const lifetime = getDocumentLifetime();
+  lifetime.assert();
+  if (!watched.has(lifetime)) {
+    watched.add(lifetime);
+    lifetime.subscribe(() => { if (lifetime.snapshot() === "revoked") mem.clear(); });
+  }
   if (mem.has(id)) mem.delete(id); // re-insert to refresh its place in line
   mem.set(id, src);
   while (mem.size > CAP) {
@@ -47,6 +55,7 @@ function remember(id: string, src: string) {
 /** The synchronous peek — what a component can render on its very first
     frame. Null means "not in memory", not "does not exist". */
 export function imgNow(id: string): string | null {
+  if (!getDocumentLifetime().active) return null;
   const hit = mem.get(id);
   if (hit) remember(id, hit); // keep what is being looked at warm
   return hit ?? null;
@@ -54,9 +63,12 @@ export function imgNow(id: string): string | null {
 
 /** The full read: memory, then the store, filling memory on the way out. */
 export async function imgLoad(id: string): Promise<string | null> {
+  const lifetime = getDocumentLifetime();
+  lifetime.assert();
   const hit = imgNow(id);
   if (hit) return hit;
   const stored = await get(IMG(id));
+  lifetime.assert();
   if (stored) {
     remember(id, stored);
     notify(id);
@@ -67,8 +79,11 @@ export async function imgLoad(id: string): Promise<string | null> {
 /** Write bytes — capture, sync arrival — through the cache, so the next
     render is already warm. */
 export async function imgSave(id: string, src: string): Promise<void> {
-  remember(id, src);
+  const lifetime = getDocumentLifetime();
+  lifetime.assert();
   await set(IMG(id), src);
+  lifetime.assert();
+  remember(id, src);
   notify(id);
 }
 

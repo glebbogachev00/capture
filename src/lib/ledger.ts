@@ -19,6 +19,8 @@ export type CaptureSource = "typed" | "dictated" | "distill" | "image" | "import
 
 export type CaptureEntry = {
   id: string;
+  /** Explicit device import. Keep these records beyond the rolling live cap. */
+  importBatch?: string;
   at: number;
   /** What was said or pasted, before the engine touched it. */
   raw: string;
@@ -93,6 +95,8 @@ export type ProposalKind =
 
 export type CorrectionEntry = {
   id: string;
+  /** Explicit device import. Keep these records beyond the rolling live cap. */
+  importBatch?: string;
   at: number;
   proposalKind: ProposalKind;
   accepted: boolean;
@@ -108,6 +112,10 @@ export type CorrectionEntry = {
 /** How many entries the board keeps: a real record, yet light enough that
     sync payloads and the export stay small. Oldest entries drop first. */
 export const LEDGER_CAP = 500;
+function limitRecent<T extends { importBatch?: string }>(entries: T[]): T[] {
+  let recent = 0;
+  return entries.filter(entry => entry.importBatch || recent++ < LEDGER_CAP);
+}
 
 /**
  * Add a capture to the ledger, newest first.
@@ -121,7 +129,7 @@ export function appendLedger(
   entry: CaptureEntry
 ): CaptureEntry[] {
   const out = [entry, ...ledger.filter((e) => e.id !== entry.id)];
-  return out.length > LEDGER_CAP ? out.slice(0, LEDGER_CAP) : out;
+  return limitRecent(out);
 }
 
 /** Union two ledgers by id, newest first. Entries never change, so the merge
@@ -140,9 +148,8 @@ export function mergeLedgers(
     const prev = byId.get(e.id);
     byId.set(e.id, prev?.undone && !e.undone ? { ...e, undone: true } : e);
   }
-  return [...byId.values()]
-    .sort((x, y) => y.at - x.at || (x.id < y.id ? 1 : -1))
-    .slice(0, LEDGER_CAP);
+  return limitRecent([...byId.values()]
+    .sort((x, y) => y.at - x.at || (x.id < y.id ? 1 : -1)));
 }
 
 /**
@@ -154,7 +161,7 @@ export function appendCorrections(
   entry: CorrectionEntry
 ): CorrectionEntry[] {
   const out = [entry, ...corrections.filter((e) => e.id !== entry.id)];
-  return out.length > LEDGER_CAP ? out.slice(0, LEDGER_CAP) : out;
+  return limitRecent(out);
 }
 
 /** Union two correction ledgers by id, newest first — identical shape to
@@ -165,9 +172,8 @@ export function mergeCorrections(
 ): CorrectionEntry[] {
   const byId = new Map<string, CorrectionEntry>();
   for (const e of [...a, ...b]) if (e?.id) byId.set(e.id, e);
-  return [...byId.values()]
-    .sort((x, y) => y.at - x.at || (x.id < y.id ? 1 : -1))
-    .slice(0, LEDGER_CAP);
+  return limitRecent([...byId.values()]
+    .sort((x, y) => y.at - x.at || (x.id < y.id ? 1 : -1)));
 }
 
 /** Fold a correction into a board in one step. */

@@ -22,7 +22,7 @@ function deps(overrides: Partial<PolarDependencies> = {}): PolarDependencies {
     config,
     isCloudEnabled: () => true,
     identity: vi.fn().mockResolvedValue({ userId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", email: "a@example.com" }),
-    hasActiveSubscription: vi.fn().mockResolvedValue(false),
+    hasBlockingSubscription: vi.fn().mockResolvedValue(false),
     createCheckout: vi.fn().mockResolvedValue({ url: "https://sandbox.polar.sh/checkout/1" }),
     createCustomerSession: vi.fn().mockResolvedValue({ customerPortalUrl: "https://sandbox.polar.sh/portal/1" }),
     validateWebhook: vi.fn().mockResolvedValue({
@@ -39,6 +39,7 @@ function deps(overrides: Partial<PolarDependencies> = {}): PolarDependencies {
         cancel_at_period_end: false,
       },
     }),
+    queueInvalidSubscriptionEvent: async () => {},
     applySubscriptionEvent: vi.fn().mockResolvedValue(true),
     ...overrides,
   };
@@ -100,13 +101,13 @@ describe("Polar checkout", () => {
   });
 
   it("does not create a second checkout while any paid entitlement remains active", async () => {
-    const d = deps({ hasActiveSubscription: vi.fn().mockResolvedValue(true) });
+    const d = deps({ hasBlockingSubscription: vi.fn().mockResolvedValue(true) });
     const response = await handleCheckout(new Request("https://capture.test/api/cloud/checkout", {
       method: "POST",
       body: JSON.stringify({ plan: "monthly" }),
     }), d);
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ error: "capture cloud is already active" });
+    expect(await response.json()).toEqual({ error: "an existing subscription requires billing management or status retry" });
     expect(d.createCheckout).not.toHaveBeenCalled();
   });
 });
@@ -211,6 +212,20 @@ describe("Polar webhooks", () => {
     expect(effectiveEntitlement(normalized!, new Date("2027-01-01T00:00:01.000Z"))).toBe(false);
   });
 
+  it.each(["canceled", "unpaid"])("does not grant access from an updated terminal %s snapshot with a future period end", (status) => {
+    const base = {
+      id: "sub_terminal", status, customer_id: "cus_1",
+      customer: { external_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+      product_id: config.monthlyProductId,
+      current_period_start: "2026-09-01T00:00:00.000Z",
+      current_period_end: "2026-10-01T00:00:00.000Z",
+      cancel_at_period_end: true,
+    };
+    const normalized = normalizeSubscription("subscription.updated", "2026-09-13T10:00:00.000Z", base, config);
+    expect(normalized?.isEntitled).toBe(false);
+    expect(normalized?.accessExpiresAt).toBe("2026-09-13T10:00:00.000Z");
+  });
+
   it("revokes immediately and gives past-due accounts a bounded three-day grace period", () => {
     const base = {
       id: "sub_1", status: "active", customer_id: "cus_1",
@@ -219,10 +234,28 @@ describe("Polar webhooks", () => {
       current_period_start: "2026-09-01T00:00:00.000Z",
       current_period_end: "2026-10-01T00:00:00.000Z",
       cancel_at_period_end: false,
+      past_due_at: "2026-09-11T10:00:00.000Z",
     };
     expect(normalizeSubscription("subscription.revoked", "2026-09-11T10:00:00.000Z", base, config)?.isEntitled).toBe(false);
     expect(normalizeSubscription("subscription.past_due", "2026-09-11T10:00:00.000Z", base, config)?.accessExpiresAt).toBe("2026-09-14T10:00:00.000Z");
     expect(normalizeSubscription("subscription.updated", "2026-09-11T10:00:00.000Z", { ...base, status: "past_due" }, config)?.accessExpiresAt).toBe("2026-09-14T10:00:00.000Z");
+  });
+
+  it("anchors repeated past-due deliveries to the initial failure, never the delivery", () => {
+    const base = {
+      id: "sub_1", status: "past_due", customer_id: "cus_1",
+      customer: { external_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+      product_id: config.monthlyProductId, current_period_start: "2026-09-01T00:00:00Z",
+      current_period_end: "2026-10-01T00:00:00Z", cancel_at_period_end: false,
+      past_due_at: "2026-09-10T10:00:00.000Z",
+    };
+    for (const timestamp of ["2026-09-11T10:00:00Z", "2026-09-15T10:00:00Z"]) {
+      expect(normalizeSubscription("subscription.updated", timestamp, base, config)?.accessExpiresAt).toBe("2026-09-13T10:00:00.000Z");
+    }
+    expect(normalizeSubscription("subscription.updated", "2026-09-15T10:00:00Z", { ...base, past_due_at: "2026-09-10T12:00:00+02:00" }, config)?.accessExpiresAt).toBe("2026-09-13T10:00:00.000Z");
+    for (const past_due_at of [undefined, null, "nonsense", "2026-02-30T00:00:00Z", "2027-01-01T00:00:00Z"]) {
+      expect(normalizeSubscription("subscription.updated", "2026-09-15T10:00:00Z", { ...base, past_due_at }, config)?.isEntitled).toBe(false);
+    }
   });
 
   it("rejects an oversized body before signature validation", async () => {

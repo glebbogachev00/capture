@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCloudBrowserClient } from "@/lib/supabase/browser";
+import { LOGOUT_PENDING_KEY, verifyCloudIdentity } from "@/lib/ownership";
 import { CloudLoginForm } from "./CloudLoginForm";
 
 vi.mock("@/lib/supabase/browser", () => ({
@@ -12,6 +13,7 @@ const signInWithOtp = vi.fn();
 const verifyOtp = vi.fn();
 
 beforeEach(() => {
+  localStorage.clear();
   vi.mocked(createCloudBrowserClient).mockReturnValue({
     auth: { signInWithOtp, verifyOtp },
   } as never);
@@ -43,7 +45,8 @@ describe("CloudLoginForm", () => {
     expect(screen.getByLabelText("Verification code").getAttribute("autocomplete")).toBe("one-time-code");
   });
 
-  it("verifies the email and an eight-digit project code", async () => {
+  it("verifies the email and an eight-digit project code, explicitly resuming after pending logout", async () => {
+    localStorage.setItem(LOGOUT_PENDING_KEY, "failed-logout");
     signInWithOtp.mockResolvedValue({ error: null });
     verifyOtp.mockResolvedValue({ error: null, data: { session: { access_token: "session" } } });
     const onAuthenticated = vi.fn();
@@ -75,6 +78,10 @@ describe("CloudLoginForm", () => {
       })
     );
     expect(onAuthenticated).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(LOGOUT_PENDING_KEY)).toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ owner: "A", expiresAt: Date.now() + 60000 })));
+    try { expect((await verifyCloudIdentity()).owner).toBe("A"); }
+    finally { vi.unstubAllGlobals(); }
   });
 
   it("lets someone correct the email address without requesting another code", async () => {
@@ -97,6 +104,7 @@ describe("CloudLoginForm", () => {
   });
 
   it("recovers when Supabase throws while verifying a code", async () => {
+    localStorage.setItem(LOGOUT_PENDING_KEY, "failed-logout");
     signInWithOtp.mockResolvedValue({ error: null });
     verifyOtp.mockRejectedValue(new Error("storage unavailable"));
     render(
@@ -117,5 +125,6 @@ describe("CloudLoginForm", () => {
 
     expect((await screen.findByRole("alert")).textContent).toBe("We couldn't verify that code. Request a new one.");
     expect(screen.getByRole("button", { name: "Open Capture" }).hasAttribute("disabled")).toBe(false);
+    expect(localStorage.getItem(LOGOUT_PENDING_KEY)).toBe("failed-logout");
   });
 });

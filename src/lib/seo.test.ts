@@ -19,13 +19,13 @@ const SITE = "https://www.trycapture.app/";
 describe("TryCapture search identity", () => {
   it("gives the public home a descriptive canonical identity", () => {
     const metadata = landingMetadata(true);
-    expect(metadata.title).toBe("Capture — messy thoughts that sort themselves");
+    expect(metadata.title).toBe("Capture — Say it, write it. Capture sorts it out.");
     expect(metadata.description).toBe(
-      "Capture rough thoughts by voice or text. It sorts them into actions, threads, or intentions without making you choose first."
+      "Put a task, a half-formed idea, and a decision in the same note. Capture separates them and keeps related thoughts together."
     );
     expect(metadata.alternates?.canonical).toBe(SITE);
     expect(metadata.openGraph).toMatchObject({
-      title: "Capture — messy thoughts that sort themselves",
+      title: "Capture — Say it, write it. Capture sorts it out.",
       url: SITE,
       siteName: "Capture",
       type: "website",

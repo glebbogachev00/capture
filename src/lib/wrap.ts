@@ -51,6 +51,8 @@ export type WrapStats = {
 
 /** One frozen day. Append-only: written once, then only `seen` flips. */
 export type DayWrap = {
+  /** Imported readings can share a calendar day without replacing either. */
+  importBatch?: string;
   day: string;
   /** When the wrap was written, ms. */
   at: number;
@@ -247,13 +249,14 @@ function firstWritten(x: DayWrap, y: DayWrap): DayWrap {
 export function mergeWraps(a: DayWrap[], b: DayWrap[]): DayWrap[] {
   const by = new Map<string, DayWrap>();
   for (const w of [...(a ?? []), ...(b ?? [])]) {
-    const prev = by.get(w.day);
+    const key = JSON.stringify([w.day, w.importBatch ?? ""]);
+    const prev = by.get(key);
     if (!prev) {
-      by.set(w.day, w);
+      by.set(key, w);
       continue;
     }
     const keep = firstWritten(prev, w);
-    by.set(w.day, { ...keep, seen: prev.seen || w.seen });
+    by.set(key, { ...keep, seen: prev.seen || w.seen });
   }
   return [...by.values()].sort((x, y) => (x.day < y.day ? -1 : 1));
 }

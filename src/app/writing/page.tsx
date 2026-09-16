@@ -3,11 +3,11 @@ import Link from "next/link";
 import { ARTICLES } from "@/content/articles";
 import { PublicThreadCard } from "@/components/PublicThreadArticle";
 import { SiteNav } from "@/components/SiteNav";
-import { PLAYGROUND } from "@/lib/playground";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 import { siteHome, writingMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = writingMetadata(PLAYGROUND);
-const HOME = siteHome(PLAYGROUND);
+export const metadata: Metadata = writingMetadata(PUBLIC_SITE);
+const HOME = siteHome(PUBLIC_SITE);
 
 export default function WritingPage() {
   return (

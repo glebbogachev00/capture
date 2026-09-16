@@ -1,4 +1,6 @@
 "use client";
+import { useOwnedState } from "./useOwnedState";
+import { logoutAndNavigate, ownedFetch as fetch } from "@/lib/ownership";
 
 /**
  * useBoard — owns the whole board: its state, its persistence, and every
@@ -61,6 +63,7 @@ import {
   DISTILL_KEY,
   EMPTY_DISTILL,
   hydrateDistill,
+  distillSource, appendDistillUserTurn,
   findMarker,
   markerHold, openDistillDraft, closeDistillDraft, replyCanBeReady, NOTHING_MARKER,
   READY_MARKER,
@@ -88,6 +91,7 @@ import { resolveCapture } from "@/lib/command";
 import {
   refileRule,
   undoRule,
+  answeredKindCorrection,
   type SortKind,
 } from "@/lib/refiled";
 import { expiryFor, parseDue } from "@/lib/due";
@@ -259,9 +263,21 @@ function newLedgerIds(before: Board, after: Board): string[] {
   return (after.ledger ?? []).filter((e) => !had.has(e.id)).map((e) => e.id);
 }
 
+/** Attach a pending draft's evidence only to entries created by this landing. */
+function preserveDraftOrigin(before: Board, after: Board, origin?: CaptureOrigin | null): Board {
+  if (!origin) return after;
+  const fresh = new Set(newLedgerIds(before, after));
+  return {
+    ...after,
+    ledger: after.ledger.map(entry => fresh.has(entry.id)
+      ? { ...entry, raw: origin.raw, source: origin.source, transcript: origin.transcript }
+      : entry),
+  };
+}
+
 export function useBoard(now: number) {
   /* ------------------------------ state ------------------------------ */
-  const [data, setData] = useState<Board>(EMPTY);
+  const { lifetime, ownershipStatus, data, setData } = useOwnedState<Board>(EMPTY);
   const [loaded, setLoaded] = useState(false);
   const [corrupt, setCorrupt] = useState(false);
   const [text, setText] = useState("");
@@ -374,6 +390,7 @@ export function useBoard(now: number) {
   const [distillSession, setDistillSession] =
     useState<DistillSession>(EMPTY_DISTILL);
   const [distillInput, setDistillInput] = useState("");
+  const [distillTranscript, setDistillTranscript] = useState("");
   const [distillBusy, setDistillBusy] = useState(false);
   const [distillErr, setDistillErr] = useState("");
   /* Whether the engine said the conversation is ready to be filed — the
@@ -392,7 +409,7 @@ export function useBoard(now: number) {
   /* The latest board, read by handlers so async work never builds on stale
      state. `commit` (and the loader) are the only writers. */
   const latest = useRef<Board>(data);
-  const dailyTrialApplies = useCaptureLimit();
+  const { applies: dailyTrialApplies, ready: captureLimitReady } = useCaptureLimit();
   const trialExhaustedNow = () => dailyTrialApplies && isTrialExhausted(latest.current.ledger ?? [], Date.now());
   const rejectDistillAtLimit = () => {
     if (!trialExhaustedNow()) return false;
@@ -424,6 +441,12 @@ export function useBoard(now: number) {
      and the finishing push re-schedules it. The old timer-plus-flag pair
      here had exactly that race, staged and pinned in pushGovernor.test. */
   const pushGovernor = useRef<PushGovernor | null>(null);
+  useEffect(() => {
+    const stop = lifetime.subscribe(() => {
+      if (lifetime.snapshot() === "revoked") pushGovernor.current?.dispose();
+    });
+    return () => { stop(); pushGovernor.current?.dispose(); pushGovernor.current = null; };
+  }, [lifetime]);
 
   /* ------------------------------ undo ------------------------------ */
 
@@ -573,11 +596,17 @@ export function useBoard(now: number) {
     );
   }, []);
 
+  // Saved Cloud edits must wait for a successful read/merge, including after
+  // reconnect. A failed read must not consume this pending work.
+  const offlineChangesPending = useRef(lifetime.cloud && lifetime.owner !== null);
+
   /** Send our state to the hub and adopt its merged answer. */
   const pushNow = useCallback(async () => {
     /* Playground: no hub. See lib/playground.ts for why this is a hard stop.
        Serialization is the governor's job now, not a flag's. */
-    if (PLAYGROUND) return;
+    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    // Also gate debounced edits and Undo, not only manual sync.
+    if (offlineChangesPending.current) return;
     try {
       const res = await fetch("/api/sync", {
         method: "POST",
@@ -618,35 +647,39 @@ export function useBoard(now: number) {
       /* hub unreachable — keep everything local, retry on the next change */
       setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
     }
-  }, [reconcileImages]);
+  }, [reconcileImages, lifetime, setData]);
 
   /** Coalesce bursts of edits into one push a beat after the last one. */
   const schedulePush = useCallback(() => {
-    if (PLAYGROUND) return;
+    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
     if (!pushGovernor.current)
       pushGovernor.current = createPushGovernor(pushNow);
     pushGovernor.current.schedule();
-  }, [pushNow]);
+  }, [pushNow, lifetime]);
 
   /**
    * Pull the hub's copy, merge it with ours, and adopt the result. Returns
-   * whether anything changed locally. Success/failure is recorded in `sync`
-   * either way, so the header dot shows a live hub even when nothing moved.
+   * success separately from whether anything changed locally. Success/failure
+   * is recorded in `sync`, so an unchanged successful read still shows a live hub.
    */
-  const pullNow = useCallback(async (): Promise<boolean> => {
-    if (PLAYGROUND) return false;
+  const pullNow = useCallback(async (): Promise<{ ok: false } | { ok: true; changed: boolean }> => {
+    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return { ok: false };
     try {
       const res = await fetch(
         hubRev.current === null ? "/api/sync" : `/api/sync?rev=${hubRev.current}`
       );
-      if (!res.ok) return false;
+      if (!res.ok) throw new Error("sync failed");
       const remote = (await res.json()) as SyncStore & { unchanged?: boolean };
       /* Nothing new in the board document since the last pull. Skip the
          parse-and-merge work, but retry referenced images because their bytes
          arrive separately and do not move the board revision. */
       if (remote.unchanged) {
         setSync({ ok: true, at: stamp() }); void reconcileImages(latest.current);
-        return false;
+        if (offlineChangesPending.current) {
+          offlineChangesPending.current = false;
+          schedulePush();
+        }
+        return { ok: true, changed: false };
       }
       hubRev.current = remote.rev ?? null;
       /* One policy for both halves of sync — see lib/adopt for the rules
@@ -674,8 +707,8 @@ export function useBoard(now: number) {
         }
       }
       setSync({ ok: true, at: stamp() });
-      // Only push if something actually changed — avoids a redundant round
-      // trip on every pull when the board is already in sync.
+      // Push merged changes or retained offline work; an ordinary unchanged
+      // poll still avoids a redundant round trip.
       /* Every successful pull, not only the ones that changed something.
          A photo that failed to fetch leaves the words in sync and the
          picture missing — and boardSignature knows nothing about images, so
@@ -683,25 +716,28 @@ export function useBoard(now: number) {
          retried. The device kept the text and lost the photograph, for
          good. Reconciling is a no-op for images it already holds. */
       void reconcileImages(adopted.board);
-      if (changed) schedulePush();
-      return changed;
+      const pending = offlineChangesPending.current;
+      offlineChangesPending.current = false;
+      if (changed || pending) schedulePush();
+      return { ok: true, changed };
     } catch {
       /* hub unreachable; local state stands */
       setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
-      return false;
+      return { ok: false };
     }
-  }, [schedulePush, reconcileImages]);
+  }, [schedulePush, reconcileImages, lifetime, setData]);
 
   /** Manual "sync now": bring the other device's changes in, then push ours up. */
   const syncNow = useCallback(async () => {
-    if (PLAYGROUND) return;
-    await pullNow();
+    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    const pulled = await pullNow();
+    if (!pulled.ok) return;
     /* A manual sync pushes NOW — flush cancels any pending debounce and
        still serializes behind an in-flight push. */
     if (!pushGovernor.current)
       pushGovernor.current = createPushGovernor(pushNow);
     await pushGovernor.current.flush();
-  }, [pullNow, pushNow]);
+  }, [pullNow, pushNow, lifetime]);
 
   /**
    * Undo the last capture: put the board and this device's tombstones back
@@ -823,7 +859,7 @@ export function useBoard(now: number) {
     if (!pushGovernor.current)
       pushGovernor.current = createPushGovernor(pushNow);
     await pushGovernor.current.flush();
-  }, [pushNow, text, pics]);
+  }, [pushNow, text, pics, setData]);
 
   /**
    * The answer to "then what was it?".
@@ -941,6 +977,7 @@ export function useBoard(now: number) {
 
   const commit = useCallback(
     async (next: Board) => {
+      if (!lifetime.active) return;
       /* Every mutation funnels through here, so the sync bookkeeping lives in
          one place: diff what changed, stamp the changed items, tombstone the
          deletions, then push.
@@ -999,7 +1036,7 @@ export function useBoard(now: number) {
       }
       schedulePush();
     },
-    [schedulePush]
+    [schedulePush, lifetime, setData]
   );
 
   /* load, then sweep. A board already on the device that fails to parse is
@@ -1034,6 +1071,7 @@ export function useBoard(now: number) {
          is already downstream of whatever went wrong. */
       void keepDailySnapshot(d);
       const { next, faded, cleared } = await sweep(d);
+      if (!lifetime.active) return;
       setData(next);
       latest.current = next;
       if (faded || cleared) {
@@ -1080,20 +1118,19 @@ export function useBoard(now: number) {
       }
       setLoaded(true);
     })();
-  }, []);
+  }, [lifetime, setData]);
 
   /* --------------------------- sync loop ---------------------------- */
-
   /* Pull on load and whenever the tab comes back into focus, then merge the
      hub's copy with ours and adopt the result. The hub merges rather than
      replaces, so two devices editing at once converge instead of clobbering.
      Offline is fine — the next commit just keeps everything local. */
   useEffect(() => {
-    if (!loaded || PLAYGROUND) return;
-    /* eslint-disable-next-line react-hooks/set-state-in-effect -- the
-       canonical subscribe-to-external-system effect: every setState inside
-       pullNow happens after a network await, never synchronously. */
-    void pullNow();
+    if (ownershipStatus === "offline") offlineChangesPending.current = true;
+    if (!loaded || PLAYGROUND || ownershipStatus !== "active" || (lifetime.cloud && lifetime.owner === null)) return;
+    if (offlineChangesPending.current) {
+      void syncNow();
+    } else void pullNow();
     const onVisible = () => {
       if (document.visibilityState === "visible") void pullNow();
     };
@@ -1114,7 +1151,7 @@ export function useBoard(now: number) {
        A failed pull doubles the wait, up to five minutes: a hub that is down
        does not need to be asked again in thirty seconds. */
     const poller = createPoller({
-      pull: pullNow,
+      pull: async () => (await pullNow()).ok,
       active: () => document.visibilityState === "visible" && navigator.onLine,
     });
     const startPoll = poller.start;
@@ -1137,7 +1174,7 @@ export function useBoard(now: number) {
       document.removeEventListener("visibilitychange", onHidden);
       stopPoll();
     };
-  }, [loaded, pullNow]);
+  }, [loaded, pullNow, syncNow, ownershipStatus, lifetime]);
 
   /* Expiry is continuous, not just at open: sweep on the minute tick too, so
      stale actions fade and cleared ones drop while the app stays open. The
@@ -1348,9 +1385,11 @@ export function useBoard(now: number) {
   }, []);
 
   /** Rewrite a thread's "Where this stands" from its current fragments. */
+  const activeSummaries = useRef(0);
   const regenerate = async (board: Board, threadId: string): Promise<Board> => {
     const target = board.threads.find((t) => t.id === threadId);
     if (!target?.frags.length) return board;
+    activeSummaries.current += 1;
     setSummarising("Updating what this thread says now");
     let result = board;
     try {
@@ -1379,8 +1418,10 @@ export function useBoard(now: number) {
       await commit(result);
     } catch {
       /* the fragments are saved; the summary can lag */
+    } finally {
+      activeSummaries.current -= 1;
+      if (!activeSummaries.current) setSummarising(null);
     }
-    setSummarising(null);
     return result;
   };
 
@@ -1393,15 +1434,13 @@ export function useBoard(now: number) {
     setErr("");
     setBusy("Updating what this thread says now");
     try {
-      const { summary, next } = await requestSummary(target.name, target.frags);
+      const sentFingerprint = threadFingerprint(target);
+      const out = await requestSummary(target.name, target.frags);
+      const accepted = acceptSummary(latest.current, threadId, sentFingerprint, out);
+      if (!accepted) return;
       await commit(
         noteCorrection(
-          {
-            ...latest.current,
-            threads: latest.current.threads.map((t) =>
-              t.id === threadId ? { ...t, summary, next } : t
-            ),
-          },
+          accepted,
           {
             proposalKind: "refresh_summary",
             accepted: true,
@@ -1413,26 +1452,22 @@ export function useBoard(now: number) {
       clearNoticeIn(4000);
     } catch (error) {
       setErr(reasonOf(error) + " The summary was left as it was.");
+    } finally {
+      setBusy(null);
     }
-    setBusy(null);
   };
 
-  /**
-   * Keep a capture that no model would sort.
-   *
-   * Losing what you just said because a free tier ran dry is the worst thing
-   * this app could do, so the text is saved verbatim and flagged for sorting
-   * later. Where it lands follows what you were looking at: an open thread
-   * takes it as a fragment, the Threads tab starts a new one, and otherwise it
-   * becomes an action.
-   */
+  /** Preserve failed captures and voice evidence. An open thread receives an
+      unsorted fragment; otherwise the words become an unsorted action. */
   const saveUnsorted = async (
     raw: string,
     imgIds: string[],
     at: number,
     reason: string,
     dictated = false,
-    captureId?: string
+    captureId?: string,
+    rawTranscript?: string,
+    origin?: CaptureOrigin | null
   ) => {
     /* One computation decides everything — board, history entry, receipt,
        target — so they cannot disagree. The old inline version computed
@@ -1442,18 +1477,19 @@ export function useBoard(now: number) {
        settlement's signature has no tab parameter; see lib/settle. */
     const settled = settleUnsortedCapture(
       latest.current,
-      { raw, imgIds, at, dictated, openThreadId: open ?? undefined },
+      { raw, imgIds, at, dictated, transcript: rawTranscript, openThreadId: open ?? undefined },
       { itemId: uid(), ledgerId: uid(), captureId }
     );
-    const next = settled.board;
+    const next = preserveDraftOrigin(latest.current, settled.board, origin);
     showReceipt(settled.receipt);
     setText("");
     setPics([]);
+    setTranscript("");
 
     captureSnapshot.current = {
       board: latest.current,
       tombstones: tombstones.current,
-      text,
+      text: raw,
       picIds: pics.map((p) => p.id),
       ledgerIds: newLedgerIds(latest.current, next),
       addedIds: newIds(latest.current, next),
@@ -1579,7 +1615,8 @@ export function useBoard(now: number) {
        and they answered, so it is applied to whatever comes back. */
     pinnedThread?: string,
     /* Undo-and-correct is the same capture, not another use of the trial. */
-    existingCaptureId?: string
+    existingCaptureId?: string,
+    origin?: CaptureOrigin | null
   ) => {
     const raw = (override ?? text).trim();
     /* What the capture's opening decides — command prefix, undo-answer
@@ -1631,12 +1668,14 @@ export function useBoard(now: number) {
         setCanUndo(false);
         setText("");
         setPics([]);
+        setTranscript("");
         /* This branch never reaches the commit below, so the lesson is
            written here or not at all. */
         if (commandLesson) await noteCommand(commandLesson, payload);
         await expandIntention(payload, {
           raw: payload,
           source: sourceOf(payload, dictated, imgIds.length > 0),
+          transcript: transcript || undefined,
           captureId,
         });
         setTimeout(() => setLanded(null), 4500);
@@ -1663,9 +1702,11 @@ export function useBoard(now: number) {
         setCanUndo(false);
         setText("");
         setPics([]);
+        setTranscript("");
         await expandIntention(payload, {
           raw: payload,
           source: sourceOf(payload, dictated, imgIds.length > 0),
+          transcript: transcript || undefined,
           captureId,
         });
         setTimeout(() => setLanded(null), 4500);
@@ -1684,7 +1725,7 @@ export function useBoard(now: number) {
          list of threads whose descriptions are now stale — comes from
          lib/settle.recordSortedCapture, behavior-tested beside the
          failed-sort settlement it mirrors. */
-      const { board: withAll, summaryTargets } = recordSortedCapture(
+      const { board: sortedBoard, summaryTargets } = recordSortedCapture(
         next,
         {
           raw,
@@ -1713,6 +1754,7 @@ export function useBoard(now: number) {
         },
         uid
       );
+      const withAll = preserveDraftOrigin(latest.current, sortedBoard, origin);
       const recorded = commandLesson
         ? noteCorrection(withAll, {
             proposalKind: "commanded",
@@ -1734,7 +1776,7 @@ export function useBoard(now: number) {
       captureSnapshot.current = {
         board: latest.current,
         tombstones: tombstones.current,
-        text,
+        text: override ?? text,
         picIds: pics.map((p) => p.id),
         ledgerIds: newLedgerIds(latest.current, recorded),
       addedIds: newIds(latest.current, recorded),
@@ -1762,7 +1804,7 @@ export function useBoard(now: number) {
       for (const id of summaryTargets) scheduleSummary(id);
     } catch (error) {
       const reason = reasonOf(error);
-      await saveUnsorted(raw, imgIds, at, reason, dictated, captureId);
+      await saveUnsorted(raw, imgIds, at, reason, dictated, captureId, transcript || undefined, origin);
       playgroundUsage.captureFailed(reason);
     }
     } finally {
@@ -2871,15 +2913,15 @@ export function useBoard(now: number) {
     });
   };
 
-  const renameThread = (id: string, name: string) => {
+  const renameThread = async (id: string, name: string) => {
     const prev = latest.current.threads.find((t) => t.id === id)?.name;
-    if (!name.trim() || name === prev) return;
-    commit(
+    if (prev === undefined || !name.trim() || name === prev) return;
+    await commit(
       noteCorrection(
         {
           ...latest.current,
           threads: latest.current.threads.map((t) =>
-            t.id === id ? { ...t, name } : t
+            t.id === id ? { ...t, name, summary: "", belongs: undefined, next: null } : t
           ),
         },
         {
@@ -2891,6 +2933,7 @@ export function useBoard(now: number) {
         }
       )
     );
+    await regenerate(latest.current, id);
   };
 
   /**
@@ -2943,24 +2986,8 @@ export function useBoard(now: number) {
     const next = applyFragEdit(latest.current, threadId, fragId, text);
     if (!next) return;
     await commit(next);
-    // Then the proofread pass catches typos before they stick. The
-    // `ifTextIs` guard is what keeps a stale correction off a newer edit.
-    const fixed = await proofreadEdit(text);
-    if (fixed !== text) {
-      const guarded = applyFragEdit(latest.current, threadId, fragId, fixed, text);
-      if (guarded) {
-        await commit(
-          noteCorrection(guarded, {
-            proposalKind: "clean_fragment",
-            accepted: true,
-            context: text.slice(0, 120),
-            correctionText: fixed.slice(0, 120),
-          })
-        );
-        setNotice("Fixed a couple of typos.");
-        clearNoticeIn(4000);
-      }
-    }
+    // A confirmed manual correction is authoritative, not a proofreading
+    // proposal. Rebuild only derived metadata; never rewrite these words.
     await regenerate(latest.current, threadId);
   };
 
@@ -3054,14 +3081,14 @@ export function useBoard(now: number) {
       .find((t) => t.id === threadId)
       ?.frags.find((f) => f.id === fragId);
     if (!frag) return;
-    const ok = await copyToClipboard(frag.text);
+    const ok = await copyToClipboard(frag.text, lifetime.assertDisclosure);
     setNotice(ok ? "Note copied." : "Couldn't reach the clipboard.");
     clearNoticeIn(3000);
   };
 
   const copyWhole = async (s: { text: string; summary: string } | null) => {
     if (!s) return;
-    const ok = await copyToClipboard(s.text);
+    const ok = await copyToClipboard(s.text, lifetime.assertDisclosure);
     setNotice(ok ? `Copied — ${s.summary}.` : "Couldn't reach the clipboard.");
     clearNoticeIn(3000);
   };
@@ -3309,28 +3336,11 @@ export function useBoard(now: number) {
     setTab("intentions");
     showReceipt("Intention " + pad(intention.number));
     setLandedIds([]);
-    /* The banner is NOT cleared on a timer here, unlike everywhere else
-       that shows one for a moment.
- 
-       The Undo button lives inside this banner, and this is the only path
-       that offers an undo and then took it away again after four and a half
-       seconds. An intention is the slowest thing the app makes — several
-       minutes of talking before it appears — so the window closed before
-       there was anything to read, and undoing became impossible rather than
-       merely awkward. Every other capture leaves its banner up until the
-       next capture or an undo clears it; this one does the same now. */
+    /* Keep the receipt until the next capture or Undo: it holds the only
+       Undo button, and reading an intention can take several minutes. */
   };
 
-  /** Close the intention draft without saving; the source action stays put. */
-  /** The classifier called it an intention; the person says thread.
- 
-      Asked for three times, in the same words each time: dictate minutes of
-      thinking, watch it come back as a two-line intention, and the only
-      exits were Save (wrong) or Discard-then-copy-from-history (a chore).
-      This is the third exit: the draft closes without a trace — no undone
-      entry, because the words are not being dropped, they are being FILED —
-      and the full raw text goes back through the sorter pinned to thread,
-      landing with its own receipt and its own undo like any capture. */
+  /** Correct an intention classification without losing its source or Undo. */
   const draftToThread = async () => {
     const d = draft;
     if (!d?.rawInput.trim()) return;
@@ -3338,7 +3348,9 @@ export function useBoard(now: number) {
     setPendingSource(null);
     intentionLedger.current = null;
     setDraft(null);
-    await submit(false, "thread", d.rawInput, undefined, opened?.captureId);
+    const lesson = opened && answeredKindCorrection(d.rawInput, "intention", "thread");
+    if (lesson) await commit(noteCorrection(latest.current, lesson));
+    await submit(false, "thread", d.rawInput, undefined, opened?.captureId, opened);
   };
 
   const discardDraft = async () => {
@@ -3349,23 +3361,9 @@ export function useBoard(now: number) {
     intentionLedger.current = null;
     setDraft(null);
 
-    /* Discarding the draft must not discard the words — but the words do
-       not belong on the board either.
- 
-       The first fix parked them as an unsorted action, which was wrong in
-       an obvious-in-hindsight way: an intention is often minutes of
-       talking, and minutes of talking pinned to the Actions list is not a
-       task, it is clutter wearing a checkbox. What was actually asked for:
-       "this intention was discarded, but you can still restore it from
-       history."
- 
-       So it goes where everything said already goes — the record — as an
-       entry marked undone from birth: said, and then not kept. No board
-       object, nothing to tidy, and the full text sits in history where an
-       undone capture would be, with the same way back (say it again).
- 
-       A draft opened FROM an action writes nothing: its words already live
-       on the board as that action, which stays. */
+    /* Discard goes only to the Record, marked undone so the words remain
+       recoverable without creating a board item. An action-born draft writes
+       nothing: the existing action already holds its words and stays put. */
     if (fromAction || !d?.rawInput.trim()) return;
 
     await commit(
@@ -3377,6 +3375,7 @@ export function useBoard(now: number) {
         clean: d.rawInput,
         kind: "intention",
         source: opened?.source ?? sourceOf(d.rawInput, false, false),
+        transcript: opened?.transcript,
         /* Nothing was created, so there is nothing to point at — the same
            state an undone capture reaches once its object is removed. */
         targetId: "",
@@ -3418,15 +3417,8 @@ export function useBoard(now: number) {
     }
   };
 
-  /** End the session: clear the login cookie and let the gate send us back. */
-  const logout = async () => {
-    try {
-      await fetch("/api/logout", { method: "POST" });
-    } catch {
-      /* server unreachable; the reload below still clears the local view */
-    }
-    window.location.href = "/login";
-  };
+  /** Revoke immediately; only confirmed logout permits success navigation. */
+  const logout = logoutAndNavigate;
 
   /* --------------------------- principles -------------------------- */
 
@@ -3504,10 +3496,11 @@ export function useBoard(now: number) {
         }
       }
     }
+    if (!lifetime.active) return;
     const outcome = await shareText({
       ...shareable,
       files: files.length ? files : undefined,
-    });
+    }, lifetime.assertDisclosure);
     if (outcome === "cancelled") return;
     setNotice(
       outcome === "shared"
@@ -3546,6 +3539,7 @@ export function useBoard(now: number) {
           }
         })
       );
+      lifetime.assertDisclosure();
       downloadJSON(buildBackup(b, images), backupFilename());
       setIoNote({
         text: `Saved ${count(latest.current.actions.length, "action")}, ${count(latest.current.threads.length, "thread")} and ${count(latest.current.intentions.length, "intention")} — with ${Object.keys(images).length} image${Object.keys(images).length === 1 ? "" : "s"} — to a file. Keep it somewhere that isn't this phone.`,
@@ -3747,11 +3741,19 @@ export function useBoard(now: number) {
   const openDistill = () => {
     setDistillErr("");
     const drafts = openDistillDraft(text, distillInput);
+    if (text.trim() && !distillInput.trim()) {
+      setDistillTranscript(transcript);
+      setTranscript("");
+    }
     setText(drafts.capture); setDistillInput(drafts.distill); setDistillOpen(true);
   };
 
   const closeDistill = () => {
     const drafts = closeDistillDraft(text, distillInput);
+    if (!text.trim() && distillInput.trim()) {
+      setTranscript(distillTranscript);
+      setDistillTranscript("");
+    }
     setText(drafts.capture); setDistillInput(drafts.distill); setDistillOpen(false);
   };
 
@@ -3760,6 +3762,7 @@ export function useBoard(now: number) {
     setSettled(null);
     setDistillErr("");
     setDistillInput("");
+    setDistillTranscript("");
     setDistillReady(false);
     const fresh: DistillSession = { id: uid(), at: stamp(), turns: [] };
     setDistillSession(fresh);
@@ -3800,14 +3803,11 @@ export function useBoard(now: number) {
       distillLoadedRef.current = true;
     }
 
-    const userTurn = { role: "user" as const, text, at: stamp() };
-    const withUser: DistillSession = {
-      id: base.id || uid(),
-      at: base.at || stamp(),
-      turns: [...base.turns, userTurn],
-    };
+    const withUser = appendDistillUserTurn(
+      base, text, stamp(), uid(), raw === undefined ? distillTranscript : undefined,
+    );
     setDistillSession(withUser);
-    setDistillInput("");
+    if (raw === undefined) { setDistillInput(""); setDistillTranscript(""); }
     await persistDistill(withUser);
 
     setDistillBusy(true);
@@ -4004,11 +4004,7 @@ export function useBoard(now: number) {
       const skipNote = proofreadSkipped
         ? " The proofread pass couldn't run — saved as reviewed."
         : "";
-      // The raw conversation the settlement came from — the ledger's `raw`.
-      const transcript = distillSession.turns
-        .map((t) => t.text)
-        .filter(Boolean)
-        .join(" ");
+      const source = distillSource(distillSession);
       // The route already reconciles this, but the review screen lets the
       // actions be emptied by hand — so guard again here. An action with no
       // task is filed as a thread, never as one action holding the whole
@@ -4020,10 +4016,7 @@ export function useBoard(now: number) {
         setDistillOpen(false);
         // The reviewed draft records the conversation in the ledger when it
         // is saved (saveDraft consumes the pending ledger note).
-        await expandIntention(finalClean, {
-          raw: transcript,
-          source: "distill",
-        });
+        await expandIntention(finalClean, source);
         await resetDistill();
       } else if (effectiveKind === "action") {
         const span = SHELF[shelfLife as ShelfLife] ?? null;
@@ -4052,10 +4045,9 @@ export function useBoard(now: number) {
             {
               id: uid(),
               at,
-              raw: transcript,
+              ...source,
               clean: finalClean,
               kind: "action",
-              source: "distill",
               targetId: items[0]?.id ?? "",
               modelVia: settled.via,
             }
@@ -4100,10 +4092,9 @@ export function useBoard(now: number) {
           {
             id: uid(),
             at: stamp(),
-            raw: transcript,
+            ...source,
             clean: finalClean,
             kind: "thread",
-            source: "distill",
             targetId: thread.id,
             /* The fragment this distillation just inserted, not the thread's
                first one. Pointing at `frags[0]` named whatever happened to
@@ -4150,7 +4141,7 @@ export function useBoard(now: number) {
       filed and nothing is kept. */
   const discardDistill = async () => {
     await resetDistill();
-    closeDistill();
+    setDistillOpen(false);
   };
 
   /* --------------------------- derivations -------------------------- */
@@ -4208,15 +4199,18 @@ export function useBoard(now: number) {
   };
 
   return {
-    data,
-    trial: dailyTrialApplies ? trialState(data.ledger ?? [], now) : null,
-    loaded,
+    data: lifetime.active ? data : EMPTY,
+    trial: dailyTrialApplies && captureLimitReady && loaded && lifetime.active
+      ? trialState(data.ledger ?? [], now)
+      : null,
+    loaded: loaded && lifetime.active,
     corrupt,
     text,
     setText,
     pics,
     setPics,
     setTranscript,
+    captureDictated: !!transcript,
     busy,
     err,
     landed,
@@ -4327,6 +4321,7 @@ export function useBoard(now: number) {
     distillSession,
     distillInput,
     setDistillInput,
+    setDistillTranscript,
     distillBusy,
     distillErr,
     distillReady,
@@ -4346,7 +4341,7 @@ export function useBoard(now: number) {
     restoreSnapshot,
     importBackup,
     doShare,
-    sync,
+    sync: ownershipStatus === "offline" ? { ok: false, at: now, note: "Offline — local changes are not synced; AI unavailable" } : sync,
     syncNow,
     canUndo,
     noticeUndoable,

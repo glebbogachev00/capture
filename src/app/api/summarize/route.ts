@@ -4,7 +4,7 @@ import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { withFallback } from "@/lib/providers";
-import { preferredFor } from "@/lib/routing";
+import { THREAD_SUMMARY_SYSTEM } from "@/lib/threadSummaryPrompt";
 import { splitNext } from "@/lib/nextStep";
 
 /**
@@ -56,21 +56,8 @@ export async function POST(request: Request) {
       const { text } = await generateText({
         model: tier.model,
         maxRetries: 0,
-        prompt:
-        'These are dated fragments one person captured over time about "' +
-        body.name +
-        '", oldest first:\n\n' +
-        body.frags
-          .map((f) => "[" + new Date(f.at).toDateString() + "] " + f.text)
-          .join("\n\n") +
-          '\n\nWrite a "Where this stands" block: 2-5 sentences of plain prose describing what this idea currently is, what\'s been settled, and what\'s still open. Write it back to them in their own register. Invent nothing. Every sentence must carry specific facts from the fragments — names, numbers, decisions made, the actual open question. No throat-clearing ("The concept is defined as...", "What remains open is whether..." followed by nothing specific), no restating the thread\'s name as prose, no summarising the summary. The main reader is the sorting engine deciding where new captures belong, and it routes on substance: a dense three-sentence snapshot beats five padded ones. Fewer sentences are better whenever the facts fit.' +
-          '\n\nThen, on its own last line, write NEXT: followed by the one concrete step the fragments point at — a decision the evidence has made, a person to write back to, a thing to send or ship — in their words, at most one short sentence, something they could do today. If the fragments point at nothing in particular, write NEXT: none; a step you would have to invent is worse than none. Never suggest something already on their list' +
-          (body.open?.length ? ':\n' + body.open.map((a) => '- ' + a).join('\n') : '.') +
-          (body.siblings?.length
-            ? '\n\nThen, on a line of its own, write BELONGS: followed by one sentence naming what kind of capture should be filed into this thread and what should not. This line is never shown to them — it is read by the sorter deciding where new captures go, so it must be useful for that and nothing else. Name the boundary against the neighbouring threads specifically where they are close: "anything broken or asked for in Capture — not its pricing or positioning, which go to Capture." Describe the SUBJECT that belongs, never the vocabulary; two threads about the same product cannot be told apart by the words they use. The other threads on this board are:\n' +
-                body.siblings.map((n) => '- ' + n).join('\n')
-            : '') +
-          '\n\nReturn only the prose and those last lines.',
+        system: THREAD_SUMMARY_SYSTEM,
+        prompt: JSON.stringify(body),
         providerOptions: tier.providerOptions,
       });
       return text;

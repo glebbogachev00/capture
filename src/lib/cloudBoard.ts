@@ -1,3 +1,4 @@
+import { ownerPrecondition } from "./ownerPrecondition";
 import { NextResponse } from "next/server";
 import { hydrate } from "@/lib/model";
 import { mergeSync, type SyncState, type Tombstone } from "@/lib/sync";
@@ -155,6 +156,8 @@ export async function handleCloudBoardGet(
 
   const identity = await identityOr401(request, deps);
   if (identity instanceof Response) return identity;
+  const precondition = ownerPrecondition(request, identity.userId);
+  if (precondition) return precondition;
   const entitlement = await entitlementOrResponse(identity, deps);
   if (entitlement instanceof Response) return entitlement;
 
@@ -175,6 +178,8 @@ export async function handleCloudBoardPut(
 
   const identity = await identityOr401(request, deps);
   if (identity instanceof Response) return identity;
+  const precondition = ownerPrecondition(request, identity.userId);
+  if (precondition) return precondition;
   const entitlement = await entitlementOrResponse(identity, deps);
   if (entitlement instanceof Response) return entitlement;
 
@@ -194,6 +199,14 @@ export async function handleCloudBoardPut(
     for (let attempt = 0; attempt < PUT_ATTEMPTS; attempt++) {
       const current = await deps.repository.get(identity.userId);
       const merged = mergeSync(current?.state ?? emptyState(), clientState);
+      // Acknowledge only inside the same optimistic write as the history.
+      // Failed writes/retries keep the client pending; receipts survive resets
+      // so a delayed pre-import document cannot replay an already accepted copy.
+      if (merged.board.historyImports) {
+        merged.board = { ...merged.board, historyImports: Object.fromEntries(
+          Object.keys(merged.board.historyImports).map(id => [id, "accepted" as const])
+        ) };
+      }
       const accepted = current
         ? await deps.repository.update(identity.userId, current.rev, merged)
         : await deps.repository.create(identity.userId, merged);

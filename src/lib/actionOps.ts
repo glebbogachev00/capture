@@ -60,8 +60,9 @@ export type ActionToThread = {
   threadId: string;
 };
 
-/** Turn an action into a thread of its own. The fragment keeps the
-    ORIGINAL words (src), not the rewritten task text. */
+/** Turn an action into a thread of its own. src carries the action-scoped
+    wording; the immutable Record, not this operation, owns capture provenance.
+    Legacy src is left intact: this is not an automatic data repair. */
 export function applyActionToNewThread(
   board: Board,
   actionId: string,

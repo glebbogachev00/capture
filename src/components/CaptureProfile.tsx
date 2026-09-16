@@ -1,5 +1,6 @@
 "use client";
 
+import { getDocumentLifetime } from "@/lib/ownership";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
 import {
@@ -20,7 +21,7 @@ import { useStoredImage } from "@/hooks/useStoredImage";
 import { shrinkFile } from "@/lib/shrink";
 
 function readSaved(key: string): ProfileDefaults {
-  if (typeof window === "undefined") return EMPTY_PROFILE_IDENTITY;
+  if (typeof window === "undefined" || getDocumentLifetime().cloud) return EMPTY_PROFILE_IDENTITY;
   return parseProfileIdentity(window.localStorage.getItem(key));
 }
 

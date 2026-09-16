@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { CopyPrompt } from "@/components/CopyPrompt";
 import { GROQ_KEYS_URL, SETUP_GUIDE_URL } from "@/lib/install";
-import { PLAYGROUND } from "@/lib/playground";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 import { installMetadata, siteHome } from "@/lib/seo";
 import { SiteNav } from "@/components/SiteNav";
 
-export const metadata = installMetadata(PLAYGROUND);
+export const metadata = installMetadata(PUBLIC_SITE);
 
-const HOME = siteHome(PLAYGROUND);
+const HOME = siteHome(PUBLIC_SITE);
 
 export default function InstallPage() {
   return (

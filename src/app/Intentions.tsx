@@ -1,4 +1,6 @@
 "use client";
+import { OfflineSettings } from "@/components/OfflineSettings";
+import { LegacyImportSettings } from "@/components/LegacyImport";
 
 /* ============================================================
    INTENTIONS — carried over from the standalone intent app.
@@ -651,7 +653,7 @@ export function RecordScreen({
                   something a person can picture. */}
               <p className="record-caption record-profile-caption">
                 {caught
-                  ? `about ${caught.words.toLocaleString()} words caught — ${caught.like}`
+                  ? `about ${caught.words.toLocaleString()} words caught`
                   : "the last twelve weeks, day by day"}
               </p>
             </div>
@@ -960,6 +962,7 @@ export function SettingsScreen({
           onToggle={() => toggleSection("cloud")}
         >
           <CloudAccountPanel />
+          <OfflineSettings />
         </SettingsDisclosure>
 
         <SettingsDisclosure
@@ -1027,6 +1030,7 @@ export function SettingsScreen({
           open={openSection === "restore"}
           onToggle={() => toggleSection("restore")}
         >
+          <LegacyImportSettings />
           {snapshotDaysList.length > 0 && (
             <div className="settings-group">
               <h4 className="settings-group-title">Go back a day</h4>
@@ -1168,6 +1172,16 @@ export function SettingsScreen({
           open={openSection === "support"}
           onToggle={() => toggleSection("support")}
         >
+          <div className="settings-group">
+            <h4 className="settings-group-title">Need help?</h4>
+            <p className="settings-copy">
+              For account or billing questions, or general help.
+            </p>
+            <a className="ghost" href="mailto:gleb@trycapture.app">
+              Contact support
+            </a>
+          </div>
+
           <div className="settings-group">
             <h4 className="settings-group-title">Caught a bug?</h4>
             <p className="settings-copy">

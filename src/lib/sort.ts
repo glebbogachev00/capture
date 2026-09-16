@@ -56,15 +56,53 @@ export function enforceStandingDecision<
   };
 }
 
+function standaloneShare(text: string): string {
+  return text.replace(/^\s*(?:Separately|On a separate note|On another note|Also),\s+(?=\S)/i, "");
+}
+
+/** Only remove shares fully accounted for by extracted tasks. No fuzzy semantic
+ * matching: an action plus deliberation must keep its thinking destination. */
+export function thinkingShares<T extends { text: string }>(
+  pieces: T[] | null | undefined, actions: string[] | undefined
+): T[] {
+  const key = (text: string) => standaloneShare(text).trim().toLowerCase()
+    .replace(/^[-*]\s+/, "").replace(/[.!]+$/, "").replace(/\s+/g, " ");
+  const tasks = new Set((actions ?? []).map(key).filter(Boolean));
+  return (pieces ?? []).filter(piece => {
+    if (!piece?.text?.trim()) return false;
+    if (tasks.has(key(piece.text))) return false;
+    const lines = piece.text.trim().split(/\n+|[.!]\s+/).filter(line => key(line));
+    return !lines.length || !lines.every(line => tasks.has(key(line)));
+  });
+}
+
 export function reconcileSorted<
   T extends {
     kind: SortKind;
+    due?: string | null;
     actions?: string[];
     threadId?: string | null;
     threadName?: string | null;
+    primaryText?: string | null;
+    also?: { text: string; threadId?: string | null; threadName?: string | null }[] | null;
   },
 >(out: T): T {
+  if (out.also) out = { ...out, also: thinkingShares(out.also, out.actions) };
+  if (
+    (out.kind === "thread" || out.kind === "both") &&
+    (out.threadId || out.threadName?.trim()) &&
+    out.also?.some((share) => share.text.trim() && (share.threadId || share.threadName?.trim()))
+  ) {
+    out = {
+      ...out,
+      primaryText: out.primaryText == null ? out.primaryText : standaloneShare(out.primaryText),
+      also: out.also.map((share) => ({ ...share, text: standaloneShare(share.text) })),
+    };
+  }
   const actions = (out.actions ?? []).map((a) => a.trim()).filter(Boolean);
+  // The legacy scalar has no action selector. Never copy one task's deadline
+  // onto siblings; their timing remains in action text and the whole Record.
+  if (actions.length > 1 && out.due) out = { ...out, due: null };
 
   if (out.kind === "both") {
     const hasThread = Boolean(out.threadId || out.threadName?.trim());

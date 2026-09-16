@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { PLAYGROUND } from "@/lib/playground";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 import { appStartUrl } from "@/lib/seo";
 
 export default function manifest(): MetadataRoute.Manifest {
@@ -8,7 +8,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "capture",
     description:
       "One capture surface, three destinations, self-clearing. Actions fade. Threads never do.",
-    start_url: appStartUrl(PLAYGROUND),
+    start_url: appStartUrl(PUBLIC_SITE),
     display: "standalone",
     background_color: "#EDEFE8",
     theme_color: "#EDEFE8",

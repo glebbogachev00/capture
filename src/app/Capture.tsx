@@ -1,4 +1,5 @@
 "use client";
+import { ownedFetch as fetch } from "@/lib/ownership";
 /* ============================================================
    CAPTURE — one capture surface, three destinations, self-clearing.
    Everything you say goes in one place. The system decides whether
@@ -10,8 +11,7 @@
 
    This file is deliberately the shell. All board state, persistence
    and operations live in useBoard(); the components below just
-   render what it hands back.
-   ============================================================ */
+   render what it hands back. */
 import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BrushCleaning, Image as ImageIcon, Layers, MessagesSquare, Mic, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
@@ -19,6 +19,7 @@ import { BusyLine, Row, TCard } from "@/components/cards";
 import { GroupedActionRows } from "@/components/GroupedActionRows";
 import { SearchResults } from "@/components/SearchResults";
 import { ThreadView } from "@/components/ThreadView";
+import { ThreadChoices } from "@/components/ThreadChoices";
 import { degradedNote } from "@/lib/degraded";
 import { TangleCallout, TangleReview } from "./Tangle";
 import { DistillView } from "./Distill";
@@ -28,6 +29,7 @@ import {
   subscribeToClock,
 } from "@/lib/clock";
 import { useRecordedDictation } from "@/hooks/useRecordedDictation";
+import { appendDictationTranscript } from "@/lib/voiceSource";
 import { get, set } from "@/lib/storage";
 import { shrinkFile } from "@/lib/shrink";
 import {
@@ -55,6 +57,7 @@ import { ReportBug } from "@/components/ReportBug";
 import { PlaygroundNotice } from "@/components/PlaygroundNotice";
 import { TrialMeter } from "@/components/TrialMeter";
 import { InstallInvitation } from "@/components/InstallInvitation";
+import { OfflineInvitation } from "@/components/OfflineSettings";
 import { CheckoutReturnNotice } from "@/components/CloudBilling";
 import { PLAYGROUND } from "@/lib/playground";
 import { groupActions } from "@/lib/group";
@@ -139,6 +142,7 @@ export function Capture() {
     pics,
     setPics,
     setTranscript,
+    captureDictated,
     busy,
     err,
     landed,
@@ -237,6 +241,7 @@ export function Capture() {
     distillSession,
     distillInput,
     setDistillInput,
+    setDistillTranscript,
     distillBusy,
     distillErr,
     distillReady,
@@ -364,20 +369,18 @@ export function Capture() {
   /* Input device plumbing: the hidden file picker, and the recorded-dictation
      mic (shared with Distill — the mic routes to whichever surface is open).
      Read through the ref by useRecordedDictation, so the destination is always
-     the one that is current when a result lands. The ref remembers that the
-     words in the box came from the microphone, so the capture can be
-     recorded as dictated in the ledger. */
-  const dictatedRef = useRef(false);
+     the one that is current when a result lands. Dictation attribution follows
+     the draft's transcript when moving between Capture and Distill. */
   const { canDictate, listening, transcribing, toggleMic } =
     useRecordedDictation((t, raw) => {
     if (distillOpen) {
+      setDistillTranscript((x) => appendDictationTranscript(x, t, raw));
       setDistillInput((x) => (x ? x + " " : "") + t.trim());
     } else {
-      dictatedRef.current = true;
       /* Keep what the recogniser actually heard, so the capture that lands
          carries its own evidence and the cleanup pass is never the only
          record of what was said. */
-      if (raw) setTranscript((x) => (x ? x + " " : "") + raw.trim());
+      setTranscript((x) => appendDictationTranscript(x, t, raw));
       setText((x) => (x ? x + " " : "") + t.trim());
     }
   });
@@ -556,6 +559,8 @@ export function Capture() {
           </div>
         </div>
 
+        <OfflineInvitation boardReady={loaded && !corrupt && sync?.ok === true} />
+
         {distillOpen && (
           <DistillView
             session={distillSession}
@@ -592,8 +597,7 @@ export function Capture() {
             placeholder="Say it however it comes out."
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                submit(dictatedRef.current);
-                dictatedRef.current = false;
+                submit(captureDictated);
               }
             }}
           />
@@ -670,8 +674,7 @@ export function Capture() {
             <button
               className="capture-btn"
               onClick={() => {
-                submit(dictatedRef.current);
-                dictatedRef.current = false;
+                submit(captureDictated);
               }}
               disabled={!!busy || (!text.trim() && !pics.length) || !!trial?.exhausted}
               aria-describedby={PLAYGROUND ? "trial-meter-status" : undefined}
@@ -721,23 +724,14 @@ export function Capture() {
               <>
                 <span className="misfiled-q">Which thread?</span>
                 <div className="picker misfiled-picker">
-                  {data.threads
-                    .filter((t) => t.id !== misfiled.thread?.id)
-                    .map((t) => (
-                      <button
-                        key={t.id}
-                        className="picker-row"
-                        onClick={() => {
-                          setPickingThread(false);
-                          void sortAgainIntoThread(t.id);
-                        }}
-                      >
-                        <span className="picker-name">{t.name}</span>
-                        <span className="picker-meta">
-                          {t.frags.length} layer{t.frags.length === 1 ? "" : "s"}
-                        </span>
-                      </button>
-                    ))}
+                  <ThreadChoices
+                    threads={data.threads.filter((t) => t.id !== misfiled.thread?.id)}
+                    countLabel="layer"
+                    onSelect={(id) => {
+                      setPickingThread(false);
+                      void sortAgainIntoThread(id);
+                    }}
+                  />
                   <button
                     className="ghost"
                     onClick={() => setPickingThread(false)}
@@ -1005,6 +999,7 @@ export function Capture() {
 
             {searching ? (
               <SearchResults
+                board={data} question={query}
                 hits={hits}
                 now={now}
                 onOpenThread={(id, fragId) => {

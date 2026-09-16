@@ -10,7 +10,7 @@ const entry = (over: object) =>
   ({ id: "e", at: 1, raw: "r", clean: "c", kind: "both", source: "typed", targetId: "", ...over }) as CaptureEntry;
 
 const thread = (over: object = {}): Thread =>
-  ({ id: "t1", name: "Pricing model decisions", summary: "Seats or usage-based pricing for small teams.", frags: [], ...over }) as Thread;
+  ({ id: "t1", name: "Pricing model decisions", summary: "Seats or usage-based pricing for small teams.", frags: [{ id: "independent", at: 0, text: "Pricing model decisions: seats or usage-based pricing for small teams." }], ...over }) as Thread;
 
 describe("the actions that belong with a thread", () => {
   it("links by provenance, splits open from done, excludes other threads", () => {
@@ -28,11 +28,11 @@ describe("the actions that belong with a thread", () => {
     expect(out.done.map((a) => a.id)).toEqual(["b"]);
   });
 
-  it("recovers pre-field actions through the ledger's both entries", () => {
+  it("recovers an exact pre-field task through the ledger's both entries", () => {
     const b: Board = {
       ...EMPTY,
       threads: [thread()],
-      actions: [action("a", { src: "ship the fix" })],
+      actions: [action("a", { text: "ship the fix", src: "ship the fix" })],
       ledger: [entry({ id: "e1", clean: "ship the fix", targetId: "t1" })],
     };
     expect(actionsForThread(b, thread()).open.map((a) => a.id)).toEqual(["a"]);
@@ -58,7 +58,7 @@ describe("the actions that belong with a thread", () => {
     const b: Board = {
       ...EMPTY,
       threads: [thread()],
-      actions: [action("a", { src: "ship the fix" })],
+      actions: [action("a", { text: "ship the fix", src: "ship the fix" })],
       ledger: [entry({ id: "e1", clean: "ship the fix", targetId: "t1", undone: true })],
     };
     expect(actionsForThread(b, thread()).open).toEqual([]);

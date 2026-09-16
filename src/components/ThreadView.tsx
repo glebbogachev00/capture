@@ -15,6 +15,7 @@ import { fmt, uid, type Action, type Frag, type Thread } from "@/lib/model";
 import { shrinkFile } from "@/lib/shrink";
 import type { DoneItem } from "@/lib/threadActions";
 import { ConfirmDelete } from "./ConfirmDelete";
+import { ThreadChoices } from "./ThreadChoices";
 
 export function ThreadView({
   thread,
@@ -156,7 +157,7 @@ export function ThreadView({
               <button className="ghost" onClick={onRefreshSummary} disabled={busy}>
                 Refresh summary
               </button>
-              <button className="ghost" onClick={() => setRenaming(true)}>
+              <button className="ghost" onClick={() => { setName(thread.name); setRenaming(true); }}>
                 Rename
               </button>
               <button
@@ -253,21 +254,10 @@ export function ThreadView({
             Pick a thread to fold into <b>{thread.name}</b>. Its fragments join
             this one in date order and the thread itself goes.
           </p>
-          {others.map((t) => (
-            <button
-              key={t.id}
-              className="picker-row"
-              onClick={() => {
-                onMerge(t.id);
-                setMerging(false);
-              }}
-            >
-              <span className="picker-name">{t.name}</span>
-              <span className="picker-meta">
-                {t.frags.length} fragment{t.frags.length > 1 ? "s" : ""}
-              </span>
-            </button>
-          ))}
+          <ThreadChoices threads={others} onSelect={(id) => {
+            onMerge(id);
+            setMerging(false);
+          }} />
           <button className="ghost" onClick={() => setMerging(false)}>
             Cancel
           </button>
@@ -485,7 +475,7 @@ export function FragView({
 
       {more && !editing && (
         <div className="row-actions">
-          <button className="ghost" onClick={() => setEditing(true)}>
+          <button className="ghost" onClick={() => { setDraft(f.text); setEditing(true); }}>
             Edit
           </button>
           <button className="ghost" onClick={onExtract} disabled={busy}>
@@ -558,21 +548,10 @@ export function FragView({
               named from this fragment, rename it after
             </span>
           </button>
-          {others.map((t) => (
-            <button
-              key={t.id}
-              className="picker-row"
-              onClick={() => {
-                onMove(t.id);
-                setMoving(false);
-              }}
-            >
-              <span className="picker-name">{t.name}</span>
-              <span className="picker-meta">
-                {t.frags.length} fragment{t.frags.length === 1 ? "" : "s"}
-              </span>
-            </button>
-          ))}
+          <ThreadChoices threads={others} onSelect={(id) => {
+            onMove(id);
+            setMoving(false);
+          }} />
           <button className="ghost" onClick={() => setMoving(false)}>
             Cancel
           </button>

@@ -1,0 +1,19 @@
+/* Keep visual, reading, and keyboard order identical on this landing only.
+ * Legacy public-page rules assign a different flex order to each section. */
+.landing :global(.site-wrap) > * { order: 0 !important; }
+.landing .fit { margin: 14px auto 0; max-width: 49ch; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.landing .followup { margin-top: 14px !important; }
+.landing :global(.site-day) > h2 { font-family: var(--font-display), Georgia, serif; font-size: 30px; line-height: 1.12; font-weight: 500; letter-spacing: -.025em; margin: 0 0 12px; }
+.landing :global(.site-day) > p { max-width: 68ch; line-height: 1.6; }
+.landing :global(.site-day) :global(.note-beats) { margin-top: 22px; }
+.voiceDetails { margin-top: 14px; }
+.voiceDetails summary { cursor: pointer; padding-block: 8px; font-size: 14px; }
+.voiceDetails p { padding-top: 10px; }
+.landing :global(.reel-fold) > :global(.hero-clip) { margin-top: 14px; }
+.landing :global(.site-proof) a:not(:global(.capture-btn)):not(:global(.ghost)) { color: var(--ink); text-underline-offset: 3px; }
+@media (max-width: 600px) {
+  .landing :global(.site-hero) h1 { font-size: clamp(42px, 12vw, 58px); line-height: .98; }
+  .landing :global(.site-hero-aside) { margin-top: 20px; }
+  .landing :global(.site-lede) { font-size: 16px; line-height: 1.55; }
+  .landing :global(.site-cue) { max-width: 31ch; margin-inline: auto; }
+}

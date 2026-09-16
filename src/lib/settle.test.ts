@@ -86,6 +86,21 @@ describe("settling a capture the sorter could not sort", () => {
     expect(out.board.ledger![0].imgs).toEqual(["img1"]);
   });
 
+  it.each([undefined, "t1"])("keeps the recogniser transcript when sorting fails (destination %s)", (openThreadId) => {
+    const transcript = "  call sea rah\nabout the draft  ";
+    const b = board({ threads: [{ id: "t1", name: "Draft", at: 1, frags: [] } as never] });
+    const out = settleUnsortedCapture(b, input({
+      raw: "Call Sarah about the draft.", transcript, openThreadId,
+    }), ids);
+    const entry = out.board.ledger![0];
+    expect(entry.transcript).toBe(transcript);
+    expect(entry.raw).toBe("Call Sarah about the draft.");
+    expect(entry.clean).toBe("Call Sarah about the draft.");
+    expect(entry.source).toBe("dictated");
+    const text = openThreadId ? out.board.threads[0].frags[0].text : out.board.actions[0].text;
+    expect(text).toBe("Call Sarah about the draft.");
+  });
+
   it("keeps the original capture identity when a correction is saved unsorted", () => {
     const out = settleUnsortedCapture(board(), input(), {
       ...ids,

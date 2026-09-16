@@ -50,6 +50,7 @@ function fullBoard(): Board {
     wraps: [wrap],
     completions: [{ id: "a9", text: "did it", at: 6 }],
     historyEpoch: 7,
+    historyImports: { original: "accepted" },
     profile: {
       name: "Gleb",
       imageId: "profile-photo",

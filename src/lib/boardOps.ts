@@ -20,6 +20,7 @@ import {
   left,
   uid,
 } from "./model";
+import { thinkingShares } from "./sort";
 import { bestActionDuplicate } from "./related";
 
 /** What /api/sort returns. Validated server-side against a schema. */
@@ -28,8 +29,11 @@ export type SortResult = {
   kind: "action" | "thread" | "intention" | "both";
   title: string;
   actions?: string[];
+  /** Exact action lines explicitly about the primary thinking subject.
+      Missing on older responses: co-capture alone never establishes a link. */
+  primaryActions?: string[] | null;
   shelfLife?: string;
-  /** An ISO deadline the capture named for itself, or null. */
+  /** Single-action ISO deadline, or null. The scalar has no owner for siblings. */
   due?: string | null;
   threadId?: string | null;
   threadName?: string | null;
@@ -104,11 +108,11 @@ export function applySorted(
      and filing the whole capture plus a copy of half of it is worse than not
      splitting at all: the person has to spot the duplicate and delete it.
      So an unusable split is refused outright rather than half-applied. */
-  const pieces = (out.also ?? []).filter((p) => p?.text?.trim());
+  const pieces = thinkingShares(out.also, out.actions);
   const share = out.primaryText?.trim();
   const splitting = pieces.length > 0 && !!share;
-  const sorted = splitting ? { ...out, clean: share! } : out;
-  const primary = applyPrimary(sorted, imgIds, at, board, !splitting);
+  const thinking = (splitting || (out.kind === "both" && share)) ? share! : out.clean;
+  const primary = applyPrimary(out, imgIds, at, board, thinking);
   return splitting ? foldAlso(primary, pieces, at, board) : primary;
 }
 
@@ -174,11 +178,11 @@ function applyPrimary(
   imgIds: string[],
   at: number,
   board: Board,
-  linkActionsToPrimary: boolean
+  thinking: string
 ): Applied {
   if (out.kind === "action") {
     const span = SHELF[out.shelfLife as ShelfLife] ?? null;
-    const due = parseDue(out.due, stamp());
+    const due = parseDue((out.actions?.length ?? 0) > 1 ? null : out.due, stamp());
 
     /* A picture that arrives with a task has nowhere to live on an action:
        nothing renders an action's images, and ticking the action off would
@@ -220,7 +224,10 @@ function applyPrimary(
         text: t,
         done: false,
         at,
-        src: out.clean,
+        // A single task may keep its fuller wording; siblings must not travel
+        // together. Whole-capture provenance belongs to the immutable Record.
+        src: (out.actions?.length ?? 0) > 1 || out.primaryText?.trim() || out.also?.length
+          ? t : out.clean,
         /* Never the action's own: the fragment owns the picture. */
         imgs: [],
         ...(shotFrag && shotThreadId
@@ -264,19 +271,21 @@ function applyPrimary(
   // deleting a closed action must never drop an image the thread still uses.
   if (out.kind === "both") {
     const span = SHELF[out.shelfLife as ShelfLife] ?? null;
-    const due = parseDue(out.due, stamp());
+    const due = parseDue((out.actions?.length ?? 0) > 1 ? null : out.due, stamp());
     const items: Action[] = (out.actions ?? []).map((t) => ({
       id: uid(),
       text: t,
       done: false,
       at,
-      src: out.clean,
+      // src is operational text for this action (fold, resort, share, intention),
+      // never either the whole mixed capture or its thinking-only fragment.
+      src: t,
       imgs: [],
       shelf: (out.shelfLife || "keep") as ShelfLife,
       due,
       expires: expiryFor(span, due, stamp()),
     }));
-    const bothFrag: Frag = { id: uid(), at, text: out.clean, imgs: imgIds };
+    const bothFrag: Frag = { id: uid(), at, text: thinking, imgs: imgIds };
     const home = board.threads.find((x) => x.id === out.threadId);
     const threads = home
       ? board.threads.map((x) =>
@@ -293,13 +302,15 @@ function applyPrimary(
         ];
     const homeId = home ? home.id : threads[0].id;
     const homeName = home ? home.name : threads[0].name;
-    /* Provenance is only a real relationship when this capture has one
-       thinking destination. In a multi-subject split, "primary" is merely
-       the first serialized thread; attaching every action to it invents a
-       relationship and makes the UI depend on array order. */
-    const linked = linkActionsToPrimary
-      ? items.map((item) => ({ ...item, threadId: homeId }))
-      : items;
+    /* "both" says the capture contains actions AND thinking, not that every
+       action belongs to that thinking. Only an explicit per-action selection
+       from this sort can establish provenance. Never infer it from the number
+       of thinking destinations (errands do not get their own threads). */
+    const primaryActions = new Set(Array.isArray(out.primaryActions)
+      ? out.primaryActions.filter((text): text is string => typeof text === "string") : []);
+    const linked = items.map((item) => primaryActions.has(item.text)
+      ? { ...item, threadId: homeId }
+      : item);
     return {
       next: { ...board, actions: [...linked, ...board.actions], threads },
       targetId: homeId,
@@ -315,7 +326,7 @@ function applyPrimary(
     };
   }
 
-  const frag: Frag = { id: uid(), at, text: out.clean, imgs: imgIds };
+  const frag: Frag = { id: uid(), at, text: thinking, imgs: imgIds };
   const existing = board.threads.find((x) => x.id === out.threadId);
   if (existing) {
     return {

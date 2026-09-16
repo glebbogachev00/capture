@@ -23,6 +23,11 @@ const base = (): Board => ({
 });
 
 describe("restoring after an undo", () => {
+  it("keeps import reconciliation receipts and unknown recovered fields across Undo", () => {
+    const snap = { board: { ...base(), historyImports: { batch: "pending" as const } } };
+    const live = { ...base(), historyImports: { batch: "accepted" as const }, futureField: { original: true } };
+    expect(restoreCapture(live, snap, NOW)).toMatchObject({ historyImports: live.historyImports, futureField: live.futureField });
+  });
   it("removes only what this capture created", () => {
     const snap = { board: base(), addedIds: new Set(["mine"]), ledgerIds: ["L1"] };
     const live: Board = {

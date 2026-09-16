@@ -84,6 +84,7 @@ const nextConfig: NextConfig = {
      request cross-origin from Next's point of view; without this it silently
      refuses to serve the JS bundles, so pages render but never hydrate. */
   allowedDevOrigins: [
+    "127.0.0.1", // loopback sandbox: browser script requests carry this Origin
     "andreys-macbook-air.tail204d23.ts.net", // tailscale serve (https)
     "100.117.116.1", // tailnet IP, direct
     "192.168.0.104", // home LAN, no tailscale needed

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { PLAYGROUND, isClosedInPlayground } from "@/lib/playground";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 import { AUTH_COOKIE, isValidSession } from "@/lib/auth";
 import { isPublicHome } from "@/lib/seo";
 import { getCloudConfig } from "@/lib/supabase/config";
@@ -46,6 +47,24 @@ export async function proxy(request: NextRequest) {
     return NextResponse.json({ error: "not available in the playground" }, { status: 404 });
   }
   const { pathname } = request.nextUrl;
+  const cloudEnabled = process.env.CAPTURE_CLOUD === "1";
+  // These services still use a single-owner hub, local upstream, or issue
+  // token. Cloud identity does not make them tenant-safe. Keep them closed
+  // on public/Cloud deployments until they have their own authorization.
+  if ((PUBLIC_SITE || cloudEnabled) && ["/api/transcribe", "/api/tts", "/api/report"].some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  )) {
+    // ReportBug already uses 501 to open its safe, pre-filled GitHub fallback.
+    const status = pathname === "/api/report" ? 501 : 404;
+    return NextResponse.json({ error: "not available on this deployment" }, { status });
+  }
+  // Only Cloud's tenant-authenticated image route may replace the shared hub.
+  if (PUBLIC_SITE && !cloudEnabled && (pathname === "/api/img" || pathname.startsWith("/api/img/"))) {
+    return NextResponse.json({ error: "cloud images are not enabled" }, { status: 404 });
+  }
+  if (PUBLIC_SITE && !cloudEnabled && (pathname === "/api/sync" || pathname.startsWith("/api/sync/"))) {
+    return NextResponse.json({ error: "cloud sync is not enabled" }, { status: 404 });
+  }
   const cloudConfig = getCloudConfig();
   const passThrough = cloudConfig?.status === "ready"
     ? await refreshCloudSession(request, cloudConfig)
@@ -56,11 +75,13 @@ export async function proxy(request: NextRequest) {
   if (
     pathname === "/api/cloud" ||
     pathname.startsWith("/api/cloud/") ||
+    (cloudEnabled && (pathname === "/api/sync" || pathname.startsWith("/api/img/"))) ||
     pathname === "/api/webhooks/polar"
   ) {
     return passThrough;
   }
-  if (isPublicHome(pathname, PLAYGROUND) || isPublic(pathname)) {
+  if (isPublicHome(pathname, PUBLIC_SITE) || isPublic(pathname) ||
+    (PUBLIC_SITE && (pathname === "/app" || pathname === "/writing" || pathname.startsWith("/writing/")))) {
     return passThrough;
   }
 

@@ -1,4 +1,5 @@
 "use client";
+import { ownedFetch as fetch } from "@/lib/ownership";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { capability } from "@/lib/clock";

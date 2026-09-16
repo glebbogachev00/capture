@@ -8,7 +8,8 @@ export const runtime = "nodejs";
 /** End both supported session types on this device. */
 export async function POST() {
   const cloud = getCloudConfig();
-  let cloudError = false;
+  // Enabled but unconfigured Cloud cannot confirm session revocation.
+  let cloudError = cloud?.status === "missing";
   if (cloud?.status === "ready") {
     try {
       const client = await createCloudServerClient(cloud);

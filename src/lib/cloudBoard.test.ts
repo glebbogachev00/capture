@@ -11,6 +11,11 @@ import { hydrate, type Board } from "@/lib/model";
 import type { SyncState } from "@/lib/sync";
 import { GET as defaultCloudRoute } from "@/app/api/cloud/board/route";
 
+const ownedRequest = (url: string, init: RequestInit = {}, owner = "alice") => {
+  const headers = new Headers(init.headers);
+  headers.set("X-Capture-Owner", owner);
+  return new Request(url, { ...init, headers });
+};
 const board = (id: string): Board =>
   hydrate({ actions: [{ id, text: id, at: 1 } as never] });
 const state = (id: string): SyncState => ({ board: board(id), tombstones: [] });
@@ -77,18 +82,34 @@ function deps(identity: VerifiedIdentity | null, repo: CloudBoardRepository) {
 
 const put = (value: SyncState, identity: VerifiedIdentity, repo: CloudBoardRepository) =>
   handleCloudBoardPut(
-    new Request("https://capture.test/api/cloud/board", {
+    ownedRequest("https://capture.test/api/cloud/board", {
       method: "PUT",
       body: JSON.stringify(value),
-    }),
+    }, identity.userId),
     deps(identity, repo)
   );
 
 describe("cloud board boundary", () => {
+  it("accepts pending history once and does not resurrect it after a genuine reset on a retry", async () => {
+    const repo = repository();
+    const entry = { id: "imported", at: 1, raw: "original", clean: "original", kind: "action" as const, source: "typed" as const, targetId: "a", importBatch: "batch" };
+    const incoming: SyncState = { board: { ...board("a"), ledger: [entry], historyImports: { batch: "pending" } }, tombstones: [] };
+    repo.documents.set("alice", { rev: 1, state: { board: { ...board("remote"), historyEpoch: 100 }, tombstones: [] } });
+    const first = await put(incoming, { userId: "alice" }, repo);
+    expect(first.status).toBe(200);
+    const accepted = await first.json();
+    expect(accepted.board.ledger).toEqual([entry]);
+    expect(accepted.board.historyImports.batch).toBe("accepted");
+    const reset = { ...accepted, board: { ...accepted.board, ledger: [], corrections: [], wraps: [], completions: [], historyEpoch: 200 } };
+    expect((await put(reset, { userId: "alice" }, repo)).status).toBe(200);
+    const retried = await put(incoming, { userId: "alice" }, repo);
+    expect((await retried.json()).board.ledger).toEqual([]);
+    expect(repo.documents.get("alice")?.state.board.ledger).toEqual([]);
+  });
   it("returns 404 and does not invoke dependencies when Cloud is off", async () => {
     const verifyIdentity = vi.fn();
     const repo = { get: vi.fn(), create: vi.fn(), update: vi.fn() };
-    const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), {
+    const response = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), {
       isEnabled: () => false, verifyIdentity, repository: repo,
     });
     expect(response.status).toBe(404);
@@ -104,21 +125,21 @@ describe("cloud board boundary", () => {
 
   it("returns 401 without verified identity and does not read the repository", async () => {
     const repo = repository();
-    const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), deps(null, repo));
+    const response = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), deps(null, repo));
     expect(response.status).toBe(401);
     expect(repo.documents).toEqual(new Map());
   });
 
   it("rejects a blank verified user id instead of sharing an empty tenant", async () => {
     const repo = repository();
-    const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), deps({ userId: "   " }, repo));
+    const response = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), deps({ userId: "   " }, repo));
     expect(response.status).toBe(401);
     expect(repo.documents).toEqual(new Map());
   });
 
   it("enforces a paid entitlement on the server when the production switch is on", async () => {
     const repo = repository();
-    const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), {
+    const response = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), {
       ...deps({ userId: "alice" }, repo),
       requiresEntitlement: () => true,
       hasEntitlement: vi.fn().mockResolvedValue(false),
@@ -130,7 +151,7 @@ describe("cloud board boundary", () => {
 
   it("fails closed when entitlement state cannot be checked", async () => {
     const repo = repository();
-    const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), {
+    const response = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), {
       ...deps({ userId: "alice" }, repo),
       requiresEntitlement: () => true,
       hasEntitlement: vi.fn().mockRejectedValue(new Error("database unavailable")),
@@ -142,7 +163,7 @@ describe("cloud board boundary", () => {
 
   it("returns hydrated empty state at revision zero without creating a row", async () => {
     const repo = repository();
-    const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), deps({ userId: "alice" }, repo));
+    const response = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), deps({ userId: "alice" }, repo));
     expect(await response.json()).toEqual({ board: hydrate(null), tombstones: [], rev: 0 });
     expect(repo.documents).toEqual(new Map());
   });
@@ -151,14 +172,14 @@ describe("cloud board boundary", () => {
     const repo = repository();
     repo.documents.set("alice", { state: state("alice-action"), rev: 4 });
     repo.documents.set("bob", { state: state("bob-action"), rev: 8 });
-    const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), deps({ userId: "alice" }, repo));
+    const response = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), deps({ userId: "alice" }, repo));
     expect(await response.json()).toEqual({ ...state("alice-action"), rev: 4 });
   });
 
   it("bounds repository read failures without exposing provider details", async () => {
     const repo = repository();
     repo.get = vi.fn().mockRejectedValue(new Error("secret provider detail"));
-    const response = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), deps({ userId: "alice" }, repo));
+    const response = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), deps({ userId: "alice" }, repo));
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "cloud unavailable" });
     expect(response.headers.get("cache-control")).toBe("private, no-store");
@@ -216,8 +237,8 @@ describe("cloud board boundary", () => {
     const repo = repository();
     await put(state("alice-action"), { userId: "alice" }, repo);
     await put(state("bob-action"), { userId: "bob" }, repo);
-    const alice = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), deps({ userId: "alice" }, repo));
-    const bob = await handleCloudBoardGet(new Request("https://capture.test/api/cloud/board"), deps({ userId: "bob" }, repo));
+    const alice = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), deps({ userId: "alice" }, repo));
+    const bob = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board", {}, "bob"), deps({ userId: "bob" }, repo));
     const aliceResult = await alice.json();
     const bobResult = await bob.json();
     expect(aliceResult.rev).toBe(1);
@@ -228,7 +249,7 @@ describe("cloud board boundary", () => {
 
   it("ignores a client-supplied tenant or storage identity on writes", async () => {
     const repo = repository();
-    const response = await handleCloudBoardPut(new Request("https://capture.test/api/cloud/board", {
+    const response = await handleCloudBoardPut(ownedRequest("https://capture.test/api/cloud/board", {
       method: "PUT", body: JSON.stringify({ ...state("alice-action"), userId: "bob", tenantId: "bob", storageKey: "bob" }),
     }), deps({ userId: "alice" }, repo));
     expect(response.status).toBe(200);
@@ -238,13 +259,13 @@ describe("cloud board boundary", () => {
 
   it("rejects malformed JSON and oversized bodies before repository access", async () => {
     const repo = repository();
-    const malformed = await handleCloudBoardPut(new Request("https://capture.test/api/cloud/board", { method: "PUT", body: "not-json" }), deps({ userId: "alice" }, repo));
+    const malformed = await handleCloudBoardPut(ownedRequest("https://capture.test/api/cloud/board", { method: "PUT", body: "not-json" }), deps({ userId: "alice" }, repo));
     expect(malformed.status).toBe(400);
-    const oversized = await handleCloudBoardPut(new Request("https://capture.test/api/cloud/board", { method: "PUT", body: "x".repeat(2_000_001) }), deps({ userId: "alice" }, repo));
+    const oversized = await handleCloudBoardPut(ownedRequest("https://capture.test/api/cloud/board", { method: "PUT", body: "x".repeat(2_000_001) }), deps({ userId: "alice" }, repo));
     expect(oversized.status).toBe(413);
-    const oversizedUtf8 = await handleCloudBoardPut(new Request("https://capture.test/api/cloud/board", { method: "PUT", body: "ế".repeat(700_000) }), deps({ userId: "alice" }, repo));
+    const oversizedUtf8 = await handleCloudBoardPut(ownedRequest("https://capture.test/api/cloud/board", { method: "PUT", body: "ế".repeat(700_000) }), deps({ userId: "alice" }, repo));
     expect(oversizedUtf8.status).toBe(413);
-    const declaredOversized = await handleCloudBoardPut(new Request("https://capture.test/api/cloud/board", {
+    const declaredOversized = await handleCloudBoardPut(ownedRequest("https://capture.test/api/cloud/board", {
       method: "PUT",
       body: "{}",
       headers: { "Content-Length": "2000001" },
@@ -255,13 +276,13 @@ describe("cloud board boundary", () => {
 
   it("rejects a payload without a board", async () => {
     const repo = repository();
-    const response = await handleCloudBoardPut(new Request("https://capture.test/api/cloud/board", { method: "PUT", body: JSON.stringify({ tombstones: [] }) }), deps({ userId: "alice" }, repo));
+    const response = await handleCloudBoardPut(ownedRequest("https://capture.test/api/cloud/board", { method: "PUT", body: JSON.stringify({ tombstones: [] }) }), deps({ userId: "alice" }, repo));
     expect(response.status).toBe(400);
   });
 
   it("rejects malformed tombstones instead of silently dropping deletion state", async () => {
     const repo = repository();
-    const response = await handleCloudBoardPut(new Request("https://capture.test/api/cloud/board", {
+    const response = await handleCloudBoardPut(ownedRequest("https://capture.test/api/cloud/board", {
       method: "PUT",
       body: JSON.stringify({ ...state("kept"), tombstones: [{ id: "deleted", kind: "action" }] }),
     }), deps({ userId: "alice" }, repo));
@@ -274,7 +295,7 @@ describe("cloud board boundary", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "");
     try {
-      const response = await defaultCloudRoute(new Request("https://capture.test/api/cloud/board"));
+      const response = await defaultCloudRoute(ownedRequest("https://capture.test/api/cloud/board"));
       expect(response.status).toBe(503);
     } finally { vi.unstubAllEnvs(); }
   });
@@ -282,7 +303,7 @@ describe("cloud board boundary", () => {
   it("keeps the default Next route unavailable without real adapters", async () => {
     vi.stubEnv("CAPTURE_CLOUD", "0");
     try {
-      const response = await defaultCloudRoute(new Request("https://capture.test/api/cloud/board"));
+      const response = await defaultCloudRoute(ownedRequest("https://capture.test/api/cloud/board"));
       expect(response.status).toBe(404);
     } finally { vi.unstubAllEnvs(); }
   });

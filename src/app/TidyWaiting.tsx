@@ -1,19 +1,12 @@
 "use client";
 
 /**
- * The minute Tidy now takes.
+ * Tidy reviews a compact snapshot of the board in one model request.
  *
- * The review used to answer in seconds, and it was worthless: a board of
- * any size renders to more tokens than the fast provider accepts in a
- * minute, so it was rejected every time and the weakest model in the chain
- * answered instead. It now reads the board in paced passes, on the good
- * model, and that takes about a minute and a half.
- *
- * A minute and a half of "Reading the board…" reads as broken. So this says
- * what is actually happening and why it is worth waiting for — the lines
- * are true, in order, and paced to the passes. Nothing here is a fake
- * progress bar: it never claims to know how far along it is, because the
- * request gives no way to know.
+ * The request checks for duplicate notes, misplaced notes, and notes that may
+ * be tasks. It can also propose resolved labels and notes that belong together.
+ * The client does not receive step progress, so the waiting copy does not claim
+ * that a specific pass has finished.
  */
 
 import { useEffect, useState } from "react";
@@ -55,7 +48,7 @@ export function TidyWaiting() {
           wait is also the reassuring one. */}
       {i < 3 && (
         <p className="tidy-waiting-why">
-          It used to answer in seconds and get it wrong.
+          Tidy is checking the board for duplicate notes, misplaced notes, and notes that may be tasks.
         </p>
       )}
     </div>

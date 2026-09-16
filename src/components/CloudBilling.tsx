@@ -160,12 +160,26 @@ export function CloudAccountPanel() {
     }
   };
 
+  const retryStatus = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await fetchCloudSubscription();
+      if (!result.subscription) throw new Error("status unavailable");
+      setSubscription(result.subscription);
+    } catch {
+      setNote("Cloud status is unavailable. Your subscription has not been changed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (state === "loading") return <p className="settings-copy">Checking your Cloud access…</p>;
   if (state === "unavailable") return <p className="settings-copy">Cloud billing is not available on this installation.</p>;
   if (state === "signed-out") {
     return <Link className="ghost cloud-inline-link" href="/login?next=%2Fapp">Sign in to Capture Cloud</Link>;
   }
-  if (!subscription || subscription.tier === "free") {
+  if (!subscription || (subscription.tier === "free" && !subscription.reconciliationRequired)) {
     return (
       <div className="settings-group cloud-account-copy">
         <p className="settings-copy">Your board is local. Cloud adds recovery and access across devices.</p>
@@ -180,12 +194,14 @@ export function CloudAccountPanel() {
   return (
     <div className="settings-group cloud-account-copy">
       <p className="settings-copy">
-        {subscription.plan === "yearly" ? "Yearly" : "Monthly"} Cloud is active
-        {subscription.cancelAtPeriodEnd && end ? ` until ${end}` : "."}
+        {subscription.reconciliationRequired
+          ? "Cloud access is awaiting billing confirmation. Your existing subscription may still be charging; do not purchase again."
+          : `${subscription.plan === "yearly" ? "Yearly" : "Monthly"} Cloud is active${subscription.cancelAtPeriodEnd && end ? ` until ${end}` : "."}`}
       </p>
       <button className="ghost" onClick={() => void openPortal()} disabled={busy}>
         {busy ? "Opening…" : "Manage subscription"}
       </button>
+      {subscription.reconciliationRequired && <button className="ghost" onClick={() => void retryStatus()} disabled={busy}>Retry status</button>}
       {note && <p className="cloud-action-note" role="status">{note}</p>}
     </div>
   );
@@ -222,12 +238,12 @@ export function CheckoutReturnNotice() {
   if (!checkoutId) return null;
   return (
     <div className={`cloud-return ${state}`} role="status">
-      <strong>{state === "active" ? "Capture Cloud is active." : "Payment received."}</strong>
+      <strong>{state === "active" ? "Capture Cloud is active." : state === "delayed" ? "Cloud access is not confirmed." : "Checking checkout status…"}</strong>
       <span>
         {state === "active"
           ? "This board can now recover across your devices."
           : state === "delayed"
-            ? "Access is still being confirmed. Your payment is not used as proof on this page."
+            ? "Check your subscription status in Settings."
             : "Confirming your Cloud access…"}
       </span>
     </div>

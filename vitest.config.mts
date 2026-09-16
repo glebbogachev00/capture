@@ -2,6 +2,8 @@ import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 export default defineConfig({
+  // Tests use synthetic configuration, never local deployment credentials.
+  envDir: false,
   test: {
     environment: "node",
     include: [

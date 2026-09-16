@@ -3052,7 +3052,6 @@ body {
   padding-bottom: 56px;
 }
 .funding-wrap {
-  max-width: 960px;
   padding-bottom: 24px;
 }
 .funding-head {
@@ -3152,8 +3151,13 @@ body {
 }
 .pricing-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+@media (max-width: 700px) {
+  .pricing-row {
+    grid-template-columns: 1fr;
+  }
 }
 .fit-row {
   display: grid;
@@ -3242,6 +3246,13 @@ body {
   text-align: center;
   text-decoration: none;
 }
+.pricing-card .capture-btn {
+  min-height: 44px;
+  padding: 12px 10px;
+  font-size: 14px;
+  line-height: 1.25;
+  text-wrap: balance;
+}
 .cloud-action-note {
   margin: 9px 0 0 !important;
   color: #7b2f2f !important;
@@ -3298,8 +3309,11 @@ body {
 .site-page {
   padding-bottom: 64px;
 }
-.site-wrap {
+/* Public outer frame follows the landing at every breakpoint. Keep this
+   scoped away from the board's .capture-wrap and constrain prose inside it. */
+.site-page > .capture-wrap {
   max-width: 760px;
+  padding-inline: 18px;
 }
 .site-head {
   align-items: center;
@@ -3340,6 +3354,9 @@ body {
   /* Keep the first statement connected to the header. The old 64px gap read
      like an empty section in the narrower desktop preview. */
   padding: 40px 0 30px;
+}
+.site-hero.site-hero-split {
+  padding-top: 12px;
 }
 .site-hero-heading,
 .site-hero-aside {
@@ -3524,9 +3541,6 @@ body {
 /* Public writing keeps the landing page's materials and type, but each piece
    opens as a read-only Thread. The fragments are visible provenance, not a
    decorative blog timeline. */
-.writing-wrap {
-  max-width: 860px;
-}
 .writing-index-page .site-wrap > .site-head { order: 0; }
 .writing-index-page .site-wrap > .site-hero { order: 1; }
 .writing-index-page .site-wrap > .writing-index-note { order: 2; }
@@ -3575,8 +3589,11 @@ body {
 .site-writing > p:not(.funding-card-label) {
   max-width: 620px;
 }
-.writing-page .writing-wrap {
-  max-width: 760px;
+.public-thread-content {
+  width: 100%;
+  /* The former 760px outer wrapper included two 18px gutters. */
+  max-width: 724px;
+  margin-inline: auto;
 }
 .writing-index-hero {
   width: 100%;
@@ -4044,9 +4061,7 @@ body {
   .pricing-card {
     min-height: 118px;
   }
-  .funding-wrap {
-    max-width: 620px;
-  }
+
   .cloud-return {
     grid-template-columns: 1fr;
     gap: 3px;
@@ -4080,15 +4095,16 @@ body {
     gap: 6px;
   }
   .site-page .site-nav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     width: 100%;
-    justify-content: space-between;
-    flex-wrap: nowrap;
-    gap: 8px;
+    gap: 4px;
     font-size: 12.5px;
     letter-spacing: 0.05em;
   }
   .site-page .site-nav > a {
     min-height: 44px;
+    justify-content: center;
   }
   .site-hero {
     padding-top: 34px;
@@ -5175,7 +5191,7 @@ body {
      read as a mess. The hero opens big and centred; everything under it
      lines up with it instead of stepping in and out. Below 1100 this all
      collapses back to the single narrow column the phone gets. */
-  .site-wrap {
+  .site-page > .capture-wrap {
     max-width: 1120px;
   }
   .site-wrap > .site-hero {
@@ -5191,7 +5207,7 @@ body {
     align-items: center;
     max-width: 1040px;
     margin-inline: auto;
-    padding-top: 48px;
+    padding-top: 16px;
     text-align: center;
   }
   .site-page:not(.install-page) .site-hero-split .site-hero-heading {
@@ -5219,9 +5235,7 @@ body {
     line-height: 0.94;
     text-wrap: balance;
   }
-  .writing-index-page .site-wrap.writing-wrap {
-    max-width: 940px;
-  }
+
   .writing-index-page .site-wrap .writing-index-hero h1 {
     max-width: 940px;
     font-size: clamp(64px, 5.2vw, 76px);
@@ -6110,4 +6124,61 @@ body {
 }
 .record-restore:hover {
   text-decoration: underline;
+}
+
+.site-nav-links {
+  display: flex;
+  align-items: center;
+  gap: inherit;
+}
+.site-nav-toggle { display: none; }
+@media (max-width: 760px) {
+  .site-page .site-head {
+    position: relative;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .site-page .site-head .site-nav {
+    display: flex;
+    width: auto;
+    margin-left: auto;
+    font-size: 12.5px;
+  }
+  .site-nav-toggle {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .site-nav .site-nav-links {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 30;
+    width: min(240px, 100%);
+    padding: 8px 16px;
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    background: var(--card);
+    box-shadow: 0 8px 24px #00000014;
+  }
+  .site-nav[data-open="true"] .site-nav-links {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+  .site-head .site-nav .site-nav-links a {
+    min-height: 44px;
+    justify-content: flex-start;
+  }
 }

@@ -1,0 +1,140 @@
+.root {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Keep the offline announcement accessible without pushing the board header
+   down. Visible sync feedback and offline controls stay in the board/Settings. */
+.offlineStatus {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Imported by the boundary, not the gated board. Defaults also work without
+   Capture's global tokens or cached fonts. Keep the board's paper/ink palette. */
+.fallback {
+  font-family: var(--font-sans, ui-sans-serif), system-ui, sans-serif;
+  box-sizing: border-box;
+  min-height: 100vh;
+  min-height: 100svh;
+  background: var(--paper, #edefe8);
+  color: var(--ink, #191d19);
+  padding: calc(28px + env(safe-area-inset-top, 0px))
+    max(24px, env(safe-area-inset-right, 0px))
+    calc(40px + env(safe-area-inset-bottom, 0px))
+    max(24px, env(safe-area-inset-left, 0px));
+  line-height: 1.5;
+}
+
+.frame {
+  width: 100%;
+  max-width: 572px;
+  margin: 0 auto;
+}
+
+/* The existing Capture wordmark, including its green full stop. */
+.wordmark {
+  font-family: var(--font-display, Georgia), Georgia, serif;
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-variation-settings: "SOFT" 40, "WONK" 1;
+}
+
+.wordmark span { color: var(--accent, #2f5d3f); }
+
+.panel {
+  margin-top: clamp(56px, 12vh, 112px);
+  padding: 32px;
+  border: 1px solid var(--rule, #dbdfd3);
+  border-radius: 16px;
+  background: var(--card, #f8f9f5);
+}
+
+.title {
+  margin: 18px 0 12px;
+  font-family: var(--font-display, Georgia), Georgia, serif;
+  font-size: clamp(25px, 4vw, 30px);
+  font-weight: 500;
+  font-variation-settings: "SOFT" 40, "WONK" 1;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.message {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 16px;
+  color: var(--muted, #60685e);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.noticeIcon { display: block; color: var(--accent, #2f5d3f); }
+
+/* Tidy's three quiet dots, not a fabricated progress meter. Settle after a
+   few pulses; the truthful status text remains for a slow account check. */
+.waiting { display: flex; align-items: center; gap: 5px; height: 24px; }
+.waiting span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #2f5d3f);
+  opacity: 0.5;
+  animation: pulse 1.6s ease-in-out 3;
+}
+.waiting span:nth-child(2) { animation-delay: 0.2s; }
+.waiting span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.actions a, .actions button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 12px 18px;
+  border: 1px solid var(--accent, #2f5d3f);
+  border-radius: 8px;
+  background: var(--accent, #2f5d3f);
+  color: #f8f9f5;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.actions a:visited { color: #f8f9f5; }
+.actions a:hover, .actions button:hover:not(:disabled) { background: #244a31; }
+.actions a:focus-visible, .actions button:focus-visible {
+  outline: 3px solid var(--ink, #191d19);
+  outline-offset: 4px;
+}
+.actions a + a, .actions button + a {
+  background: transparent;
+  border-color: var(--rule, #dbdfd3);
+  color: var(--accent, #2f5d3f);
+}
+.actions button + a:hover { background: var(--accent-soft, #e2e9de); }
+.actions button:disabled { opacity: 0.55; cursor: wait; }
+
+@media (max-width: 480px) {
+  .panel { padding: 24px; }
+  .actions a, .actions button { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .waiting span { animation: none; }
+}

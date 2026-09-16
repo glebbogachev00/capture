@@ -1,5 +1,6 @@
 "use client";
 
+import { completeExplicitAuthentication } from "@/lib/ownership";
 import { useMemo, useState } from "react";
 import type { CloudConfig } from "@/lib/supabase/config";
 import { createCloudBrowserClient } from "@/lib/supabase/browser";
@@ -71,6 +72,7 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
         return;
       }
 
+      completeExplicitAuthentication();
       if (onAuthenticated) {
         onAuthenticated();
         return;

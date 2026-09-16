@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PublicThreadArticle } from "@/components/PublicThreadArticle";
 import { ARTICLES, articleBySlug } from "@/content/articles";
-import { PLAYGROUND } from "@/lib/playground";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 import { articleMetadata, articleSchema } from "@/lib/seo";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const article = articleBySlug(slug);
   if (!article) return {};
-  return articleMetadata(PLAYGROUND, article);
+  return articleMetadata(PUBLIC_SITE, article);
 }
 
 export default async function ArticlePage({ params }: Props) {

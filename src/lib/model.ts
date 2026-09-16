@@ -172,6 +172,8 @@ export type Principle = {
  * merged like the ledgers so a tick on the phone is not lost to the laptop.
  */
 export type Completion = {
+  /** Explicit local import, separate from the account history reset epoch. */
+  importBatch?: string;
   /** The action's own id, so a tick can never be recorded twice. */
   id: string;
   text: string;
@@ -218,6 +220,8 @@ export type Board = {
       tab that synced. A wipe bumps this instead; on merge, the side with
       the older epoch drops its history. Absent means zero. */
   historyEpoch?: number;
+  /** Pending explicit history additions; accepted receipts survive history resets. */
+  historyImports?: Record<string, "pending" | "accepted">;
   /** One profile shared by every synced device. */
   profile?: ProfileIdentity;
 };
@@ -271,6 +275,7 @@ export function hydrate(raw: Partial<Board> | null | undefined): Board {
     updatedAt: x.updatedAt ?? x.at ?? 0,
   });
   return {
+    ...raw,
     actions: (raw?.actions ?? []).map(stamped),
     threads: (raw?.threads ?? []).map((t) => ({
       ...t,
@@ -317,6 +322,7 @@ export function hydrate(raw: Partial<Board> | null | undefined): Board {
     profile:
       raw?.profile && typeof raw.profile.name === "string"
         ? {
+            ...raw.profile,
             name: raw.profile.name,
             imageId:
               typeof raw.profile.imageId === "string"
@@ -387,13 +393,15 @@ export async function sweep(data: Board) {
        finish line, not the start of a new chore. New ticks never reach
        here: toggleAction removes the action the moment it is completed. */
     if (a.done && a.doneAt && now - a.doneAt > AFTER_DONE) {
-      await dropImages(a.imgs);
+      // Do not garbage-collect bytes here: Records, snapshots and concurrent
+      // edits may retain them even when this action leaves the board.
       cleared++;
       clearedIds.push(a.id);
       continue;
     }
     if (a.faded && a.fadedAt && now - a.fadedAt > GRACE) {
-      await dropImages(a.imgs);
+      // Do not garbage-collect bytes here: Records, snapshots and concurrent
+      // edits may retain them even when this action leaves the board.
       cleared++;
       clearedIds.push(a.id);
       continue;

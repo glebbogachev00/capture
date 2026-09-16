@@ -17,6 +17,7 @@
 export type PushGovernor = {
   /** An edit happened: push soon (coalescing bursts). */
   schedule: () => void;
+  dispose: () => void;
   /** Push NOW if anything is scheduled or in flight — the manual sync. */
   flush: () => Promise<void>;
 };
@@ -32,9 +33,11 @@ export function createPushGovernor(
   let timer: unknown = null;
   let running = false;
   let pending = false;
+  let disposed = false;
 
   const fire = async (): Promise<void> => {
     timer = null;
+    if (disposed) return;
     if (running) {
       /* The race, caught instead of dropped: remember, and the running
          push re-schedules on its way out. */
@@ -58,7 +61,7 @@ export function createPushGovernor(
   };
 
   const schedule = (): void => {
-    if (timer !== null) return;
+    if (disposed || timer !== null) return;
     timer = setT(() => void fire(), delayMs);
   };
 
@@ -70,5 +73,10 @@ export function createPushGovernor(
     await fire();
   };
 
-  return { schedule, flush };
+  const dispose = () => {
+    disposed = true; pending = false;
+    if (timer !== null) clearT(timer);
+    timer = null;
+  };
+  return { schedule, flush, dispose };
 }

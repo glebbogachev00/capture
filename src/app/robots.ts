@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
-import { PLAYGROUND } from "@/lib/playground";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 import { robotsFor } from "@/lib/seo";
 
 export default function robots(): MetadataRoute.Robots {
-  return robotsFor(PLAYGROUND);
+  return robotsFor(PUBLIC_SITE);
 }

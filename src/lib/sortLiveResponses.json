@@ -1,0 +1,50 @@
+{
+  "related": {
+    "clean": "Fix the Stripe webhook retry bug. I am still debating annual pricing versus monthly pricing. Call mom this weekend. Send the annual pricing comparison to Jen.",
+    "kind": "both",
+    "title": "Pricing debate and tasks",
+    "actions": [
+      "Fix the Stripe webhook retry bug",
+      "Call mom this weekend",
+      "Send the annual pricing comparison to Jen"
+    ],
+    "primaryActions": [
+      "Send the annual pricing comparison to Jen"
+    ],
+    "shelfLife": "days",
+    "due": null,
+    "threadId": "pricing",
+    "threadName": null,
+    "primaryText": "I am still debating annual pricing versus monthly pricing.",
+    "also": [
+      {
+        "text": "Fix the Stripe webhook retry bug",
+        "threadId": null,
+        "threadName": null
+      },
+      {
+        "text": "Call mom this weekend",
+        "threadId": null,
+        "threadName": null
+      }
+    ],
+    "via": "cerebras"
+  },
+  "unrelated": {
+    "clean": "Fix the Stripe webhook retry bug. I am still debating annual pricing versus monthly pricing. Call mom this weekend.",
+    "kind": "both",
+    "title": "Stripe bug, pricing debate, call mom",
+    "actions": [
+      "Fix the Stripe webhook retry bug",
+      "Call mom this weekend"
+    ],
+    "primaryActions": [],
+    "shelfLife": "keep",
+    "due": "2026-09-19",
+    "threadId": "pricing",
+    "threadName": null,
+    "primaryText": "I am still debating annual pricing versus monthly pricing.",
+    "also": null,
+    "via": "cerebras"
+  }
+}

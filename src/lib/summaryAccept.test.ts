@@ -33,6 +33,17 @@ describe("a stale summary cannot overwrite newer thread inputs", () => {
     expect(acceptSummary(nowBoard, "t1", fp, out)).toBeNull();
   });
 
+  it.each([
+    { text: "Askde, not Ask AI" },
+    { at: 2 },
+    { id: "replacement-fragment" },
+  ])("rejects changed fragment text, time, or identity: %j", (change) => {
+    const frag = { id: "f1", text: "Ask AI", at: 1 };
+    const sent = thread([frag]);
+    const current = board(thread([{ ...frag, ...change }]));
+    expect(acceptSummary(current, "t1", threadFingerprint(sent), out)).toBeNull();
+  });
+
   it("a rename mid-request also rejects", () => {
     const sent = thread([{ id: "f1", text: "x", at: 1 }], "Retake");
     const fp = threadFingerprint(sent as never);

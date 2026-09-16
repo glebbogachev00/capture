@@ -1,6 +1,7 @@
 "use client";
+import { getDocumentLifetime, ownedFetch as fetch } from "@/lib/ownership";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { PLAYGROUND } from "@/lib/playground";
 
@@ -40,6 +41,8 @@ function githubUrl(what: string): string {
 }
 
 export function ReportBugForm({ onClose }: { onClose: () => void }) {
+  const lifetime = getDocumentLifetime();
+  const status = useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
   const [what, setWhat] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<{ number?: number; url?: string } | null>(
@@ -77,6 +80,7 @@ export function ReportBugForm({ onClose }: { onClose: () => void }) {
     }
   };
 
+  if (status !== "active") return null;
   return createPortal(
     <div className="modal" onClick={onClose}>
       <div className="modal-in bug-modal" onClick={(e) => e.stopPropagation()}>

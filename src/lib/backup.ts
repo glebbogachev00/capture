@@ -1,3 +1,4 @@
+import { markHistoryImport } from "./historyImport";
 import { type Board, hydrate } from "./model";
 import { mergeCorrections, mergeLedgers } from "./ledger";
 import { mergeWraps, mergeCompletions } from "./wrap";
@@ -29,6 +30,8 @@ export type CaptureBackup = {
   /** Image bytes by id, so a restore can bring the photos back. Keyed by the
       ids the board references in Action.imgs / Frag.imgs. */
   images?: Record<string, string>;
+  /** Original device entries are archival only; never execute or restore settings. */
+  deviceSnapshot?: { version: 1; id: string; entries: [string, string][] };
 };
 
 export function buildBackup(
@@ -111,8 +114,21 @@ export function restoreBackup(parsed: unknown, board: Board): RestoreResult {
     );
   }
 
-  const incoming = hydrate(backup.board);
-  const merged = { ...board };
+  const snapshot = backup.deviceSnapshot;
+  const originalArchive = snapshot?.version === 1 && typeof snapshot.id === "string" &&
+    /^[a-zA-Z0-9_-]{1,128}$/.test(snapshot.id) && Array.isArray(snapshot.entries);
+  // This call is the explicit Restore action, not a sync/retry callback.
+  // Give each authorized recovery its own receipt: the same archive may be
+  // requested again after a reset. The returned board persists this identity
+  // in historyImports/importBatch; reloads and network retries reuse it.
+  const incoming = originalArchive
+    ? markHistoryImport(hydrate(backup.board), board, `recovery-${crypto.randomUUID()}`)
+    : hydrate(backup.board);
+  // Carry unknown board fields too. Conflicts still keep the destination;
+  // the original download is the lossless archive, not a destructive restore.
+  const merged = { ...incoming, ...board,
+    ...(originalArchive ? { historyImports: incoming.historyImports } : {}),
+  };
   const counts = { actions: 0, threads: 0, intentions: 0, principles: 0 };
   const images = backup.images || undefined;
 

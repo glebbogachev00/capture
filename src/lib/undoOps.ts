@@ -67,6 +67,8 @@ export function restoreCapture(
     a.filter((x) => !mine.has(x.id) && !snappedFrags.has(x.id));
 
   return {
+    ...snap.board,
+    ...live,
     actions: [
       ...foreign(live.actions, snap.board.actions),
       ...snap.board.actions.map((a) => (had(live.actions, a.id) ? a : bump(a))),

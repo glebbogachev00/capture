@@ -52,6 +52,20 @@ describe("editing a note", () => {
     expect(next!.threads[1].frags[0].text).toMatch(/notion/);
   });
 
+  it("clears derived routing metadata without changing the Record or capture date", () => {
+    const before = board();
+    before.ledger = [{ id: "capture-1", at: T0, raw: "Original raw words", transcript: "Original dictated transcript", clean: "Original clean words", kind: "thread", source: "dictated", targetId: "retake", targetFragId: "r1" }];
+    before.threads[0].belongs = "Old routing description";
+    before.threads[0].next = "Old next step";
+    const next = applyFragEdit(before, "retake", "r1", "Corrected subject")!;
+    expect(next.threads[0].summary).toBe("");
+    expect(next.threads[0].belongs).toBeUndefined();
+    expect(next.threads[0].next).toBeNull();
+    expect(next.ledger).toBe(before.ledger);
+    expect(next.threads[0].frags[0].at).toBe(T0);
+    expect(before.threads[0].summary).not.toBe("");
+  });
+
   it("a stale typo-fix never clobbers a newer edit", () => {
     /* The proofread runs after the save and comes back late. By then the
        person may have edited again — the fix may only land on the exact

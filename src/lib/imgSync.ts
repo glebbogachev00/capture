@@ -1,3 +1,4 @@
+import { ownedFetch } from "./ownership";
 import { parseCover } from "./cover";
 import type { Board } from "./model";
 
@@ -17,6 +18,7 @@ import type { Board } from "./model";
 export function referencedImageIds(board: Board): string[] {
   const ids = new Set<string>();
   for (const a of board.actions) for (const id of a.imgs || []) ids.add(id);
+  for (const entry of board.ledger ?? []) for (const id of entry.imgs ?? []) ids.add(id);
   for (const t of board.threads) {
     for (const f of t.frags || []) for (const id of f.imgs || []) ids.add(id);
     /* A photo cover is a reference like any other, and the only one that
@@ -31,7 +33,7 @@ export function referencedImageIds(board: Board): string[] {
   /* A profile photo uses the same immutable-image path as every captured
      picture. The board syncs only this id; reconcile carries the bytes. */
   if (board.profile?.imageId) ids.add(board.profile.imageId);
-  return [...ids];
+  return [...ids].filter(isSafeImageId);
 }
 
 /** An id safe to use as a file name on the hub: the app's own uid alphabet,
@@ -52,8 +54,9 @@ type ImageRequest = (
 export async function ensureHubImage(
   id: string,
   src: string,
-  request: ImageRequest = fetch
+  request: ImageRequest = ownedFetch
 ): Promise<boolean> {
+  if (!isSafeImageId(id)) return false;
   const existing = await request(`/api/img/${id}`, { method: "HEAD" });
   if (existing.ok) return true;
   if (existing.status !== 404) return false;

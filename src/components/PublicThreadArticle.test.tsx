@@ -32,7 +32,7 @@ describe("PublicThreadArticle", () => {
     ).toBeTruthy();
     expect(screen.getByRole("article").getAttribute("data-capture-thread")).toBe("read-only");
     const navigation = screen.getByRole("navigation", { name: "Capture links" });
-    expect(within(navigation).queryByRole("button")).toBeNull();
+    expect(within(navigation).getByRole("button", { name: "Open navigation" }).getAttribute("aria-expanded")).toBe("false");
     expect(within(navigation).getByRole("link", { name: "Writing" }).getAttribute("aria-current"))
       .toBe("page");
     const writingLinks = screen.getAllByRole("link", { name: "Written with Capture" });

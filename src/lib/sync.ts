@@ -139,15 +139,32 @@ export function mergeBoards(a: Board, b: Board): Board {
   const ea = a.historyEpoch ?? 0;
   const eb = b.historyEpoch ?? 0;
   const empty = { ledger: [], corrections: [], wraps: [], completions: [] };
-  const ha = ea >= eb ? a : empty;
-  const hb = eb >= ea ? b : empty;
+  // Pending imports are explicit additions, not evidence of a reset. An
+  // accepted receipt wins over stale pending copies, including after a reset.
+  const historyImports = { ...a.historyImports, ...b.historyImports };
+  for (const [id, status] of Object.entries(a.historyImports ?? {}))
+    if (status === "accepted") historyImports[id] = status;
+  const pending = (entry: { importBatch?: string }) =>
+    !!entry.importBatch && historyImports[entry.importBatch] === "pending";
+  const pendingHistory = (board: Board) => ({
+    ...empty,
+    ledger: (board.ledger ?? []).filter(pending),
+    corrections: (board.corrections ?? []).filter(pending),
+    wraps: (board.wraps ?? []).filter(pending),
+    completions: (board.completions ?? []).filter(pending),
+  });
+  const ha = ea >= eb ? a : pendingHistory(a);
+  const hb = eb >= ea ? b : pendingHistory(b);
   const profile = !a.profile
     ? b.profile
     : !b.profile || ts(a.profile) >= ts(b.profile)
       ? a.profile
       : b.profile;
   return {
+    ...a,
+    ...b,
     historyEpoch: Math.max(ea, eb),
+    ...(Object.keys(historyImports).length ? { historyImports } : {}),
     actions: mergeList(a.actions, b.actions, (x, y) => y.at - x.at),
     threads: mergeThreads(a.threads, b.threads),
     intentions: mergeList(a.intentions, b.intentions, (x, y) => y.at - x.at),
@@ -286,6 +303,8 @@ export function boardSignature(board: Board, tombstones: Tombstone[]): string {
   for (const w of board.wraps ?? [])
     parts.push(`W:${w.day}:${w.at}:${w.seen ? 1 : 0}:${hashOf(w.line ?? "")}`);
   parts.push(`E:${board.historyEpoch ?? 0}`);
+  for (const [id, status] of Object.entries(board.historyImports ?? {}))
+    parts.push(`I:${id}:${status}`);
 
   return parts.sort().join("|");
 }

@@ -1,4 +1,5 @@
 import { contentWords } from "./related";
+import type { CorrectionEntry } from "./model";
 
 /**
  * Learning from the fix, not from the suggestion.
@@ -120,6 +121,16 @@ export function undoRule(
   const words = contentWords(captureText).slice(0, 2);
   if (!words.length) return null;
   return `Captures about "${words.join(" ")}" are ${KIND_WORD[right]}, not ${KIND_WORD[wrong]}`;
+}
+
+/** An explicit kind correction, ready for the existing correction ledger. */
+export function answeredKindCorrection(
+  raw: string, wrong: SortKind, right: SortKind
+): Omit<CorrectionEntry, "id" | "at"> | null {
+  const rule = undoRule(raw, wrong, right);
+  return rule ? {
+    proposalKind: "undone", accepted: true, context: raw.slice(0, 160), rule,
+  } : null;
 }
 
 /**

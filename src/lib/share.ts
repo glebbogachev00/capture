@@ -230,8 +230,9 @@ export function shareableFor(
  * Copy inside the OS sheet. The header control still handles sharing a whole
  * view to a person.
  */
-export async function copyToClipboard(text: string): Promise<boolean> {
+export async function copyToClipboard(text: string, assertDisclosure: () => void = () => {}): Promise<boolean> {
   try {
+    assertDisclosure();
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
@@ -250,7 +251,7 @@ export type ShareOutcome = "shared" | "copied" | "cancelled" | "failed";
  * not need a destination menu of its own. Dismissing the sheet throws
  * AbortError, which is a choice rather than a failure and is reported as such.
  */
-export async function shareText(s: Shareable): Promise<ShareOutcome> {
+export async function shareText(s: Shareable, assertDisclosure: () => void = () => {}): Promise<ShareOutcome> {
   if (typeof navigator !== "undefined" && navigator.share) {
     try {
       /* A Record already carries its single visible, dated heading in `text`.
@@ -263,6 +264,7 @@ export async function shareText(s: Shareable): Promise<ShareOutcome> {
         : s.title
           ? { title: s.title, text: s.text }
           : { text: s.text };
+      assertDisclosure();
       await navigator.share(payload);
       return "shared";
     } catch (error) {
@@ -273,6 +275,7 @@ export async function shareText(s: Shareable): Promise<ShareOutcome> {
     }
   }
   try {
+    assertDisclosure();
     await navigator.clipboard.writeText(s.text);
     return "copied";
   } catch {

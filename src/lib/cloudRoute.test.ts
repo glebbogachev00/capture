@@ -35,8 +35,9 @@ vi.mock("@/lib/supabase/repository", () => ({
 }));
 
 import { GET } from "@/app/api/cloud/board/route";
+import { GET as syncGet, POST as syncPost } from "@/app/api/sync/route";
 
-const request = () => new Request("https://capture.test/api/cloud/board");
+const request = () => new Request("https://capture.test/api/cloud/board", { headers: { "X-Capture-Owner": "user-1" } });
 const readyConfig = {
   status: "ready" as const,
   url: "https://capture.supabase.co",
@@ -98,6 +99,25 @@ describe("Cloud board route composition", () => {
     expect(mocks.repositoryConstructor).toHaveBeenCalledWith(client);
     expect(mocks.repositoryGet).toHaveBeenCalledTimes(2);
     expect(mocks.repositoryGet).toHaveBeenCalledWith("user-1");
+  });
+
+  it("sync compatibility rejects stale and old clients before repository access", async () => {
+    vi.stubEnv("CAPTURE_CLOUD", "1");
+    vi.stubEnv("CAPTURE_CLOUD_REQUIRE_SUBSCRIPTION", "0");
+    mocks.getCloudConfig.mockReturnValue(readyConfig);
+    mocks.createCloudServerClient.mockResolvedValue({});
+    mocks.identityFromClaims.mockResolvedValue({ userId: "B" });
+    for (const method of ["GET", "POST"]) for (const owner of [undefined, "A"]) {
+      const request = new Request("https://capture.test/api/sync", {
+        method, headers: owner ? { "X-Capture-Owner": owner } : {},
+        ...(method === "POST" ? { body: '{"board":{}}' } : {}),
+      });
+      const response = await (method === "GET" ? syncGet : syncPost)(request);
+      expect(response.status).toBe(owner === undefined ? 428 : 412);
+    }
+    expect(mocks.repositoryGet).not.toHaveBeenCalled();
+    expect(mocks.repositoryCreate).not.toHaveBeenCalled();
+    expect(mocks.repositoryUpdate).not.toHaveBeenCalled();
   });
 
   it("stops before repository access when Supabase cannot verify a user", async () => {

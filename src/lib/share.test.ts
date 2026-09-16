@@ -115,7 +115,8 @@ describe("the header share carries the connections too", () => {
           id: "t1",
           name: "Pricing model decisions",
           summary: "Seats or usage-based pricing.",
-          frags: [{ id: "f1", at: 1, text: "seats vs usage" }],
+          // Independent note evidence, not the generated summary alone.
+          frags: [{ id: "f1", at: 1, text: "seats vs usage-based pricing" }],
         },
       ],
       actions: [

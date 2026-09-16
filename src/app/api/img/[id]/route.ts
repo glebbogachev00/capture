@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import { handleCloudImage } from "@/lib/cloudImage";
 import { clientIp } from "@/lib/clientIp";
 import { hubStore } from "@/lib/hubStore";
 import { isSafeImageId } from "@/lib/imgSync";
 import { limitFromEnv, rateLimit } from "@/lib/limiter";
 
 /**
- * The photo hub.
+ * The photo hub. Cloud delegates to authenticated, per-user Supabase Storage;
+ * the implementation below remains the self-hosted single-owner path.
  *
  * The board syncs as text — photo bytes live under their own keys on each
  * device — so a picture used to stop at the device that took it. This is
@@ -28,6 +30,7 @@ import { limitFromEnv, rateLimit } from "@/lib/limiter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /** One key per image id, under a folder of their own. */
 const keyFor = (id: string) => `img/${id}`;
@@ -59,6 +62,7 @@ export async function HEAD(
   if (!limit.allowed) return tooMany(limit.retryAfterSec);
 
   const { id } = await params;
+  if (process.env.CAPTURE_CLOUD === "1") return handleCloudImage(request, id);
   if (!isSafeImageId(id)) return new Response(null, { status: 400 });
 
   const exists = await hubStore().exists(keyFor(id));
@@ -76,6 +80,7 @@ export async function GET(
   if (!limit.allowed) return tooMany(limit.retryAfterSec);
 
   const { id } = await params;
+  if (process.env.CAPTURE_CLOUD === "1") return handleCloudImage(request, id);
   if (!isSafeImageId(id))
     return NextResponse.json({ error: "bad id" }, { status: 400 });
 
@@ -96,6 +101,7 @@ export async function PUT(
   if (!limit.allowed) return tooMany(limit.retryAfterSec);
 
   const { id } = await params;
+  if (process.env.CAPTURE_CLOUD === "1") return handleCloudImage(request, id);
   if (!isSafeImageId(id))
     return NextResponse.json({ error: "bad id" }, { status: 400 });
 

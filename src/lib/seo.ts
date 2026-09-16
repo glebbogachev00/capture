@@ -2,9 +2,9 @@ import type { Metadata, MetadataRoute } from "next";
 import { ARTICLES, type CaptureArticle } from "@/content/articles";
 
 export const SITE_URL = "https://www.trycapture.app/";
-export const SITE_TITLE = "Capture — messy thoughts that sort themselves";
+export const SITE_TITLE = "Capture — Say it, write it. Capture sorts it out.";
 export const SITE_DESCRIPTION =
-  "Capture rough thoughts by voice or text. It sorts them into actions, threads, or intentions without making you choose first.";
+  "Put a task, a half-formed idea, and a decision in the same note. Capture separates them and keeps related thoughts together.";
 export const INSTALL_URL = new URL("install", SITE_URL).toString();
 export const WRITING_URL = new URL("writing", SITE_URL).toString();
 export const OG_IMAGE_URL = new URL("og-v2.png", SITE_URL).toString();

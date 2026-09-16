@@ -35,6 +35,7 @@ export type SubscriptionShape = {
   current_period_start: string;
   current_period_end: string;
   cancel_at_period_end: boolean;
+  past_due_at?: string | null;
 };
 
 export type AppliedSubscription = {
@@ -58,10 +59,11 @@ export type PolarDependencies = {
   config: PolarConfig | null;
   isCloudEnabled: () => boolean;
   identity: () => Promise<CaptureIdentity | null>;
-  hasActiveSubscription: (userId: string) => Promise<boolean>;
+  hasBlockingSubscription: (userId: string) => Promise<boolean>;
   createCheckout: (input: CheckoutInput) => Promise<{ url: string }>;
   createCustomerSession: (input: PortalInput) => Promise<{ customerPortalUrl: string }>;
   validateWebhook: (body: string, headers: Record<string, string>, secret: string) => Promise<unknown>;
+  queueInvalidSubscriptionEvent: (event: { subscriptionId: string; eventId: string; eventType: string; eventCreatedAt: string }) => Promise<void>;
   applySubscriptionEvent: (event: AppliedSubscription) => Promise<boolean>;
 };
 
@@ -159,8 +161,8 @@ export async function handleCheckout(request: Request, deps: PolarDependencies):
   const plan = await requestPlan(request);
   if (!plan) return json({ error: "invalid plan" }, 400);
   try {
-    if (await deps.hasActiveSubscription(identity.userId)) {
-      return json({ error: "capture cloud is already active" }, 409);
+    if (await deps.hasBlockingSubscription(identity.userId)) {
+      return json({ error: "an existing subscription requires billing management or status retry" }, 409);
     }
   } catch {
     return json({ error: "subscription status is unavailable" }, 503);
@@ -222,10 +224,21 @@ export function normalizeSubscription(
   const plan: PolarPlan | null = data.product_id === config.monthlyProductId ? "monthly" : data.product_id === config.yearlyProductId ? "yearly" : null;
   if (typeof userId !== "string" || !UUID.test(userId) || !plan || !data.id || !data.customer_id || !validDate(eventCreatedAt) || !validDate(data.current_period_start) || !validDate(data.current_period_end)) return null;
   const status = normalizedStatus(eventType, data.status, data.cancel_at_period_end);
-  const isEntitled = status === "active" || status === "trialing" || status === "canceled" || status === "past_due";
-  const accessExpiresAt = status === "past_due"
-    ? new Date(Date.parse(eventCreatedAt) + 3 * 24 * 60 * 60 * 1000).toISOString()
-    : (isEntitled ? data.current_period_end : eventCreatedAt);
+  // Polar's terminal `canceled`/`unpaid` snapshots are not scheduled
+  // cancellations, even if the old period end or cancellation flag remains.
+  // https://polar.sh/docs/features/subscriptions/introduction#cancellation
+  const terminal = data.status === "canceled" || data.status === "unpaid";
+  // ISO calendar validation rejects Date.parse's rollover (e.g. February 30).
+  const anchor = data.past_due_at;
+  const validAnchor = validDate(anchor) && /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(anchor)
+    && new Date(`${anchor.slice(0, 10)}T00:00:00Z`).toISOString().slice(0, 10) === anchor.slice(0, 10)
+    && Date.parse(anchor) <= Date.parse(eventCreatedAt);
+  const isEntitled = !terminal && (status === "active" || status === "trialing" || status === "canceled" || (status === "past_due" && validAnchor));
+  // Capture's THREE days, not Polar's organization-level benefit grace.
+  // Missing/invalid anchors deny access rather than starting a fresh grace clock.
+  const accessExpiresAt = !isEntitled ? eventCreatedAt : status === "past_due"
+    ? new Date(Date.parse(anchor!) + 3 * 24 * 60 * 60 * 1000).toISOString()
+    : data.current_period_end;
   return {
     userId, status, plan, isEntitled,
     polarCustomerId: data.customer_id,
@@ -272,17 +285,15 @@ export async function handlePolarWebhook(request: Request, deps: PolarDependenci
   const payload = webhookPayload(raw);
   if (!payload) return json({ error: "invalid webhook" }, 400);
   if (!SUBSCRIPTION_EVENTS.has(payload.type)) return new Response(null, { status: 202 });
-  if (
-    payload.data.product_id !== deps.config.monthlyProductId &&
-    payload.data.product_id !== deps.config.yearlyProductId
-  ) {
-    return new Response(null, { status: 202 });
-  }
   const normalized = normalizeSubscription(payload.type, payload.timestamp, payload.data, deps.config);
-  // A verified event from an older static checkout can have no Capture user.
-  // It cannot grant access, and retries cannot repair that missing identity.
-  if (!normalized) return new Response(null, { status: 202 });
   try {
+    if (!normalized) {
+      // Unrelated IDs are ignored by SQL; tracked rows retain their original
+      // binding/catalog and are durably denied until an authoritative repair.
+      if (typeof payload.data.id !== "string" || !payload.data.id || !validDate(payload.timestamp)) return json({ error: "invalid webhook" }, 400);
+      await deps.queueInvalidSubscriptionEvent({ subscriptionId: payload.data.id, eventId, eventType: payload.type, eventCreatedAt: payload.timestamp });
+      return new Response(null, { status: 202 });
+    }
     await deps.applySubscriptionEvent({ eventId, eventType: payload.type, eventCreatedAt: payload.timestamp, ...normalized });
     return new Response(null, { status: 202 });
   } catch {

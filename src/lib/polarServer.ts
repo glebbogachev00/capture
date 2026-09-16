@@ -4,6 +4,7 @@ import { createCloudServerClient } from "@/lib/supabase/server";
 import { getCloudConfig } from "@/lib/supabase/config";
 import {
   getPolarConfig,
+  normalizeSubscription,
   type AppliedSubscription,
   type CheckoutInput,
   type PolarDependencies,
@@ -17,7 +18,11 @@ function secretKey(env: Env = process.env): string | null {
   return value.startsWith("sb_secret_") ? value : null;
 }
 
-export async function createPolarDependencies(env: Env = process.env): Promise<PolarDependencies> {
+export async function retryPolarSubscriptionsForUser(userId: string, env: Env = process.env): Promise<void> {
+  await (await createPolarDependencies(env)).retryPending(userId);
+}
+
+export async function createPolarDependencies(env: Env = process.env): Promise<PolarDependencies & { retryPending: (userId: string) => Promise<void> }> {
   const config = getPolarConfig(env);
   const cloud = getCloudConfig(env);
   const secret = secretKey(env);
@@ -38,12 +43,14 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
   if (!config || !cloud || cloud.status !== "ready" || !secret) {
     return {
       config: null,
+      retryPending: async () => { throw new Error("billing is not configured"); },
       isCloudEnabled,
       identity,
-      hasActiveSubscription: async () => { throw new Error("billing is not configured"); },
+      hasBlockingSubscription: async () => { throw new Error("billing is not configured"); },
       createCheckout: async () => { throw new Error("billing is not configured"); },
       createCustomerSession: async () => { throw new Error("billing is not configured"); },
       validateWebhook: async () => { throw new Error("billing is not configured"); },
+      queueInvalidSubscriptionEvent: async () => { throw new Error("billing is not configured"); },
       applySubscriptionEvent: async () => { throw new Error("billing is not configured"); },
     };
   }
@@ -51,17 +58,44 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
   const polar = createPolar({ accessToken: config.accessToken, environment: config.environment });
   const admin = createClient(cloud.url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
 
+  const reconcile = async (subscriptionId: string) => {
+    const claim = await admin.rpc("claim_polar_reconciliation", { p_subscription_id: subscriptionId });
+    if (claim.error || !claim.data || typeof claim.data.pending !== "boolean") throw new Error("reconciliation claim failed");
+    if (!claim.data.pending) return;
+    const ticket = claim.data;
+    if (typeof ticket.version !== "string") throw new Error("reconciliation retry pending");
+    // Installed alpha.21 SDK: exact subscription GET, timeout in SECONDS.
+    // No customer-state shortcut: it would discard Capture's custom grace.
+    const snapshot = await polar.subscriptions.get(subscriptionId, { timeout: 2 });
+    const normalized = normalizeSubscription("subscription.updated", new Date().toISOString(), snapshot, config);
+    if (!normalized || (snapshot.status === "past_due" && !normalized.isEntitled)
+      || normalized.polarSubscriptionId !== subscriptionId
+      || normalized.userId !== ticket.userId || normalized.polarCustomerId !== ticket.customerId) throw new Error("reconciliation binding mismatch");
+    // normalizeSubscription binds product/plan to the configured Capture catalog;
+    // the authoritative subscription may legitimately have switched monthly/yearly.
+    const result = await admin.rpc("finish_polar_reconciliation", {
+      p_subscription_id: subscriptionId, p_version: ticket.version, p_snapshot: normalized,
+    });
+    if (result.error || result.data !== true) throw new Error("reconciliation superseded or failed");
+  };
+
   return {
     config,
+    retryPending: async (userId) => {
+      const next = await admin.rpc("next_polar_reconciliation", { p_user_id: userId });
+      if (next.error) throw new Error("reconciliation queue unavailable");
+      if (typeof next.data === "string") await reconcile(next.data);
+    },
     isCloudEnabled,
     identity,
-    hasActiveSubscription: async (userId) => {
+    hasBlockingSubscription: async (userId) => {
       const { data, error } = await admin
         .from("capture_cloud_subscriptions")
         .select("polar_subscription_id")
         .eq("user_id", userId)
-        .eq("is_entitled", true)
-        .gt("access_expires_at", new Date().toISOString())
+        // Purchase eligibility is NOT effective resource access. A pending
+        // source can still be charging even though access is temporarily denied.
+        .or(`reconciliation_required.eq.true,and(is_entitled.eq.true,access_expires_at.gt.${new Date().toISOString()})`)
         .limit(1);
       if (error) throw new Error("subscription status could not be read");
       return Array.isArray(data) && data.length > 0;
@@ -88,6 +122,14 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
       return { customerPortalUrl: result.customer_portal_url };
     },
     validateWebhook: (body, headers, webhookSecret) => webhooks.validateEvent(body, headers, webhookSecret),
+    queueInvalidSubscriptionEvent: async (event) => {
+      const { data, error } = await admin.rpc("queue_invalid_polar_event", {
+        p_subscription_id: event.subscriptionId, p_event_id: event.eventId,
+        p_event_type: event.eventType, p_event_created_at: event.eventCreatedAt,
+      });
+      if (error) throw new Error("invalid subscription state could not be queued");
+      if (data === true) await reconcile(event.subscriptionId);
+    },
     applySubscriptionEvent: async (event: AppliedSubscription) => {
       const { data, error } = await admin.rpc("apply_polar_subscription_event", {
         p_event_id: event.eventId,
@@ -106,6 +148,9 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
         p_cancel_at_period_end: event.cancelAtPeriodEnd,
       });
       if (error) throw new Error("subscription state could not be stored");
+      // Always check, including a duplicate delivery after a failed/crashed fetch.
+      // The SQL transaction already durably queued ambiguity and denied access.
+      await reconcile(event.polarSubscriptionId);
       return data === true;
     },
   };

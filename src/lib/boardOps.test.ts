@@ -343,7 +343,7 @@ describe("a both capture leaves the seam on its actions", () => {
     const { applySorted } = await import("./boardOps");
     const { EMPTY } = await import("./model");
     const out = applySorted(
-      { kind: "both", clean: "c", title: "T", actions: ["do the thing"], threadId: null, threadName: "Home", shelfLife: "keep" } as never,
+      { kind: "both", clean: "c", title: "T", actions: ["do the thing"], primaryActions: ["do the thing"], threadId: null, threadName: "Home", shelfLife: "keep" } as never,
       [],
       1,
       EMPTY

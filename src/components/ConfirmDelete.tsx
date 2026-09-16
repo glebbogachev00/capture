@@ -1,5 +1,7 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+import { getDocumentLifetime } from "@/lib/ownership";
 import { createPortal } from "react-dom";
 
 /**
@@ -28,6 +30,9 @@ export function ConfirmDelete({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const lifetime = getDocumentLifetime();
+  const status = useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
+  if (status !== "active" && status !== "offline") return null;
   return createPortal(
     <div className="modal" onClick={onCancel}>
       <div className="modal-in" onClick={(e) => e.stopPropagation()}>

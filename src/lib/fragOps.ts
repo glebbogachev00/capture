@@ -48,6 +48,9 @@ export function applyFragEdit(
       t.id === threadId
         ? {
             ...t,
+            summary: "",
+            belongs: undefined,
+            next: null,
             frags: t.frags.map((f) => (f.id === fragId ? { ...f, text } : f)),
           }
         : t

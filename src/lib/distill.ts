@@ -12,6 +12,8 @@ export const DISTILL_KEY = "capture:distill:v1";
 export type DistillTurn = {
   role: "user" | "assistant";
   text: string;
+  /** Recogniser wording, separate from the edited user turn. Never sent to the provider. */
+  transcript?: string;
   at: number;
 };
 
@@ -22,6 +24,33 @@ export type DistillSession = {
 };
 
 export const EMPTY_DISTILL: DistillSession = { id: "", at: 0, turns: [] };
+
+/** Source is optional: typed/Talk turns never borrow the composer evidence. */
+export function distillUserTurn(text: string, at: number, transcript?: string): DistillTurn {
+  return { role: "user", text, at, ...(transcript ? { transcript } : {}) };
+}
+
+/** Append a turn while preserving the identity of a reloaded conversation. */
+export function appendDistillUserTurn(
+  session: DistillSession, text: string, at: number, id: string, transcript?: string,
+): DistillSession {
+  return {
+    id: session.id || id,
+    at: session.at || at,
+    turns: [...session.turns, distillUserTurn(text, at, transcript)],
+  };
+}
+
+/** Preserve edited conversation and recogniser evidence when filing/exporting. */
+export function distillSource(session: DistillSession) {
+  const raw = session.turns.map((t) => t.text).filter(Boolean).join(" ");
+  const transcript = session.turns
+    .filter((t) => t.role === "user")
+    .map((t) => t.transcript)
+    .filter(Boolean)
+    .join("\n\n");
+  return { raw, source: "distill" as const, ...(transcript ? { transcript } : {}) };
+}
 
 const DISTILL_PARAGRAPH_LIMIT = 220;
 
@@ -208,6 +237,7 @@ export function hydrateDistill(raw: string | null | undefined): DistillSession {
         turns.push({
           role: t.role,
           text: t.text,
+          ...(t.role === "user" && typeof t.transcript === "string" && t.transcript ? { transcript: t.transcript } : {}),
           at: typeof t.at === "number" ? t.at : 0,
         });
       }

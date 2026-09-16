@@ -31,10 +31,13 @@ export function actionsForThread(
   /* Without the photo captions — see spokenText. A screenshot of the board
      filed into a thread quotes other actions verbatim, and this list then
      claimed them. */
-  const threadText = spokenText(
-    [thread.name, thread.summary, ...thread.frags.map((f) => f.text)]
-      .filter(Boolean)
-      .join(" ")
+  // Titles and summaries can be generated from contaminated shared captures.
+  // Neither is independent evidence. Same-time fragments (including split
+  // shares) are the same capture, even when their wording differs from src.
+  // Reject exact legacy source copies too. False negatives are preferable to
+  // borrowing an errand; none of these read-time guards rewrites saved links.
+  const independentNotes = (a: Action) => thread.frags.filter((f) =>
+    f.at !== a.at && (!a.src || f.text.trim() !== a.src.trim())
   );
 
   /* A restore can bring an action across without the thread it named —
@@ -46,9 +49,12 @@ export function actionsForThread(
       ? a.threadId
       : undefined;
 
+  /* A legacy ledger entry can vouch for an exact task, never every task
+     extracted from a shared multi-subject source. Keep source text for the
+     Record, not as evidence of an action's subject. */
   const isMine = (a: Action) =>
     homed(a) === thread.id ||
-    (!homed(a) && !!a.src && vouched.has(a.src.trim()));
+    (!homed(a) && !!a.src && a.text.trim() === a.src.trim() && vouched.has(a.src.trim()));
   /* A shared PHRASE, never a shared word.
      One telling word was tried and it is wrong. "Give the caul lilies to
      my girlfriend" attached itself to a thread about AI agents, because
@@ -67,10 +73,10 @@ export function actionsForThread(
   /* An action that names another living thread as home is never borrowed. */
   const isRelated = (a: Action) => {
     if (a.done || homed(a)) return false;
-    const run = sharedPhrase(spokenText(`${a.text} ${a.src ?? ""}`), threadText)
-      .split(" ")
-      .filter(Boolean);
-    return run.length >= 2;
+    return independentNotes(a).some((f) =>
+      sharedPhrase(spokenText(a.text), spokenText(f.text))
+        .split(" ").filter(Boolean).length >= 2
+    );
   };
 
   const newestFirst = (x: { at: number }, y: { at: number }) => y.at - x.at;

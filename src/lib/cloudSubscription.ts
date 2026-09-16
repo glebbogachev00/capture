@@ -5,6 +5,7 @@ export type CloudSubscriptionRow = {
   status: string;
   plan: string | null;
   is_entitled: boolean;
+  reconciliation_required?: boolean;
   current_period_end: string | null;
   access_expires_at: string | null;
   cancel_at_period_end: boolean;
@@ -19,6 +20,7 @@ export type PublicCloudSubscription = {
   currentPeriodEnd: string | null;
   accessExpiresAt: string | null;
   captureLimit: number | null;
+  reconciliationRequired?: boolean;
 };
 
 export type CloudSubscriptionDependencies = {
@@ -69,6 +71,7 @@ export function publicCloudSubscription(
   const isEntitled = isCurrentCloudEntitlement(row, now);
   return {
     tier: isEntitled ? "cloud" : "free",
+    ...(row.reconciliation_required ? { reconciliationRequired: true } : {}),
     status: typeof row.status === "string" ? row.status.slice(0, 40) : "inactive",
     plan: row.plan === "monthly" || row.plan === "yearly" ? row.plan : null,
     cancelAtPeriodEnd: row.cancel_at_period_end === true,

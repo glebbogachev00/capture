@@ -1,5 +1,6 @@
 "use client";
 
+import { getDocumentLifetime, ownedFetch as fetch } from "@/lib/ownership";
 import { useEffect, useState } from "react";
 import {
   captureLimitFromSubscriptionResponse,
@@ -7,12 +8,19 @@ import {
   TRIAL_LIMIT,
 } from "@/lib/playground";
 
-/** Whether this browser should use Capture's fifteen-a-day public allowance. */
-export function useCaptureLimit(): boolean {
-  const [captureLimit, setCaptureLimit] = useState<number | null>(TRIAL_LIMIT);
+/** Local installs are unlimited; Cloud enforcement waits fail-closed for billing. */
+export function useCaptureLimit(): { applies: boolean; ready: boolean } {
+  const lifetime = getDocumentLifetime();
+  const selfHosted = !lifetime.cloud && !PLAYGROUND;
+  const [captureLimit, setCaptureLimit] = useState<number | null>(
+    selfHosted ? null : TRIAL_LIMIT,
+  );
+  const [ready, setReady] = useState(
+    selfHosted || PLAYGROUND || (lifetime.cloud && lifetime.owner === null),
+  );
 
   useEffect(() => {
-    if (PLAYGROUND) return;
+    if (selfHosted || PLAYGROUND || (lifetime.cloud && lifetime.owner === null)) return;
     let stopped = false;
     void fetch("/api/cloud/subscription", {
       cache: "no-store",
@@ -21,16 +29,24 @@ export function useCaptureLimit(): boolean {
       .then(async (response) => {
         const body = await response.json().catch(() => null);
         if (!stopped) {
-          setCaptureLimit(captureLimitFromSubscriptionResponse(response.status, body));
+          // This is already a verified Cloud document; even a 404 must not
+          // reclassify it as self-hosted or grant an unlimited allowance.
+          setCaptureLimit(response.ok
+            ? captureLimitFromSubscriptionResponse(response.status, body)
+            : TRIAL_LIMIT);
+          setReady(true);
         }
       })
       .catch(() => {
-        if (!stopped) setCaptureLimit(TRIAL_LIMIT);
+        if (!stopped) {
+          setCaptureLimit(TRIAL_LIMIT);
+          setReady(true);
+        }
       });
     return () => {
       stopped = true;
     };
-  }, []);
+  }, [lifetime, selfHosted]);
 
-  return PLAYGROUND || captureLimit === TRIAL_LIMIT;
+  return { applies: PLAYGROUND || captureLimit === TRIAL_LIMIT, ready };
 }

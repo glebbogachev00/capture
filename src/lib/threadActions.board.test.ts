@@ -21,7 +21,8 @@ const thread = (id: string, name: string, frags: string[]): Thread => ({
   id,
   name,
   summary: "",
-  frags: frags.map((text, i) => ({ id: `${id}-f${i}`, at: 1, text })),
+  // These notes precede the tasks: co-capture is not independent evidence.
+  frags: frags.map((text, i) => ({ id: `${id}-f${i}`, at: 0, text })),
 });
 
 const board = (actions: Action[], threads: Thread[]): Board => ({

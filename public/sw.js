@@ -15,10 +15,10 @@
  *
  * Bump VERSION to drop both caches on the next activate.
  */
-const VERSION = "v2";
+const VERSION = "v3";
 const SHELL_CACHE = `capture-shell-${VERSION}`;
 const STATIC_CACHE = `capture-static-${VERSION}`;
-const APP_SHELL = ["/", "/icon.svg"];
+const APP_SHELL = ["/icon.svg"];
 const STATIC_LIMIT = 80;
 
 self.addEventListener("install", (event) => {
@@ -62,6 +62,23 @@ async function trimStatic() {
   }
 }
 
+/** A stalled network must not hold a saved installed shell indefinitely. */
+async function fetchShell(request) {
+  const controller = new AbortController();
+  let timer;
+  try {
+    return await Promise.race([
+      fetch(request, { signal: controller.signal }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error("Shell navigation timed out"));
+          controller.abort();
+        }, 4000);
+      }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -78,6 +95,7 @@ self.addEventListener("fetch", (event) => {
         (cached) =>
           cached ??
           fetch(request).then((response) => {
+            if (!response.ok || response.redirected) return response;
             const copy = response.clone();
             caches
               .open(STATIC_CACHE)
@@ -91,18 +109,21 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Only generic HTML entry shells and public icons. Never cache login,
+  // callbacks, RSC payloads or arbitrary documents. Identity stays in /api/.
+  const shell = request.mode === "navigate" && (url.pathname === "/app" || url.pathname === "/");
+  const icon = ["/icon.svg", "/manifest.webmanifest", "/favicon.ico"].includes(url.pathname);
+  if ((!shell && !icon) || request.headers.get("RSC")) return;
+  const key = url.pathname;
   event.respondWith(
-    fetch(request)
-      .then((response) => {
+    fetchShell(request).then((response) => {
+      if (response.ok && !response.redirected) {
         const copy = response.clone();
-        caches
-          .open(SHELL_CACHE)
-          .then((cache) => cache.put(request, copy))
-          .catch(() => {});
-        return response;
-      })
-      .catch(() =>
-        caches.match(request).then((cached) => cached ?? caches.match("/"))
-      )
+        event.waitUntil(caches.open(SHELL_CACHE).then(cache => cache.put(key, copy)).catch(() => {}));
+      }
+      return response;
+    }).catch(async () => (await caches.match(key)) ?? new Response("Open Capture online once to save its app shell.", {
+      status: 503, headers: { "Content-Type": "text/plain" },
+    }))
   );
 });

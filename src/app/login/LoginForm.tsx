@@ -1,6 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import { completeExplicitAuthentication } from "@/lib/ownership";
 import { safeNext } from "@/lib/safeNext";
 import { useState } from "react";
 
@@ -32,6 +33,7 @@ export function LoginForm() {
         body: JSON.stringify({ password: value }),
       });
       if (res.ok) {
+        completeExplicitAuthentication();
         /* A full load so the middleware sees the new cookie — and only ever
            to a path inside this app. `next` arrives in the URL, so anyone
            can choose it. */

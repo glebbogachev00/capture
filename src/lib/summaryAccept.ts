@@ -19,14 +19,15 @@ import type { Board, Thread } from "./model";
  * which supersedes this one.
  */
 
-/** What the summary is ABOUT: the name and each fragment's identity and
-    time. Any change to these makes an in-flight summary stale. */
+/** Per-thread request inputs (name, fragment date/text), plus fragment identity
+    for stale protection. Images and resolution labels are not sent to the
+    summarizer; changing them must not discard an otherwise current reply.
+    JSON encoding also prevents delimiter collisions in text. */
 export function threadFingerprint(t: Thread): string {
-  return (
-    t.name +
-    "|" +
-    (t.frags ?? []).map((f) => `${f.id}:${f.at ?? 0}`).join(",")
-  );
+  return JSON.stringify([
+    t.name,
+    (t.frags ?? []).map((f) => [f.id, f.at ?? 0, f.text]),
+  ]);
 }
 
 export function acceptSummary(

@@ -156,7 +156,7 @@ describe("install section links", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "Messy thoughts that sort themselves.",
+        name: "Say it, write it. Capture sorts it out.",
       })
     ).toBeTruthy();
     expect(screen.queryByLabelText(/install prompt/i)).toBeNull();
@@ -167,7 +167,7 @@ describe("install section links", () => {
     ).toBe(true);
 
     const navigation = screen.getByRole("navigation", { name: "Capture links" });
-    expect(within(navigation).queryByRole("button")).toBeNull();
+    expect(within(navigation).getByRole("button", { name: "Open navigation" }).getAttribute("aria-expanded")).toBe("false");
     expect(within(navigation).getByRole("link", { name: "About" }).getAttribute("aria-current"))
       .toBe("page");
     const heroActions = container.querySelector(".site-hero .site-actions");
@@ -191,27 +191,36 @@ describe("install section links", () => {
     const { container } = render(<Landing />);
 
     expect(
-      screen.getByRole("heading", { name: "How to use Capture best" })
+      screen.getByRole("heading", { level: 2, name: "Keep the thought. Then put it to work." })
     ).toBeTruthy();
-    expect(container.querySelector('[data-move="how-to"]')).toBeTruthy();
-    expect(
-      screen.getByRole("heading", { name: "Use the voice typing you already have." })
-    ).toBeTruthy();
-    for (const platform of [
-      "Built into Apple devices",
-      "iPhone",
-      "Apple-silicon Mac",
-      "Windows, Mac, and Linux",
+    expect(container.querySelector('[data-move="use-cases"]')).toBeTruthy();
+
+    const voiceSection = screen.getByRole("region", { name: "Voice typing compatibility" });
+    const heading = within(voiceSection).getByRole("heading", {
+      level: 2,
+      name: "Start before the sentence is polished.",
+    });
+    expect(within(voiceSection).getByText("Voice or text")).toBeTruthy();
+    const options = within(voiceSection).getByRole("group") as HTMLDetailsElement;
+    expect(options.open).toBe(false);
+    expect(options.contains(heading)).toBe(false);
+    fireEvent.click(within(options).getByText("Voice typing options", { selector: "summary" }));
+    expect(options.open).toBe(true);
+
+    for (const guidance of [
+      "Apple Dictation, LocalWhisper, and Wispr Flow work on Apple devices.",
+      "Try Hex on an Apple-silicon Mac",
+      "Handy on Windows, Mac, or Linux.",
     ]) {
-      expect(screen.getByText(platform)).toBeTruthy();
+      expect(options.textContent).toContain(guidance);
     }
-    expect(screen.getByRole("link", { name: "LocalWhisper" }).getAttribute("href"))
+    expect(within(options).getByRole("link", { name: "LocalWhisper" }).getAttribute("href"))
       .toBe("https://apps.apple.com/app/localwhisper/id6760680371");
-    expect(screen.getByRole("link", { name: "Wispr Flow" }).getAttribute("href"))
+    expect(within(options).getByRole("link", { name: "Wispr Flow" }).getAttribute("href"))
       .toBe("https://wisprflow.ai/");
-    expect(screen.getByRole("link", { name: "Hex" }).getAttribute("href"))
+    expect(within(options).getByRole("link", { name: "Hex" }).getAttribute("href"))
       .toBe("https://github.com/kitlangton/Hex");
-    expect(screen.getByRole("link", { name: "Handy" }).getAttribute("href"))
+    expect(within(options).getByRole("link", { name: "Handy" }).getAttribute("href"))
       .toBe("https://handy.computer/");
     expect(screen.queryByText(/works best with/i)).toBeNull();
   });

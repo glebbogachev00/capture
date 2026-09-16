@@ -13,6 +13,9 @@ const board = (over: Partial<Board> = {}): Board => ({
 });
 
 describe("referencedImageIds", () => {
+  it("ignores untrusted board references that could escape the image route", () => {
+    expect(referencedImageIds(board({ profile: { name: "A", imageId: "../cloud/board" } }))).toEqual([]);
+  });
   it("collects ids from actions and from fragments inside threads", () => {
     const b = board({
       actions: [
@@ -113,6 +116,15 @@ describe("isSafeImageId", () => {
 });
 
 describe("ensureHubImage", () => {
+  it("refuses unsafe IDs without making a request", async () => {
+    let called = false;
+    const confirmed = await ensureHubImage("../cloud/board", "data:image/png;base64,x", async () => {
+      called = true;
+      return new Response(null, { status: 404 });
+    });
+    expect(called).toBe(false);
+    expect(confirmed).toBe(false);
+  });
   it("does not send image bytes when the hub already has the image", async () => {
     const calls: { method: string; body: BodyInit | null | undefined }[] = [];
     const request = async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -147,11 +159,11 @@ describe("ensureHubImage", () => {
     ]);
   });
 
-  it("does not upload when the existence check fails", async () => {
+  it.each([401, 402, 403, 429, 500, 503])("does not upload when the existence check fails with %s", async (status) => {
     const calls: { method: string; body: BodyInit | null | undefined }[] = [];
     const request = async (_input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ method: init?.method ?? "GET", body: init?.body });
-      return new Response(null, { status: 500 });
+      return new Response(null, { status });
     };
 
     const confirmed = await ensureHubImage(

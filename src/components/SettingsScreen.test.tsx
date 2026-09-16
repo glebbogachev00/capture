@@ -66,6 +66,18 @@ describe("SettingsScreen disclosures", () => {
     expect(screen.getByRole("button", { name: "Upload a Capture backup" })).toBeTruthy();
   });
 
+  it("offers the approved support contact without removing bug reporting or logout", () => {
+    renderSettings();
+    expect(screen.queryByRole("link", { name: "Contact support" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show Support and session" }));
+
+    expect(screen.getByRole("link", { name: "Contact support" }).getAttribute("href"))
+      .toBe("mailto:gleb@trycapture.app");
+    expect(screen.getByText("For account or billing questions, or general help.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Report a bug" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Log out" })).toBeTruthy();
+  });
+
   it("uses a reversible switch for each principle", () => {
     const { onToggle } = renderSettings();
     fireEvent.click(screen.getByRole("button", { name: "Show Principles" }));

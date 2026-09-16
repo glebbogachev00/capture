@@ -31,6 +31,7 @@ export type SaveDraftInput = {
 export type CaptureOrigin = {
   raw: string;
   source: CaptureSource;
+  transcript?: string;
   via?: string;
   captureId?: string;
 };
@@ -78,6 +79,7 @@ export function applySaveDraft(
       clean: draft.expandedIntention,
       kind: "intention",
       source: origin.capture.source,
+      ...(origin.capture.transcript ? { transcript: origin.capture.transcript } : {}),
       targetId: intention.id,
       modelVia: origin.capture.via,
     });

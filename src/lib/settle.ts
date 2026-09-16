@@ -42,6 +42,8 @@ export function settleUnsortedCapture(
     imgIds: string[];
     at: number;
     dictated: boolean;
+    /** Recogniser evidence, separate from the editable capture text. */
+    transcript?: string;
     /** The thread the person has OPEN — their choice, so valid input.
         Undefined means no destination was chosen by anyone. */
     openThreadId?: string;
@@ -81,6 +83,7 @@ export function settleUnsortedCapture(
         captureId: ids.captureId,
         at: input.at,
         raw: input.raw,
+        transcript: input.transcript,
         clean: body,
         kind: "thread",
         source,
@@ -119,6 +122,7 @@ export function settleUnsortedCapture(
       captureId: ids.captureId,
       at: input.at,
       raw: input.raw,
+      transcript: input.transcript,
       clean: body,
       kind: "action",
       source,

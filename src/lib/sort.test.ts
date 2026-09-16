@@ -6,6 +6,61 @@ import {
 } from "./sort";
 
 describe("reconcileSorted", () => {
+  it("makes split shares standalone without rewriting the original capture", () => {
+    const paragraph = "I want to refine my Askde posting strategy so the posts sound like something I would actually say. The current drafts are too polished and keep turning ordinary observations into dramatic lessons. I want to keep the actual experience and uncertainty without inventing dialogue, outcomes, or a motivational ending.";
+    const clean = `The navbar needs work. Separately, ${paragraph}`;
+    const input = {
+      kind: "thread" as const,
+      actions: [],
+      clean,
+      threadName: "Navbar",
+      primaryText: "The navbar needs work.",
+      also: [{ text: `Separately, ${paragraph}`, threadName: "Askde", threadId: null }],
+    };
+    const out = reconcileSorted(input);
+    expect(out.also[0].text).toBe(paragraph);
+    expect(out.primaryText).toBe(input.primaryText);
+    expect(out.clean).toBe(clean);
+    expect(input.also[0].text).toBe(`Separately, ${paragraph}`);
+  });
+  it.each(["Separately, ", "Also, ", "On a separate note, ", "On another note, "])("removes the detached transition %s from either share", (prefix) => {
+    const out = reconcileSorted({
+      kind: "thread" as const,
+      threadName: "Navigation",
+      primaryText: `${prefix}I want clearer navigation.`,
+      also: [{ text: `${prefix}I want human posts.`, threadName: "Writing" }],
+    });
+    expect(out.primaryText).toBe("I want clearer navigation.");
+    expect(out.also[0].text).toBe("I want human posts.");
+    expect(reconcileSorted(out)).toEqual(out);
+  });
+
+  it.each([
+    "Store the files separately, not in a shared folder.",
+    "Separately packaged items cost more.",
+    "Also available in Vietnamese.",
+    "Separately,",
+    "I want a calmer voice.\n\nAlso, keep my uncertainty.",
+  ])("preserves meaningful wording and internal transitions: %s", (text) => {
+    const out = reconcileSorted({
+      kind: "thread" as const,
+      threadName: "Navigation",
+      also: [{ text, threadName: "Writing" }],
+    });
+    expect(out.also[0].text).toBe(text);
+  });
+
+  it("does not rewrite an unsplit capture", () => {
+    const input = {
+      kind: "thread" as const,
+      threadName: "Writing",
+      clean: "Separately, I want human posts.",
+      primaryText: "Separately, I want human posts.",
+      also: [],
+    };
+    expect(reconcileSorted(input)).toEqual({ ...input, actions: [] });
+  });
+
   it("keeps a valid 'both' and trims its actions", () => {
     const out = reconcileSorted({
       kind: "both",
