@@ -1,0 +1,140 @@
+/* No pending/hidden state: no JS, delayed hydration and unsupported observers
+   all retain the exact static page. Only a finite, observed entrance is added. */
+@keyframes settle {
+  from { opacity: .25; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes assemble {
+  from { opacity: .12; transform: translate(var(--word-x), var(--word-y)) rotate(var(--word-angle)); }
+  to { opacity: 1; transform: translate(0, 0) rotate(0); }
+}
+.root .enter {
+  animation: settle 700ms cubic-bezier(.22, 1, .36, 1) var(--landing-delay, 0ms) both;
+}
+@keyframes scrollFlow {
+  0% { opacity: .18; transform: translateY(64px) scale(.92); }
+  25% { opacity: 1; transform: translateY(24px) scale(.98); }
+  50% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; transform: translateY(-24px) scale(.98); }
+  100% { opacity: .18; transform: translateY(-64px) scale(.92); }
+}
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .root .flow {
+      animation: scrollFlow linear both;
+      animation-timeline: view();
+      animation-range: entry 0% exit 100%;
+    }
+  }
+}
+.root :global(.site-hero-heading).enter {
+  animation: none;
+}
+.root :global(.site-hero-heading) h1 > span {
+  display: inline-block;
+}
+.root :global(.site-hero-heading).enter h1 > span {
+  --word-x: 0px;
+  --word-y: 36px;
+  --word-angle: 0deg;
+  animation: assemble 1000ms cubic-bezier(.16, 1, .3, 1) both;
+}
+.root :global(.site-hero-heading).enter h1 > span:nth-child(1) {
+  --word-x: -28px; --word-y: -18px; --word-angle: -5deg;
+}
+.root :global(.site-hero-heading).enter h1 > span:nth-child(2) {
+  --word-x: 18px; --word-y: -26px; --word-angle: 3deg;
+  animation-delay: 100ms;
+}
+.root :global(.site-hero-heading).enter h1 > span:nth-child(3) {
+  --word-x: -14px; --word-y: 28px; --word-angle: -3deg;
+  animation-delay: 200ms;
+}
+.root :global(.site-hero-heading).enter h1 > span:nth-child(4) {
+  --word-x: 20px; --word-y: 24px; --word-angle: 4deg;
+  animation-delay: 300ms;
+}
+.root :global(.site-hero-heading).enter h1 > span:nth-child(5) {
+  --word-x: -18px; --word-y: 32px; --word-angle: -2deg;
+  animation-delay: 400ms;
+}
+/* A short visual sentence: source, direction, then two distinct destinations.
+   These classes exist only while the example is in view. No perpetual loop. */
+@keyframes sourceSweep {
+  0% { background-size: 0% 100%; }
+  50%, 75% { background-size: 100% 100%; }
+  100% { background-size: 0% 100%; }
+}
+@keyframes send {
+  0%, 18% { opacity: .25; transform: translateX(-12px); }
+  55% { opacity: 1; transform: translateX(12px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes cardLand {
+  from { opacity: 0; transform: translateX(-28px) scale(.96); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.root .sequence :global(.demo-in) {
+  background-image: linear-gradient(color-mix(in srgb, var(--accent) 18%, transparent), color-mix(in srgb, var(--accent) 18%, transparent));
+  background-repeat: no-repeat;
+  animation: sourceSweep 2100ms ease-in-out both;
+}
+.root .sequence :global(.demo-turn) span {
+  display: inline-block;
+  animation: send 850ms 250ms ease-in-out both;
+}
+.root .sequence :global(.demo-out) > li {
+  animation: cardLand 700ms 700ms cubic-bezier(.16, 1, .3, 1) both;
+}
+.root .sequence :global(.demo-out) > li:nth-child(2) {
+  animation-delay: 1150ms;
+}
+@media (max-width: 640px) {
+  @keyframes send {
+    0%, 18% { opacity: .25; transform: translateY(-10px); }
+    55% { opacity: 1; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes cardLand {
+    from { opacity: 0; transform: translateY(24px) scale(.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+}
+/* Feedback belongs to real controls, never to the non-interactive cards. */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+  .root :global(.site-actions) a {
+    transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  }
+  .root :global(.site-actions) a:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 15%, transparent);
+  }
+  .root :global(.site-actions) a:active { transform: translateY(0); }
+  .root :global(.hero-demo-play) {
+    transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+  .root :global(.hero-demo-poster):hover :global(.hero-demo-play) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+}
+.root .enter:focus-within, .root .flow:focus-within { animation: none; opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .root .flow { animation: none; opacity: 1; transform: none; }
+  .root .enter { animation: none; transform: none; opacity: 1; }
+  .root :global(.site-hero-heading).enter h1 > span {
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+  .root .sequence :global(.demo-in),
+  .root .sequence :global(.demo-turn) span,
+  .root .sequence :global(.demo-out) > li {
+    animation: none;
+    transform: none;
+    opacity: 1;
+    background-image: none;
+  }
+  .root :global(.site-actions) a,
+  .root :global(.hero-demo-play) { transition: none; transform: none; }
+}

@@ -35,7 +35,7 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "capture",
   description:
-    "Fast notes without the junk drawer. Capture sorts raw thoughts into actions, threads, and intentions.",
+    "One place for all your thoughts, organized for you and easy to find.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

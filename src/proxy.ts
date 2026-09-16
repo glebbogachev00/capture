@@ -28,7 +28,17 @@ const PUBLIC_PATHS = [
   "/demos",
 ];
 
-function isPublic(pathname: string): boolean {
+/** Exact landing asset names only; never expose their directories or suffix paths. */
+const PUBLIC_ASSETS = new Set([
+  "/brands/notion.png",
+  "/brands/obsidian.svg",
+  "/screenshots/distill-mode.png",
+  "/screenshots/record-heatmap.png",
+  "/og-clarity.png",
+]);
+
+function isPublic(pathname: string, method: string): boolean {
+  if ((method === "GET" || method === "HEAD") && PUBLIC_ASSETS.has(pathname)) return true;
   return PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`)
   );
@@ -80,7 +90,7 @@ export async function proxy(request: NextRequest) {
   ) {
     return passThrough;
   }
-  if (isPublicHome(pathname, PUBLIC_SITE) || isPublic(pathname) ||
+  if (isPublicHome(pathname, PUBLIC_SITE) || isPublic(pathname, request.method) ||
     (PUBLIC_SITE && (pathname === "/app" || pathname === "/writing" || pathname.startsWith("/writing/")))) {
     return passThrough;
   }

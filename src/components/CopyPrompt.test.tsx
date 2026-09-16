@@ -156,7 +156,7 @@ describe("install section links", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "Say it, write it. Capture sorts it out.",
+        name: "Messy thoughts that sort themselves.",
       })
     ).toBeTruthy();
     expect(screen.queryByLabelText(/install prompt/i)).toBeNull();
@@ -191,28 +191,25 @@ describe("install section links", () => {
     const { container } = render(<Landing />);
 
     expect(
-      screen.getByRole("heading", { level: 2, name: "Keep the thought. Then put it to work." })
+      screen.getByRole("heading", { level: 2, name: "How to use Capture best" })
     ).toBeTruthy();
-    expect(container.querySelector('[data-move="use-cases"]')).toBeTruthy();
+    expect(container.querySelector('[data-move="how-to"]')).toBeTruthy();
 
     const voiceSection = screen.getByRole("region", { name: "Voice typing compatibility" });
-    const heading = within(voiceSection).getByRole("heading", {
+    expect(within(voiceSection).getByRole("heading", {
       level: 2,
-      name: "Start before the sentence is polished.",
-    });
-    expect(within(voiceSection).getByText("Voice or text")).toBeTruthy();
-    const options = within(voiceSection).getByRole("group") as HTMLDetailsElement;
-    expect(options.open).toBe(false);
-    expect(options.contains(heading)).toBe(false);
-    fireEvent.click(within(options).getByText("Voice typing options", { selector: "summary" }));
-    expect(options.open).toBe(true);
-
-    for (const guidance of [
-      "Apple Dictation, LocalWhisper, and Wispr Flow work on Apple devices.",
-      "Try Hex on an Apple-silicon Mac",
-      "Handy on Windows, Mac, or Linux.",
+      name: "Use the voice typing you already have.",
+    })).toBeTruthy();
+    expect(within(voiceSection).getByText("Speech to text")).toBeTruthy();
+    const options = within(voiceSection).getByLabelText("Voice typing options by device");
+    expect(options.tagName).toBe("DL");
+    for (const platform of [
+      "Built into Apple devices",
+      "iPhone",
+      "Apple-silicon Mac",
+      "Windows, Mac, and Linux",
     ]) {
-      expect(options.textContent).toContain(guidance);
+      expect(within(options).getByText(platform)).toBeTruthy();
     }
     expect(within(options).getByRole("link", { name: "LocalWhisper" }).getAttribute("href"))
       .toBe("https://apps.apple.com/app/localwhisper/id6760680371");

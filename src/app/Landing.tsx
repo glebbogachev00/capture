@@ -1,34 +1,85 @@
 import Link from "next/link";
+import Image from "next/image";
+import { MessagesSquare, Share2 } from "lucide-react";
 import { PLAYGROUND, TRIAL_LIMIT } from "@/lib/playground";
 import { PUBLIC_SITE } from "@/lib/publicSite";
 import { siteHome, websiteSchema } from "@/lib/seo";
 import { LandingDemo } from "@/components/LandingDemo";
 import { SiteNav } from "@/components/SiteNav";
-import { LandingThreadExample } from "@/components/LandingThreadExample";
-import styles from "./Landing.module.css";
+import { LandingMotion } from "@/components/LandingMotion";
+import motion from "@/components/LandingMotion.module.css";
+import "./landing-content.css";
 
 /** Where "open the app" points: the playground serves the board at /app so
     this page can hold the front door; a personal instance keeps it at /. */
 const APP = PUBLIC_SITE ? "/app" : "/";
 const HOME = siteHome(PUBLIC_SITE);
 
+/*
+ * The public page is allowed to be strange, because the app is not.
+ *
+ * Everything the app does quietly — learning from corrections, fading what
+ * stopped mattering, asking whether a two-month-old intention is still
+ * yours — gets explained once, here, so it never has to be explained
+ * inside the product. That is the whole trade: the landing page carries the
+ * weirdness so the board can stay empty.
+ */
+
+/* Run against the live sorter eight times while writing this page: one
+   action and one thread, every time. The wording and the thread's name
+   vary between runs, so neither is quoted as a promise. An earlier
+   candidate — two tasks, two deadlines — was dropped because a capture
+   carries a single due date, and the demo would have shipped a visible
+   bug. */
+const DEMO_IN =
+  "uh fix the signup bug before friday and i keep going back and forth on usage based pricing vs seats";
+
+const DEMO_OUT = [
+  {
+    kind: "Action",
+    text: "Fix the signup bug before Friday",
+    note: "closes, and fades if it stops mattering",
+    /* The same marks the board uses: an empty box for a thing to close,
+       stacked layers for a thing that grows. Recognition does the work a
+       paragraph of explanation was doing. */
+    mark: (
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="13" height="13" rx="3.5" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
+  {
+    kind: "Thread",
+    text: "Pricing model decision",
+    note: "keeps, and the summary stays current",
+    mark: (
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M2 5.5 8 2.5l6 3-6 3-6-3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="m2 10.5 6 3 6-3" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+];
+
 const kinds = [
   {
     name: "Actions",
-    label: "Things to do",
-    copy: "Tasks you mark done. Items with a shelf life fade when it expires, not because Capture knows you finished.",
+    label: "What you need to do.",
+    copy: "Tasks have a shelf life and fade when it ends. Keep the ones you still need.",
   },
   {
     name: "Threads",
-    label: "Ideas that grow",
-    copy: "Related fragments collect over time. The summary updates as the idea changes, with the sources kept alongside it.",
+    label: "Thoughts you’re still developing.",
+    copy: "Related thoughts collect in one place, with a summary that updates as you add to them.",
   },
   {
     name: "Intentions",
-    label: "Standing decisions",
-    copy: "Directions you want to live by. They stay separate from tasks, with a check-in to ask whether you still mean them.",
+    label: "Goals that guide your choices.",
+    copy: "A direction to return to, not another task to finish. For example: “I build businesses that run without me.”",
   },
 ];
+
+
 
 /** A page-level signpost. Every heading on this page lived inside a card,
     all at one size, so the page had no sections — just a stack of boxes a
@@ -49,7 +100,7 @@ function Movement({
 }) {
   return (
     <div className="movement" data-move={id} id={id}>
-      <h2>{title}</h2>
+      <h2 id={`${id}-heading`}>{title}</h2>
       {gloss && <p>{gloss}</p>}
     </div>
   );
@@ -57,8 +108,43 @@ function Movement({
 
 export function Landing() {
   const schema = websiteSchema(PUBLIC_SITE);
+  /* The posed "you say / it lands as" card. In the wide layouts the hero's
+     second column belongs to the recording, and this drops to the slot the
+     recording used to hold, so the page keeps both and repeats neither. */
+  const demoCard = (
+        <section className="site-card site-demo" aria-label="What it does">
+          <div className="demo-split">
+            <div className="demo-said">
+              <p className="funding-card-label">You say</p>
+              <p className="demo-in">“{DEMO_IN}”</p>
+            </div>
+            <div className="demo-turn" aria-hidden="true">
+              <span>→</span>
+            </div>
+            <div className="demo-landed">
+              <p className="funding-card-label">It lands as</p>
+              <ul className="demo-out">
+                {DEMO_OUT.map((row) => (
+                  <li key={row.kind}>
+                    <span className="demo-mark">{row.mark}</span>
+                    <span className="demo-body">
+                      <span className="demo-kind">{row.kind}</span>
+                      <span className="demo-text">{row.text}</span>
+                      <span className="demo-note">{row.note}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <p className="demo-caption">
+            One capture can hold several thoughts. Capture separates them, so you do not have to choose a folder or tidy them first.
+          </p>
+        </section>
+  );
   return (
-    <main className={`capture-root site-page ${styles.landing}`}>
+    <main className={`capture-root site-page landing-content ${motion.root}`}>
+      <LandingMotion />
       {schema && (
         <script
           type="application/ld+json"
@@ -73,17 +159,21 @@ export function Landing() {
           <SiteNav current="about" homeHref={HOME} />
         </header>
 
-        <section className="site-hero site-hero-split">
+        <section className="site-hero site-hero-split" aria-labelledby="landing-title">
           <div className="site-hero-heading">
             <p className="funding-kicker">Thought capture</p>
-            <h1>Say it, write it. Capture sorts it out.</h1>
+            <h1 id="landing-title" aria-label="Messy thoughts that sort themselves.">
+              <span aria-hidden="true">Messy</span>{" "}
+              <span aria-hidden="true">thoughts</span>{" "}
+              <span aria-hidden="true">that</span>{" "}
+              <span aria-hidden="true">sort</span>{" "}
+              <span aria-hidden="true">themselves.</span>
+            </h1>
           </div>
           <div className="site-hero-aside">
             <p className="funding-lede site-lede">
-              Put a task, a half-formed idea, and a decision in the same note.
-              Capture separates them and keeps related thoughts together.
+              Say what’s on your mind. Capture keeps related ideas together, separates out tasks, and helps you find your thoughts later.
             </p>
-            <p className={styles.fit}>For the thoughts that keep arriving while you work, make things, or figure out what comes next.</p>
             <div className="site-actions">
               <Link className="capture-btn" href={APP}>
                 {PUBLIC_SITE ? "Try Capture" : "Open Capture"}
@@ -95,67 +185,34 @@ export function Landing() {
             {PUBLIC_SITE && (
               <p className="site-cue">
                 {PLAYGROUND
-                  ? `${TRIAL_LIMIT} captures a day in the free playground. No account needed.`
+                  ? `${TRIAL_LIMIT} captures a day. No account. This board stays in your browser.`
                   : "Free self-hosted. Optional paid Cloud. See pricing for availability."}
               </p>
             )}
           </div>
         </section>
 
-        <LandingThreadExample />
+        {/* The transformation is the product, so it is the first object on
+            the page. Side by side, not stacked: the whole claim is that the
+            left turns into the right, and a reader should see that before
+            reading a word of it. */}
+        {/* The recording, in the same card every other block sits in, and
+            with no caption under it: the caption repeated the headline.
+            It does not autoplay — the take opens on a title card, which as
+            a still is an empty rectangle, so the poster is the payoff
+            frame instead. */}
+        <div className="site-card site-demo hero-clip">
+          <LandingDemo />
+        </div>
 
-        <Movement
-            id="three-kinds"
-            title="Different thoughts need different lives"
-            gloss="Capture sorts for you. You can correct where something lands."
-          />
-        <section className="site-kind-grid" aria-label="The three kinds">
-          {kinds.map((kind) => (
-            <article className="site-card kind-card" key={kind.name}>
-              <p className="funding-card-label">{kind.label}</p>
-              <h2>{kind.name}</h2>
-              <p>{kind.copy}</p>
-            </article>
-          ))}
-        </section>
-
-
-        <Movement id="use-cases" title="Keep the thought. Then put it to work." />
-        <section className="site-card site-day" aria-label="Capture use cases">
-          <p className="funding-card-label">Alongside the tools you already use</p>
-          <h2>No folders to choose before the thought is safe.</h2>
-          <p>Keep developing an idea here, or copy it into Notion or Obsidian. Capture is the place for the rough thought, not a demand to move your whole system.</p>
-          <dl className="note-beats">
-            <div>
-              <dt>Find it again</dt>
-              <dd>Search when a thought becomes useful. Open its Thread for the summary and the fragments behind it.</dd>
-            </div>
-            <div>
-              <dt>Still working it out? Use Distill.</dt>
-              <dd>Talk through an unclear thought, one question at a time. When it is ready, save what you settled back into Capture.</dd>
-            </div>
-          </dl>
-        </section>
-        <section className="site-card site-quiet" aria-label="Agent handoff">
-          <p className="funding-card-label">Take the context with you</p>
-          <h2>Your agent does not have to start from nothing.</h2>
-          <p>Open a Thread and use Share to copy its summary and dated fragments. Paste them into Claude, Hermes, or Codex to continue the work.</p>
-          <p className={styles.followup}>Share follows your current view: a Thread, an Intention, a tab list, or the selected day in the Record. This is a manual handoff, not an automatic integration.</p>
-        </section>
-
-        <section className="site-card site-voice" aria-label="Voice typing compatibility">
-          <p className="funding-card-label">Voice or text</p>
-          <h2>Start before the sentence is polished.</h2>
-          <p>Type, use Capture’s microphone, or dictate with the tools you already have. If it can type into the box, Capture can sort the thought.</p>
-          <details className={styles.voiceDetails}>
-            <summary>Voice typing options</summary>
-            <p>Apple Dictation, <a href="https://apps.apple.com/app/localwhisper/id6760680371" target="_blank" rel="noreferrer">LocalWhisper</a>, and <a href="https://wisprflow.ai/" target="_blank" rel="noreferrer">Wispr Flow</a> work on Apple devices. Try <a href="https://github.com/kitlangton/Hex" target="_blank" rel="noreferrer">Hex</a> on an Apple-silicon Mac, or <a href="https://handy.computer/" target="_blank" rel="noreferrer">Handy</a> on Windows, Mac, or Linux.</p>
-          </details>
-        </section>
+        {/* One demo at a size worth watching, then the other two. Three
+            equal tiles made every one of them too small to read the app in,
+            which is the only thing they are for. */}
         <section className="demo-reel" aria-label="Watch it work">
+          {demoCard}
+
           <details className="reel-fold">
-            <summary>Watch the product recordings</summary>
-            <div className="site-card site-demo hero-clip"><LandingDemo /></div>
+            <summary>See two more examples</summary>
             <div className="reel-more">
               {[
                 {
@@ -164,7 +221,7 @@ export function Landing() {
                   w: 1440,
                   h: 1230,
                   title: "It got it wrong. You told it once.",
-                  note: "Correct a sort. Capture uses that correction when sorting later captures.",
+                  note: "Undo asks what it should have been. The next one lands right, unasked.",
                 },
                 {
                   src: "/demos/next-step.mp4",
@@ -197,20 +254,47 @@ export function Landing() {
           </details>
         </section>
 
+        <Movement
+          id="use-cases"
+          title="No deciding where to save it."
+          gloss="Save a thought, find it later, and keep building on it."
+        />
+        <section className="site-card site-day" aria-label="Capture use cases">
+          <dl className="note-beats">
+            <div>
+              <dt>Speak freely across topics</dt>
+              <dd>
+                Talk through several ideas and plans in one capture. Capture separates topics into new or existing threads and pulls out the things to do.
+              </dd>
+            </div>
+            <div>
+              <dt>No wondering where you put it.</dt>
+              <dd>
+                Search the words you remember. Find the thought and the context around it, without checking several apps.
+              </dd>
+            </div>
+            <div>
+              <dt>Give your AI the whole idea.</dt>
+              <dd>
+                Copy a thread into Claude, Hermes, or the AI you already use. It includes the summary and everything you’ve added, with dates. You choose what to copy and paste.
+              </dd>
+            </div>
+          </dl>
+        </section>
+
         {PUBLIC_SITE && (
           <>
             <Movement
               id="writing"
               title="What the rough thought became"
-              gloss="First-party use, with source moments you can read."
+              gloss="Articles spoken in motion and finished in public."
             />
             <section className="site-card site-writing" aria-label="Writing made with Capture">
               <p className="funding-card-label">Written with Capture</p>
               <h2>I started writing while walking and running.</h2>
               <p>
-                I captured rough thoughts over several walks, developed them with
-                Hermes, and edited the articles. The finished writing sits beside
-                selected source moments. Capture kept the material; it did not write the articles.
+                The finished articles sit beside selected source moments, so you
+                can see what Capture kept and what the thought became.
               </p>
               <div className="site-actions">
                 <Link className="ghost site-ghost" href="/writing">
@@ -228,8 +312,8 @@ export function Landing() {
             knows a person is talking before reading a word of it. */}
         <Movement
             id="maker"
-            title="Built from daily use"
-            gloss="A maker’s account, not a customer testimonial."
+            title="Who built it, and on what"
+            gloss="No reviews yet. Here is the honest version instead."
           />
         <section className="site-card site-note" aria-label="From the maker">
           <div className="note-who">
@@ -246,11 +330,12 @@ export function Landing() {
             </span>
           </div>
 
-          <h2>I built it for the work I was carrying.</h2>
+          <h2>This is where the reviews usually go.</h2>
           <p>
-            I built Capture for myself at the end of July and have used it
-            every day since. These are projects I have used it on, not customers
-            or endorsements.
+            I do not have any yet, so here is the honest version. I built
+            it for myself at the end of July, and I have used it every day
+            since. The four below are not customers. They are the work I
+            was carrying while I used it.
           </p>
 
           {/* Four links, because a link is checkable and a sentence is
@@ -293,6 +378,138 @@ export function Landing() {
           </div>
         </section>
 
+        <section className="site-card site-problem">
+          <p className="funding-card-label">The point</p>
+          <h2>No folders to manage. No old tasks to clear out.</h2>
+          <p>
+            Short-lived tasks fade. Developing ideas stay together. You don’t need to file every new thought or delete every expired task.
+          </p>
+          <div className="site-other-apps" aria-labelledby="other-apps-title">
+            <h3 id="other-apps-title">Keep the apps you already use.</h3>
+            <p>Capture is not a replacement for Notion or Obsidian. It makes thoughts easy to capture, organize, and find. Develop them in Capture, or copy them into the app you choose.</p>
+            <ul className="site-app-logos" aria-label="Apps you can keep using">
+              <li>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/brands/notion.png" width={28} height={28} alt="" /><span>Notion</span>
+              </li>
+              <li>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/brands/obsidian.svg" width={28} height={28} alt="" /><span>Obsidian</span>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <Movement
+            id="three-kinds"
+            title="Different thoughts need different places."
+            gloss="Capture chooses where they belong. You don’t have to choose first."
+          />
+        <section className="site-kind-grid" aria-label="The three kinds">
+          {kinds.map((kind) => (
+            <article className="site-card kind-card" key={kind.name}>
+              <p className="funding-card-label">{kind.label}</p>
+              <h2>{kind.name}</h2>
+              <p>{kind.copy}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="feature-chapter" aria-labelledby="more-with-a-thought-heading">
+          <Movement id="more-with-a-thought" title="When you need to do more with a thought." gloss="Work through an idea, or share it with your agent." />
+          <div className="feature-card-grid">
+        <section id="distill" className="site-card site-distill feature-card-layout" aria-labelledby="distill-title">
+          <div className="feature-card-copy">
+            <h3 id="distill-title">Distill mode</h3>
+            <p>Not sure what you mean yet? Distill is a short AI conversation that helps you clarify an idea or decision. Review the result, then save it as an Action, Thread, or Intention.</p>
+          </div>
+          <figure className="feature-card-image">
+            <div className="feature-screenshot-frame">
+              <Image src="/screenshots/distill-mode.png" alt="Distill in Capture, with an app idea ready to discuss" width={1168} height={1140} unoptimized />
+            </div>
+            <figcaption className="feature-access-cue"><span className="feature-control-icon"><MessagesSquare size={18} strokeWidth={1.7} aria-hidden="true" /></span><span>Tap this icon beside Capture to open Distill.</span></figcaption>
+          </figure>
+        </section>
+
+        <section id="handoff" className="site-card site-quiet feature-card-layout" aria-labelledby="handoff-title">
+          <div className="feature-card-copy">
+            <h3 id="handoff-title">Agent handoff</h3>
+            <dl className="note-beats">
+              <div><dt>Pick a day</dt><dd>Open The Record. Its heat map shows your capture history. Click any day to revisit what you captured that day.</dd></div>
+              <div><dt>Share what you’re viewing</dt><dd>Click Share. In The Record, it shares that day’s captures. In a thread, it shares the summary and dated notes. On a tab, it shares that tab’s list.</dd></div>
+              <div><dt>Continue with your agent</dt><dd>Use your device’s share menu, or copy and paste into Claude, Hermes, or another agent. No collecting scattered notes or explaining everything again.</dd></div>
+            </dl>
+          </div>
+          <figure className="feature-card-image">
+            <Image src="/screenshots/record-heatmap.png" alt="The Record heat map in Capture, showing sample history with one day selected" width={920} height={536} unoptimized />
+            <figcaption>Example capture history, with a day selected.</figcaption>
+            <div className="feature-access-cue"><span className="feature-control-icon"><Share2 size={18} strokeWidth={1.7} aria-hidden="true" /></span><span>Tap the counts below Capture’s name to open The Record. Pick a day, then tap Share.</span></div>
+          </figure>
+        </section>
+          </div>
+        </section>
+
+        <Movement
+          id="how-to"
+          title="How to use Capture best"
+          gloss="Start with the voice typing already on your device."
+        />
+        <section
+          className="site-card site-voice"
+          aria-label="Voice typing compatibility"
+        >
+          <p className="funding-card-label">Speech to text</p>
+          <h2>Use the voice typing you already have.</h2>
+          <p className="site-voice-intro">
+            Type it, or use your device’s voice typing. You don’t need to tidy it first.
+          </p>
+          <dl className="voice-options" aria-label="Voice typing options by device">
+            <div>
+              <dt>Built into Apple devices</dt>
+              <dd>Apple Dictation</dd>
+            </div>
+            <div>
+              <dt>iPhone</dt>
+              <dd>
+                <a
+                  href="https://apps.apple.com/app/localwhisper/id6760680371"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  LocalWhisper
+                </a>
+                <span aria-hidden="true"> · </span>
+                <a href="https://wisprflow.ai/" target="_blank" rel="noreferrer">
+                  Wispr Flow
+                </a>
+              </dd>
+            </div>
+            <div>
+              <dt>Apple-silicon Mac</dt>
+              <dd>
+                <a
+                  href="https://github.com/kitlangton/Hex"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Hex
+                </a>
+              </dd>
+            </div>
+            <div>
+              <dt>Windows, Mac, and Linux</dt>
+              <dd>
+                <a href="https://handy.computer/" target="_blank" rel="noreferrer">
+                  Handy
+                </a>
+              </dd>
+            </div>
+          </dl>
+          <p className="site-voice-point">
+            Start speaking before you decide how polished the thought should be.
+          </p>
+        </section>
+
         <Movement
             id="ownership"
             title="Yours to keep"
@@ -300,15 +517,17 @@ export function Landing() {
         <section className="site-card site-proof">
           <p className="funding-card-label">Yours</p>
           <h2>Your thinking stays yours.</h2>
-          <p>
-            The playground saves your board in this browser. AI features send
-            relevant content to model providers for processing. Export a backup
-            before clearing browser data or changing devices.
-          </p>
-          <p className={styles.followup}>The full self-hosted system is free and open source. Cloud is optional and paid. <Link href="/pricing">See plans and availability</Link>.</p>
+          {PUBLIC_SITE && !PLAYGROUND ? (
+            <p>The full self-hosted system is free and open source. Cloud is optional and paid. <Link href="/pricing">See plans and availability</Link>.</p>
+          ) : (
+            <p>
+              Your thoughts stay in this browser. Export a backup before clearing browser data.
+            </p>
+          )}
+          <p>AI features send relevant content to model providers for processing.</p>
           <div className="site-actions">
             <Link className="capture-btn" href={APP}>
-              {PUBLIC_SITE ? "Try Capture" : "Open Capture"}
+              {PLAYGROUND ? `Try ${TRIAL_LIMIT} captures today` : PUBLIC_SITE ? "Try Capture" : "Open Capture"}
             </Link>
             <Link className="ghost site-ghost" href="/install">
               Install locally
