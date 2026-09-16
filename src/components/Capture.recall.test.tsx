@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Capture } from "@/app/Capture";
 import { EMPTY, KEY } from "@/lib/model";
 import { get, set } from "@/lib/storage";
@@ -10,7 +10,7 @@ import { DISTILL_KEY, EMPTY_DISTILL } from "@/lib/distill";
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 const text = "Capture pricing: I decided to keep thinking features free. Cloud pays for hosting.";
 const question = "What did I decide about Capture pricing?";
-const requests: { question: string; sources: { id: string; text: string; targetId: string; fragId?: string }[] }[] = [];
+const requests: string[] = [];
 beforeEach(async () => {
   requests.length = 0;
   vi.stubGlobal("matchMedia", vi.fn((media: string) => ({ media, matches: false, onchange: null,
@@ -25,62 +25,53 @@ beforeEach(async () => {
     ] },
   ] }));
   await set(DISTILL_KEY, JSON.stringify(EMPTY_DISTILL));
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input) !== "/api/recall") return new Response(null, { status: 503 });
-    const body = JSON.parse(String(init?.body));
-    requests.push(body);
-    return Response.json({ status: "answered", claims: [{
-      text: "You decided to keep thinking features free and charge for Cloud hosting.",
-      citations: [{ sourceId: body.sources[0].id, quote: text }],
-    }] });
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (/^\/api\/(?:recall|sort|distill|group|intention|judge|organize|summarize|transcribe|tts|untangle|wrap)(?:\/|$)/.test(path)) requests.push(path);
+    return new Response(null, { status: 503 });
   }));
   Element.prototype.scrollIntoView = vi.fn();
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-it("answers a natural question from saved notes without changing the board, then opens its exact source", async () => {
+it("restores keyword results without a separate answer surface or board changes", async () => {
   render(<Capture />);
   await screen.findByText("No open loops.");
   expect(screen.getByRole("button", { name: "Threads 2" })).toBeTruthy();
   const baseline = await get(KEY);
   const input = screen.getByRole("searchbox", { name: "Search everything" });
-  fireEvent.change(input, { target: { value: question } });
+  fireEvent.change(input, { target: { value: "Capture pricing" } });
+  await screen.findByText("Threads · 1");
   expect(requests).toHaveLength(0);
-  fireEvent.click(await screen.findByRole("button", { name: "Answer from my captures" }));
-  await screen.findByText("You decided to keep thinking features free and charge for Cloud hosting.");
-  expect(requests).toHaveLength(1);
-  expect(requests[0].question).toBe(question);
-  expect(requests[0].sources).toEqual([expect.objectContaining({ text, targetId: "pricing", fragId: "decision" })]);
-  expect(JSON.stringify(requests[0])).not.toMatch(/rosemary|private-image-reference|Unrelated private material/);
+  expect(screen.queryByRole("button", { name: "Answer from my captures" })).toBeNull();
+  expect(screen.queryByText("Keyword matches")).toBeNull();
+  expect(screen.getByText("Threads · 1")).toBeTruthy();
+  expect(screen.queryByText("Buy rosemary for the kitchen.")).toBeNull();
   expect(await get(KEY)).toBe(baseline);
-  const citationButton = screen.getAllByRole("button", { name: /Open.*Capture pricing/i }).find((button) => !button.closest("details"));
-  expect(citationButton).toBeTruthy();
-  fireEvent.click(citationButton!);
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(text.replace(/\./g, "\\.")) }));
   await waitFor(() => expect(document.querySelector('.frag[aria-current="true"]')?.textContent).toContain(text));
-  expect(requests).toHaveLength(1);
+  expect(requests).toHaveLength(0);
+  expect(await get(KEY)).toBe(baseline);
 });
 
-it("keeps an edited search query and ignores an old answer even when transport ignores cancellation", async () => {
-  let finish: (response: Response) => void = () => {};
-  let submitted: { id: string }[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input) !== "/api/recall") return new Response(null, { status: 503 });
-    submitted = JSON.parse(String(init?.body)).sources;
-    return new Promise<Response>((resolve) => { finish = resolve; });
-  }));
+it("keeps the original empty state for questions and allows editing and clearing without recall", async () => {
   render(<Capture />);
   await screen.findByText("No open loops.");
   expect(screen.getByRole("button", { name: "Threads 2" })).toBeTruthy();
   const baseline = await get(KEY);
   const input = screen.getByRole("searchbox", { name: "Search everything" });
   fireEvent.change(input, { target: { value: question } });
-  fireEvent.click(await screen.findByRole("button", { name: "Answer from my captures" }));
-  await waitFor(() => expect(submitted).toHaveLength(1));
+  await screen.findByText("Nothing by that shape.");
+  expect(screen.queryByRole("button", { name: "Answer from my captures" })).toBeNull();
+  expect(screen.queryByText("Keyword matches")).toBeNull();
   fireEvent.change(input, { target: { value: "rosemary" } });
-  await act(async () => finish(Response.json({ status: "answered", claims: [{
-    text: "Stale pricing answer", citations: [{ sourceId: submitted[0].id, quote: text }],
-  }] })));
-  expect(screen.queryByText("Stale pricing answer")).toBeNull();
+  await screen.findByRole("button", { name: /Buy rosemary for the kitchen/ });
   expect((input as HTMLInputElement).value).toBe("rosemary");
+  expect(await get(KEY)).toBe(baseline);
+  fireEvent.change(input, { target: { value: "" } });
+  await screen.findByText("No open loops.");
+  expect(screen.getByRole("button", { name: "Threads 2" })).toBeTruthy();
+  expect(screen.queryByText("Nothing by that shape.")).toBeNull();
+  expect(requests).toHaveLength(0);
   expect(await get(KEY)).toBe(baseline);
 });

@@ -6,23 +6,10 @@
  * program: Capture.tsx keeps orchestration only.
  */
 
-import { fmt, left, type Board, type ProfileIdentity } from "@/lib/model";
+import { fmt, left, type ProfileIdentity } from "@/lib/model";
 import type { Hits } from "@/lib/search";
 import { IntentionCard } from "@/app/Intentions";
 import { ProfileSignature } from "./ProfileSignature";
-import { QuestionAnswer } from "./QuestionAnswer";
-
-export function SearchResults({ board, question, ...props }: Parameters<typeof KeywordResults>[0] & {
-  board?: Board;
-  question?: string;
-}) {
-  return <>
-    {board && question && <QuestionAnswer key={question} board={board} question={question}
-      onOpenThread={props.onOpenThread} onOpenIntention={props.onOpenIntention} />}
-    <div className="section-label">Keyword matches</div>
-    <KeywordResults {...props} />
-  </>;
-}
 
 /**
  * What a query turned up, across all three kinds at once.
@@ -31,7 +18,7 @@ export function SearchResults({ board, question, ...props }: Parameters<typeof K
  * comparable enough to rank against each other — and you usually know which
  * kind of thing you are hunting for.
  */
-function KeywordResults({
+export function SearchResults({
   hits,
   now,
   onOpenThread,

@@ -999,7 +999,6 @@ export function Capture() {
 
             {searching ? (
               <SearchResults
-                board={data} question={query}
                 hits={hits}
                 now={now}
                 onOpenThread={(id, fragId) => {
