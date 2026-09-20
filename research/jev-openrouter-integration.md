@@ -1,6 +1,6 @@
 # Jev through OpenRouter: Capture integration decision
 
-_As of 2026-09-19. Research used current first-party OpenRouter and TypeSafe documentation only. No live inference/API call and no private Capture data were used._
+_Research began 2026-09-19 from current first-party OpenRouter and TypeSafe documentation. On 2026-09-20, the pinned endpoint was exercised in the isolated Capture Preview sandbox with invented launch-validation text only; no private Capture data was used._
 
 ## Decision
 
@@ -88,7 +88,7 @@ Every request requires:
 }
 ```
 
-OpenRouter documents `data_collection: "deny"` as allowing only providers that do not collect user data and `zdr: true` as allowing only zero-data-retention endpoints. OpenRouter itself says prompt retention is opt-in, while request metadata is retained. Its separate Input & Output Logging setting can retain full content for at least three months when enabled; this cannot be disabled in the Decisions request, although OpenRouter lets an operator exclude individual API keys in workspace Observability settings. Before anyone enables the shadow for private notes, the key must be excluded from Input & Output Logging and the separate input/output-use discount must be off. TypeSafe says it does not train on customer requests, but its ordinary privacy policy permits retaining personal data as reasonably necessary and its docs describe ZDR as an enterprise feature. I did **not** make a live call to prove that the current TypeSafe/OpenRouter endpoint is eligible for request-level ZDR. The adapter therefore fails closed: if no eligible endpoint exists, the shadow request fails and the normal sort remains untouched.
+OpenRouter documents `data_collection: "deny"` as allowing only providers that do not collect user data and `zdr: true` as allowing only zero-data-retention endpoints. OpenRouter itself says prompt retention is opt-in, while request metadata is retained. Its separate Input & Output Logging setting can retain full content for at least three months when enabled; this cannot be disabled in the Decisions request, although OpenRouter lets an operator exclude individual API keys in workspace Observability settings. Before anyone enables the shadow for private notes, the key must be excluded from Input & Output Logging and the separate input/output-use discount must be off. TypeSafe says it does not train on customer requests, but its ordinary privacy policy permits retaining personal data as reasonably necessary and its docs describe ZDR as an enterprise feature. The configured Preview key was confirmed by the owner to have logging/data sharing disabled, and harmless sandbox requests proved that the pinned endpoint accepts the locked no-fallback/no-collection/ZDR envelope. This is runtime compatibility evidence, not a guarantee about future provider terms. The adapter remains fail-open: if no eligible endpoint exists later, the shadow request fails and the normal route remains untouched.
 
 Production logs contain only aggregate comparison fields (candidate count, existing/new selection, candidate index, confidence, input-token count, agreement). They never contain capture text, candidate text, thread IDs, API keys, or provider response/error bodies.
 
@@ -113,7 +113,7 @@ The synthetic fixtures/harness and exact activation blocker are in
 
 ## Implementation status and additional Jev uses
 
-Ranked by likely Capture value. Latency estimates are qualitative; no live calls were made.
+Ranked by likely Capture value. Preview observations remain too small to justify routing or threshold changes.
 
 | Rank | Candidate use | Expected benefit | Latency / cost | Risk | Decision |
 |---:|---|---|---|---|---|
@@ -123,6 +123,18 @@ Ranked by likely Capture value. Latency estimates are qualitative; no live calls
 | 4 | **Distill settle or expensive-LLM gating** | Low-medium theoretical savings | Cheap gate before an unavoidable generative call | High product risk: Jev returns decisions, not the settled/polished artifact; a wrong gate can suppress the core output | **Defer**, matching the existing product decision. |
 
 Jev is useful only where Capture needs a narrow semantic branch. It cannot replace the current chat/generative paths that clean dictation, extract actions, invent a new thread name, summarize, proofread, or polish text.
+
+## Isolated Preview evidence (2026-09-20)
+
+All three shadows were exercised against invented, non-sensitive launch-validation text on `capture-playground` Preview. They remained post-response and observational:
+
+- thread rerank agreed with the authoritative sorter for both a new-thread decision (0.90 confidence, five candidates) and a later existing-thread decision (1.00 confidence, six candidates);
+- Recall classified a cited answer as `answer_fact`, placed the top cited source first, and reported high intent/evidence buckets without changing the answer or citations;
+- judge shadow returned a low score for the unrelated synthetic candidate and a materially higher score for the launch-related synthetic candidate, while the existing generative verdicts remained authoritative;
+- the four observed Decisions requests used 3,577 input tokens in total, approximately $0.000150 at the documented $0.042/M price;
+- Preview logs contained only the documented aggregate fields, and no application errors were recorded.
+
+This proves endpoint compatibility, containment, and the usefulness of the calibration signals. It does **not** prove a user-visible quality or latency improvement, select a threshold, or authorize production routing.
 
 ## Primary sources
 

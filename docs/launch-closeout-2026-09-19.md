@@ -11,6 +11,7 @@ This is a current-state reconciliation, not a deployment or release approval. Hi
 - One launch-relevant branch-only fix was not on `origin/main`: uncapping explicit tasks in Sort and Distill. It has been integrated into this closeout working tree without changing its preserved source branch. Tests were adapted for current `primaryActions` and sanitized-provider interfaces.
 - The lockfile resolved four development-tool advisories (two moderate, two high) by moving to fixed in-range transitive versions. Earlier full and production audits returned zero. The second-pass audit is **indeterminate**, not failed-security evidence: npm's audit services were under scheduled maintenance and both supported audit endpoints failed before returning advisory data.
 - No other dirty-worktree artifact is a safe launch port. The remaining manual acceptance is consolidated into exactly two owner sessions below. A local-only hosted source gate now removes the synthetic unit/SQL/browser-simulator work from Session A.
+- The combined candidate was deployed to the isolated `capture-playground` Preview on 2026-09-20. OTP authentication, Cloud identity/subscription readback, hosted sync through the app, a real cited answer, and all three non-authoritative Jev shadows completed with synthetic non-sensitive text. Retake passed the hosted two-scene answer flow at 1920×1080; this narrows Session A but does not replace two-account, full billing-lifecycle, Storage-race, or physical-device acceptance.
 
 ## Current implemented / partial / absent matrix
 

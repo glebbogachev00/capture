@@ -1,6 +1,6 @@
 # Jev Recall/Search shadow calibration
 
-_Status: foundation only. Disabled by default. No live calls or private data were used._
+_Status: observational foundation. Disabled by default in source. A harmless isolated Preview call succeeded on 2026-09-20; no private data was used._
 
 ## Runtime boundary
 
@@ -73,11 +73,12 @@ threshold, routing change, source reorder, or prose-call suppression.
 Do not activate routing, source reordering, or prose-call suppression until all
 of these are resolved:
 
-1. Confirm the exact OpenRouter key is excluded from Input & Output Logging and
-   input/output-use sharing is disabled.
-2. Verify with a harmless non-sensitive request that the exact Decisions
-   endpoint/model accepts `data_collection:"deny"` and `zdr:true` with fallback
-   disabled.
+1. Reconfirm before production that the exact OpenRouter key remains excluded
+   from Input & Output Logging and input/output-use sharing remains disabled.
+2. Recheck before production that the exact Decisions endpoint/model still
+   accepts `data_collection:"deny"` and `zdr:true` with fallback disabled. A
+   harmless isolated Preview request passed this compatibility check on
+   2026-09-20.
 3. Approve OpenRouter/TypeSafe as an additional recipient for bounded Recall
    questions and excerpts, and approve the disclosure for that extra processor.
 4. Collect enough approved, representative labeled observations to evaluate

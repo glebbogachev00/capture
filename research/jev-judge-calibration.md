@@ -1,7 +1,7 @@
 # Jev `/api/judge` calibration gate
 
-_Synthetic foundation only. No private Capture data, credentials, or live
-model calls were used._
+_Synthetic foundation plus one harmless isolated Preview observation. No
+private Capture data or credential values were used._
 
 ## Current production decision
 
@@ -31,10 +31,11 @@ evidence that 0.5 or any other cutoff is safe.
 
 ## Exact activation blocker
 
-No threshold can be derived yet because all three required inputs are absent:
+No threshold can be derived yet because the required calibration inputs remain
+insufficient:
 
-1. No checked-in outputs from the pinned Jev model exist; this work was
-   prohibited from making a live API call.
+1. Only one two-candidate, non-sensitive Preview observation from the pinned
+   model exists. It proved transport and score separation, not calibration.
 2. The small synthetic fixture set proves the measurement harness, not the
    distribution of future Tidy candidates. It cannot guarantee the costliest
    error—rejecting a suggestion the generative judge should keep.
