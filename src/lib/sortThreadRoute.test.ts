@@ -56,7 +56,9 @@ it("does not broadcast the real mom deadline to unrelated sibling actions", asyn
 });
 
 const ai = vi.hoisted(() => ({ generateObject: vi.fn(), generateText: vi.fn() }));
+const jev = vi.hoisted(() => ({ scheduleJevThreadRerankShadow: vi.fn() }));
 vi.mock("ai", () => ai);
+vi.mock("@/lib/jevThreadRerank", () => jev);
 vi.mock("@/lib/clientIp", () => ({ clientIp: () => "synthetic" }));
 vi.mock("@/lib/limiter", () => ({ modelRateLimit: () => ({ allowed: true }) }));
 vi.mock("@/lib/providers", () => ({
@@ -125,4 +127,142 @@ it("does not carry selected action provenance into a different series-overridden
   const out = await response.json();
   expect(out.threadId).toBe("pricing");
   expect(out.primaryActions).toEqual([]);
+});
+
+it("schedules an inert Jev shadow with only the reconciled thinking decision", async () => {
+  jev.scheduleJevThreadRerankShadow.mockClear();
+  ai.generateObject.mockImplementation(async ({ schema }) => ({ object: schema.parse(modelResult) }));
+
+  const response = await POST(new Request("http://localhost/api/sort", {
+    method: "POST",
+    body: JSON.stringify({
+      raw,
+      threads: [
+        { id: "pricing", name: "Annual pricing", about: thinking },
+        { id: "webhooks", name: "Webhook reliability", about: "Retry failures" },
+      ],
+    }),
+  }));
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject(modelResult);
+  expect(jev.scheduleJevThreadRerankShadow).toHaveBeenCalledWith({
+    capture: thinking,
+    candidates: [
+      { id: "pricing", name: "Annual pricing", about: thinking },
+      { id: "webhooks", name: "Webhook reliability", about: "Retry failures" },
+    ],
+    sorterThreadId: "pricing",
+    sorterCreatedNewThread: false,
+  });
+});
+
+it("does not schedule Jev for an action result", async () => {
+  jev.scheduleJevThreadRerankShadow.mockClear();
+  ai.generateObject.mockImplementation(async ({ schema }) => ({
+    object: schema.parse({
+      ...modelResult,
+      kind: "action",
+      actions: ["Fix the Stripe webhook retry bug"],
+      primaryActions: [],
+      primaryText: null,
+      threadId: null,
+      threadName: null,
+    }),
+  }));
+
+  const response = await POST(new Request("http://localhost/api/sort", {
+    method: "POST",
+    body: JSON.stringify({ raw, threads: [] }),
+  }));
+
+  expect(response.status).toBe(200);
+  expect(jev.scheduleJevThreadRerankShadow).not.toHaveBeenCalled();
+});
+
+it.each([null, "", "   "])("skips Jev rather than leaking clean action text when primaryText is %j", async (primaryText) => {
+  jev.scheduleJevThreadRerankShadow.mockClear();
+  ai.generateObject.mockImplementation(async ({ schema }) => ({
+    object: schema.parse({
+      ...modelResult,
+      kind: "both",
+      actions: ["Fix the Stripe webhook retry bug"],
+      primaryActions: [],
+      primaryText,
+      threadId: "pricing",
+      threadName: null,
+    }),
+  }));
+
+  const response = await POST(new Request("http://localhost/api/sort", {
+    method: "POST",
+    body: JSON.stringify({
+      raw: thinking,
+      threads: [{ id: "pricing", name: "Annual pricing", about: thinking }],
+    }),
+  }));
+
+  expect(response.status).toBe(200);
+  expect(jev.scheduleJevThreadRerankShadow).not.toHaveBeenCalled();
+});
+
+it("uses clean thinking for an unsplit thread whose primaryText is null", async () => {
+  jev.scheduleJevThreadRerankShadow.mockClear();
+  ai.generateObject.mockImplementation(async ({ schema }) => ({
+    object: schema.parse({
+      ...modelResult,
+      clean: thinking,
+      kind: "thread",
+      actions: [],
+      primaryActions: [],
+      primaryText: null,
+      threadId: "pricing",
+      threadName: null,
+    }),
+  }));
+
+  const response = await POST(new Request("http://localhost/api/sort", {
+    method: "POST",
+    body: JSON.stringify({
+      raw: thinking,
+      threads: [{ id: "pricing", name: "Annual pricing", about: thinking }],
+    }),
+  }));
+
+  expect(response.status).toBe(200);
+  expect(jev.scheduleJevThreadRerankShadow).toHaveBeenCalledWith(
+    expect.objectContaining({ capture: thinking, sorterThreadId: "pricing" })
+  );
+});
+
+it("marks a missing existing id as the sorter's new-thread abstention when thinking is isolated", async () => {
+  jev.scheduleJevThreadRerankShadow.mockClear();
+  ai.generateObject.mockImplementation(async ({ schema }) => ({
+    object: schema.parse({
+      ...modelResult,
+      kind: "thread",
+      actions: [],
+      primaryActions: [],
+      primaryText: thinking,
+      threadId: null,
+      threadName: "Pricing decision",
+    }),
+  }));
+
+  const response = await POST(new Request("http://localhost/api/sort", {
+    method: "POST",
+    body: JSON.stringify({
+      raw: thinking,
+      threads: [{ id: "pricing", name: "Annual pricing", about: thinking }],
+    }),
+  }));
+
+  expect(response.status).toBe(200);
+  expect(jev.scheduleJevThreadRerankShadow).toHaveBeenCalledWith(
+    expect.objectContaining({
+      capture: thinking,
+      sorterThreadId: null,
+      sorterCreatedNewThread: true,
+    })
+  );
 });

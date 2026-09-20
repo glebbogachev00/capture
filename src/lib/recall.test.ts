@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Action, Board, Intention, Thread } from "./model";
 import { search } from "./search";
-import { RECALL_MAX_SOURCES, RECALL_MAX_SOURCE_CHARS, RecallSourceSchema, RecallAnswerSchema, recallSources, validateRecallAnswer } from "./recall";
+import { RECALL_MAX_SOURCES, RECALL_MAX_SOURCE_CHARS, RecallSourceSchema, RecallAnswerSchema, isLikelyRecallQuestion, recallRequestFingerprint, recallSources, validateRecallAnswer } from "./recall";
 
 const board = (patch: Partial<Board> = {}): Board => ({
   actions: [], threads: [], intentions: [], principles: [], ledger: [], corrections: [], ...patch,
@@ -15,6 +15,66 @@ const thread = (id: string, text: string, patch: Partial<Thread> = {}): Thread =
 const intention = (id: string, rawInput: string): Intention => ({
   id, rawInput, expandedIntention: "Generated expansion", recommendedActions: [],
   counterIntentions: [], at: 30, updatedAt: 40, number: 1,
+});
+
+describe("isLikelyRecallQuestion", () => {
+  it.each([
+    "What did I decide about Capture pricing?",
+    "When did we settle the launch date",
+    "Did I write anything about orchard planting?",
+    "Is the Cloud plan still the current decision",
+    "¿Qué decidí sobre los precios?",
+    "Что я решил о ценах？",
+    "ماذا قررت بشأن التسعير؟",
+    "为什么推迟发布？",
+    "Τι αποφασίσαμε για την τιμολόγηση;",
+  ])("recognizes an explicit question: %s", (query) => {
+    expect(isLikelyRecallQuestion(query)).toBe(true);
+  });
+
+  it.each([
+    "Capture pricing",
+    "notes about orchard planting",
+    "I decided to keep thinking features free.",
+    "what we decided about pricing",
+    "show launch notes",
+    "can opener",
+    "can opener?",
+    "Will Smith",
+    "Will Smith?",
+    "Project Alpha?",
+    "Roadmap: Q4？",
+    "What We Do?",
+    "Washington launch notes?",
+    "Quick brown fox?",
+    "Question answer design?",
+    "Workspace pricing notes？",
+    "Washington launch notes;",
+    "Quick brown fox؟",
+    "Qué launch notes;",
+    "Qué launch notes；",
+    "what-did-I-decide?.md",
+    "What did I decide?.txt",
+    "\"What did I decide?\"",
+    "“What did I decide?”",
+    "What did",
+    "Why is",
+    "Can I",
+    "ab",
+    "x".repeat(501),
+  ])("does not treat an ordinary search as a question: %s", (query) => {
+    expect(isLikelyRecallQuestion(query)).toBe(false);
+  });
+});
+
+describe("recallRequestFingerprint", () => {
+  it("normalizes the question but keys the exact bounded source snapshot", () => {
+    const sources = recallSources(board({ threads: [thread("t", "Pricing stays free")] }), "pricing");
+    const first = recallRequestFingerprint("  WHAT   did I decide about pricing?  ", sources);
+    expect(recallRequestFingerprint("what did i decide about pricing?", structuredClone(sources))).toBe(first);
+    expect(recallRequestFingerprint("what did i decide about pricing?", [{ ...sources[0], text: "Pricing changed" }])).not.toBe(first);
+    expect(recallRequestFingerprint("what did i decide about launch?", sources)).not.toBe(first);
+  });
 });
 
 describe("validateRecallAnswer", () => {

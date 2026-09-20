@@ -5,6 +5,7 @@ import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { withFallback } from "@/lib/providers";
 import { preferredFor } from "@/lib/routing";
+import { scheduleJevJudgeShadow } from "@/lib/jevJudgeShadow";
 
 /**
  * The judge — does this candidate mean anything?
@@ -166,6 +167,14 @@ export async function POST(request: Request) {
     if (!verdicts.length) {
       return Response.json({ error: "no usable judgement" }, { status: 503 });
     }
+
+    /* Separate disabled-by-default observation only. The generative judge has
+       already seen the full batch and supplied the user-facing reasons; Jev
+       cannot remove, rewrite, delay, or replace any candidate in this route. */
+    scheduleJevJudgeShadow({
+      candidates: body.candidates,
+      generativeVerdicts: verdicts,
+    });
 
     return Response.json({ verdicts, via });
   } catch {

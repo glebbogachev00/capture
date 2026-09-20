@@ -106,6 +106,41 @@ describe("a second Groq account", () => {
   });
 });
 
+describe("operator provider preference", () => {
+  async function attemptedOrder(jobPreference?: string) {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    process.env.OPENROUTER_API_KEY = "openrouter";
+    delete process.env.GROQ_API_KEY_2;
+    delete process.env.CEREBRAS_API_KEY;
+    delete process.env.MISTRAL_API_KEY;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const { withFallback } = await import("./providers");
+    const seen: string[] = [];
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(
+      withFallback(async (tier) => {
+        seen.push(tier.name);
+        throw new Error("synthetic outage");
+      }, jobPreference)
+    ).rejects.toThrow("synthetic outage");
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+    return seen;
+  }
+
+  it("uses a job default when the operator did not choose a provider", async () => {
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+    expect(await attemptedOrder("openrouter")).toEqual(["openrouter", "groq"]);
+  });
+
+  it("keeps an explicit operator preference ahead of a conflicting job default", async () => {
+    process.env.CAPTURE_MODEL_PROVIDER = "openrouter";
+    expect(await attemptedOrder("groq")).toEqual(["openrouter", "groq"]);
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+  });
+});
+
 describe("a tier that is out for the day", () => {
   it("is skipped on the next request instead of probed again", async () => {
     vi.resetModules();

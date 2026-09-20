@@ -1,4 +1,4 @@
-import type { Board, Frag, Thread } from "./model";
+import type { Board, Thread } from "./model";
 import { applyActionDone } from "./actionOps";
 import { threadHoldsNote } from "./organize";
 import { isRefile, refileRule } from "./refiled";

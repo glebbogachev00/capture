@@ -9,6 +9,7 @@ import { ownerPrecondition } from "@/lib/ownerPrecondition";
 import { getCloudConfig } from "@/lib/supabase/config";
 import { createCloudServerClient } from "@/lib/supabase/server";
 import { identityFromClaims } from "@/lib/supabase/identity";
+import { scheduleJevRecallShadow } from "@/lib/jevRecallShadow";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -165,6 +166,13 @@ export async function POST(request: Request) {
     budget.signal.throwIfAborted();
     if (value instanceof RecallError) throw value;
     if (identityExpired()) throw new RecallError(401, "Sign in to use recall.");
+    /* The cited answer remains authoritative and is complete before this
+       disabled-by-default observation is registered. Its default scheduler is
+       Next's after(), so Decisions work cannot delay or rewrite this response. */
+    scheduleJevRecallShadow({
+      ...body,
+      authoritativeAnswer: value,
+    });
     return json(value);
   } catch (error) {
     return error instanceof RecallError

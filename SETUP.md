@@ -32,19 +32,74 @@ cp .env.example .env.local
 # uncomment GROQ_API_KEY= and paste your key
 ```
 
+For a funded OpenRouter account, run `npm run setup:openrouter`. It asks for
+the hidden key and the exact `provider/model` slug shown by OpenRouter, then
+makes OpenRouter first while retaining any other configured providers as
+fallbacks. To make it the sole provider, remove the other active provider-key
+lines from `.env.local`. The wizard does not guess a paid model from account
+credits.
+
+The wizard validates the `provider/model` format and rejects the current Jev
+Decisions slugs (`typesafe/jev-1.13` and `~typesafe/jev-latest`) because
+Capture's normal provider chain uses OpenRouter chat completions. Before using
+another model type, confirm on OpenRouter that it supports chat completions.
+Jev's separate, disabled-by-default Decisions shadows are documented below.
+
 Provider order (fastest first):
 
 | Order | Provider | Get a key | Env var |
 |---|---|---|---|
 | 1 | Groq | https://console.groq.com/keys | `GROQ_API_KEY` |
 | 2 | Groq (second key) | https://console.groq.com/keys | `GROQ_API_KEY_2` |
-| 3 | Mistral | https://console.mistral.ai | `MISTRAL_API_KEY` |
-| 4 | Google AI Studio | https://aistudio.google.com/apikey | `GOOGLE_GENERATIVE_AI_API_KEY` |
-| 5 | OpenRouter | https://openrouter.ai/keys | `OPENROUTER_API_KEY` |
+| 3 | Cerebras | https://cloud.cerebras.ai | `CEREBRAS_API_KEY` |
+| 4 | Mistral | https://console.mistral.ai | `MISTRAL_API_KEY` |
+| 5 | Google AI Studio | https://aistudio.google.com/apikey | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| 6 | OpenRouter | https://openrouter.ai/keys | `OPENROUTER_API_KEY` |
 
 A missing key just skips that tier — one key is a complete setup. If every
 provider fails, captures are still saved verbatim and flagged unsorted —
 nothing is ever lost, it just waits to be sorted.
+
+Set `CAPTURE_MODEL_PROVIDER` to a configured provider name (`openrouter`,
+`groq`, `cerebras`, `mistral`, or `gemini`) to move it to the front without
+disabling the remaining fallbacks. This explicit operator choice outranks the
+per-job defaults in `src/lib/routing.ts`.
+
+On Vercel, a funded OpenRouter setup needs all three settings in the target
+environment; adding only the key leaves the default model/order in effect:
+
+```bash
+vercel env add OPENROUTER_API_KEY production
+vercel env add OPENROUTER_MODEL production
+vercel env add CAPTURE_MODEL_PROVIDER production
+```
+
+The CLI reads each value from stdin. Enter the exact chat-capable model slug
+for `OPENROUTER_MODEL` and `openrouter` for `CAPTURE_MODEL_PROVIDER`; do not put
+key values in shell history or documentation.
+
+### Optional Jev Decisions shadows
+
+`CAPTURE_JEV_THREAD_RERANK_SHADOW=1` observes thread-destination agreement. A
+pure-thread result may use bounded reconciled `clean` text when `primaryText`
+is absent; a mixed `both` result requires nonempty isolated `primaryText` and
+never substitutes the complete mixed capture.
+`CAPTURE_JEV_JUDGE_SHADOW=1` separately compares one Jev Noul score per Tidy
+judge candidate after the existing generative judge has already returned its
+full verdict list and user-facing reasons.
+`CAPTURE_JEV_RECALL_SHADOW=1` separately observes query intent, opaque source
+ranking (including `none`), and evidence sufficiency in one Decisions request
+after the existing cited Recall answer is complete. It does not reorder
+sources, gate the prose model, write prose/citations, or change the response.
+All three flags default off, require `OPENROUTER_API_KEY`, use locked
+ZDR/no-collection/no-fallback routing, and never alter the board or response.
+No judge or Recall generative calls are eliminated; calibration is blocked as
+documented in `research/jev-judge-calibration.md` and
+`research/jev-recall-calibration.md`.
+
+Before any private-data shadow is enabled, exclude its OpenRouter key from
+Input & Output Logging and verify the Jev endpoint accepts the required privacy
+routing with a non-private payload. A routing failure simply skips the shadow.
 
 ## 2. Run it
 

@@ -18,6 +18,7 @@ import { Markup } from "./Markup";
 import { BusyLine, Row, TCard } from "@/components/cards";
 import { GroupedActionRows } from "@/components/GroupedActionRows";
 import { SearchResults } from "@/components/SearchResults";
+import { createQuestionAnswerSession, QuestionAnswer } from "@/components/QuestionAnswer";
 import { ThreadView } from "@/components/ThreadView";
 import { ThreadChoices } from "@/components/ThreadChoices";
 import { degradedNote } from "@/lib/degraded";
@@ -92,15 +93,14 @@ const TRY = {
 
 /** How long a ticked action shows itself done before it leaves. Long enough
     to read as a finish, short enough that nobody waits on it. */
-
 export function Capture() {
+  const [answerSession, setAnswerSession] = useState(createQuestionAnswerSession);
   /* The ticking clock the countdowns and shelf lives derive from. */
   const now = useSyncExternalStore(
     subscribeToClock,
     clockSnapshot,
     clockServerSnapshot
   );
-
   /* Input device plumbing: the hidden file picker, and the speech recogniser
      (shared with Distill — the mic routes to whichever surface is open). */
   const fileRef = useRef<HTMLInputElement>(null);
@@ -272,7 +272,8 @@ export function Capture() {
     learnedRules,
     toggleLearnedRule,
   } = useBoard(now);
-
+  const updateQuery = (next: string) => { if (next !== query) {
+    setAnswerSession((value) => ({ ...value, revision: value.revision + 1 })); setQuery(next); } };
   /* The rollback days, read when Settings opens — a list this short is
      cheaper to re-read than to keep in sync with every write. */
   const [snapDays, setSnapDays] = useState<string[]>([]);
@@ -986,16 +987,21 @@ export function Capture() {
               <input
                 type="search"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search everything"
-                aria-label="Search everything"
+                onChange={(e) => updateQuery(e.target.value)}
+                placeholder="Search or ask a question"
+                aria-label="Search or ask a question"
               />
               {searching && (
-                <button className="ghost" onClick={() => setQuery("")}>
+                <button className="ghost" onClick={() => updateQuery("")}>
                   Clear
                 </button>
               )}
             </div>
+
+            <QuestionAnswer board={data} question={query} session={answerSession}
+              onOpenThread={(id, fragId) => {
+                setOpen(id); setOpenFrag(fragId || null);
+              }} onOpenIntention={(id) => setOpenIntention(id)} />
 
             {searching ? (
               <SearchResults

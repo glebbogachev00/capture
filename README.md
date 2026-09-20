@@ -101,6 +101,10 @@ npm run setup       # prompts for your Groq key (free at console.groq.com/keys),
 npm run dev
 ```
 
+For funded OpenRouter, use `npm run setup:openrouter`; it requires the exact
+model slug from OpenRouter and configures OpenRouter as the preferred provider
+without deleting any existing fallbacks.
+
 Then open http://localhost:3000. Nothing sorts until you add at least one
 model key.
 
@@ -138,12 +142,16 @@ own is a complete setup.
 |---|---|---|---|
 | 1 | Groq | [console.groq.com/keys](https://console.groq.com/keys) | Very fast, generous free tier |
 | 2 | Groq (second key) | [console.groq.com/keys](https://console.groq.com/keys) | Optional: `GROQ_API_KEY_2` doubles the daily allowance; same model, twice the headroom |
-| 3 | Mistral | [console.mistral.ai](https://console.mistral.ai) | Fast fallback once configured; test account/model access directly, and the chain falls through on 429s |
-| 4 | Google AI Studio | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Reliable free tier — the quality fallback |
-| 5 | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | Last resort — defaults to a `:free` model; paid models need a funded account |
+| 3 | Cerebras | [cloud.cerebras.ai](https://cloud.cerebras.ai) | Fast fallback when the account has model access |
+| 4 | Mistral | [console.mistral.ai](https://console.mistral.ai) | Fast fallback once configured; test account/model access directly, and the chain falls through on 429s |
+| 5 | Google AI Studio | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | Reliable free tier — the quality fallback |
+| 6 | OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | Last by default; exact paid model slug required for funded use |
 
-Model ids are overridable (`GROQ_MODEL`, `MISTRAL_MODEL`, `GEMINI_MODEL`,
-`OPENROUTER_MODEL`), so a retired model can be swapped without editing source.
+Model ids are overridable (`GROQ_MODEL`, `CEREBRAS_MODEL`, `MISTRAL_MODEL`,
+`GEMINI_MODEL`, `OPENROUTER_MODEL`), so a retired model can be swapped without
+editing source.
+Set `CAPTURE_MODEL_PROVIDER=openrouter` to try a configured OpenRouter model
+first. Leave every other provider key unset to use OpenRouter alone.
 
 When a capture carries a photo, the vision tier (Gemini) captions it first, so
 the sorter files the capture by what it shows. The caption is a bonus layer:
@@ -195,11 +203,18 @@ there unless you mean it: with it set locally, `npm run phone` stops using
 
 ```bash
 vercel env add OPENROUTER_API_KEY production
+vercel env add OPENROUTER_MODEL production
+vercel env add CAPTURE_MODEL_PROVIDER production
 vercel env add APP_PASSWORD production
 vercel deploy --prod
 ```
 
 `vercel env add` reads the value from stdin and does not echo it.
+For the two non-secret OpenRouter settings, enter a `provider/model` slug that
+OpenRouter documents as supporting chat completions, and `openrouter`. The
+wizard validates the slug format and rejects the current Jev slugs because
+they are Decisions-only; it does not query OpenRouter for every model's
+capabilities.
 
 Everything is written `access: "private"` and read back through the SDK, so
 no board and no photo is reachable from a URL alone.

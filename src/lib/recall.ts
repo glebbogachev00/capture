@@ -4,6 +4,53 @@ import type { Board } from "./model";
 export const RECALL_MAX_SOURCES = 12;
 export const RECALL_MAX_SOURCE_CHARS = 1500;
 
+const QUESTION_END = /[?？؟;]$/u;
+const OUTER_QUOTED = /^(?:"[\s\S]*"|'[\s\S]*'|“[\s\S]*”|‘[\s\S]*’|«[\s\S]*»|「[\s\S]*」|『[\s\S]*』)$/u;
+const FILE_NAME = /(?:^|[/\\])?[^/\\\s]+\.[\p{L}\p{N}]{1,10}[?？؟;]?$/iu;
+const ENGLISH_AUX = new Set("do does did is are was were can could will would should have has had".split(" "));
+const ENGLISH_WH = new Set("what when where why who whom whose which".split(" "));
+const ENGLISH_SUBJECT = new Set((
+  "i me we us you he she it they there this that these those the a an my mine our ours your yours his her hers its their theirs"
+).split(" "));
+const CJK_QUESTION_LEAD = /^(?:什么|为什么|何时|什么时候|哪里|哪儿|谁|怎么|如何|是否|有没有|いつ|なぜ|どこ|誰|どう|何)/u;
+const MULTILINGUAL_QUESTION_LEAD = new Set((
+  "qué que cuándo cuando dónde donde cómo como cuál cual quién quien що что когда где почему зачем как кто какой " +
+  "ماذا متى أين لماذا كيف من هل τι πότε πού γιατί πώς ποιος wer was wann wo warum wie welche qui quand où pourquoi comment quel"
+).split(" "));
+const QUESTION_WORD = /[\p{L}\p{N}][\p{L}\p{M}\p{N}'’_-]*/gu;
+
+const normalizeQuestion = (question: string): string => question.normalize("NFC").trim().replace(/\s+/gu, " ").toLowerCase();
+
+/** Conservative automatic gate: punctuation alone is never enough. */
+export function isLikelyRecallQuestion(query: string): boolean {
+  // Inspect punctuation before normalization so a Greek question mark remains
+  // distinguishable from an ordinary semicolon, which must stay local-only.
+  const trimmed = query.trim();
+  if (trimmed.length < 3 || trimmed.length > 500 || OUTER_QUOTED.test(trimmed) || FILE_NAME.test(trimmed)) return false;
+  const punctuated = QUESTION_END.test(trimmed);
+  const body = trimmed.replace(/^¿\s*/u, "").replace(/[?？؟;]\s*$/u, "").trim().normalize("NFC");
+  if (punctuated && CJK_QUESTION_LEAD.test(body) && body.length >= 4) return true;
+  const words = (body.match(QUESTION_WORD) ?? []).map((word) => word.toLowerCase());
+  if (words.length < 3) return false;
+
+  const first = words[0];
+  const second = words[1];
+  if (ENGLISH_WH.has(first) && ENGLISH_AUX.has(second)) {
+    return words.length >= (first === "who" || first === "whom" ? 3 : 4);
+  }
+  if (first === "how") {
+    if (ENGLISH_AUX.has(second)) return words.length >= 4;
+    if (["much", "many", "long", "often", "far", "old", "soon", "well"].includes(second)) return words.length >= 4;
+  }
+  if (ENGLISH_AUX.has(first)) return words.length >= 3 && ENGLISH_SUBJECT.has(second);
+  if (punctuated && first === "what" && second === "about") return words.length >= 3;
+  return punctuated && (MULTILINGUAL_QUESTION_LEAD.has(first) || (first === "por" && second === "qué"));
+}
+
+export function recallRequestFingerprint(question: string, sources: RecallSource[]): string {
+  return JSON.stringify([normalizeQuestion(question), sources]);
+}
+
 const nonblank = (max: number, min = 1) => z.string().min(min).max(max).refine((s) => /\S/u.test(s));
 const SourceIdSchema = nonblank(400);
 const MAX_DATE_MS = 8_640_000_000_000_000;

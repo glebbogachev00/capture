@@ -44,6 +44,42 @@ describe("chain", () => {
     expect(chain()).toEqual([]);
   });
 
+  it("supports OpenRouter as the only configured provider", () => {
+    for (const k of ALL_KEYS) vi.stubEnv(k, "");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    vi.stubEnv("OPENROUTER_MODEL", "provider/paid-model");
+
+    expect(chain().map((tier) => tier.name)).toEqual(["openrouter"]);
+  });
+
+  it("moves the configured preferred provider to the front without removing fallbacks", () => {
+    for (const k of ALL_KEYS) vi.stubEnv(k, "test-key");
+    vi.stubEnv("CAPTURE_MODEL_PROVIDER", "openrouter");
+
+    expect(chain().map((t) => t.name)).toEqual([
+      "openrouter",
+      "groq",
+      "groq-2",
+      "cerebras",
+      "mistral",
+      "gemini",
+    ]);
+  });
+
+  it("ignores a preferred provider that is not configured", () => {
+    for (const k of ALL_KEYS) vi.stubEnv(k, "test-key");
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    vi.stubEnv("CAPTURE_MODEL_PROVIDER", "openrouter");
+
+    expect(chain().map((t) => t.name)).toEqual([
+      "groq",
+      "groq-2",
+      "cerebras",
+      "mistral",
+      "gemini",
+    ]);
+  });
+
   it("defaults Cerebras to gpt-oss-120b unless CEREBRAS_MODEL overrides it", () => {
     const idOf = (tier?: { model: unknown }) =>
       (tier?.model as unknown as { modelId: string }).modelId;

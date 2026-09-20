@@ -42,11 +42,14 @@ describe("Capture Cloud billing client", () => {
   it("keeps management and status retry available while pending billing denies access", async () => {
     globalThis.fetch = vi.fn().mockImplementation(async () => Response.json({ tier: "free", status: "active", reconciliationRequired: true }));
     render(<CloudAccountPanel />);
-    const manage = await screen.findByRole("button", { name: "Manage subscription" });
+    await screen.findByRole("button", { name: "Manage subscription" });
     expect(screen.queryByText("See Capture Cloud")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry status" }));
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
-    fireEvent.click(manage);
+    await waitFor(() => expect(
+      (screen.getByRole("button", { name: "Manage subscription" }) as HTMLButtonElement).disabled,
+    ).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "Manage subscription" }));
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith("/api/cloud/portal", expect.any(Object)));
   });
   it("normalizes the authenticated status response", async () => {

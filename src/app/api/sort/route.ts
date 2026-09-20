@@ -9,6 +9,7 @@ import { modelRateLimit } from "@/lib/limiter";
 import { sanitizeProviderError, visionChain, withFallback } from "@/lib/providers";
 import { DUE_RULE, ROUTING_RULE, todayLine } from "@/lib/engineRules";
 import { enforceStandingDecision, reconcileSorted } from "@/lib/sort";
+import { scheduleJevThreadRerankShadow } from "@/lib/jevThreadRerank";
 
 /**
  * The sorting engine.
@@ -274,7 +275,7 @@ function prompt(
       raw +
       '"""\n\n' +
       'Set kind to "action". Leave the thread fields null.\n' +
-      "Fill actions with 1-3 imperative one-line items — the thing to actually do, not a description of the thinking around it. If only one thing is genuinely doable, return one.\n" +
+      "Fill actions with every distinct, explicit task as an imperative one-line item — the thing to actually do, not a description of the thinking around it. Never invent a task or duplicate one. Keep clauses describing the same task together. If only one thing is genuinely doable, return one.\n" +
       "Each one must stand alone: it will be read as a single line with none of the surrounding words, so put the subject INTO it. \"Have engineering handle the verification workflow\", never \"Have engineering handle this\".\n" +
       "Set clean to the excerpt tidied up, and title to at most six words.\n\n" +
       "shelfLife is how long this stays worth looking at. Judge it honestly:\n" +
@@ -331,7 +332,7 @@ function prompt(
     (raw || "(image only)") +
     '"""\n\n' +
     'There are four kinds. The reference examples below are your guide for telling them apart.\n' +
-    'kind = "action" when this is a task, errand, reminder, or decision that gets closed out — there is a concrete thing to do. Fill "actions" with the one to three items actually being asked for, and leave the thread fields null. Never pad the list: if only one thing is genuinely doable, return one.\n' +
+    'kind = "action" when this is a task, errand, reminder, or decision that gets closed out — there is a concrete thing to do. Fill "actions" with every distinct, explicit task actually being asked for as an imperative one-line item, and leave the thread fields null. Never pad the list: if only one thing is genuinely doable, return one.\n' +
     'kind = "thread" when this is thinking, worldbuilding, an idea being developed, or material that accumulates — a subject to keep adding to, with no single thing to do. Set threadId if one clearly fits, otherwise invent a short threadName. Leave "actions" empty.\n' +
     'kind = "intention" only when they are declaring something they are calling into being about themselves or their life — a state they want to be living in, spoken as a wish, a resolve, or an aspiration. "I want to wake at 6 and actually feel rested", "I live somewhere with light", "I stop taking on work I resent". These are about how they want to be, not tasks to close or subjects to think about. Set "actions" and "primaryActions" to []. Leave the thread fields null.\n' +
     'An intention is the ESSENCE of a state — a sentence or two. A detailed PLAN is not one, however much it is spoken in "I will": the moment the words carry schedules, counts, quantities, exercise lists, or step-by-step structure ("I will run twice a week for 30 to 40 minutes, do push-ups, dips and pull-ups, walk 10,000 steps, keep to 500-600 calories, and organize my schedule around it"), the person is DESIGNING a routine, not declaring a state — that is thinking that accumulates, so it is a thread. Filing a plan as an intention throws the plan away: the intention keeps only a condensed sentence, and paragraphs of specifics the person dictated are lost. When a capture holds both a true declaration AND its detailed plan, the plan is the primary thing — file it as the thread, and let the person declare the one-line intention separately if they want it. Length is the cheapest tell: multiple paragraphs are almost never an intention.\n' +
@@ -484,6 +485,27 @@ export async function POST(request: Request) {
       primaryActions: standing.threadId === value.threadId && standing.threadName === value.threadName
         ? value.primaryActions : [],
     });
+    /* Jev is an opt-in shadow only. It receives the already-isolated thinking
+       share, never images/history/rules, runs after this response, and cannot
+       change the destination. A failed shadow therefore leaves both the
+       successful filing path and the existing unsorted failure path intact. */
+    const jevCapture =
+      reconciled.kind === "thread"
+        ? reconciled.primaryText?.trim() || reconciled.clean.trim()
+        : reconciled.kind === "both"
+          ? reconciled.primaryText?.trim()
+          : undefined;
+    if (
+      (reconciled.kind === "thread" || reconciled.kind === "both") &&
+      jevCapture
+    ) {
+      scheduleJevThreadRerankShadow({
+        capture: jevCapture,
+        candidates: body.threads,
+        sorterThreadId: reconciled.threadId,
+        sorterCreatedNewThread: !reconciled.threadId,
+      });
+    }
     return Response.json({ ...value, ...reconciled, via });
   } catch (error) {
     /* AI SDK errors can carry the full request body, including the person's

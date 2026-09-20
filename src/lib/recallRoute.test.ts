@@ -10,9 +10,11 @@ const mocks = vi.hoisted(() => ({
   server: vi.fn(),
   claims: vi.fn(),
   playground: false,
+  scheduleJevRecallShadow: vi.fn(),
 }));
 vi.mock("ai", async (original) => ({ ...await original<typeof import("ai")>(), generateText: mocks.generateText }));
 vi.mock("@/lib/providers", () => ({ withFallback: mocks.fallback }));
+vi.mock("@/lib/jevRecallShadow", () => ({ scheduleJevRecallShadow: mocks.scheduleJevRecallShadow }));
 vi.mock("@/lib/limiter", () => ({ modelRateLimit: mocks.limiter }));
 vi.mock("@/lib/supabase/config", () => ({ getCloudConfig: mocks.config }));
 vi.mock("@/lib/supabase/server", () => ({ createCloudServerClient: mocks.server }));
@@ -371,6 +373,26 @@ describe("POST /api/recall", () => {
       expect(response?.status).toBe(401);
       expect(mocks.generateText).not.toHaveBeenCalled();
     });
+  });
+
+  it("schedules an inert Jev Recall shadow only after the authoritative cited result exists", async () => {
+    const response = await post();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(answer);
+    expect(mocks.scheduleJevRecallShadow).toHaveBeenCalledOnce();
+    expect(mocks.scheduleJevRecallShadow).toHaveBeenCalledWith({
+      ...body(),
+      question: "When is launch?",
+      authoritativeAnswer: answer,
+    });
+  });
+
+  it("does not schedule the shadow when authoritative Recall fails", async () => {
+    mocks.generateText.mockRejectedValue(new Error("synthetic provider failure"));
+
+    expect((await post()).status).toBe(502);
+    expect(mocks.scheduleJevRecallShadow).not.toHaveBeenCalled();
   });
 
   it("returns a directly usable cited answer with private no-store headers", async () => {

@@ -28,8 +28,9 @@ export function chain(): Tier[] {
 
   // Most capture calls are small, frequent, and latency-sensitive — every
   // capture sorts, every thread update re-summarises, every edit is
-  // proofread — so the fastest free tiers lead: Groq, then Mistral. Gemini
-  // is the reliable quality fallback. OpenRouter is last: its free models
+  // proofread — so the fast tiers lead: Groq, Cerebras, then Mistral. Gemini
+  // is the reliable quality fallback. OpenRouter is last unless explicitly
+  // preferred: its free models
   // share tight rate limits and are the least dependable, and a paid account
   // should be an explicit choice, not the default path.
   const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
@@ -95,7 +96,18 @@ export function chain(): Tier[] {
     });
   }
 
-  return tiers;
+  // Operators with a funded provider can move it to the front without
+  // deleting fallback keys. An absent or unconfigured preference is inert.
+  const preferred = process.env.CAPTURE_MODEL_PROVIDER;
+  if (!preferred || !tiers.some((tier) => tier.name === preferred)) return tiers;
+  return [
+    ...tiers.filter(
+      (tier) => tier.name === preferred || tier.name.startsWith(preferred + "-")
+    ),
+    ...tiers.filter(
+      (tier) => tier.name !== preferred && !tier.name.startsWith(preferred + "-")
+    ),
+  ];
 }
 
 /** The Gemini tier, shared by the text chain and the vision chain. */
@@ -258,12 +270,23 @@ export async function withFallback<T>(
   prefer?: string
 ): Promise<{ value: T; via: string }> {
   const all = chain();
-  /* A preference moves that provider to the front and keeps everything
-     else in its usual order. Prefixes match too, so preferring "groq" also
+  const operatorPreferred = process.env.CAPTURE_MODEL_PROVIDER;
+  const hasConfiguredOperatorPreference = Boolean(
+    operatorPreferred &&
+      all.some(
+        (tier) =>
+          tier.name === operatorPreferred ||
+          tier.name.startsWith(operatorPreferred + "-")
+      )
+  );
+  /* The operator's explicit env choice has already ordered `all` and outranks
+     this per-job default. Otherwise a job preference moves that provider to
+     the front and keeps everything else in its usual order. Prefixes match
+     too, so preferring "groq" also
      brings "groq-2" forward — the spare account is the same model, and
      falling from one Groq key to the other costs nothing, where falling to
      a different provider can cost a great deal. */
-  const tiers = prefer
+  const tiers = prefer && !hasConfiguredOperatorPreference
     ? [
         ...all.filter((t) => t.name === prefer || t.name.startsWith(prefer + "-")),
         ...all.filter((t) => t.name !== prefer && !t.name.startsWith(prefer + "-")),
