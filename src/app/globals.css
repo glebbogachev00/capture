@@ -3591,9 +3591,8 @@ body {
 }
 .public-thread-content {
   width: 100%;
-  /* The former 760px outer wrapper included two 18px gutters. */
-  max-width: 724px;
-  margin-inline: auto;
+  max-width: none;
+  margin-inline: 0;
 }
 .writing-index-hero {
   width: 100%;
@@ -3762,8 +3761,9 @@ body {
   text-transform: uppercase;
 }
 .public-thread-head h1 {
-  max-width: 820px;
-  margin: 0;
+  max-width: 980px;
+  margin: 0 auto;
+  text-align: center;
   font-family: var(--font-display), Georgia, serif;
   font-size: clamp(48px, 9vw, 78px);
   font-weight: 500;
@@ -3794,7 +3794,7 @@ body {
   margin-top: 25px;
 }
 .public-thread-state {
-  max-width: 760px;
+  max-width: none;
   margin-bottom: 12px;
   padding: 19px 20px;
   border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
@@ -3817,7 +3817,7 @@ body {
   line-height: 1.5;
 }
 .public-record {
-  max-width: 760px;
+  max-width: none;
   margin: 0 0 22px;
   padding: 19px 20px 4px;
   background: var(--card);
@@ -3897,7 +3897,7 @@ body {
 }
 .finished-thread {
   position: relative;
-  max-width: 760px;
+  max-width: none;
   margin: 0 0 18px;
   padding: 0 42px 46px;
   background: var(--card);
@@ -3924,7 +3924,8 @@ body {
   text-transform: uppercase;
 }
 .article-body {
-  max-width: 650px;
+  max-width: 900px;
+  margin-inline: auto;
 }
 .article-body h2 {
   margin: 2.2em 0 0.65em;
@@ -3960,7 +3961,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  max-width: 760px;
+  max-width: none;
   padding: 20px;
   background: var(--accent-soft);
   border-radius: 14px;
