@@ -4,8 +4,11 @@ This checklist starts only after automated source, hosted desktop, hosted mobile
 
 ## What the agent already completed
 
-- Full source gate: 226 test files / 2,167 tests, lint, TypeScript, production build, and trace guard.
-- Hosted source gate: 40 files / 456 tests, disposable billing/quota/erasure/retention and image SQL, and synthetic image client failure cases.
+- Full source gate: 227 test files / 2,191 tests, lint, TypeScript, production build, and trace guard.
+- Hosted source gate: 41 files / 474 tests, disposable billing/quota/erasure/retention/complimentary-access and image SQL, and synthetic image client failure cases.
+- Complete owner-bound backup v3 export/restore is implemented, including authoritative Cloud state, tombstones, verified remote images, additive restore, and v1/v2 compatibility.
+- The account-erasure backend and durable fence are source-complete and default-off pending hosted provider, worker, UI-copy, and legal acceptance.
+- Complimentary Cloud access is implemented as a service-managed UUID grant behind the same canonical paid-or-complimentary access predicate; no email is stored in source.
 - Two-account identity and board ownership boundaries.
 - Polar sandbox checkout, entitlement, portal, and scheduled cancellation.
 - Real-provider explicit-task preservation.
@@ -21,8 +24,8 @@ Owner decisions or provider-side evidence are still required for:
 
 1. Decide whether paid public Cloud ships now or remains an internal cohort.
 2. Approve privacy, terms, retention, and provider-processing scope.
-3. Resolve authenticated Cloud export/restore scope.
-4. Resolve the account-erasure contract before implementation.
+3. Run hosted clean-browser backup v3 export/restore acceptance with remote images.
+4. Approve account-erasure UI/legal copy and complete disposable hosted provider acceptance before activation.
 5. Confirm the provider spend ceiling.
 6. Exercise terminal billing expiry/revocation, past-due timing, duplicate webhook delivery, and reconciliation retry.
 7. Reuse prior hosted image-publication evidence if it can be located. Do not repeat the campaign unless the existing evidence cannot prove the exact candidate bucket, five race rounds, cross-account denial, and readback.

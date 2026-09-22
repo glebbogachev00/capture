@@ -7,7 +7,7 @@ This is a current-state reconciliation, not a deployment or release approval. Hi
 ## Executive state
 
 - Current `origin/main` already contains the public landing, motion, playground, Cloud foundation, OTP, subscriptions, ownership boundaries, persistent offline permission, explicit earlier-board import, billing hardening, and the default-closed durable image-publication protocol.
-- The source suite was green before closeout edits: 186 files / 1,748 tests. The combined release candidate now passes 226 files / 2,167 tests, including the launch, OpenRouter/Jev, Search-that-answers, truthful provider-status, explicit-task, minimal answer-surface, navigation-deduplication, offline waiting-to-sort, Cloud backup, operational-retention, and account-erasure regressions.
+- The source suite was green before closeout edits: 186 files / 1,748 tests. The merged launch source now passes 227 files / 2,191 tests, including the launch, OpenRouter/Jev, Search-that-answers, truthful provider-status, explicit-task, minimal answer-surface, navigation-deduplication, offline waiting-to-sort, complete Cloud backup v3, operational-retention, account-erasure, and complimentary-access regressions. The hosted-source gate passes 41 files / 474 tests.
 - One launch-relevant branch-only fix was not on `origin/main`: uncapping explicit tasks in Sort and Distill. It has been integrated into this closeout working tree without changing its preserved source branch. Tests were adapted for current `primaryActions` and sanitized-provider interfaces.
 - The lockfile resolved four development-tool advisories (two moderate, two high) by moving to fixed in-range transitive versions. Earlier full and production audits returned zero. The second-pass audit is **indeterminate**, not failed-security evidence: npm's audit services were under scheduled maintenance and both supported audit endpoints failed before returning advisory data.
 - No other dirty-worktree artifact is a safe launch port. The remaining manual acceptance is consolidated into exactly two owner sessions below. A local-only hosted source gate now removes the synthetic unit/SQL/browser-simulator work from Session A.
@@ -42,10 +42,10 @@ This is a current-state reconciliation, not a deployment or release approval. Hi
 | Cloud image validation, tenant paths, and physical quota | Implemented in source, hosted attestation blocked | MIME/signature/size checks, exact owner/lifecycle/entitlement, database-generated candidate paths, atomic 256-object/576-MB reservation defaults, service-only finalize/release/abandon, durable operation inventory, no-store responses | Product must approve/change the internal defaults by migration. Hosted direct-INSERT denial, service upload, and provider quiescence/inventory remain launch gates. |
 | Durable immutable image publication | Partial, safely default-closed | Fresh UUID candidates, digest-bound publication, unique-key arbitration, stable winner-byte validation, mode/bucket plus admission RPC gates, fresh/legacy upgrade tests | No activation until approved hosted namespace provenance, post-admission policy attestation, and five race rounds pass. Legacy cutover remains blocked on provider drain and preservation evidence. |
 | Account erasure | Source state machine and bounded worker implemented; default-off | Durable lifecycle fence, live-user/recent-email-OTP/session-bound receipt, provider admissions/capabilities, leased one-stage retries, image ledger plus Storage inventory, app/Auth readback contracts | Hosted stale-JWT fence authority, Storage quiescence/inventory, OTP claims, Polar capability/errors, Auth typed absence, grants, UI/copy/legal and owner acceptance remain mandatory before setting the three activation flags. |
-| Cloud export | Partial | Local Capture backup and original-import archive exist; no authenticated server-side Cloud export endpoint. Local export silently omits referenced image bytes not yet materialized in IndexedDB | Not a technical prerequisite when erasure is explicitly requested without export. It remains a pre-public-Cloud gate under the approved foundation spec unless Cloud is excluded from launch or kept to an explicitly limited internal cohort. |
+| Cloud export and restore | Implemented in source; hosted acceptance pending | Owner-bound backup v3 reads authoritative Cloud state, includes tombstones and pending recovery envelopes, recovers and verifies every referenced image, restores additively, and retains v1/v2 compatibility | Apply hosted migrations, then prove a clean-browser exact-owner export/restore with remotely held image bytes and a transfer above the ordinary image request ceiling. |
 | Cloud value metrics and per-user quotas | Quotas implemented; analytics still partial | Durable server-owned AI/board/backup request quotas plus atomic image object/byte reservations; playground still has bounded aggregate usage events | Approve image product limits and retain private policy ownership. Do not add analytics without a privacy and operations decision. |
 | PWA freshness | Implemented in source | Service worker v3 and `FreshBuild`/`/api/version` support exist | Installed-device double-reload and visible-build comparison remain manual. |
-| Backups / restore / selected-day and selected-thread share | Implemented locally | Existing backup, restore, selected-day isolation, thread export, and whole-board Settings action are tested | Native receiver behavior and target-device share remain manual. |
+| Backups / restore / selected-day and selected-thread share | Implemented in source | Complete owner-bound backup v3, additive restore, selected-day isolation, thread export, and whole-board Settings action are tested | Hosted remote-image recovery and native receiver behavior remain manual. |
 | Natural-language multi-thread filing commands | Absent, not a launch gate | Explicitly deferred in the Sep 15 priority record | Do not propose for launch closeout. |
 | Shared threads / collaboration / general agent mode / graph UI | Absent, intentionally deferred | Product records classify these as later experiments; general chat and graph UI conflict with current boundaries | Do not build for launch. |
 
@@ -172,11 +172,11 @@ Remaining activation blockers are exact and hosted: verification that the durabl
 
 Authenticated Cloud export is **not a prerequisite of erasure itself**: the foundation explicitly says export occurs only when the person requests it, and a person may choose irreversible deletion without an export. Erasure must never report failure merely because an unrequested archive was not created.
 
-It is also not automatically safe to defer for a public paid Cloud launch. `docs/specs/capture-cloud-foundation.md` requires authenticated export and clean-browser restore before enabling Cloud for real users. The current local download is a useful escape hatch, but it reads the current local board and silently skips referenced image bytes that have not reached IndexedDB. Therefore:
+The source now implements complete owner-bound backup v3 export and additive restore, including authoritative Cloud state, tombstones, and verified remote images. Public paid Cloud still requires hosted clean-browser acceptance. Therefore:
 
 - public playground/local/self-hosted launch can proceed independently of authenticated Cloud export;
-- an explicitly internal Cloud trial can use the local backup only with a verified complete image count and restore;
-- public paid Cloud requires authenticated export/restore, or an explicit release-scope decision that keeps Cloud unavailable until it exists.
+- an explicitly internal Cloud trial can use the implemented backup v3 after hosted exact-owner readback;
+- public paid Cloud requires a clean-browser hosted export/restore pass with remote images before release approval.
 
 ### Privacy/legal boundary
 
@@ -196,7 +196,7 @@ Run `npm run check:launch-hosted` before the owner joins; do not repeat its synt
 4. **Core path completed:** verified Polar sandbox checkout, signed-webhook entitlement, customer portal, and scheduled cancellation passed with server readback. Still exercise past-due timing, terminal expiry/revocation, duplicate delivery, reconciliation retry, provider spend ceiling, and test-instrument scope.
 5. Establish never-used fresh image-bucket provenance, activate only the reviewed fresh mode, run five hosted concurrent publication rounds, reread attributed winners, and verify stale/direct/cross-account denial. Keep legacy cutover inactive without a provider drain.
 6. **Completed before the owner session:** approved synthetic text passed real Cerebras Sort, forced-action Sort, and Distill with all four explicit tasks preserved and no invented task; an isolated every-provider-dead browser run preserved the exact capture as unsorted through reload and kept the composer usable.
-7. Obtain the erasure decisions/evidence above, approve provider data-processing and backup-retention terms, and decide whether authenticated Cloud export must ship before Cloud leaves the internal cohort. Do not execute real account erasure until a later source path passes mocks and a disposable hosted account is explicitly authorized.
+7. Obtain the erasure decisions/evidence above, approve provider data-processing and backup-retention terms, and pass hosted backup v3 export/restore acceptance. Do not enable or execute real account erasure until the default-off source path passes against a disposable hosted account with explicit authorization.
 
 ### Session B — physical device, fresh visitor, PWA, native share, owner trial, and release approval
 
@@ -227,17 +227,17 @@ Conclusion: the current run produced **no vulnerability result**. The clean inst
 
 - Durable Cloud image publication is intentionally unavailable until hosted activation evidence passes; legacy cutover is separately blocked on a provider-verifiable drain and complete preservation evidence.
 - Billing and ownership are locally hardened but not accepted against the intended live sandbox and provider configuration.
-- Account erasure is not implemented end to end and is blocked on the six explicit decisions/evidence items above.
-- Public Cloud cannot be approved while privacy/terms/retention disclosure and the authenticated-export release scope remain unresolved. This does not block the separate account-free playground verdict.
+- Account erasure is source-complete and default-off. Hosted stale-session fencing, Storage drain/quiescence, Polar/Auth readback, worker scheduling, UI copy, legal disclosure, and disposable-account acceptance remain mandatory before activation.
+- Public Cloud cannot be approved while privacy/terms/retention disclosure and hosted backup/erasure acceptance remain unresolved. This does not block the separate account-free playground verdict.
 - Current local Node is 22.18.0 while installed `jsdom` requests 22.22.2+ and `undici` requests 22.19.0+. Tests pass, but clean-install verification should use a supported Node version. README still says Node 20+; changing public setup copy was outside this preserve-copy closeout.
 - Real-provider compliance for the checked synthetic explicit-task fixture passed on the isolated Preview. This is bounded provider evidence, not a guarantee for every phrasing.
 
 ## Executed verification
 
-- `npm run check:launch-hosted`: **40 files / 456 tests passed**; disposable billing, quota, erasure, and operational-retention SQL passed; blocked-legacy and fresh-publication SQL passed; the five-round browser simulator passed its success case and rejected both-success, missing-no-store, denied, and read-error cases as expected.
-- Combined release-candidate `npm run check`: passed after bounding Vitest to one worker.
+- `npm run check:launch-hosted`: **41 files / 474 tests passed**; disposable billing, quota, erasure, operational-retention, and complimentary-access SQL passed; blocked-legacy and fresh-publication SQL passed; the five-round browser simulator passed its success case and rejected both-success, missing-no-store, denied, and read-error cases as expected.
+- Merged launch source `npm run check`: passed after bounding Vitest to one worker.
   - ESLint: zero errors, zero warnings.
-  - Vitest: **226 files / 2,167 tests passed**.
+  - Vitest: **227 files / 2,191 tests passed**.
   - TypeScript: passed with `--noEmit --incremental false`.
   - Next 16.3.3 isolated build: compiled, typechecked, and generated **35 static pages** while emitting the expected dynamic API routes.
   - Trace guard: **50 manifests**, no private paths.
