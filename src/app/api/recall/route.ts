@@ -2,7 +2,6 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { RecallSourceSchema, RecallAnswerSchema, validateRecallAnswer, RECALL_MAX_SOURCES } from "@/lib/recall";
 import { withFallback } from "@/lib/providers";
-import { PLAYGROUND } from "@/lib/playground";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
@@ -119,7 +118,6 @@ export async function POST(request: Request) {
   // Starts before auth/body reading: fallback waits do not get a fresh budget.
   const budget = deadline(request.signal, TOTAL_MS, new RecallError(499, "Recall request cancelled."));
   try {
-    if (PLAYGROUND) return json({ error: "Not available in the playground." }, 404);
     budget.signal.throwIfAborted();
     const authorization = await authorize(request, budget.signal);
     if (authorization instanceof Response) return authorization;

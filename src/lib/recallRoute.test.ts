@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   config: vi.fn(),
   server: vi.fn(),
   claims: vi.fn(),
-  playground: false,
   scheduleJevRecallShadow: vi.fn(),
 }));
 vi.mock("ai", async (original) => ({ ...await original<typeof import("ai")>(), generateText: mocks.generateText }));
@@ -18,7 +17,6 @@ vi.mock("@/lib/jevRecallShadow", () => ({ scheduleJevRecallShadow: mocks.schedul
 vi.mock("@/lib/limiter", () => ({ modelRateLimit: mocks.limiter }));
 vi.mock("@/lib/supabase/config", () => ({ getCloudConfig: mocks.config }));
 vi.mock("@/lib/supabase/server", () => ({ createCloudServerClient: mocks.server }));
-vi.mock("@/lib/playground", () => ({ get PLAYGROUND() { return mocks.playground; } }));
 
 const source = {
   id: "source-1", kind: "thread", title: "Launch", text: "We decided to launch in October.",
@@ -33,7 +31,6 @@ const post = async (req = request()) => (await import("@/app/api/recall/route"))
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.playground = false;
   mocks.config.mockReturnValue(null);
   mocks.limiter.mockReturnValue({ allowed: true, retryAfterSec: 0 });
   mocks.server.mockResolvedValue({ auth: { getClaims: mocks.claims } });
@@ -108,14 +105,13 @@ describe("POST /api/recall", () => {
     } });
     expect((await post(new Request("http://localhost/api/recall", { method: "POST", body: stream, duplex: "half" } as RequestInit))).status).toBe(200);
   });
-  it("denies the playground at the route before reading the body or spending quota", async () => {
-    mocks.playground = true;
-    const response = await post(new Request("http://localhost/api/recall", { method: "POST", body: "bad json" }));
-    expect(response.status).toBe(404);
+  it("keeps cited answers available on the non-Cloud local product", async () => {
+    vi.stubEnv("NEXT_PUBLIC_PLAYGROUND", "1");
+    const response = await post();
+    expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(mocks.config).not.toHaveBeenCalled();
-    expect(mocks.limiter).not.toHaveBeenCalled();
-    expect(mocks.generateText).not.toHaveBeenCalled();
+    expect(mocks.limiter).toHaveBeenCalledTimes(1);
+    expect(mocks.generateText).toHaveBeenCalledTimes(1);
   });
 
   it("uses the existing limiter and returns a private retryable rejection", async () => {

@@ -30,7 +30,8 @@ boundary rather than additional UI.
 - The server limits the complete request to 96 KiB and the operation to 45 seconds.
 - Individual provider attempts have a 10-second limit and no SDK retries.
 - Cloud requests require verified identity and the matching owner precondition.
-- Anonymous Cloud sessions and the public playground cannot use this feature.
+- Anonymous Cloud sessions cannot use this feature. The local playground product retains the same cited-answer functionality
+  through its existing bounded provider chain; retrieval still happens locally and only the selected question/excerpts are sent.
 - Offline and revoked sessions cannot disclose notes through this feature.
 - Responses use `private, no-store`. The feature does not persist or log note content.
 - HTTP, transport, timeout, and invalid-answer failures remain distinct from insufficient evidence. Local results and saved
