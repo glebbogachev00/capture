@@ -91,7 +91,7 @@ describe("shared Cloud request guard", () => {
     const deps = dependencies({ hasEntitlement: vi.fn().mockResolvedValue(false) });
     const result = await authorizeCloudRequest(request(), "managed_ai", deps);
     expect((result as Response).status).toBe(402);
-    expect(await (result as Response).json()).toEqual({ error: "capture cloud subscription required" });
+    expect(await (result as Response).json()).toEqual({ error: "capture cloud access required" });
     expect(deps.consumeQuota).not.toHaveBeenCalled();
   });
 

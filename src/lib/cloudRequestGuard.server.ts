@@ -14,6 +14,7 @@ import { opsEvent } from "@/lib/opsEvent.server";
 import { getCloudConfig } from "@/lib/supabase/config";
 import { identityFromClaims } from "@/lib/supabase/identity";
 import { createCloudServerClient } from "@/lib/supabase/server";
+import { hasCurrentCloudAccess } from "@/lib/cloudAccess.server";
 
 export type CloudServerClient = Awaited<ReturnType<typeof createCloudServerClient>>;
 
@@ -91,15 +92,7 @@ export async function createCloudGuardServerContext(): Promise<CloudGuardServerC
         return data;
       },
       hasEntitlement: async ({ userId }) => {
-        const { data, error } = await client
-          .from("capture_cloud_subscriptions")
-          .select("polar_subscription_id")
-          .eq("user_id", userId)
-          .eq("is_entitled", true)
-          .gt("access_expires_at", new Date().toISOString())
-          .limit(1);
-        if (error) throw new Error("Cloud entitlement unavailable");
-        return Array.isArray(data) && data.length > 0;
+        return hasCurrentCloudAccess(client, userId);
       },
       consumeQuota: (ownerId, policy) => consumeQuotaWithRpc(client, ownerId, policy),
       acquireExternalWork: async (ownerId, kind) => {

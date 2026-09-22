@@ -40,7 +40,7 @@ describe("Capture Cloud billing client", () => {
   });
 
   it("keeps management and status retry available while pending billing denies access", async () => {
-    globalThis.fetch = vi.fn().mockImplementation(async () => Response.json({ tier: "free", status: "active", reconciliationRequired: true }));
+    globalThis.fetch = vi.fn().mockImplementation(async () => Response.json({ tier: "free", status: "active", reconciliationRequired: true, canManageBilling: true }));
     render(<CloudAccountPanel />);
     await screen.findByRole("button", { name: "Manage subscription" });
     expect(screen.queryByText("See Capture Cloud")).toBeNull();
@@ -52,6 +52,41 @@ describe("Capture Cloud billing client", () => {
     fireEvent.click(screen.getByRole("button", { name: "Manage subscription" }));
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith("/api/cloud/portal", expect.any(Object)));
   });
+
+  it("shows complimentary Cloud access without a broken subscription portal control", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(Response.json({
+      tier: "cloud",
+      accessSource: "complimentary",
+      status: "complimentary",
+      plan: null,
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: null,
+      accessExpiresAt: null,
+      captureLimit: null,
+      canManageBilling: false,
+    }));
+    render(<CloudAccountPanel />);
+    await screen.findByText("Complimentary Capture Cloud is active.");
+    expect(screen.queryByRole("button", { name: "Manage subscription" })).toBeNull();
+    expect(screen.queryByText("See Capture Cloud")).toBeNull();
+  });
+
+  it("keeps the billing warning and retry available for mixed complimentary and unresolved paid state", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(Response.json({
+      tier: "cloud",
+      accessSource: "complimentary",
+      status: "complimentary",
+      plan: null,
+      captureLimit: null,
+      canManageBilling: true,
+      reconciliationRequired: true,
+    }));
+    render(<CloudAccountPanel />);
+    await screen.findByText(/awaiting billing confirmation/i);
+    expect(screen.getByRole("button", { name: "Manage subscription" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry status" })).toBeTruthy();
+  });
+
   it("normalizes the authenticated status response", async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json({
       tier: "cloud",

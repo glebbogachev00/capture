@@ -32,6 +32,7 @@ npm run test -- --maxWorkers=1 \
   src/lib/cloudSyncBridge.test.ts \
   src/lib/cloudSubscription.test.ts \
   src/lib/cloudSubscriptionRoute.test.ts \
+  src/lib/complimentaryCloudAccessMigration.test.ts \
   src/lib/polar.test.ts \
   src/lib/polarSignature.test.ts \
   src/lib/polarCheckoutEligibility.test.ts \

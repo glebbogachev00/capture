@@ -14,6 +14,8 @@ import {
   TRIAL_LIMIT,
 } from "@/lib/playground";
 
+const COMPLIMENTARY_REVALIDATION_MS = 5 * 60 * 1_000;
+
 /** Local installs are unlimited; Cloud enforcement waits fail-closed for billing. */
 export function useCaptureLimit(): { applies: boolean; ready: boolean } {
   const lifetime = getDocumentLifetime();
@@ -95,18 +97,28 @@ export function useCaptureLimit(): { applies: boolean; ready: boolean } {
           // This is already a verified Cloud document; even a 404 must not
           // reclassify it as self-hosted or grant an unlimited allowance.
           const value = body && typeof body === "object"
-            ? body as { tier?: unknown; captureLimit?: unknown; accessExpiresAt?: unknown }
+            ? body as { tier?: unknown; captureLimit?: unknown; accessExpiresAt?: unknown; accessSource?: unknown }
             : null;
           const accessExpiresAt = typeof value?.accessExpiresAt === "string"
             ? Date.parse(value.accessExpiresAt)
             : NaN;
-          const verifiedPaid = response.ok && value?.tier === "cloud" &&
+          const complimentary = value?.accessSource === "complimentary";
+          const verifiedPaid = response.ok && !complimentary && value?.tier === "cloud" &&
             value.captureLimit === null && Number.isFinite(accessExpiresAt) &&
             accessExpiresAt > Date.now();
+          const indefiniteComplimentary = value?.accessExpiresAt === null;
+          const verifiedComplimentary = response.ok && complimentary && value?.tier === "cloud" &&
+            value.captureLimit === null &&
+            (indefiniteComplimentary ||
+              (Number.isFinite(accessExpiresAt) && accessExpiresAt > Date.now()));
+          const verifiedCloud = verifiedPaid || verifiedComplimentary;
+          const revalidateAt = verifiedComplimentary && indefiniteComplimentary
+            ? Date.now() + COMPLIMENTARY_REVALIDATION_MS
+            : accessExpiresAt;
           /* A successful response is authoritative online. Subscription-disabled
              Cloud intentionally returns free/null; it is unlimited while verified
              online, but unlike paid access it is never cached for offline use. */
-          const limit = response.ok
+          const limit = response.ok && (!complimentary || verifiedComplimentary)
             ? captureLimitFromSubscriptionResponse(response.status, body)
             : TRIAL_LIMIT;
           setCaptureLimit(limit);
@@ -117,7 +129,7 @@ export function useCaptureLimit(): { applies: boolean; ready: boolean } {
               setEntitlementNow(Date.now());
             } else {
               clearCloudEntitlement(lifetime.owner);
-              setVerifiedExpiresAt(null);
+              setVerifiedExpiresAt(verifiedCloud ? revalidateAt : null);
             }
           }
           setReady(true);

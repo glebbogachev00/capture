@@ -197,11 +197,15 @@ export function CloudAccountPanel() {
       <p className="settings-copy">
         {subscription.reconciliationRequired
           ? "Cloud access is awaiting billing confirmation. Your existing subscription may still be charging; do not purchase again."
+          : subscription.accessSource === "complimentary"
+            ? "Complimentary Capture Cloud is active."
           : `${subscription.plan === "yearly" ? "Yearly" : "Monthly"} Cloud is active${subscription.cancelAtPeriodEnd && end ? ` until ${end}` : "."}`}
       </p>
-      <button className="ghost" onClick={() => void openPortal()} disabled={busy}>
-        {busy ? "Opening…" : "Manage subscription"}
-      </button>
+      {subscription.canManageBilling !== false && (
+        <button className="ghost" onClick={() => void openPortal()} disabled={busy}>
+          {busy ? "Opening…" : "Manage subscription"}
+        </button>
+      )}
       {subscription.reconciliationRequired && <button className="ghost" onClick={() => void retryStatus()} disabled={busy}>Retry status</button>}
       {note && <p className="cloud-action-note" role="status">{note}</p>}
     </div>

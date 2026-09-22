@@ -147,7 +147,7 @@ describe("cloud board boundary", () => {
       hasEntitlement: vi.fn().mockResolvedValue(false),
     });
     expect(response.status).toBe(402);
-    expect(await response.json()).toEqual({ error: "capture cloud subscription required" });
+    expect(await response.json()).toEqual({ error: "capture cloud access required" });
     expect(repo.documents).toEqual(new Map());
   });
 

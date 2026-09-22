@@ -9,6 +9,10 @@ import { isCloudEnabled } from "@/lib/cloudBoard";
 import { getCloudConfig } from "@/lib/supabase/config";
 import { identityFromClaims } from "@/lib/supabase/identity";
 import { createCloudServerClient } from "@/lib/supabase/server";
+import {
+  currentComplimentaryAccess,
+  hasCurrentCloudAccess,
+} from "@/lib/cloudAccess.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +28,7 @@ async function dependencies(): Promise<CloudSubscriptionDependencies> {
       verifyIdentity: async () => null,
       isAccountErasing: async () => { throw new Error("account lifecycle unavailable"); },
       getSubscriptions: async () => [],
+      getCloudAccess: async () => { throw new Error("cloud access unavailable"); },
     };
   }
 
@@ -37,6 +42,14 @@ async function dependencies(): Promise<CloudSubscriptionDependencies> {
       const { data, error } = await client.rpc("capture_account_deleting", { p_user_id: userId });
       if (error || typeof data !== "boolean") throw new Error("account lifecycle unavailable");
       return data;
+    },
+    getCloudAccess: async (userId) => {
+      const complimentary = await currentComplimentaryAccess(client, userId);
+      return {
+        current: await hasCurrentCloudAccess(client, userId),
+        complimentaryCurrent: complimentary.current,
+        complimentaryExpiresAt: complimentary.expiresAt,
+      };
     },
     getSubscriptions: async (userId) => {
       // Recovery after Polar's finite delivery retries, on authenticated demand.

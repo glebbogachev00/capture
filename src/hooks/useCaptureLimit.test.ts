@@ -198,6 +198,84 @@ describe("Capture allowance", () => {
     expect(hasCloudEntitlement("synthetic-account", Date.now(), localStorage)).toBe(true);
   });
 
+  it("rechecks an expiring complimentary grant without caching it for offline use", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-21T12:00:00Z"));
+    const fetcher = vi.mocked(globalThis.fetch);
+    fetcher
+      .mockResolvedValueOnce(Response.json({
+        tier: "cloud",
+        accessSource: "complimentary",
+        captureLimit: null,
+        accessExpiresAt: new Date(Date.now() + 1_000).toISOString(),
+      }))
+      .mockResolvedValueOnce(Response.json({ tier: "free", captureLimit: 15 }));
+    const { useCaptureLimit } = await loadHook(account());
+    const { result } = renderHook(() => useCaptureLimit());
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current).toEqual({ applies: false, ready: true });
+    const { hasCloudEntitlement } = await import("@/lib/cloudEntitlement");
+    expect(hasCloudEntitlement("synthetic-account", Date.now(), localStorage)).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_001);
+      await Promise.resolve();
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current).toEqual({ applies: true, ready: true });
+  });
+
+  it("rechecks an indefinite complimentary grant on a bounded online lease", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-21T12:00:00Z"));
+    const fetcher = vi.mocked(globalThis.fetch);
+    fetcher
+      .mockResolvedValueOnce(Response.json({
+        tier: "cloud",
+        accessSource: "complimentary",
+        captureLimit: null,
+        accessExpiresAt: null,
+      }))
+      .mockResolvedValueOnce(Response.json({ tier: "free", captureLimit: 15 }));
+    const { useCaptureLimit } = await loadHook({
+      owner: "synthetic-account",
+      expiresAt: Date.now() + 10 * 60 * 1_000,
+    });
+    const { result } = renderHook(() => useCaptureLimit());
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current).toEqual({ applies: false, ready: true });
+    const { hasCloudEntitlement } = await import("@/lib/cloudEntitlement");
+    expect(hasCloudEntitlement("synthetic-account", Date.now(), localStorage)).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1_000 + 100);
+      await Promise.resolve();
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current).toEqual({ applies: true, ready: true });
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["malformed", "not-a-date"],
+  ])("fails closed when a complimentary grant has a %s access boundary", async (_label, accessExpiresAt) => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(Response.json({
+      tier: "cloud",
+      accessSource: "complimentary",
+      captureLimit: null,
+      ...(accessExpiresAt === undefined ? {} : { accessExpiresAt }),
+    }));
+    const { useCaptureLimit } = await loadHook(account());
+    const { result } = renderHook(() => useCaptureLimit());
+
+    await waitFor(() => expect(result.current).toEqual({ applies: true, ready: true }));
+    const { hasCloudEntitlement } = await import("@/lib/cloudEntitlement");
+    expect(hasCloudEntitlement("synthetic-account", Date.now(), localStorage)).toBe(false);
+  });
+
   it("rechecks an active paid account when its verified access boundary expires", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-21T12:00:00Z"));

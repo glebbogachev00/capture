@@ -11,6 +11,7 @@ import {
   type PolarDependencies,
   type PortalInput,
 } from "@/lib/polar";
+import { hasCurrentCloudAccess } from "@/lib/cloudAccess.server";
 
 type Env = Record<string, string | undefined>;
 
@@ -48,7 +49,9 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
       isCloudEnabled,
       identity,
       isAccountErasing: async () => { throw new Error("billing is not configured"); },
+      hasCloudAccess: async () => { throw new Error("billing is not configured"); },
       hasBlockingSubscription: async () => { throw new Error("billing is not configured"); },
+      hasBillingSubscription: async () => { throw new Error("billing is not configured"); },
       acquireExternalWork: async () => { throw new Error("billing is not configured"); },
       releaseExternalWork: async () => { throw new Error("billing is not configured"); },
       createCheckout: async () => { throw new Error("billing is not configured"); },
@@ -117,6 +120,7 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
       if (error || typeof data !== "boolean") throw new Error("account lifecycle unavailable");
       return data;
     },
+    hasCloudAccess: (userId) => hasCurrentCloudAccess(admin, userId),
     hasBlockingSubscription: async (userId) => {
       const { data, error } = await admin
         .from("capture_cloud_subscriptions")
@@ -125,6 +129,15 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
         // Purchase eligibility is NOT effective resource access. A pending
         // source can still be charging even though access is temporarily denied.
         .or(`reconciliation_required.eq.true,and(is_entitled.eq.true,access_expires_at.gt.${new Date().toISOString()})`)
+        .limit(1);
+      if (error) throw new Error("subscription status could not be read");
+      return Array.isArray(data) && data.length > 0;
+    },
+    hasBillingSubscription: async (userId) => {
+      const { data, error } = await admin
+        .from("capture_cloud_subscriptions")
+        .select("polar_subscription_id")
+        .eq("user_id", userId)
         .limit(1);
       if (error) throw new Error("subscription status could not be read");
       return Array.isArray(data) && data.length > 0;
