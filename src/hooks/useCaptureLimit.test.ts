@@ -13,6 +13,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   localStorage.clear();
@@ -74,17 +75,175 @@ describe("Capture allowance", () => {
   });
 
   it.each([
-    { tier: "cloud", captureLimit: null, applies: false },
-    { tier: "free", captureLimit: 15, applies: true },
-  ])("settles delayed $tier billing without granting an early exemption", async ({ tier, captureLimit, applies }) => {
+    { tier: "cloud", captureLimit: null, applies: false, accessExpiresAt: new Date(Date.now() + 60_000).toISOString() },
+    { tier: "free", captureLimit: 15, applies: true, accessExpiresAt: undefined },
+  ])("settles delayed $tier billing without granting an early exemption", async ({ tier, captureLimit, applies, accessExpiresAt }) => {
     const pending = deferredResponse();
     vi.mocked(globalThis.fetch).mockReturnValue(pending.promise);
     const { useCaptureLimit } = await loadHook(account());
     const { result } = renderHook(() => useCaptureLimit());
     expect(result.current).toEqual({ applies: true, ready: false });
-    await act(async () => { pending.resolve(Response.json({ tier, captureLimit })); });
+    await act(async () => { pending.resolve(Response.json({ tier, captureLimit, accessExpiresAt })); });
     await waitFor(() => expect(result.current).toEqual({ applies, ready: true }));
     expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("honors subscription-disabled Cloud as unlimited online without caching offline access", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(Response.json({
+      tier: "free",
+      captureLimit: null,
+      accessExpiresAt: null,
+    }));
+    const { useCaptureLimit } = await loadHook(account());
+    const { result } = renderHook(() => useCaptureLimit());
+
+    await waitFor(() => expect(result.current).toEqual({ applies: false, ready: true }));
+    const { hasCloudEntitlement } = await import("@/lib/cloudEntitlement");
+    expect(hasCloudEntitlement("synthetic-account", Date.now(), localStorage)).toBe(false);
+  });
+
+  it("uses the same owner's unexpired, server-verified Cloud access while offline", async () => {
+    const { OFFLINE_PERMISSION_KEY } = await import("@/lib/ownership");
+    const { cacheCloudEntitlement } = await import("@/lib/cloudEntitlement");
+    localStorage.setItem(OFFLINE_PERMISSION_KEY, JSON.stringify({
+      owner: "synthetic-account",
+      policy: "until-revoked",
+    }));
+    cacheCloudEntitlement("synthetic-account", Date.now() + 60_000, localStorage);
+
+    const { useCaptureLimit } = await loadHook({
+      owner: "synthetic-account",
+      expiresAt: 0,
+      offline: true,
+    });
+    const { result } = renderHook(() => useCaptureLimit());
+
+    expect(result.current).toEqual({ applies: false, ready: true });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("re-enables the offline allowance exactly when cached paid access expires", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-21T12:00:00Z"));
+    const { OFFLINE_PERMISSION_KEY } = await import("@/lib/ownership");
+    const { cacheCloudEntitlement } = await import("@/lib/cloudEntitlement");
+    localStorage.setItem(OFFLINE_PERMISSION_KEY, JSON.stringify({
+      owner: "synthetic-account",
+      policy: "until-revoked",
+    }));
+    cacheCloudEntitlement("synthetic-account", Date.now() + 1_000, localStorage);
+
+    const { useCaptureLimit } = await loadHook({
+      owner: "synthetic-account",
+      expiresAt: 0,
+      offline: true,
+    });
+    const { result } = renderHook(() => useCaptureLimit());
+    expect(result.current).toEqual({ applies: false, ready: true });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_001);
+    });
+    expect(result.current).toEqual({ applies: true, ready: true });
+  });
+
+  it("re-arms an entitlement timer beyond the browser maximum timeout", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-21T12:00:00Z"));
+    const MAX_TIMEOUT = 2_147_483_647;
+    const { OFFLINE_PERMISSION_KEY } = await import("@/lib/ownership");
+    const { cacheCloudEntitlement, hasCloudEntitlement } = await import("@/lib/cloudEntitlement");
+    localStorage.setItem(OFFLINE_PERMISSION_KEY, JSON.stringify({
+      owner: "synthetic-account",
+      policy: "until-revoked",
+    }));
+    cacheCloudEntitlement("synthetic-account", Date.now() + MAX_TIMEOUT + 10_000, localStorage);
+
+    const { useCaptureLimit } = await loadHook({
+      owner: "synthetic-account",
+      expiresAt: 0,
+      offline: true,
+    });
+    const { result } = renderHook(() => useCaptureLimit());
+    expect(result.current).toEqual({ applies: false, ready: true });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(MAX_TIMEOUT); });
+    expect(result.current).toEqual({ applies: false, ready: true });
+    expect(hasCloudEntitlement("synthetic-account", Date.now(), localStorage)).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_001); });
+    expect(result.current).toEqual({ applies: true, ready: true });
+  });
+
+  it("does not trust a cached paid entitlement while online verification is pending", async () => {
+    const { cacheCloudEntitlement } = await import("@/lib/cloudEntitlement");
+    cacheCloudEntitlement("synthetic-account", Date.now() + 60_000, localStorage);
+    const { useCaptureLimit } = await loadHook(account());
+    const { result } = renderHook(() => useCaptureLimit());
+    expect(result.current).toEqual({ applies: true, ready: false });
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+  });
+
+  it("caches only a verified paid response with a future access boundary", async () => {
+    const accessExpiresAt = new Date(Date.now() + 60_000).toISOString();
+    vi.mocked(globalThis.fetch).mockResolvedValue(Response.json({
+      tier: "cloud",
+      captureLimit: null,
+      accessExpiresAt,
+    }));
+    const { useCaptureLimit } = await loadHook(account());
+    const { result } = renderHook(() => useCaptureLimit());
+    await waitFor(() => expect(result.current).toEqual({ applies: false, ready: true }));
+    const { hasCloudEntitlement } = await import("@/lib/cloudEntitlement");
+    expect(hasCloudEntitlement("synthetic-account", Date.now(), localStorage)).toBe(true);
+  });
+
+  it("rechecks an active paid account when its verified access boundary expires", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-21T12:00:00Z"));
+    const fetcher = vi.mocked(globalThis.fetch);
+    fetcher
+      .mockResolvedValueOnce(Response.json({
+        tier: "cloud",
+        captureLimit: null,
+        accessExpiresAt: new Date(Date.now() + 1_000).toISOString(),
+      }))
+      .mockResolvedValueOnce(Response.json({ tier: "free", captureLimit: 15 }));
+    const { useCaptureLimit } = await loadHook(account());
+    const { result } = renderHook(() => useCaptureLimit());
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current).toEqual({ applies: false, ready: true });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_001);
+      await Promise.resolve();
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current).toEqual({ applies: true, ready: true });
+  });
+
+  it("does not retain an expired paid exemption after the document goes offline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-21T12:00:00Z"));
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(Response.json({
+        tier: "cloud",
+        captureLimit: null,
+        accessExpiresAt: new Date(Date.now() + 1_000).toISOString(),
+      }))
+      .mockRejectedValueOnce(new TypeError("offline"));
+    const { useCaptureLimit, lifetime } = await loadHook(account());
+    const { result } = renderHook(() => useCaptureLimit());
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current).toEqual({ applies: false, ready: true });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_001);
+      await Promise.resolve();
+      lifetime.expiresAt = 0;
+      try { lifetime.assert(); } catch { /* revoked or offline is fail-closed */ }
+    });
+    expect(result.current.applies).toBe(true);
   });
 
   it.each(["network error", "503", "404", "malformed JSON", "missing limit"])(

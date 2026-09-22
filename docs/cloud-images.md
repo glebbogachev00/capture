@@ -34,10 +34,15 @@ The metadata-only `info()` call is deliberate: SDK `exists()` conflates some
 400/404 errors. An unknown/legacy bare 404 fails closed instead of resending
 photo bytes. Confirm the target Storage version emits `NoSuchKey` on absence.
 
-PUT counts the actual stream (3,001,024-byte JSON envelope limit), limits the
-data URL to 3,000,000 bytes, accepts canonical base64 PNG/JPEG/WebP/GIF only,
-and checks raster signatures. These checks are not a full image decoder.
-Storage receives at most 2,250,000 decoded bytes, explicit MIME, cacheControl
+PUT derives its exact envelope from the decoded ceiling: 2,250,000 bytes encode
+to 3,000,000 canonical base64 characters; the longest supported data-URL prefix
+is 23 bytes and the exact `{"src":""}` JSON wrapper adds 10. The route therefore
+caps the data URL at **3,000,023 bytes** and the whole request stream at
+**3,000,033 bytes**, without granting unrelated body headroom. It accepts
+canonical base64 PNG/JPEG/WebP/GIF only and checks raster signatures. Exactly
+2,250,000 decoded bytes pass for every supported MIME; 2,250,001 fail with 413.
+These checks are not a full image decoder. Storage receives at most 2,250,000
+decoded bytes, explicit MIME, cacheControl
 `0`, and `upsert:false`. Duplicate codes are acknowledged only after an
 owner-scoped metadata read confirms the winner. Arbitrary provider failures
 never mean duplicate success. GET also checks size/MIME/signature because

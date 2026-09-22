@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import * as React from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Board } from "@/lib/model";
 
@@ -21,6 +21,7 @@ function fixture(): Board {
 
 const stopWatches: (() => void)[] = [];
 beforeEach(() => {
+  vi.useFakeTimers();
   vi.resetModules();
   vi.stubGlobal("React", React);
   vi.stubEnv("NEXT_PUBLIC_PLAYGROUND", "0");
@@ -37,23 +38,19 @@ async function setup(board = fixture(), question = "What about orchard planting?
   const props = { board, question, onOpenThread: vi.fn(), onOpenIntention: vi.fn() };
   return { ...render(<QuestionAnswer {...props} />), props, QuestionAnswer };
 }
-const ask = () => fireEvent.click(screen.getByRole("button", { name: "Answer from my captures" }));
+const startAnswer = async () => {
+  await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+};
 
-it("distinguishes insufficient evidence and keeps the submitted, bounded excerpts available", async () => {
+it("keeps insufficient evidence out of the visual answer surface", async () => {
   const board = fixture();
   board.threads[0].frags[0].text = "Orchard " + "long source passage ".repeat(150);
   await setup(board);
-  ask();
-  expect(await screen.findByText("Not enough evidence in these matching notes to answer.")).toBeTruthy();
-  expect(screen.queryByRole("alert")).toBeNull();
-  const evidence = screen.getByText(/Show submitted evidence/).closest("details")!;
-  expect(evidence.open).toBe(false);
-  fireEvent.click(screen.getByText(/Show submitted evidence/));
-  expect(evidence.open).toBe(true);
-  expect(evidence.textContent).toContain("Orchard planting was completed in winter.");
-  expect(evidence.textContent).toContain("resolved");
-  expect(evidence.textContent).toContain("Excerpt truncated");
-  expect(evidence.textContent).toContain("2026");
+  await startAnswer();
+  expect(screen.getByRole("status").textContent).toBe("Not enough evidence in these matching notes to answer.");
+  expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Open thread/ })).toBeNull();
 });
 
 function deferred<T>() {
@@ -67,23 +64,206 @@ async function answered(board: Board, text: string) {
   return { status: "answered", claims: [{ text, citations: [{ sourceId: source.id, quote: source.text }] }] };
 }
 
-it("rechecks disclosure authority when a citation or evidence is opened during silent revalidation", async () => {
+it("automatically answers a stable question only after the debounce", async () => {
+  vi.useFakeTimers();
+  await setup();
+  expect(fetch).not.toHaveBeenCalled();
+  await act(async () => { await vi.advanceTimersByTimeAsync(599); });
+  expect(fetch).not.toHaveBeenCalled();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(fetch).not.toHaveBeenCalled();
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it("stays visually quiet while answering, then shows only the answer and connected items", async () => {
+  const response = deferred<Response>();
+  vi.mocked(fetch).mockReset().mockReturnValueOnce(response.promise);
+  const board = fixture();
+  await setup(board);
+
+  await startAnswer();
+  expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
+  expect(screen.getByRole("status").className).toMatch(/visuallyHidden/);
+  expect(screen.queryByText(/Sends up to/i)).toBeNull();
+
+  await act(async () => { response.resolve(Response.json(await answered(board, "CURRENT ANSWER"))); });
+
+  const answer = screen.getByRole("region", { name: "Answer" });
+  expect(answer.textContent).toContain("CURRENT ANSWER");
+  expect(screen.getByRole("heading", { name: "Answer" })).toBeTruthy();
+  expect(screen.getAllByRole("button", { name: "Open thread: Orchard plan" })).toHaveLength(1);
+  expect(answer.textContent).not.toMatch(/matching subset|submitted evidence|configured AI|unchanged/i);
+  expect(answer.querySelector("blockquote, details, time")).toBeNull();
+});
+
+it("commits a quiet accessibility status before transmitting excerpts", async () => {
+  vi.mocked(fetch).mockImplementationOnce(async () => {
+    const status = screen.getByRole("status");
+    expect(status.textContent).toMatch(/answering/i);
+    expect(status.className).toMatch(/visuallyHidden/);
+    expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
+    return Response.json({ status: "insufficient", claims: [] });
+  });
+  await setup();
+  await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+  expect(fetch).not.toHaveBeenCalled();
+  expect(screen.getByRole("status").className).toMatch(/visuallyHidden/);
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it("keeps one quiet polite status node and announces completion", async () => {
+  const response = deferred<Response>();
+  vi.mocked(fetch).mockReset().mockReturnValueOnce(response.promise);
+  const board = fixture();
+  await setup(board);
+  await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+  const status = screen.getByRole("status");
+  expect(status.getAttribute("aria-busy")).toBe("true");
+  expect(status.getAttribute("aria-live")).toBe("polite");
+  expect(status.getAttribute("aria-atomic")).toBe("true");
+  expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  await act(async () => { response.resolve(Response.json(await answered(board, "CURRENT ANSWER"))); });
+  expect(screen.getByRole("status")).toBe(status);
+  expect(status.textContent).toBe("Answer from your captures");
+  expect(status.getAttribute("aria-busy")).toBe("false");
+  expect(screen.getByRole("region", { name: "Answer" })).toBeTruthy();
+});
+
+it("does not resend when board identity or unrelated board data changes", async () => {
+  const board = fixture();
+  vi.mocked(fetch).mockResolvedValue(Response.json(await answered(board, "STABLE ANSWER")));
+  const view = await setup(board);
+  await startAnswer();
+  expect(screen.getByText("STABLE ANSWER")).toBeTruthy();
+  const replacement = structuredClone(board);
+  replacement.profile = { name: "Different presentation identity" };
+  view.rerender(<view.QuestionAnswer {...view.props} board={replacement} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("STABLE ANSWER")).toBeTruthy();
+});
+
+it("retires a request only when its exact bounded source snapshot changes", async () => {
+  const first = deferred<Response>();
+  vi.mocked(fetch).mockReset().mockReturnValueOnce(first.promise)
+    .mockResolvedValueOnce(Response.json({ status: "insufficient", claims: [] }));
+  const board = fixture();
+  const view = await setup(board);
+  await startAnswer();
+  const firstSignal = vi.mocked(fetch).mock.calls[0][1]?.signal;
+  const changed = structuredClone(board);
+  changed.threads[0].frags[0].text = "Orchard planting moved to late spring.";
+  view.rerender(<view.QuestionAnswer {...view.props} board={changed} />);
+  expect(firstSignal?.aborted).toBe(true);
+  expect(screen.queryByRole("region", { name: "Answer from captures" })).toBeNull();
+  await startAnswer();
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await act(async () => { first.resolve(Response.json(await answered(board, "STALE ANSWER"))); });
+  expect(screen.queryByText("STALE ANSWER")).toBeNull();
+});
+
+it("retries a settled question once same-owner readiness becomes subscribed-ready", async () => {
+  const { installDocumentLifetime } = await import("@/lib/ownership");
+  const lifetime = installDocumentLifetime({ owner: "synthetic-owner", expiresAt: Date.now() + 60000 });
+  const verify = deferred<{ owner: string; expiresAt: number }>();
+  stopWatches.push(lifetime.watch(() => verify.promise));
+  await setup();
+  act(() => { window.dispatchEvent(new Event("focus")); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+  expect(fetch).not.toHaveBeenCalled();
+  expect(screen.getByRole("status").textContent).toMatch(/answering/i);
+  await act(async () => { verify.resolve({ owner: "synthetic-owner", expiresAt: Date.now() + 60000 }); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it("does not resend a completed fingerprint after offline reconnect or same-owner remount", async () => {
+  const { installDocumentLifetime } = await import("@/lib/ownership");
+  const lifetime = installDocumentLifetime({ owner: "synthetic-owner", expiresAt: Date.now() + 60000 });
+  lifetime.keepOffline(true);
+  const verifies: ReturnType<typeof deferred<{ owner: string; expiresAt: number }>>[] = [];
+  stopWatches.push(lifetime.watch(() => {
+    const verify = deferred<{ owner: string; expiresAt: number }>();
+    verifies.push(verify);
+    return verify.promise;
+  }));
+  await setup();
+  await startAnswer();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  act(() => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    window.dispatchEvent(new Event("offline"));
+  });
+  expect(screen.queryByRole("region", { name: "Answer from captures" })).toBeNull();
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+  act(() => { window.dispatchEvent(new Event("online")); });
+  await act(async () => { verifies.at(-1)!.resolve({ owner: "synthetic-owner", expiresAt: Date.now() + 60000 }); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it("does not resend a completed fingerprint after the answer component fully unmounts and remounts", async () => {
+  const board = fixture();
+  vi.mocked(fetch).mockResolvedValue(Response.json(await answered(board, "STABLE ANSWER")));
+  const { QuestionAnswer, createQuestionAnswerSession } = await import("./QuestionAnswer");
+  const props = { board, question: "What about orchard?", onOpenThread: vi.fn(), onOpenIntention: vi.fn(),
+    session: createQuestionAnswerSession() };
+  const first = render(<QuestionAnswer {...props} />);
+  await startAnswer();
+  expect(screen.getByText("STABLE ANSWER")).toBeTruthy();
+  expect(fetch).toHaveBeenCalledTimes(1);
+
+  first.unmount();
+  render(<QuestionAnswer {...props} />);
+  await startAnswer();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("STABLE ANSWER")).toBeTruthy();
+});
+
+it("does not call recall for an ordinary search phrase", async () => {
+  vi.useFakeTimers();
+  await setup(fixture(), "orchard planting");
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("aborts a changed question and ignores its late response", async () => {
+  vi.useFakeTimers();
+  const first = deferred<Response>();
+  const second = deferred<Response>();
+  vi.mocked(fetch).mockReset().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  const board = fixture();
+  const view = await setup(board);
+  await startAnswer();
+  const firstSignal = vi.mocked(fetch).mock.calls[0][1]?.signal;
+  view.rerender(<view.QuestionAnswer {...view.props} question="Did I write about orchard planting?" />);
+  expect(firstSignal?.aborted).toBe(true);
+  await startAnswer();
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await act(async () => { second.resolve(Response.json(await answered(board, "CURRENT ANSWER"))); });
+  expect(screen.getByText("CURRENT ANSWER")).toBeTruthy();
+  await act(async () => { first.resolve(Response.json(await answered(board, "STALE ANSWER"))); });
+  expect(screen.queryByText("STALE ANSWER")).toBeNull();
+  expect(screen.getByText("CURRENT ANSWER")).toBeTruthy();
+});
+
+it("rechecks disclosure authority when a connected item is opened during silent revalidation", async () => {
   const { installDocumentLifetime } = await import("@/lib/ownership");
   const lifetime = installDocumentLifetime({ owner: "synthetic-owner", expiresAt: Date.now() + 60000 });
   const verify = deferred<{ owner: string; expiresAt: number }>();
   stopWatches.push(lifetime.watch(() => verify.promise));
   const board = fixture();
   vi.mocked(fetch).mockResolvedValueOnce(Response.json(await answered(board, "CITED ANSWER")));
-  const view = await setup(board, "orchard");
-  ask();
-  await screen.findByText("CITED ANSWER");
+  const view = await setup(board, "What about orchard?");
+  await startAnswer();
+  screen.getByText("CITED ANSWER");
   act(() => { window.dispatchEvent(new Event("focus")); });
   expect(lifetime.snapshot()).toBe("active");
   fireEvent.click(screen.getAllByRole("button", { name: "Open thread: Orchard plan" })[0]);
   expect(view.props.onOpenThread).not.toHaveBeenCalled();
-  const summary = screen.getByText(/Show submitted evidence/);
-  fireEvent.click(summary);
-  expect(summary.closest("details")?.open).toBe(false);
 });
 
 it.each(["revoked", "offline", "checking"])("removes sensitive output and rejects late bodies while %s", async mode => {
@@ -94,14 +274,11 @@ it.each(["revoked", "offline", "checking"])("removes sensitive output and reject
   stopWatches.push(lifetime.watch(() => verify.promise));
   const late = deferred<unknown>();
   const board = fixture();
-  vi.mocked(fetch).mockResolvedValueOnce(Response.json(await answered(board, "PRIVATE ANSWER")))
-    .mockResolvedValueOnce({ status: 200, ok: true, json: () => late.promise } as Response);
-  const view = await setup(board, "orchard");
-  ask();
-  await screen.findByText("PRIVATE ANSWER");
+  vi.mocked(fetch).mockResolvedValueOnce({ status: 200, ok: true, json: () => late.promise } as Response);
+  const view = await setup(board, "What about orchard?");
+  await startAnswer();
   expect(new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers).get("X-Capture-Owner")).toBe("synthetic-owner");
-  await act(async () => { ask(); });
-  expect(screen.getByText(/Show submitted evidence/)).toBeTruthy();
+  expect(screen.getByRole("status").textContent).toMatch(/answering/i);
   act(() => {
     if (mode === "revoked") lifetime.revoke();
     else if (mode === "offline") {
@@ -115,7 +292,7 @@ it.each(["revoked", "offline", "checking"])("removes sensitive output and reject
   expect(lifetime.snapshot()).toBe(mode);
   expect(view.container.textContent).not.toContain("Orchard");
   expect(screen.queryByText(/Show submitted evidence/)).toBeNull();
-  expect(vi.mocked(fetch).mock.calls[1][1]?.signal?.aborted).toBe(true);
+  expect(vi.mocked(fetch).mock.calls[0][1]?.signal?.aborted).toBe(true);
   await act(async () => { late.resolve(await answered(board, "LATE PRIVATE ANSWER")); });
   expect(screen.queryByText("LATE PRIVATE ANSWER")).toBeNull();
   if (mode !== "revoked") {
@@ -125,10 +302,9 @@ it.each(["revoked", "offline", "checking"])("removes sensitive output and reject
       window.dispatchEvent(new Event("online"));
       verify.resolve({ owner: "synthetic-owner", expiresAt: Date.now() + 60000 });
     });
-    expect(screen.getByRole("button", { name: "Answer from my captures" })).toBeTruthy();
     expect(screen.queryByText(/Show submitted evidence/)).toBeNull();
     expect(screen.queryByText("LATE PRIVATE ANSWER")).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
   }
 });
 
@@ -140,20 +316,25 @@ it.each(["question", "board", "unmount"])("retires delayed headers and body on %
     if (phase === "headers") vi.mocked(fetch).mockReturnValueOnce(late.promise);
     else vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: () => body.promise } as Response);
     const board = fixture();
-    const view = await setup(board, "orchard");
+    const view = await setup(board, "What about orchard?");
     const stale = await answered(board, "RETIRED ANSWER");
-    await act(async () => { ask(); });
+    await startAnswer();
     const signal = vi.mocked(fetch).mock.calls[0][1]?.signal;
     if (change === "unmount") view.unmount();
-    else view.rerender(<view.QuestionAnswer {...view.props} question={change === "question" ? "planting" : "orchard"} board={change === "board" ? fixture() : board} />);
+    else {
+      const changedBoard = fixture();
+      changedBoard.threads[0].frags[0].text = "Orchard planting moved to late spring.";
+      view.rerender(<view.QuestionAnswer {...view.props} question={change === "question" ? "What about planting?" : view.props.question} board={change === "board" ? changedBoard : board} />);
+    }
     expect(signal?.aborted).toBe(true);
     expect(screen.queryByText(/Show submitted evidence/)).toBeNull();
     await act(async () => { late.resolve(Response.json(stale)); body.resolve(stale); });
     expect(screen.queryByText("RETIRED ANSWER")).toBeNull();
     if (change !== "unmount") {
       vi.mocked(fetch).mockResolvedValueOnce(Response.json({ status: "insufficient", claims: [] }));
-      ask();
-      expect(await screen.findByText("Not enough evidence in these matching notes to answer.")).toBeTruthy();
+      await startAnswer();
+      expect(screen.getByRole("status").textContent).toBe("Not enough evidence in these matching notes to answer.");
+      expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
       view.unmount();
     }
   }
@@ -162,10 +343,12 @@ it.each(["question", "board", "unmount"])("retires delayed headers and body on %
 it.each(["question", "board"])("clears completed sensitive output on %s change and does not resurrect it on return", async change => {
   const board = fixture();
   vi.mocked(fetch).mockResolvedValueOnce(Response.json(await answered(board, "PREVIOUS ANSWER")));
-  const view = await setup(board, "orchard");
-  ask();
-  await screen.findByText("PREVIOUS ANSWER");
-  view.rerender(<view.QuestionAnswer {...view.props} question={change === "question" ? "planting" : "orchard"} board={change === "board" ? fixture() : board} />);
+  const view = await setup(board, "What about orchard?");
+  await startAnswer();
+  screen.getByText("PREVIOUS ANSWER");
+  const changedBoard = fixture();
+  changedBoard.threads[0].frags[0].text = "Orchard planting moved to late spring.";
+  view.rerender(<view.QuestionAnswer {...view.props} question={change === "question" ? "What about planting?" : view.props.question} board={change === "board" ? changedBoard : board} />);
   expect(screen.queryByText("PREVIOUS ANSWER")).toBeNull();
   view.rerender(<view.QuestionAnswer {...view.props} />);
   expect(screen.queryByText("PREVIOUS ANSWER")).toBeNull();
@@ -180,46 +363,34 @@ it.each(["headers", "body"])("bounds the entire %s wait at 45s even when transpo
   if (phase === "headers") vi.mocked(fetch).mockReturnValue(late.promise);
   else vi.mocked(fetch).mockResolvedValue({ ok: true, json: () => body.promise } as Response);
   const board = fixture();
-  await setup(board, "orchard");
+  await setup(board, "What about orchard?");
   const stale = await answered(board, "TOO LATE");
-  vi.useFakeTimers();
-  await act(async () => { ask(); });
-  await act(async () => { await vi.advanceTimersByTimeAsync(44999); });
+  await startAnswer();
   expect(screen.getByRole("status").textContent).toMatch(/answering/i);
-  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
-  expect(screen.getByRole("alert").textContent).toMatch(/timed out/i);
+  await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+  expect(screen.getByRole("status").textContent).toMatch(/timed out/i);
   expect(vi.mocked(fetch).mock.calls[0][1]?.signal?.aborted).toBe(true);
-  expect((screen.getByRole("button", { name: "Answer from my captures" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
   await act(async () => { late.resolve(Response.json(stale)); body.resolve(stale); });
   expect(screen.queryByText("TOO LATE")).toBeNull();
-  expect(screen.getByRole("alert").textContent).toMatch(/timed out/i);
+  expect(screen.getByRole("status").textContent).toMatch(/timed out/i);
 });
 
-it("cancels and retries without accepting an abort-ignoring older response or stealing search focus", async () => {
-  const first = deferred<Response>();
-  const second = deferred<Response>();
-  vi.mocked(fetch).mockReset().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+it("answers without stealing search focus", async () => {
+  const response = deferred<Response>();
+  vi.mocked(fetch).mockReset().mockReturnValueOnce(response.promise);
   const board = fixture();
-  await setup(board, "orchard");
+  await setup(board, "What about orchard?");
   const searchView = render(<input aria-label="Search captures" />);
-  ask();
   const search = screen.getByRole("textbox", { name: "Search captures" }) as HTMLInputElement;
   search.focus();
   fireEvent.change(search, { target: { value: "Still typing" } });
-  expect(search.disabled).toBe(false);
-  expect(document.activeElement).toBe(search);
-  ask();
+  await startAnswer();
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(screen.getByRole("status").textContent).toMatch(/answering/i);
-  fireEvent.click(screen.getByRole("button", { name: "Cancel answer" }));
-  expect(vi.mocked(fetch).mock.calls[0][1]?.signal?.aborted).toBe(true);
-  expect(screen.getByText(/Answer cancelled/)).toBeTruthy();
-  ask();
-  const latest = await answered(board, "CURRENT ANSWER");
-  await act(async () => { second.resolve(Response.json(latest)); });
-  expect(screen.getByText("CURRENT ANSWER")).toBeTruthy();
-  await act(async () => { first.resolve(Response.json(await answered(board, "STALE ANSWER"))); });
-  expect(screen.queryByText("STALE ANSWER")).toBeNull();
+  expect(search.disabled).toBe(false);
+  expect(document.activeElement).toBe(search);
+  await act(async () => { response.resolve(Response.json(await answered(board, "CURRENT ANSWER"))); });
   expect(screen.getByText("CURRENT ANSWER")).toBeTruthy();
   expect(document.activeElement).toBe(search);
   searchView.unmount();
@@ -235,17 +406,15 @@ it.each(["anonymous", "offline", "playground"])("guards %s before retrieval or n
   const board = fixture();
   Object.defineProperty(board, "threads", { get() { throw new Error("Private board was accessed"); } });
   const view = await setup(board);
-  if (mode === "playground") expect(view.container.textContent).toBe("");
-  else expect(screen.getByText(mode === "anonymous" ? /Sign in.*answer/i : /online.*answer/i)).toBeTruthy();
-  const button = screen.queryByRole("button", { name: "Answer from my captures" });
-  if (button) fireEvent.click(button);
+  expect(view.container.textContent).toBe("");
+  await startAnswer();
   expect(fetch).not.toHaveBeenCalled();
 });
 
 it("does not even retrieve matching notes during render or query edits", async () => {
   const board = fixture();
   Object.defineProperty(board, "threads", { get() { throw new Error("No implicit retrieval"); } });
-  const view = await setup(board, "orchard");
+  const view = await setup(board, "What about orchard?");
   view.rerender(<view.QuestionAnswer {...view.props} question="orchard planting" />);
   expect(fetch).not.toHaveBeenCalled();
 });
@@ -253,20 +422,18 @@ it("does not even retrieve matching notes during render or query edits", async (
 it.each(["", "ab", " ".repeat(10), "x".repeat(501)])("blocks invalid question length without retrieving or sending (%s)", async question => {
   const board = fixture();
   Object.defineProperty(board, "threads", { get() { throw new Error("Retrieval must not run"); } });
-  await setup(board, question);
-  const button = screen.getByRole("button", { name: "Answer from my captures" }) as HTMLButtonElement;
-  expect(button.disabled).toBe(true);
-  expect(screen.getByText(/3.*500 characters/)).toBeTruthy();
-  fireEvent.click(button);
+  const view = await setup(board, question);
+  await startAnswer();
+  expect(view.container.textContent).toBe("");
   expect(fetch).not.toHaveBeenCalled();
 });
 
 it("reports no matching evidence locally without sending an empty or unrelated board", async () => {
-  await setup(fixture(), "volcanoes");
-  ask();
-  expect(await screen.findByText(/No matching evidence.*Try more specific words/i)).toBeTruthy();
+  await setup(fixture(), "What about volcanoes?");
+  await startAnswer();
+  expect(screen.getByRole("status").textContent).toMatch(/No matching evidence.*Try more specific words/i);
   expect(fetch).not.toHaveBeenCalled();
-  expect(screen.queryByText(/Show submitted evidence/)).toBeNull();
+  expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
 });
 
 it.each(["javascript:alert(1)", "__proto__", "quote-mismatch"])("rejects unverified server citations: %s", async kind => {
@@ -277,10 +444,11 @@ it.each(["javascript:alert(1)", "__proto__", "quote-mismatch"])("rejects unverif
     citations: [{ sourceId: kind === "quote-mismatch" ? source.id : kind,
       quote: kind === "quote-mismatch" ? "This quote never existed." : source.text }],
   }] }));
-  const view = await setup(board, "orchard");
-  ask();
-  expect((await screen.findByRole("alert")).textContent).toMatch(/could not verify/i);
+  const view = await setup(board, "What about orchard?");
+  await startAnswer();
+  expect(screen.getByRole("status").textContent).toMatch(/could not verify/i);
   expect(screen.queryByText("UNTRUSTED CLAIM")).toBeNull();
+  expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
   expect(view.container.querySelector("a, script, img")).toBeNull();
   expect(view.props.onOpenThread).not.toHaveBeenCalled();
 });
@@ -288,33 +456,85 @@ it.each(["javascript:alert(1)", "__proto__", "quote-mismatch"])("rejects unverif
 it.each([503, 429])("reports HTTP %s as a failed request, not insufficient evidence", async status => {
   vi.mocked(fetch).mockResolvedValue(Response.json({ status: "insufficient", claims: [] }, { status }));
   await setup();
-  ask();
-  expect((await screen.findByRole("alert")).textContent).toMatch(/could not get an answer/i);
+  await startAnswer();
+  expect(screen.getByRole("status").textContent).toMatch(/could not get an answer/i);
   expect(screen.queryByText("Not enough evidence in these matching notes to answer.")).toBeNull();
-  expect(screen.getByText(/Show submitted evidence/)).toBeTruthy();
-  expect((screen.getByRole("button", { name: "Answer from my captures" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
 });
 
-it("sends only matching original evidence after an explicit click, never while typing", async () => {
+it.each(["HTTP", "transport", "timeout", "invalid answer"])(
+  "does not automatically loop after a %s failure and retries after the query changes away and returns",
+  async failure => {
+    const never = deferred<Response>();
+    vi.mocked(fetch).mockReset();
+    if (failure === "HTTP") vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 503 }));
+    else if (failure === "transport") vi.mocked(fetch).mockRejectedValueOnce(new TypeError("network unavailable"));
+    else if (failure === "timeout") vi.mocked(fetch).mockReturnValueOnce(never.promise);
+    else vi.mocked(fetch).mockResolvedValueOnce(Response.json({ status: "answered", claims: [] }));
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ status: "insufficient", claims: [] }));
+
+    const board = fixture();
+    const question = "What about orchard planting?";
+    const view = await setup(board, question);
+    await startAnswer();
+    if (failure === "timeout") {
+      await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+    }
+    expect(screen.getByRole("status").textContent).toMatch(/could not|timed out/i);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    view.rerender(<view.QuestionAnswer {...view.props} board={structuredClone(board)} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    view.rerender(<view.QuestionAnswer {...view.props} question="orchard planting" />);
+    view.rerender(<view.QuestionAnswer {...view.props} question={question} />);
+    await startAnswer();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("status").textContent).toBe("Not enough evidence in these matching notes to answer.");
+    expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
+  },
+);
+
+it("retries a failed question when its bounded source snapshot changes", async () => {
+  vi.mocked(fetch).mockReset()
+    .mockResolvedValueOnce(new Response(null, { status: 503 }))
+    .mockResolvedValueOnce(Response.json({ status: "insufficient", claims: [] }));
+  const board = fixture();
+  const view = await setup(board);
+  await startAnswer();
+  expect(screen.getByRole("status").textContent).toMatch(/could not get an answer/i);
+
+  const changed = structuredClone(board);
+  changed.threads[0].frags[0].text = "Orchard planting moved to late spring.";
+  view.rerender(<view.QuestionAnswer {...view.props} board={changed} />);
+  await startAnswer();
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole("status").textContent).toBe("Not enough evidence in these matching notes to answer.");
+  expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
+});
+
+it("sends only matching original evidence for a stable question", async () => {
   const { recallSources } = await import("@/lib/recall");
   const board = fixture();
   const before = JSON.stringify(board);
-  const view = await setup(board);
+  const view = await setup(board, "orchard planting");
+  await startAnswer();
   expect(fetch).not.toHaveBeenCalled();
-  expect(screen.getByText("Sends up to 12 matching notes to your configured AI. Your notes stay unchanged.")).toBeTruthy();
-  view.rerender(<view.QuestionAnswer {...view.props} question="orchard" />);
+  const question = "What about orchard?";
+  view.rerender(<view.QuestionAnswer {...view.props} question={question} />);
   expect(fetch).not.toHaveBeenCalled();
-  ask();
-  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  await startAnswer();
+  expect(fetch).toHaveBeenCalledTimes(1);
   const [url, init] = vi.mocked(fetch).mock.calls[0];
   expect(url).toBe("/api/recall");
   expect(init?.method).toBe("POST");
-  expect(JSON.parse(init?.body as string)).toEqual({ question: "orchard", sources: recallSources(board, "orchard") });
+  expect(JSON.parse(init?.body as string)).toEqual({ question, sources: recallSources(board, question) });
   expect(init?.body).not.toContain("PRIVATE");
   expect(JSON.stringify(board)).toBe(before);
 });
 
-it("shows escaped cited claims with trusted titles, dated states, and exact source navigation", async () => {
+it("shows escaped cited claims with one minimal control per connected item", async () => {
   const board = fixture();
   const { recallSources } = await import("@/lib/recall");
   const sources = recallSources(board, "orchard");
@@ -322,28 +542,18 @@ it("shows escaped cited claims with trusted titles, dated states, and exact sour
   vi.mocked(fetch).mockResolvedValue(Response.json({ status: "answered", claims: [{ text,
     citations: sources.map(source => ({ sourceId: source.id, quote: source.text })),
   }] }));
-  const view = await setup(board, "orchard");
-  ask();
-  expect(await screen.findByRole("heading", { name: "Answer from your captures" })).toBeTruthy();
+  const view = await setup(board, "What about orchard?");
+  await startAnswer();
+  expect(screen.getByRole("heading", { name: "Answer" })).toBeTruthy();
   expect(screen.getByText(text)).toBeTruthy();
   expect(view.container.querySelector("img, a, script")).toBeNull();
-  expect(screen.getAllByText("resolved").length).toBeGreaterThan(0);
-  expect(screen.getAllByText("done").length).toBeGreaterThan(0);
-  for (const time of view.container.querySelectorAll("time")) {
-    expect(time.getAttribute("datetime")).toMatch(/^2026-01-0[34]T12:00:00.000Z$/);
-    expect(time.textContent).toContain("2026");
-  }
+  expect(view.container.querySelector("blockquote, details, time")).toBeNull();
+  expect(view.container.textContent).not.toMatch(/resolved|done|matching subset|submitted evidence/i);
   const threadButtons = screen.getAllByRole("button", { name: "Open thread: Orchard plan" });
+  expect(threadButtons).toHaveLength(1);
   fireEvent.click(threadButtons[0]);
   expect(view.props.onOpenThread).toHaveBeenLastCalledWith("thread-1", "frag-2");
-  fireEvent.click(threadButtons[1]);
-  expect(view.props.onOpenThread).toHaveBeenLastCalledWith("thread-1", "frag-1");
   fireEvent.click(screen.getAllByRole("button", { name: "Open intention: I tend my orchard patiently." })[0]);
   expect(view.props.onOpenIntention).toHaveBeenCalledWith("intent-1");
-  const action = screen.getByText("Show action source").closest("details")!;
-  expect(action.open).toBe(false);
-  fireEvent.click(screen.getByText("Show action source"));
-  expect(action.open).toBe(true);
-  expect(action.textContent).toContain("Orchard seedlings ordered");
-  expect(screen.getByText(/matching subset.*not your entire board/i)).toBeTruthy();
+  expect(screen.queryByText("Orchard seedlings ordered")).toBeNull();
 });

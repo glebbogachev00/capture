@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Action, Board } from "./model";
 import { EMPTY } from "./model";
-import { shareAction, shareableFor, shareRecordDay, shareText } from "./share";
+import { shareAction, shareableFor, shareRecord, shareRecordDay, shareText } from "./share";
 describe("shareAction — one task, on its way to an assistant", () => {
   const act = (over: Partial<Action> = {}): Action => ({
     id: "a1",
@@ -55,6 +55,22 @@ describe("a thread travels with its actions", () => {
     expect(out.text).toContain("- [ ] call the bank");
     expect(out.text).toContain("- [x] ship it");
     expect(shareThread(t, { open: [], done: [] }).text).not.toContain("Actions from");
+  });
+
+  it("defensively excludes a legacy unsorted fragment from thread shares", async () => {
+    const { shareThread } = await import("./share");
+    const out = shareThread({
+      id: "t",
+      name: "Pricing",
+      summary: "",
+      frags: [
+        { id: "waiting", at: 1, text: "private pending pricing draft", unsorted: true },
+        { id: "ready", at: 2, text: "published pricing decision" },
+      ],
+    });
+    expect(out.text).not.toContain("private pending pricing draft");
+    expect(out.text).toContain("published pricing decision");
+    expect(out.summary).toContain("1 fragment");
   });
 });
 
@@ -132,6 +148,39 @@ describe("the header share carries the connections too", () => {
   it("the threads tab counts each thread's open actions", () => {
     const out = shareableFor(board(), { kind: "tab", tab: "threads" }, 10);
     expect(out?.text).toContain("1 open action");
+  });
+
+  it("does not share a waiting-to-sort envelope as an open Action", () => {
+    const value = board();
+    value.actions.push({
+      id: "waiting",
+      text: "private offline capture waiting for classification",
+      done: false,
+      at: 3,
+      shelf: "keep",
+      expires: null,
+      unsorted: true,
+    });
+    const out = shareableFor(value, { kind: "tab", tab: "actions" }, 10);
+    expect(out?.text).not.toContain("private offline capture");
+    expect(out?.text).toContain("Draft the usage-based pricing page");
+  });
+
+  it("excludes waiting envelopes from whole-board action text and counts", () => {
+    const value = board();
+    value.actions.push({
+      id: "waiting",
+      text: "private offline capture waiting for classification",
+      done: false,
+      at: 3,
+      shelf: "keep",
+      expires: null,
+      unsorted: true,
+    });
+    const out = shareRecord(value);
+    expect(out.summary).toContain("1 open actions");
+    expect(out.text).not.toContain("private offline capture");
+    expect(out.text).toContain("Draft the usage-based pricing page");
   });
 });
 

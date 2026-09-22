@@ -22,6 +22,7 @@ async function dependencies(): Promise<CloudSubscriptionDependencies> {
       isConfigured: () => false,
       requiresSubscription: () => isSubscriptionRequired(),
       verifyIdentity: async () => null,
+      isAccountErasing: async () => { throw new Error("account lifecycle unavailable"); },
       getSubscriptions: async () => [],
     };
   }
@@ -32,6 +33,11 @@ async function dependencies(): Promise<CloudSubscriptionDependencies> {
     isConfigured: () => true,
     requiresSubscription: () => isSubscriptionRequired(),
     verifyIdentity: async () => identityFromClaims(client),
+    isAccountErasing: async ({ userId }) => {
+      const { data, error } = await client.rpc("capture_account_deleting", { p_user_id: userId });
+      if (error || typeof data !== "boolean") throw new Error("account lifecycle unavailable");
+      return data;
+    },
     getSubscriptions: async (userId) => {
       // Recovery after Polar's finite delivery retries, on authenticated demand.
       // A failed fetch leaves the durable pending row denied; other subscriptions

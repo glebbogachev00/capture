@@ -9,6 +9,7 @@ import {
 import { actionsForThread, type DoneItem } from "./threadActions";
 import type { CaptureEntry } from "./ledger";
 import { dayKey } from "./record";
+import { settledLedgerEntries } from "./unsortedOps";
 
 /**
  * Turning what is on screen into text someone else can read.
@@ -55,17 +56,18 @@ export function shareThread(
   t: Thread,
   from?: { open: Action[]; done: DoneItem[] }
 ): Shareable {
-  const dates = t.frags.map((f) => f.at);
+  const frags = t.frags.filter((frag) => !frag.unsorted);
+  const dates = frags.map((f) => f.at);
   const lines = [`# ${t.name}`, ""];
   lines.push(
-    `${t.frags.length} fragment${t.frags.length === 1 ? "" : "s"}${
+    `${frags.length} fragment${frags.length === 1 ? "" : "s"}${
       dates.length ? " · " + span(dates) : ""
     }`,
     ""
   );
   if (t.summary) lines.push("**Where this stands**", "", t.summary, "");
   lines.push("---", "");
-  for (const f of t.frags) {
+  for (const f of frags) {
     /* The label an agent reads: done and still-open must be tellable
        apart from the text alone. */
     lines.push(
@@ -86,8 +88,8 @@ export function shareThread(
   return {
     title: t.name,
     text: lines.join("\n").trimEnd(),
-    summary: `Thread · ${t.frags.length} fragment${t.frags.length === 1 ? "" : "s"}`,
-    imgIds: t.frags.flatMap((f) => f.imgs || []),
+    summary: `Thread · ${frags.length} fragment${frags.length === 1 ? "" : "s"}`,
+    imgIds: frags.flatMap((f) => f.imgs || []),
   };
 }
 
@@ -159,10 +161,11 @@ export function shareActions(actions: Action[], now: number): Shareable {
 export function shareThreadList(threads: Thread[], board?: Board): Shareable {
   const lines = [`# Threads (${threads.length})`, ""];
   for (const t of threads) {
-    const last = t.frags.at(-1);
+    const frags = t.frags.filter((frag) => !frag.unsorted);
+    const last = frags.at(-1);
     const open = board ? actionsForThread(board, t).open.length : 0;
     lines.push(
-      `- **${t.name}** — ${t.frags.length} fragment${t.frags.length === 1 ? "" : "s"}${
+      `- **${t.name}** — ${frags.length} fragment${frags.length === 1 ? "" : "s"}${
         open ? `, ${open} open action${open === 1 ? "" : "s"}` : ""
       }${last ? ", last " + shortDate(last.at) : ""}`
     );
@@ -199,7 +202,7 @@ export function shareableFor(
     | { kind: "record"; day: string },
   now: number
 ): Shareable | null {
-  if (view.kind === "record") return shareRecordDay(board.ledger ?? [], view.day);
+  if (view.kind === "record") return shareRecordDay(settledLedgerEntries(board), view.day);
   if (view.kind === "thread") {
     const t = board.threads.find((x) => x.id === view.id);
     /* The same document the thread's own Copy produces: the standing, and
@@ -211,7 +214,7 @@ export function shareableFor(
     return i ? shareIntention(i) : null;
   }
   if (view.tab === "actions") {
-    const open = board.actions.filter((a) => !a.done && !a.faded);
+    const open = board.actions.filter((a) => !a.done && !a.faded && !a.unsorted);
     return open.length ? shareActions(open, now) : null;
   }
   if (view.tab === "threads") {
@@ -317,7 +320,7 @@ export function shareRecordDay(
   day: string
 ): Shareable | null {
   const rows = ledger
-    .filter((entry) => dayKey(entry.at) === day)
+    .filter((entry) => entry.kind !== "pending" && dayKey(entry.at) === day)
     .sort((a, b) => a.at - b.at);
   if (!rows.length) return null;
 
@@ -378,9 +381,9 @@ export function shareRecordSince(board: Board, since: number): Shareable | null 
     ])
       claimed.add(a.id);
   const loose = board.actions.filter(
-    (a) => !a.done && a.at > since && !claimed.has(a.id)
+    (a) => !a.done && !a.unsorted && a.at > since && !claimed.has(a.id)
   );
-  const rows = [...(board.ledger ?? [])]
+  const rows = settledLedgerEntries(board)
     .filter((e) => e.at > since)
     .sort((a, b) => b.at - a.at)
     .slice(0, 50);
@@ -460,20 +463,20 @@ export function shareRecord(board: Board, recentLimit = 15): Shareable {
         for (const a of acts.done) lines.push(`- [x] ${a.text}`);
       }
     }
-    const loose = board.actions.filter((a) => !a.done && !claimed.has(a.id));
+    const loose = board.actions.filter((a) => !a.done && !a.unsorted && !claimed.has(a.id));
     if (loose.length) {
       lines.push("", "## Actions attached to nothing", "");
       for (const a of loose) lines.push(`- [ ] ${a.text}`);
     }
   } else {
-    const open = board.actions.filter((a) => !a.done);
+    const open = board.actions.filter((a) => !a.done && !a.unsorted);
     if (open.length) {
       lines.push("## Open actions", "");
       for (const a of open) lines.push(`- [ ] ${a.text}`);
     }
   }
 
-  const rows = [...(board.ledger ?? [])]
+  const rows = settledLedgerEntries(board)
     .sort((a, b) => b.at - a.at)
     .slice(0, recentLimit);
   if (rows.length) {
@@ -496,7 +499,7 @@ export function shareRecord(board: Board, recentLimit = 15): Shareable {
   return {
     title: "Capture board",
     summary: `${board.threads.length} threads · ${
-      board.actions.filter((a) => !a.done).length
+      board.actions.filter((a) => !a.done && !a.unsorted).length
     } open actions`,
     text: lines.join("\n"),
   };

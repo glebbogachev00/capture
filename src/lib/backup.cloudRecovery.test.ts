@@ -25,7 +25,10 @@ it("allows a fresh explicit archive recovery after reset without replaying the o
       body: JSON.stringify({ board, tombstones: [] }),
     }), {
       isEnabled: () => true, verifyIdentity: async () => ({ userId: "alice" }),
-      requiresEntitlement: () => false, repository,
+      requiresEntitlement: () => false,
+      isAccountErasing: async () => false,
+      consumeQuota: async () => ({ allowed: true, retryAfterSec: 0 }),
+      repository,
     });
     expect(response.status).toBe(200);
     const result = await response.json();

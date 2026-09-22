@@ -12,7 +12,7 @@ import { LegacyImportSettings } from "@/components/LegacyImport";
    action is finished, an intention is inhabited.
    ============================================================ */
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -38,6 +38,7 @@ import { ProfileSignature } from "@/components/ProfileSignature";
 import { CaptureProfile } from "@/components/CaptureProfile";
 import { CloudAccountPanel } from "@/components/CloudBilling";
 import { PLAYGROUND } from "@/lib/playground";
+import { imgLoad, imgNow } from "@/lib/imgCache";
 import type { CaptureEntry } from "@/lib/ledger";
 import type { DayWrap } from "@/lib/wrap";
 import { WrapView, WrapCallout } from "./Wrap";
@@ -394,6 +395,8 @@ export function IntentionDetail({
         }
       />
 
+      {!!intention.imgs?.length && <IntentionImages ids={intention.imgs} />}
+
       {hasSpoken && (
         /* Folded, and last. The expanded intention is the thing to act on;
            this is the record behind it, wanted occasionally and never in
@@ -413,6 +416,22 @@ export function IntentionDetail({
   );
 }
 
+function IntentionImages({ ids }: { ids: string[] }) {
+  const [srcs, setSrcs] = useState(() => ids.map(imgNow).filter((src): src is string => !!src));
+  useEffect(() => {
+    let active = true;
+    void Promise.all(ids.map((id) => imgLoad(id).catch(() => null))).then((values) => {
+      if (active) setSrcs(values.filter((src): src is string => !!src));
+    });
+    return () => { active = false; };
+  }, [ids]);
+  if (!srcs.length) return null;
+  return <div className="intention-images">{srcs.map((src, index) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img key={ids[index] || index} src={src} alt={`Attached capture ${index + 1}`} />
+  ))}</div>;
+}
+
 /**
  * A file button that opens the picker on iOS.
  *
@@ -425,9 +444,11 @@ export function IntentionDetail({
 function FileButton({
   label,
   onFile,
+  disabled = false,
 }: {
   label: string;
   onFile: (file: File) => void;
+  disabled?: boolean;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   return (
@@ -435,6 +456,7 @@ function FileButton({
       <button
         type="button"
         className="ghost"
+        disabled={disabled}
         onClick={() => ref.current?.click()}
       >
         {label}
@@ -443,6 +465,7 @@ function FileButton({
         ref={ref}
         type="file"
         accept="application/json,.json"
+        disabled={disabled}
         className="clipped"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -856,6 +879,7 @@ export function SettingsScreen({
   onImportIntent,
   onLogout,
   ioNote,
+  ioBusy,
   sync,
   onSyncNow,
   onOpenRecord,
@@ -879,6 +903,7 @@ export function SettingsScreen({
   onImportIntent: (file: File) => void;
   onLogout: () => void;
   ioNote: IoNote;
+  ioBusy?: string | null;
   sync: { ok: boolean; at: number; note?: string } | null;
   onSyncNow: () => void;
   /** The signpost to The record — the screen itself lives off the masthead,
@@ -988,8 +1013,8 @@ export function SettingsScreen({
               {counts.intentions === 1 ? "" : "s"}. Includes pictures and
               history.
             </p>
-            <button className="capture-btn" onClick={onExport}>
-              Download backup
+            <button className="capture-btn" onClick={onExport} disabled={!!ioBusy}>
+              {ioBusy ?? "Download backup"}
             </button>
           </div>
 
@@ -1058,7 +1083,11 @@ export function SettingsScreen({
               Adds missing data and pictures. Uploading the same backup twice
               changes nothing the second time.
             </p>
-            <FileButton label="Upload a Capture backup" onFile={onRestore} />
+            <FileButton
+              label={ioBusy ?? "Upload a Capture backup"}
+              onFile={onRestore}
+              disabled={!!ioBusy}
+            />
           </div>
 
           <div className="settings-group">

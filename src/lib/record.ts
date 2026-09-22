@@ -22,15 +22,16 @@ export type RecordStats = {
 };
 
 export function recordStats(ledger: CaptureEntry[]): RecordStats {
+  const settled = ledger.filter((entry) => entry.kind !== "pending");
   const stats: RecordStats = {
-    total: ledger.length,
+    total: settled.length,
     since: null,
     actions: 0,
     threads: 0,
     intentions: 0,
     dictated: 0,
   };
-  for (const e of ledger) {
+  for (const e of settled) {
     if (stats.since === null || e.at < stats.since) stats.since = e.at;
     /* An undone capture was said, but became nothing. */
     if (e.undone) continue;
@@ -93,7 +94,8 @@ export function recentCaptures(
   ledger: CaptureEntry[],
   limit = 12
 ): RecordEntry[] {
-  return [...ledger]
+  return ledger
+    .filter((entry) => entry.kind !== "pending")
     .sort((a, b) => b.at - a.at)
     .slice(0, limit)
     .map(asEntry);
@@ -108,7 +110,7 @@ export function recentCaptures(
  */
 export function dayCaptures(ledger: CaptureEntry[], day: string): RecordEntry[] {
   return ledger
-    .filter((e) => dayKey(e.at) === day)
+    .filter((e) => e.kind !== "pending" && dayKey(e.at) === day)
     .sort((a, b) => a.at - b.at)
     .map(asEntry);
 }
@@ -163,6 +165,7 @@ export function heatGrid(
   const days = weeks * 7;
   const counts = new Map<string, number>();
   for (const e of ledger) {
+    if (e.kind === "pending") continue;
     const key = dayKey(e.at);
     counts.set(key, (counts.get(key) || 0) + 1);
   }
@@ -212,6 +215,7 @@ export type CaughtWords = { words: number; like: string } | null;
 export function caughtWords(ledger: CaptureEntry[]): CaughtWords {
   let words = 0;
   for (const e of ledger) {
+    if (e.kind === "pending") continue;
     const said = (e.raw || e.clean || "").trim();
     if (said) words += said.split(/\s+/).length;
   }

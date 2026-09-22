@@ -5,6 +5,7 @@ import {
   handleCustomerPortal,
   handlePolarWebhook,
   normalizeSubscription,
+  polarCapabilityLifetimeMs,
   type PolarDependencies,
 } from "@/lib/polar";
 
@@ -22,7 +23,10 @@ function deps(overrides: Partial<PolarDependencies> = {}): PolarDependencies {
     config,
     isCloudEnabled: () => true,
     identity: vi.fn().mockResolvedValue({ userId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", email: "a@example.com" }),
+    isAccountErasing: vi.fn().mockResolvedValue(false),
     hasBlockingSubscription: vi.fn().mockResolvedValue(false),
+    acquireExternalWork: vi.fn().mockResolvedValue({ admissionId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }),
+    releaseExternalWork: vi.fn().mockResolvedValue(undefined),
     createCheckout: vi.fn().mockResolvedValue({ url: "https://sandbox.polar.sh/checkout/1" }),
     createCustomerSession: vi.fn().mockResolvedValue({ customerPortalUrl: "https://sandbox.polar.sh/portal/1" }),
     validateWebhook: vi.fn().mockResolvedValue({
@@ -46,6 +50,13 @@ function deps(overrides: Partial<PolarDependencies> = {}): PolarDependencies {
 }
 
 describe("Polar checkout", () => {
+  it("uses a conservative configurable capability lifetime and fails closed on invalid configuration", () => {
+    expect(polarCapabilityLifetimeMs({})).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(polarCapabilityLifetimeMs({ CAPTURE_POLAR_CAPABILITY_MAX_SECONDS: "86400" })).toBe(86_400_000);
+    expect(() => polarCapabilityLifetimeMs({ CAPTURE_POLAR_CAPABILITY_MAX_SECONDS: "59" })).toThrow();
+    expect(() => polarCapabilityLifetimeMs({ CAPTURE_POLAR_CAPABILITY_MAX_SECONDS: "invalid" })).toThrow();
+  });
+
   it("cannot charge when Capture Cloud is disabled", async () => {
     const d = deps({ isCloudEnabled: () => false });
     const response = await handleCheckout(new Request("https://capture.test/api/cloud/checkout", {
@@ -59,6 +70,16 @@ describe("Polar checkout", () => {
   it("requires a signed-in user", async () => {
     const response = await handleCheckout(new Request("https://capture.test/api/cloud/checkout", { method: "POST", body: JSON.stringify({ plan: "yearly" }) }), deps({ identity: vi.fn().mockResolvedValue(null) }));
     expect(response.status).toBe(401);
+  });
+
+  it("refuses checkout before reading billing state when account erasure is fenced", async () => {
+    const d = deps({ isAccountErasing: vi.fn().mockResolvedValue(true) });
+    const response = await handleCheckout(new Request("https://capture.test/api/cloud/checkout", {
+      method: "POST", body: JSON.stringify({ plan: "yearly" }),
+    }), d);
+    expect(response.status).toBe(403);
+    expect(d.hasBlockingSubscription).not.toHaveBeenCalled();
+    expect(d.createCheckout).not.toHaveBeenCalled();
   });
 
   it("accepts only named plans and creates a server-bound checkout without a trial", async () => {
@@ -82,6 +103,29 @@ describe("Polar checkout", () => {
       allowTrial: false,
       metadata: { capturePlan: "yearly" },
     });
+    expect(d.acquireExternalWork).toHaveBeenCalledWith(expect.objectContaining({
+      ownerId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      kind: "polar_checkout",
+      capabilityExpiresAt: expect.any(Date),
+    }));
+    expect(d.releaseExternalWork).toHaveBeenCalledWith(
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    );
+  });
+
+  it("releases checkout admission in finally when Polar fails", async () => {
+    const order: string[] = [];
+    const d = deps({
+      acquireExternalWork: vi.fn(async () => { order.push("acquire"); return { admissionId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }; }),
+      createCheckout: vi.fn(async () => { order.push("provider"); throw new Error("gateway 404"); }),
+      releaseExternalWork: vi.fn(async () => { order.push("release"); }),
+    });
+    const response = await handleCheckout(new Request("https://capture.test/api/cloud/checkout", {
+      method: "POST", body: JSON.stringify({ plan: "monthly" }),
+    }), d);
+    expect(response.status).toBe(502);
+    expect(order).toEqual(["acquire", "provider", "release"]);
   });
 
   it("can create checkout before the webhook secret has been issued", async () => {
@@ -128,6 +172,10 @@ describe("Polar customer portal", () => {
       externalCustomerId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       returnUrl: "https://trycapture.app/app",
     });
+    expect(d.acquireExternalWork).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "polar_portal", capabilityExpiresAt: expect.any(Date),
+    }));
+    expect(d.releaseExternalWork).toHaveBeenCalledOnce();
   });
 });
 

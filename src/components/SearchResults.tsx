@@ -72,6 +72,7 @@ export function SearchResults({
         </>
       )}
 
+
       {!!hits.threads.length && (
         <>
           <div className="section-label">Threads · {hits.threads.length}</div>

@@ -1,0 +1,90 @@
+[
+  {
+    "batchId": "pricing-and-vet",
+    "id": "pricing-related",
+    "expectedKeep": true,
+    "candidate": {
+      "kind": "fold_action",
+      "source": "Compare annual and monthly pricing",
+      "target": "Pricing decisions",
+      "targetContext": "Packaging and annual-plan tradeoffs"
+    }
+  },
+  {
+    "batchId": "pricing-and-vet",
+    "id": "vet-unrelated",
+    "expectedKeep": false,
+    "candidate": {
+      "kind": "fold_action",
+      "source": "Call the vet about Luna's shots",
+      "target": "Webhook reliability",
+      "targetContext": "Retry timing and failed deliveries"
+    }
+  },
+  {
+    "batchId": "duplicate-boundary",
+    "id": "domain-duplicate",
+    "expectedKeep": true,
+    "candidate": {
+      "kind": "dup_action",
+      "source": "Renew example.com domain",
+      "target": "Renew the example.com registration",
+      "targetContext": "Open actions"
+    }
+  },
+  {
+    "batchId": "duplicate-boundary",
+    "id": "demo-same-topic-not-duplicate",
+    "expectedKeep": false,
+    "candidate": {
+      "kind": "dup_action",
+      "source": "Create transitions for the demo",
+      "target": "Add sound effects to the demo",
+      "targetContext": "Open actions"
+    }
+  },
+  {
+    "batchId": "all-unrelated-a",
+    "id": "morning-word-overlap",
+    "expectedKeep": false,
+    "candidate": {
+      "kind": "fold_action",
+      "source": "Photograph the morning light",
+      "target": "Morning grocery run",
+      "targetContext": "A shopping list for breakfast ingredients"
+    }
+  },
+  {
+    "batchId": "all-unrelated-a",
+    "id": "publish-word-overlap",
+    "expectedKeep": false,
+    "candidate": {
+      "kind": "fold_action",
+      "source": "Publish the finished article",
+      "target": "Webhook delivery",
+      "targetContext": "Publishing delivery events to subscribers"
+    }
+  },
+  {
+    "batchId": "all-unrelated-b",
+    "id": "portfolio-lesson-overlap",
+    "expectedKeep": false,
+    "candidate": {
+      "kind": "dup_action",
+      "source": "Create a portfolio for Dom",
+      "target": "Tell the parent Dom has two lessons left",
+      "targetContext": "Open actions"
+    }
+  },
+  {
+    "batchId": "all-unrelated-b",
+    "id": "coffee-code-overlap",
+    "expectedKeep": false,
+    "candidate": {
+      "kind": "move_fragment",
+      "source": "Try a lighter coffee roast",
+      "target": "Reduce application cold-start time",
+      "targetContext": "Performance profiling notes"
+    }
+  }
+]

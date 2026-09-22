@@ -5,6 +5,7 @@ import { mistral } from "@ai-sdk/mistral";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import type { LanguageModel } from "ai";
+import { opsEvent, type OpsReason } from "@/lib/opsEvent.server";
 
 /**
  * The model chain, tried in order until one answers.
@@ -28,8 +29,9 @@ export function chain(): Tier[] {
 
   // Most capture calls are small, frequent, and latency-sensitive — every
   // capture sorts, every thread update re-summarises, every edit is
-  // proofread — so the fastest free tiers lead: Groq, then Mistral. Gemini
-  // is the reliable quality fallback. OpenRouter is last: its free models
+  // proofread — so the fast tiers lead: Groq, Cerebras, then Mistral. Gemini
+  // is the reliable quality fallback. OpenRouter is last unless explicitly
+  // preferred: its free models
   // share tight rate limits and are the least dependable, and a paid account
   // should be an explicit choice, not the default path.
   const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
@@ -95,7 +97,18 @@ export function chain(): Tier[] {
     });
   }
 
-  return tiers;
+  // Operators with a funded provider can move it to the front without
+  // deleting fallback keys. An absent or unconfigured preference is inert.
+  const preferred = process.env.CAPTURE_MODEL_PROVIDER;
+  if (!preferred || !tiers.some((tier) => tier.name === preferred)) return tiers;
+  return [
+    ...tiers.filter(
+      (tier) => tier.name === preferred || tier.name.startsWith(preferred + "-")
+    ),
+    ...tiers.filter(
+      (tier) => tier.name !== preferred && !tier.name.startsWith(preferred + "-")
+    ),
+  ];
 }
 
 /** The Gemini tier, shared by the text chain and the vision chain. */
@@ -203,38 +216,14 @@ export function _resetDailyOut(): void {
 }
 
 
-/**
- * What a provider failure is allowed to say in a log.
- *
- * The old line logged the whole error object, and an AI SDK APICallError
- * carries `requestBodyValues` — the request body, which for this app means
- * the person's own captured words, en route to a server log they never
- * agreed to. A failure log's job is "which tier, why, how long to wait",
- * and that is ALL that survives:
- *
- *   - provider name, HTTP status, error name;
- *   - the message, but only after every field that can carry payload
- *     (request bodies, response bodies, headers, causes) is discarded —
- *     and truncated, because provider messages occasionally echo input.
- *
- * Nothing else. Add a field here only if you can argue it cannot contain
- * what someone said.
- */
-export function sanitizeProviderError(error: unknown): {
-  name: string;
-  status?: number;
-  message: string;
-} {
-  const e = error as {
-    name?: string;
-    statusCode?: number;
-    message?: string;
-  } | null;
-  return {
-    name: e?.name ?? "Error",
-    status: e?.statusCode,
-    message: String(e?.message ?? "").slice(0, 200),
-  };
+/** Map provider state to a fixed operational reason without retaining text. */
+export function sanitizeProviderError(error: unknown): OpsReason {
+  const status = (error as { statusCode?: unknown } | null)?.statusCode;
+  if (status === 429 || rateLimited(error)) return "rate_limited";
+  if (status === 400 || status === 401 || status === 402 || status === 403) {
+    return "provider_rejected";
+  }
+  return "provider_unavailable";
 }
 
 export async function withFallback<T>(
@@ -256,48 +245,108 @@ export async function withFallback<T>(
      It is a preference, not a pin: if the named provider is missing or
      refuses, the rest of the chain still answers. */
   prefer?: string
-): Promise<{ value: T; via: string }> {
+): Promise<{
+  value: T;
+  via: string;
+  preferred: string;
+  fallback: boolean;
+  fallbackReason: "rate_limit" | "provider_failure" | null;
+}> {
   const all = chain();
-  /* A preference moves that provider to the front and keeps everything
-     else in its usual order. Prefixes match too, so preferring "groq" also
+  const operatorPreferred = process.env.CAPTURE_MODEL_PROVIDER;
+  const hasConfiguredOperatorPreference = Boolean(
+    operatorPreferred &&
+      all.some(
+        (tier) =>
+          tier.name === operatorPreferred ||
+          tier.name.startsWith(operatorPreferred + "-")
+      )
+  );
+  /* The operator's explicit env choice has already ordered `all` and outranks
+     this per-job default. Otherwise a job preference moves that provider to
+     the front and keeps everything else in its usual order. Prefixes match
+     too, so preferring "groq" also
      brings "groq-2" forward — the spare account is the same model, and
      falling from one Groq key to the other costs nothing, where falling to
      a different provider can cost a great deal. */
-  const tiers = prefer
+  const tiers = prefer && !hasConfiguredOperatorPreference
     ? [
         ...all.filter((t) => t.name === prefer || t.name.startsWith(prefer + "-")),
         ...all.filter((t) => t.name !== prefer && !t.name.startsWith(prefer + "-")),
       ]
     : all;
   if (!tiers.length) throw new NoProvidersError();
+  const preferred = tiers[0].name.replace(/-\d+$/, "");
+  const routed = (
+    value: T,
+    via: string,
+    fallbackReason: "rate_limit" | "provider_failure" | null
+  ) => ({
+    value,
+    via,
+    preferred,
+    /* A second key for the same provider is extra capacity, not a weaker
+       model. Calling it a backup made normal key rotation look degraded. */
+    fallback: via !== preferred && !via.startsWith(preferred + "-"),
+    fallbackReason,
+  });
 
   const round = async (): Promise<
-    { ok: true; value: T; via: string } | { ok: false; error: unknown; limited: boolean }
+    {
+      ok: true;
+      value: T;
+      via: string;
+      fallbackReason: "rate_limit" | "provider_failure" | null;
+    } | { ok: false; error: unknown; limited: boolean }
   > => {
     let last: unknown;
     let limited = false;
+    let preferredFailureReason: "rate_limit" | "provider_failure" | null = null;
+    const isPreferredTier = (name: string) =>
+      name === preferred || name.startsWith(preferred + "-");
     /* Skip tiers known to be out for the day — but never skip our way to
        an empty round: if the breaker would silence everyone, ignore it and
        ask anyway. Being wrong about a recovery costs one failed call;
        refusing to try at all costs the capture. */
     let live = tiers.filter((t) => (dailyOut.get(t.name) ?? 0) < Date.now());
     if (!live.length) live = tiers;
+    else if (live.length < tiers.length) {
+      /* A tier skipped by the daily breaker already failed with a rate limit
+         on an earlier request. Preserve that cause in routing metadata even
+         though this round wisely avoids paying for the same known failure. */
+      limited = true;
+      if (tiers.some((tier) => !live.includes(tier) && isPreferredTier(tier.name))) {
+        preferredFailureReason = "rate_limit";
+      }
+    }
     for (const tier of live) {
       try {
-        return { ok: true, value: await attempt(tier), via: tier.name };
+        return {
+          ok: true,
+          value: await attempt(tier),
+          via: tier.name,
+          fallbackReason: preferredFailureReason,
+        };
       } catch (error) {
         last = error;
-        if (rateLimited(error)) limited = true;
+        const tierLimited = rateLimited(error);
+        if (tierLimited) limited = true;
+        if (isPreferredTier(tier.name)) {
+          if (tierLimited) preferredFailureReason = "rate_limit";
+          else preferredFailureReason ??= "provider_failure";
+        }
         if (dailyLimited(error)) {
           dailyOut.set(
             tier.name,
             Date.now() + Math.min(askedToWait(error) ?? DAILY_RECHECK_CAP_MS, DAILY_RECHECK_CAP_MS)
           );
         }
-        console.warn(
-          `[capture] ${tier.name} failed, trying next`,
-          sanitizeProviderError(error)
-        );
+        opsEvent({
+          event: "managed_ai_provider_attempt",
+          outcome: "degraded",
+          reason: sanitizeProviderError(error),
+          count: "one",
+        });
         // Remember which tier this error came from so the message shown to
         // the operator names the provider that actually failed.
         try {
@@ -311,7 +360,7 @@ export async function withFallback<T>(
   };
 
   const first = await round();
-  if (first.ok) return { value: first.value, via: first.via };
+  if (first.ok) return routed(first.value, first.via, first.fallbackReason);
   /* Only a rate limit earns a second pass. An outage does not get better
      for being asked twice, and the person is waiting — and neither does a
      DAILY limit: eighteen seconds against a budget that refills over a day
@@ -320,10 +369,15 @@ export async function withFallback<T>(
   if (!first.limited || dailyLimited(first.error)) throw first.error;
 
   const wait = Math.min(askedToWait(first.error) ?? DEFAULT_WAIT_MS, MAX_WAIT_MS);
-  console.warn(`[capture] every tier rate-limited; waiting ${wait}ms and trying once more`);
+  opsEvent({
+    event: "managed_ai_provider_attempt",
+    outcome: "degraded",
+    reason: "rate_limited",
+    count: "not_measured",
+  });
   await new Promise((r) => setTimeout(r, wait));
 
   const second = await round();
-  if (second.ok) return { value: second.value, via: second.via };
+  if (second.ok) return routed(second.value, second.via, second.fallbackReason);
   throw second.error;
 }

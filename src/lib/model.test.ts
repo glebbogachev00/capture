@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AFTER_DONE,
   DAY,
+  EMPTY,
   GRACE,
   HOUR,
   SEED_PRINCIPLES,
@@ -65,6 +66,111 @@ describe("hydrate", () => {
   it("keeps supplied principles when present", () => {
     const h = hydrate({ principles: [{ id: "x" } as never] });
     expect(h.principles).toHaveLength(1);
+  });
+
+  it("migrates legacy unsorted actions and fragments into lossless retryable envelopes", () => {
+    const raw: Partial<Board> = {
+      ...({} as Board),
+      actions: [action({
+        id: "legacy-action",
+        text: "Action copy",
+        src: "Exact action source",
+        at: 11,
+        imgs: ["action-photo"],
+        unsorted: true,
+      })],
+      threads: [{
+        id: "legacy-thread",
+        name: "Chosen home",
+        summary: "",
+        frags: [{
+          id: "legacy-frag",
+          text: "Exact fragment source",
+          at: 12,
+          imgs: ["frag-photo"],
+          unsorted: true,
+        }],
+      }],
+      ledger: [
+        {
+          id: "old-action-row",
+          captureId: "action-capture",
+          at: 11,
+          raw: "Exact action source",
+          clean: "Action copy",
+          kind: "action",
+          source: "typed",
+          targetId: "legacy-action",
+          imgs: ["action-photo"],
+        },
+        {
+          id: "old-frag-row",
+          captureId: "frag-capture",
+          at: 12,
+          raw: "Exact fragment source",
+          clean: "Exact fragment source",
+          kind: "thread",
+          source: "typed",
+          targetId: "legacy-thread",
+          targetFragId: "legacy-frag",
+          imgs: ["frag-photo"],
+        },
+      ],
+    };
+
+    const migrated = hydrate(raw);
+    expect(migrated.threads[0].frags).toEqual([]);
+    expect(migrated.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "legacy-action",
+        text: "Action copy",
+        src: "Exact action source",
+        imgs: ["action-photo"],
+        unsorted: true,
+      }),
+      expect.objectContaining({
+        text: "Exact fragment source",
+        src: "Exact fragment source",
+        imgs: ["frag-photo"],
+        unsorted: true,
+        threadId: "legacy-thread",
+      }),
+    ]));
+    const actionEnvelope = migrated.actions.find((item) => item.id === "legacy-action")!;
+    const fragEnvelope = migrated.actions.find((item) => item.threadId === "legacy-thread")!;
+    expect(migrated.ledger.find((entry) => entry.id === "old-action-row")).toMatchObject({
+      kind: "pending",
+      targetId: actionEnvelope.id,
+      captureId: "action-capture",
+      raw: "Exact action source",
+      imgs: ["action-photo"],
+    });
+    expect(migrated.ledger.find((entry) => entry.id === "old-frag-row")).toMatchObject({
+      kind: "pending",
+      targetId: fragEnvelope.id,
+      captureId: "frag-capture",
+      raw: "Exact fragment source",
+      imgs: ["frag-photo"],
+    });
+    expect(migrated.ledger.find((entry) => entry.id === "old-frag-row")?.targetFragId)
+      .toBeUndefined();
+    expect(hydrate(migrated)).toEqual(migrated);
+  });
+
+  it("synthesizes retry history when a legacy unsorted item has no ledger row", () => {
+    const migrated = hydrate({
+      ...EMPTY,
+      actions: [action({ id: "orphan", text: "Preserve me", unsorted: true, imgs: ["photo"] })],
+      ledger: [],
+    });
+
+    expect(migrated.ledger).toContainEqual(expect.objectContaining({
+      kind: "pending",
+      targetId: "orphan",
+      raw: "Preserve me",
+      clean: "Preserve me",
+      imgs: ["photo"],
+    }));
   });
 });
 

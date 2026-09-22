@@ -53,6 +53,20 @@ export function setCerebrasKey(content, key) {
   return setApiKey(content, "CEREBRAS_API_KEY", key);
 }
 
+export function isOpenRouterModelSlug(model) {
+  const decisionsOnly = new Set([
+    "typesafe/jev-1.13",
+    "~typesafe/jev-latest",
+  ]);
+  return /^[^\s/]+\/[^\s]+$/.test(model) && !decisionsOnly.has(model);
+}
+
+export function setOpenRouterConfig(content, key, model) {
+  let updated = setApiKey(content, "OPENROUTER_API_KEY", key);
+  updated = setApiKey(updated, "OPENROUTER_MODEL", model);
+  return setApiKey(updated, "CAPTURE_MODEL_PROVIDER", "openrouter");
+}
+
 /**
  * Status message returned after writing — never mentions the key or a prefix.
  */

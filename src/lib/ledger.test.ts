@@ -74,6 +74,57 @@ describe("appendLedger", () => {
     expect(ledger.some((e) => e.id === "e0")).toBe(false);
     expect(ledger[0]?.id).toBe("e" + (LEDGER_CAP + 9));
   });
+
+  it("keeps unresolved pending recovery records outside the rolling cap", () => {
+    const pending: CaptureEntry = {
+      ...entry("pending", -1),
+      captureId: "capture-pending",
+      kind: "pending",
+      targetId: "waiting",
+    };
+    const settled = Array.from({ length: LEDGER_CAP + 10 }, (_, i) => entry("e" + i, i));
+    const merged = mergeLedgers([pending], settled);
+
+    expect(merged).toHaveLength(LEDGER_CAP + 1);
+    expect(merged).toContainEqual(pending);
+  });
+
+  it("returns a resolved pending record to the ordinary cap", () => {
+    const pending: CaptureEntry = {
+      ...entry("pending", -1),
+      captureId: "capture-pending",
+      kind: "pending",
+      targetId: "waiting",
+    };
+    const classified: CaptureEntry = {
+      ...entry("classified", 1),
+      captureId: "capture-pending",
+    };
+    const settled = Array.from({ length: LEDGER_CAP + 10 }, (_, i) => entry("e" + i, i + 2));
+    const merged = mergeLedgers([pending, classified], settled);
+
+    expect(merged).toHaveLength(LEDGER_CAP);
+    expect(merged).not.toContainEqual(pending);
+  });
+
+  it("keeps pending identity unresolved when its classification was undone", () => {
+    const pending: CaptureEntry = {
+      ...entry("pending", -1),
+      captureId: "capture-pending",
+      kind: "pending",
+      targetId: "waiting",
+    };
+    const undoneClassification: CaptureEntry = {
+      ...entry("classified", 1),
+      captureId: "capture-pending",
+      undone: true,
+    };
+    const settled = Array.from({ length: LEDGER_CAP + 10 }, (_, i) => entry("e" + i, i + 2));
+    const merged = mergeLedgers([pending, undoneClassification], settled);
+
+    expect(merged).toHaveLength(LEDGER_CAP + 1);
+    expect(merged).toContainEqual(pending);
+  });
 });
 
 describe("sourceOf", () => {

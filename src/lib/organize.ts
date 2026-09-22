@@ -162,7 +162,7 @@ export function threadHoldsNote(
  * put it back — and the board grows a copy on every lap.
  */
 export function actionsHoldNote(
-  actions: { text?: string; src?: string; done?: boolean; faded?: boolean }[]
+  actions: { text?: string; src?: string; done?: boolean; faded?: boolean; unsorted?: boolean }[]
     | undefined,
   ...texts: (string | undefined)[]
 ): boolean {
@@ -172,7 +172,7 @@ export function actionsHoldNote(
     .filter((s) => s.length > 0);
   if (!wants.length) return false;
   return (actions || []).some((a) => {
-    if (a.done || a.faded) return false;
+    if (a.done || a.faded || a.unsorted) return false;
     return [a.text, a.src]
       .filter((t): t is string => !!t)
       .map(normNote)
@@ -321,7 +321,7 @@ function staleProposals(
 ): OrganizeProposal[] {
   const out: OrganizeProposal[] = [];
   for (const a of board.actions) {
-    if (a.faded || a.done) continue;
+    if (a.faded || a.done || a.unsorted) continue;
     const overdue = !!a.due && a.due < now - AFTER_DUE;
     const carried =
       a.shelf === "keep" && !a.due && now - (a.at || 0) > LONG_CARRY;
@@ -424,6 +424,7 @@ export function scanResolved(
   const out: OrganizeProposal[] = [];
   for (const t of board.threads) {
     for (const f of t.frags || []) {
+      if (f.unsorted) continue;
       if (f.resolvedAt) continue;
       const id = `done:${f.id}`;
       if (dropped.has(id)) continue;
@@ -495,6 +496,16 @@ export function scanBoard(
   now: number = Date.now(),
   mode: ScanMode = {}
 ): OrganizeProposal[] {
+  /* Legacy failed sorts may reach this pure seam without passing through
+     hydrate first. Keep them outside every local/AI Tidy comparison anyway. */
+  board = {
+    ...board,
+    actions: board.actions.filter((action) => !action.unsorted),
+    threads: board.threads.map((thread) => ({
+      ...thread,
+      frags: (thread.frags ?? []).filter((frag) => !frag.unsorted),
+    })),
+  };
   /* Two words is a candidate; three is a claim. And a duplicate candidate
      skips the coverage test entirely — deciding whether two tasks are the
      same task is exactly what the judge is for. */
@@ -508,11 +519,11 @@ export function scanBoard(
 
   /* Duplicate actions — same task twice. The newer action is the copy. */
   for (const a of board.actions) {
-    if (a.faded || a.done) continue;
+    if (a.faded || a.done || a.unsorted) continue;
     const dup = bestActionDuplicate(board, actionText(a), a.id, 1, dupCoverage);
     if (!dup) continue;
     const target = board.actions.find((x) => x.id === dup.id);
-    if (!target || target.faded) continue;
+    if (!target || target.faded || target.unsorted) continue;
     /* Only the newer of the pair proposes; a re-capture of a task that is
        already fading is a refresh, not a duplicate. */
     if (a.at <= (target.at || 0)) continue;
@@ -599,7 +610,7 @@ export function scanBoard(
 
   /* Fold an action into the thread it clearly belongs with. */
   for (const a of board.actions) {
-    if (a.faded || a.done || dupClaimed.has(a.id)) continue;
+    if (a.faded || a.done || a.unsorted || dupClaimed.has(a.id)) continue;
     const hit = bestThreadHome(board, actionText(a), a.id, minPhrase);
     if (!hit) continue;
     /* A fold-back is never a fold: extraction leaves the note in place, so

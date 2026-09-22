@@ -92,18 +92,11 @@ export async function POST(request: Request) {
       }),
     });
     if (!res.ok) {
-      /* Status only. The response body can quote the request, and the
-         request carried the token. */
-      console.error("issue create failed:", res.status);
       return Response.json({ error: "github refused" }, { status: 502 });
     }
     const issue = (await res.json()) as { number?: number; html_url?: string };
     return Response.json({ number: issue.number, url: issue.html_url });
-  } catch (error) {
-    console.error(
-      "issue create failed:",
-      error instanceof Error ? error.message : "unknown"
-    );
+  } catch {
     return Response.json({ error: "unreachable" }, { status: 502 });
   }
 }

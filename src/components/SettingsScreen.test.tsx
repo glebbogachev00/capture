@@ -14,7 +14,7 @@ const principle: Principle = {
 
 afterEach(cleanup);
 
-function renderSettings() {
+function renderSettings(ioBusy: string | null = null) {
   const onToggle = vi.fn();
   const onProfileChange = vi.fn();
   render(
@@ -33,6 +33,7 @@ function renderSettings() {
       onImportIntent={() => {}}
       onLogout={() => {}}
       ioNote={null}
+      ioBusy={ioBusy}
       sync={{ ok: true, at: 1_788_288_000_000 }}
       onSyncNow={() => {}}
       onOpenRecord={() => {}}
@@ -64,6 +65,14 @@ describe("SettingsScreen disclosures", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show Restore" }));
     expect(screen.queryByRole("button", { name: "Download backup" })).toBeNull();
     expect(screen.getByRole("button", { name: "Upload a Capture backup" })).toBeTruthy();
+  });
+
+  it("shows backup progress and prevents a second download while work is in flight", () => {
+    renderSettings("Fetching 2 of 6 pictures…");
+    fireEvent.click(screen.getByRole("button", { name: "Show Data and sync" }));
+
+    const download = screen.getByRole("button", { name: "Fetching 2 of 6 pictures…" });
+    expect(download.hasAttribute("disabled")).toBe(true);
   });
 
   it("offers the approved support contact without removing bug reporting or logout", () => {

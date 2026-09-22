@@ -37,6 +37,20 @@ describe("recordStats", () => {
       dictated: 0,
     });
   });
+
+  it("does not count a capture that is still waiting to sort", () => {
+    expect(recordStats([
+      entry(100, "pending"),
+      entry(200, "thread"),
+    ])).toEqual({
+      total: 1,
+      since: 200,
+      actions: 0,
+      threads: 1,
+      intentions: 0,
+      dictated: 0,
+    });
+  });
 });
 
 describe("heatGrid", () => {
@@ -117,6 +131,12 @@ describe("recentCaptures", () => {
   it("is empty on an empty ledger", () => {
     expect(recentCaptures([])).toEqual([]);
   });
+
+  it("keeps waiting captures out of the visible record", () => {
+    expect(recentCaptures([
+      e({ kind: "pending", raw: "private draft" }),
+    ])).toEqual([]);
+  });
 });
 
 
@@ -155,6 +175,12 @@ describe("caughtWords — the one line under the grid", () => {
     const huge = Array.from({ length: 400 }, (_, i) => said("word ".repeat(200), i));
     expect(caughtWords(huge)!.like).toBe("a novel");
   });
+
+  it("does not count words that are still waiting to sort", () => {
+    const pending = said("word ".repeat(200));
+    pending.kind = "pending";
+    expect(caughtWords([pending])).toBeNull();
+  });
 });
 
 describe("an undone capture in the record", () => {
@@ -192,5 +218,11 @@ describe("the record shows a day's story, not the whole history", () => {
 
   it("a day with nothing said is an empty story, not someone else's", () => {
     expect(dayCaptures(ledger, "2026-08-29")).toEqual([]);
+  });
+
+  it("does not show waiting captures in the day's story", () => {
+    expect(dayCaptures([
+      { ...entry("waiting", at("2026-08-30", 8), "private draft"), kind: "pending" },
+    ], "2026-08-30")).toEqual([]);
   });
 });

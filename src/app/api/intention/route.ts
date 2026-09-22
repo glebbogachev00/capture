@@ -3,7 +3,9 @@ import { z } from "zod";
 import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
-import { withFallback } from "@/lib/providers";
+import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
+import { sanitizeProviderError, withFallback } from "@/lib/providers";
+import { opsEvent } from "@/lib/opsEvent.server";
 
 /**
  * The intention engine, carried over from the standalone intent app.
@@ -167,6 +169,9 @@ Apply the same rules: present tense, faithful to the user's words, no filler. Pr
 }
 
 export async function POST(request: Request) {
+  const authorization = await authorizeManagedAiRequest(request);
+  if (authorization instanceof Response) return authorization;
+  return withManagedAiAdmission(authorization, async () => {
   // The intention engine spends real model quota; a single client can't loop it.
   const gate = modelRateLimit(clientIp(request));
   if (!gate.allowed) {
@@ -207,8 +212,9 @@ export async function POST(request: Request) {
     });
     return Response.json({ ...value, via });
   } catch (error) {
-    console.error("intention failed", error);
+    opsEvent({ event: "managed_ai_route", outcome: "failure", reason: sanitizeProviderError(error), count: "one" });
     const { message: reason, status } = explain(error);
     return Response.json({ error: reason }, { status });
   }
+  });
 }

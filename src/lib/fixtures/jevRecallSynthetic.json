@@ -1,0 +1,48 @@
+[
+  {
+    "caseId": "direct-fact",
+    "question": "When is the synthetic launch planned?",
+    "sources": [
+      { "label": "source_0", "excerpt": "The synthetic launch is planned for October." },
+      { "label": "source_1", "excerpt": "The review happens in September." }
+    ],
+    "expectedIntent": "answer_fact",
+    "expectedSourceRanking": ["source_0", "source_1", "none"],
+    "expectedSufficient": true,
+    "expectedProseCall": true
+  },
+  {
+    "caseId": "multi-source-synthesis",
+    "question": "How did the two synthetic launch plans differ?",
+    "sources": [
+      { "label": "source_0", "excerpt": "Plan A uses a staged release." },
+      { "label": "source_1", "excerpt": "Plan B uses one public release." }
+    ],
+    "expectedIntent": "synthesize",
+    "expectedSourceRanking": ["source_0", "source_1", "none"],
+    "expectedSufficient": true,
+    "expectedProseCall": true
+  },
+  {
+    "caseId": "navigation-only",
+    "question": "Find my synthetic launch checklist.",
+    "sources": [
+      { "label": "source_0", "excerpt": "Synthetic launch checklist." }
+    ],
+    "expectedIntent": "find_notes",
+    "expectedSourceRanking": ["source_0", "none"],
+    "expectedSufficient": true,
+    "expectedProseCall": false
+  },
+  {
+    "caseId": "no-support",
+    "question": "What color is the synthetic launch banner?",
+    "sources": [
+      { "label": "source_0", "excerpt": "The synthetic launch date is in October." }
+    ],
+    "expectedIntent": "answer_fact",
+    "expectedSourceRanking": ["none", "source_0"],
+    "expectedSufficient": false,
+    "expectedProseCall": false
+  }
+]

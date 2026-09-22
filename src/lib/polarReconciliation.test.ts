@@ -18,14 +18,24 @@ beforeEach(() => {
   pending = { pending: true, version: "9", userId: user, customerId: "cus_1", productId: product };
   finishResult = true;
   mocks.get.mockResolvedValue(snapshot);
-  mocks.rpc.mockImplementation(async (name: string) => ({ error: null, data: name === "claim_polar_reconciliation" ? pending : name === "finish_polar_reconciliation" ? finishResult : false }));
+  mocks.rpc.mockImplementation(async (name: string) => ({
+    error: null,
+    data: name === "claim_polar_reconciliation" ? pending
+      : name === "finish_polar_reconciliation" ? finishResult
+        : name === "acquire_capture_external_work" || name === "release_capture_external_work",
+  }));
   mocks.validate.mockResolvedValue({ type: "subscription.revoked", timestamp: event.eventCreatedAt, data: snapshot });
 });
 it.each(["identity", "product"])("queues a tracked terminal invalid %s webhook and keeps invalid GET retryable", async (kind) => {
   const invalid = { ...snapshot, status: "canceled", ...(kind === "identity" ? { customer: null } : { product_id: "off-catalog" }) };
   mocks.validate.mockResolvedValue({ type: "subscription.canceled", timestamp: event.eventCreatedAt, data: invalid });
   mocks.get.mockResolvedValue(invalid);
-  mocks.rpc.mockImplementation(async (name: string) => ({ error: null, data: name === "queue_invalid_polar_event" ? true : name === "claim_polar_reconciliation" ? pending : false }));
+  mocks.rpc.mockImplementation(async (name: string) => ({
+    error: null,
+    data: name === "queue_invalid_polar_event" ? true
+      : name === "claim_polar_reconciliation" ? pending
+        : name === "acquire_capture_external_work" || name === "release_capture_external_work",
+  }));
   const response = await handlePolarWebhook(new Request("https://capture.test/api/webhooks/polar", { method: "POST", headers: { "webhook-id": "invalid_terminal" }, body: "{}" }), await createPolarDependencies(env));
   expect(response.status).toBe(500);
   expect(mocks.rpc).toHaveBeenCalledWith("queue_invalid_polar_event", { p_subscription_id: "sub_1", p_event_id: "invalid_terminal", p_event_type: "subscription.canceled", p_event_created_at: event.eventCreatedAt });
@@ -53,6 +63,9 @@ it("reconciles even a ledgered duplicate using exact bounded GET, preserving sch
   const deps = await createPolarDependencies(env);
   await deps.applySubscriptionEvent(event);
   expect(mocks.get).toHaveBeenCalledExactlyOnceWith("sub_1", { timeout: 2 });
+  const names = mocks.rpc.mock.calls.map(([name]) => name);
+  expect(names.indexOf("acquire_capture_external_work")).toBeLessThan(names.indexOf("finish_polar_reconciliation"));
+  expect(names.indexOf("release_capture_external_work")).toBeGreaterThan(names.indexOf("finish_polar_reconciliation"));
   expect(mocks.rpc).toHaveBeenCalledWith("finish_polar_reconciliation", { p_subscription_id: "sub_1", p_version: "9", p_snapshot: expect.objectContaining({ status: "canceled", isEntitled: true, accessExpiresAt: snapshot.current_period_end, cancelAtPeriodEnd: true }) });
 });
 it.each(["network", "binding", "product", "subscription", "identity", "stale", "busy"])("keeps %s failures pending and returns retryable webhook failure", async (failure) => {
@@ -66,6 +79,7 @@ it.each(["network", "binding", "product", "subscription", "identity", "stale", "
   const response = await handlePolarWebhook(new Request("https://capture.test/api/webhooks/polar", { method: "POST", headers: { "webhook-id": "evt_1" }, body: "{}" }), await createPolarDependencies(env));
   expect(response.status).toBe(500);
   if (failure !== "stale") expect(mocks.rpc.mock.calls.some(([name]) => name === "finish_polar_reconciliation")).toBe(false);
+  if (failure !== "busy") expect(mocks.rpc.mock.calls.some(([name]) => name === "release_capture_external_work")).toBe(true);
 });
 it("allows an authoritative switch between the configured Capture products, never an unrelated product", async () => {
   mocks.get.mockResolvedValue({ ...snapshot, product_id: env.POLAR_PRODUCT_ID_YEARLY });

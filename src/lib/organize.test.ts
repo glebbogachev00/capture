@@ -55,6 +55,29 @@ describe("scanBoard — empty and noise", () => {
     });
     expect(kinds(b)).toEqual([]);
   });
+
+  it("does not tidy a waiting-to-sort envelope before classification", () => {
+    const waiting = {
+      ...act("waiting", "Book a dentist appointment for Tuesday", 200),
+      unsorted: true,
+    };
+    const matching = act("existing", "Book a dentist appointment for Tuesday", 100);
+    const legacyFrag = {
+      ...frag("legacy-frag", "Espresso machine grinder calibration notes", 200),
+      unsorted: true,
+    };
+    const matchingFrag = frag("settled-frag", "Espresso machine grinder calibration notes", 100);
+    const b = board({
+      actions: [waiting, matching],
+      threads: [thread("legacy", "Legacy", [legacyFrag]), thread("settled", "Settled", [matchingFrag])],
+    });
+    const proposals = scanBoard(b, [], FIXTURE_NOW);
+    expect(proposals.some((proposal) =>
+      proposal.sourceId === "waiting" || proposal.targetId === "waiting" ||
+      proposal.sourceFragId === "legacy-frag"
+    )).toBe(false);
+    expect(scanStale(board({ actions: [waiting] }), [], 100 * 24 * 60 * 60 * 1000)).toEqual([]);
+  });
 });
 
 describe("scanBoard — duplicate actions", () => {

@@ -106,6 +106,138 @@ describe("a second Groq account", () => {
   });
 });
 
+describe("operator provider preference", () => {
+  async function attemptedOrder(jobPreference?: string) {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    process.env.OPENROUTER_API_KEY = "openrouter";
+    delete process.env.GROQ_API_KEY_2;
+    delete process.env.CEREBRAS_API_KEY;
+    delete process.env.MISTRAL_API_KEY;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const { withFallback } = await import("./providers");
+    const seen: string[] = [];
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(
+      withFallback(async (tier) => {
+        seen.push(tier.name);
+        throw new Error("synthetic outage");
+      }, jobPreference)
+    ).rejects.toThrow("synthetic outage");
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+    return seen;
+  }
+
+  it("uses a job default when the operator did not choose a provider", async () => {
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+    expect(await attemptedOrder("openrouter")).toEqual(["openrouter", "groq"]);
+  });
+
+  it("keeps an explicit operator preference ahead of a conflicting job default", async () => {
+    process.env.CAPTURE_MODEL_PROVIDER = "openrouter";
+    expect(await attemptedOrder("groq")).toEqual(["openrouter", "groq"]);
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+  });
+});
+
+describe("fallback routing metadata", () => {
+  it("reports an intentionally preferred OpenRouter answer as normal", async () => {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    process.env.OPENROUTER_API_KEY = "openrouter";
+    process.env.CAPTURE_MODEL_PROVIDER = "openrouter";
+    const { withFallback } = await import("./providers");
+
+    const result = await withFallback(async () => "answered", "groq");
+    expect(result).toMatchObject({
+      via: "openrouter",
+      preferred: "openrouter",
+      fallback: false,
+      fallbackReason: null,
+    });
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+  });
+
+  it("distinguishes a rate-limit fallback from an ordinary provider failure", async () => {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    process.env.MISTRAL_API_KEY = "m";
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+    const { withFallback } = await import("./providers");
+
+    const rateLimited = await withFallback(async (tier) => {
+      if (tier.name === "groq") throw limit();
+      return "answered";
+    });
+    expect(rateLimited).toMatchObject({
+      via: "mistral",
+      preferred: "groq",
+      fallback: true,
+      fallbackReason: "rate_limit",
+    });
+
+    const failed = await withFallback(async (tier) => {
+      if (tier.name === "groq") throw new Error("synthetic outage");
+      return "answered";
+    });
+    expect(failed).toMatchObject({
+      via: "mistral",
+      preferred: "groq",
+      fallback: true,
+      fallbackReason: "provider_failure",
+    });
+  });
+
+  it("does not blame the preferred provider for a later fallback tier's rate limit", async () => {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    process.env.MISTRAL_API_KEY = "m";
+    process.env.OPENROUTER_API_KEY = "openrouter";
+    delete process.env.GROQ_API_KEY_2;
+    delete process.env.CEREBRAS_API_KEY;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+    const { withFallback } = await import("./providers");
+
+    const result = await withFallback(async (tier) => {
+      if (tier.name === "groq") throw new Error("synthetic outage");
+      if (tier.name === "mistral") throw limit();
+      return "answered";
+    });
+    expect(result).toMatchObject({
+      via: "openrouter",
+      preferred: "groq",
+      fallback: true,
+      fallbackReason: "provider_failure",
+    });
+    delete process.env.OPENROUTER_API_KEY;
+  });
+
+  it("treats a second key for the preferred provider as the same model", async () => {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    process.env.GROQ_API_KEY_2 = "two";
+    process.env.MISTRAL_API_KEY = "m";
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+    const { withFallback } = await import("./providers");
+
+    const result = await withFallback(async (tier) => {
+      if (tier.name === "groq") throw limit();
+      return "answered";
+    });
+    expect(result).toMatchObject({
+      via: "groq-2",
+      preferred: "groq",
+      fallback: false,
+      fallbackReason: "rate_limit",
+    });
+    delete process.env.GROQ_API_KEY_2;
+  });
+});
+
 describe("a tier that is out for the day", () => {
   it("is skipped on the next request instead of probed again", async () => {
     vi.resetModules();
@@ -127,13 +259,15 @@ describe("a tier that is out for the day", () => {
       return "answered";
     };
 
-    await withFallback(attempt);
+    const first = await withFallback(attempt);
     /* Learned once... */
     expect(calls).toEqual(["groq", "mistral"]);
-    await withFallback(attempt);
+    expect(first).toMatchObject({ fallback: true, fallbackReason: "rate_limit" });
+    const second = await withFallback(attempt);
     /* ...spared thereafter. The person waiting on a sort does not pay for
        a probe of a budget that refills over a day. */
     expect(calls).toEqual(["groq", "mistral", "mistral"]);
+    expect(second).toMatchObject({ fallback: true, fallbackReason: "rate_limit" });
   });
 
   it("never skips its way to asking nobody", async () => {
@@ -187,16 +321,12 @@ describe("a tier that is out for the day", () => {
 });
 
 describe("what a provider failure may say in a log", () => {
-  it("the person's words cannot reach the log line", async () => {
-    /* The exact leak: an AI SDK APICallError carries the request body —
-       the captured words — and the old log line printed the whole object
-       into server logs. The sanitizer keeps tier, status and a bounded
-       message; everything that can carry payload is discarded. */
+  it("retains only a fixed reason and never any provider-controlled string", async () => {
     vi.resetModules();
     process.env.GROQ_API_KEY = "one";
     const { sanitizeProviderError } = await import("./providers");
     const SECRET = "I want to remove my mind frictions and my private fears";
-    const sdkError = Object.assign(new Error("Bad request"), {
+    const sdkError = Object.assign(new Error(`Bad request: ${SECRET}`), {
       name: "AI_APICallError",
       statusCode: 400,
       requestBodyValues: { prompt: SECRET },
@@ -205,32 +335,18 @@ describe("what a provider failure may say in a log", () => {
       cause: new Error(SECRET),
       data: { messages: [{ content: SECRET }] },
     });
-    const logged = sanitizeProviderError(sdkError);
-    const flat = JSON.stringify(logged);
-    expect(flat).not.toContain(SECRET);
-    expect(flat).not.toContain("mind frictions");
-    /* And it still says what a log needs to say. */
-    expect(logged.name).toBe("AI_APICallError");
-    expect(logged.status).toBe(400);
-    expect(logged.message).toBe("Bad request");
+    expect(sanitizeProviderError(sdkError)).toEqual("provider_rejected");
+    expect(JSON.stringify(sanitizeProviderError(sdkError))).not.toContain(SECRET);
+    expect(sanitizeProviderError(Object.assign(new Error(SECRET), { statusCode: 429 })))
+      .toBe("rate_limited");
+    expect(sanitizeProviderError(new Error(SECRET))).toBe("provider_unavailable");
   });
 
-  it("even a payload-echoing message is bounded", async () => {
-    vi.resetModules();
-    process.env.GROQ_API_KEY = "one";
-    const { sanitizeProviderError } = await import("./providers");
-    const long = "x".repeat(5000);
-    expect(sanitizeProviderError(new Error(long)).message.length).toBeLessThanOrEqual(200);
-  });
-
-  it("the raw error object never reaches console.warn", async () => {
-    /* Seam guard: the chain may only log through the sanitizer. */
+  it("the provider chain logs only through the fixed operational logger", async () => {
     const fs = await import("node:fs");
     const src = fs.readFileSync("src/lib/providers.ts", "utf8");
-    const warns = [...src.matchAll(/console\.warn\(([\s\S]*?)\)/g)];
-    for (const w of warns) {
-      expect(w[1]).not.toMatch(/,\s*error\s*$/);
-    }
+    expect(src).not.toMatch(/console\.(?:log|info|warn|error|debug)/);
+    expect(src).toMatch(/opsEvent\(/);
     expect(src).toMatch(/sanitizeProviderError\(error\)/);
   });
 });

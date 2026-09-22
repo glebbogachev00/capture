@@ -80,7 +80,11 @@ describe("Cloud board route composition", () => {
   it("composes a fresh configured client, verified identity, and tenant-scoped repository", async () => {
     vi.stubEnv("CAPTURE_CLOUD", "1");
     vi.stubEnv("CAPTURE_CLOUD_REQUIRE_SUBSCRIPTION", "0");
-    const client = { auth: { getClaims: vi.fn() } };
+    const rpc = vi.fn().mockImplementation(async (name: string) => ({
+      data: name === "capture_account_deleting" ? false : { allowed: true, retryAfterSec: 0 },
+      error: null,
+    }));
+    const client = { auth: { getClaims: vi.fn() }, rpc };
     mocks.getCloudConfig.mockReturnValue(readyConfig);
     mocks.createCloudServerClient.mockResolvedValue(client);
     mocks.identityFromClaims.mockResolvedValue({ userId: "user-1" });
@@ -99,6 +103,11 @@ describe("Cloud board route composition", () => {
     expect(mocks.repositoryConstructor).toHaveBeenCalledWith(client);
     expect(mocks.repositoryGet).toHaveBeenCalledTimes(2);
     expect(mocks.repositoryGet).toHaveBeenCalledWith("user-1");
+    expect(rpc).toHaveBeenCalledTimes(4);
+    expect(rpc).toHaveBeenCalledWith("capture_account_deleting", { p_user_id: "user-1" });
+    expect(rpc).toHaveBeenCalledWith("consume_capture_cloud_quota", {
+      p_scope: "board_read",
+    });
   });
 
   it("sync compatibility rejects stale and old clients before repository access", async () => {

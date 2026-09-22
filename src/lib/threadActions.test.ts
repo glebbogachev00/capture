@@ -54,6 +54,20 @@ describe("the actions that belong with a thread", () => {
     expect(open).not.toContain("elsewhere");
   });
 
+  it("never borrows a waiting-to-sort envelope into a thread", () => {
+    const b: Board = {
+      ...EMPTY,
+      threads: [thread()],
+      actions: [
+        action("waiting", {
+          text: "Draft the usage-based pricing page",
+          unsorted: true,
+        }),
+      ],
+    };
+    expect(actionsForThread(b, thread()).open).toEqual([]);
+  });
+
   it("an undone capture vouches for nothing", () => {
     const b: Board = {
       ...EMPTY,

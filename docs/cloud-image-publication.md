@@ -1,5 +1,13 @@
 # Durable image publication — fresh sandbox or blocked legacy cutover
 
+> The publication design below is now wrapped by the additive service-only
+> reservation/quota protocol in [cloud-image-admission.md](cloud-image-admission.md).
+> Apply `20260922200000_image_storage_admissions.sql` only after publication and
+> account-erasure migrations. The route requires both readiness RPCs. Historical
+> authenticated candidate/publication INSERT descriptions below are superseded:
+> direct authenticated INSERT is now denied; the server secret client uploads
+> only a database-generated reserved path and finalizes through service RPC.
+
 The localhost acceptance client is archived under `scripts/fixtures/`, outside the deployed app.
 The local VM regression reads that copy. It does not require files in `public/`.
 For approved live sandbox checks, copy both `sandbox-image-publication-acceptance.*` files into the isolated sandbox server's `public/` directory.
@@ -34,10 +42,10 @@ The new route deliberately returns **503** for paid image operations until the m
 
 - Preserve `/api/img/<logical-id>` and existing `capture-images/<user>/<logical-id>` objects.
 - Close legacy admissions using restrictive RLS, then keep activation off until a verified drain and full legacy-preservation evidence exist. Only AFTER that gate, retained legacy objects remain readable; duplicate PUT returns `stored:false` without an upload or publication row. Current local tests do not establish hosted legacy preservation.
-- New attempts upload once to the separate private **capture-image-candidates** bucket under `<verified-user>/<random-UUID>`. Never reuse a candidate path, even after an uncertain upload response.
-- Validate downloaded candidate bytes before publication. Plain INSERT into `capture_image_publications`, keyed by `(user_id,image_id)`, arbitrates across processes. SQLSTATE 23505 means read the winner, not retry an overwrite/upsert.
+- New attempts first reserve one exact object/byte amount in PostgreSQL. The service-only RPC chooses the active bucket and generates `<verified-user>/<random-UUID>`; the request cannot choose a path or limits. Never reuse a candidate path after an uncertain upload response.
+- The server-only Storage client validates downloaded candidate bytes, then a service-only finalize RPC performs `INSERT ... ON CONFLICT DO NOTHING` into `capture_image_publications`, keyed by `(user_id,image_id)`, and reads the winner.
 - Publication records bind UUID, SHA-256, MIME and length. Read back the durable pointer and exact candidate bytes before acknowledging either winner or loser. A missing/corrupt published object returns 503, never 404 or permission to upload a replacement.
-- No per-request delete/cleanup calls. Failed and losing candidates remain. A crash before INSERT leaves an orphan and retries with a fresh UUID. A commit with a lost response is recovered from the pointer and returns `stored:false`. Administrative account erasure is supported separately below.
+- Failed, ambiguous, and losing candidates remain durably inventoried and consume quota. Any failure after provider upload invocation is idempotently marked abandoned while its erasure-blocking admission remains until lease expiry; even current typed absence cannot prove a late completion will not land. A commit with a lost response is recovered from the pointer and returns `stored:false`.
 - HEAD uses metadata-only `info()` (size/MIME and published pointer checks), no image download. **204 means metadata existence, not integrity or recoverability.** Same-size/same-MIME corruption can pass HEAD, suppressing retries, while GET and PUT fail 503. This explicitly accepts owner-caused availability loss to restore cheap reload checks. A dangling publication is 503, never 404. GET and EVERY PUT acknowledgment download/validate raster bytes and publication digest/MIME/length; new PUT additionally validates before INSERT. Legacy objects lack historical digests and are safe only under the verified no-writer cutover assumption.
 
 ## Why activation remains blocked after admissions close
@@ -54,11 +62,10 @@ The pinned [upstream uploader](https://github.com/supabase/storage/blob/755986d5
 
 ## Security / direct-Storage boundary
 
-- User identity comes from verified claims and `X-Capture-Owner` must match. Both publication RLS and Storage policies require the same live paid entitlement; no app service role.
-- Restrictive candidate policies survive unrelated permissive policies, scope paths to the user and a UUID, disallow anon, listing/signing/copy, signed uploads, updates and deletion. Legacy policies stay in place with an additional insert freeze.
-- The publication table grants authenticated SELECT/INSERT only. The legacy guard has fixed search_path and checks owner and cutover before its privileged metadata existence read. The private app-owned cutover table has RLS and no public/anon/authenticated grants. Boolean RPCs expose no evidence/user data. Nonempty operator evidence is an administrative attestation, NOT automatic verification that evidence is true. Catalog checks are drift alarms, not semantic verification of policy definitions.
-- The application still does **not** repair the provider's general create-only API. Application UUIDs are unguessable, fresh and never reused. A hostile same-owner direct client can deliberately race the SAME candidate path, overwrite through pre-admitted provider completions, insert bad pointers or select its own digest. It can self-deny availability, including after an earlier success. GET and PUT fail closed on any published-byte mismatch; HEAD is existence only. This is not a tamper-proof backup against an owner, nor a signed proof of app authorship. Tenant paths and paid RLS remain enforced. An upload admitted while entitled can finish after revocation; subsequent read/publication is denied. Privileged maintenance/provider behavior is a trusted-administration boundary.
-- No TTL cleanup or lease steals. Future garbage collection requires separate approval and a protocol that excludes delayed/ambiguous publishers. A naive age-based orphan sweep is unsafe.
+- User identity comes from verified claims and `X-Capture-Owner` must match. The server route uses the existing Supabase secret only after a service-only reservation transaction rechecks exact owner lifecycle, entitlement, mode, quota, MIME, size, and digest. The secret never reaches the browser.
+- Authenticated roles retain exact-owner reads but have publication INSERT revoked. A new restrictive Storage policy denies authenticated INSERT into legacy and both candidate buckets even when another permissive policy exists. Candidate/publication mutation occurs only through service functions and a publication-operation trigger.
+- The provider's general create-only behavior is still not repaired. A service upload admitted before a later fence may finish after it; therefore expired reservations remain accounted and stale reclaim is default-disabled. GET and PUT fail closed on any published-byte mismatch; HEAD remains existence-only.
+- A 120-second lease reclaims only the owner-bound work admission. It never releases physical quota by age. Provider-authoritative stale reconciliation and erasure remain blocked exactly as documented in `cloud-image-admission.md`.
 
 ## Legacy-only staged procedure (NOT the fresh sandbox apply path)
 
@@ -73,7 +80,7 @@ The pinned [upstream uploader](https://github.com/supabase/storage/blob/755986d5
 
 Normal users cannot delete Storage objects or publication rows. There is NO blanket trigger blocking administrative Storage API removal. Follow [Supabase Storage schema guidance](https://supabase.com/docs/guides/storage/schema/design): mutate files only through Storage API/dashboard, never SQL DELETE of `storage.objects`. [Auth deletion requires removing owned objects first](https://supabase.com/docs/guides/auth/managing-user-data#deleting-users).
 
-For an approved account erasure, an operator/trusted backend (never privileged browser code) must: (1) block the owner's new image admissions/publications by revoking live entitlement and prevent billing reconciliation regrant during erasure; revoke sessions, noting existing JWTs can remain valid; (2) obtain/execute the same verified provider drain covering already-admitted uploads; (3) enumerate ALL owned paths in BOTH buckets including losing/orphan candidates using privileged API, paginate fully, remove via Storage API, verify empty with API plus read-only metadata inventory; include other owned buckets before Auth deletion; (4) delete user through Auth admin API/dashboard, read back deletion and verify publication FK cascade and no residual owned Storage objects. Retry failures, do not declare erasure complete on a partial batch or Auth error. Local SQL tests model only privileged metadata deletion plus FK cascade, NOT actual backend-byte erasure. **Hosted drain and end-to-end account-erasure remain launch gates.** No credentials or privileged cleanup endpoint added; no naive age-based orphan GC.
+For an approved account erasure, the trusted worker must first drain every non-released operation from `capture_image_operation_inventory`, remove each exact path through Storage API, read back typed exact-path absence, and mark the operation deleted. It must then independently paginate every approved bucket (`capture-images`, both candidate buckets) for the exact owner prefix to catch pre-ledger losing/orphan and legacy objects, remove them, exact-read absence, and prove both ledger and provider inventory empty. The source adapter deliberately reports provider inventory as non-authoritative, so the worker cannot advance until the exact hosted Storage version supplies and passes the documented quiescence/drain contract. Only afterward may app rows and Auth be deleted. See `cloud-image-admission.md` and `cloud-account-erasure.md`; never mutate `storage.objects` with SQL or infer completion from quiet listings.
 
 Rollback after cutover means keeping image operations unavailable while investigating. **Do not unfreeze legacy writes or revert to the old uploader** after new pointers exist; do not drop the bucket or publications. Other app features can keep operating.
 

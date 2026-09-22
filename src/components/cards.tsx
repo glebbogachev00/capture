@@ -155,7 +155,7 @@ export const Row = memo(function Row({
         </div>
 
         {shelfOpen && (
-          <div className="shelf">
+          <div className="shelf action-shelf">
             <button onClick={() => onSetShelf(DAY, "hours")}>1 day</button>
             <button onClick={() => onSetShelf(7 * DAY, "days")}>1 week</button>
             <button onClick={() => onSetShelf(30 * DAY, "weeks")}>

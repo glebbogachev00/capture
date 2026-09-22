@@ -8,8 +8,10 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  isOpenRouterModelSlug,
   setCerebrasKey,
   setGroqKey,
+  setOpenRouterConfig,
   successMessage,
 } from "../../scripts/setupEnv.mjs";
 
@@ -92,6 +94,45 @@ describe("setCerebrasKey", () => {
   });
 });
 
+describe("setOpenRouterConfig", () => {
+  it("accepts only explicit provider/model slugs", () => {
+    expect(isOpenRouterModelSlug("provider/paid-model")).toBe(true);
+    expect(isOpenRouterModelSlug("provider/model:variant")).toBe(true);
+    expect(isOpenRouterModelSlug("typesafe/jev-1.13")).toBe(false);
+    expect(isOpenRouterModelSlug("~typesafe/jev-latest")).toBe(false);
+    expect(isOpenRouterModelSlug("paid-model")).toBe(false);
+    expect(isOpenRouterModelSlug("provider/ model")).toBe(false);
+    expect(isOpenRouterModelSlug(" ")).toBe(false);
+  });
+
+  it("writes the key, exact model slug, and OpenRouter preference", () => {
+    const result = setOpenRouterConfig(
+      EXAMPLE,
+      "sk-or-test",
+      "provider/paid-model"
+    );
+
+    expect(result).toContain("OPENROUTER_API_KEY=sk-or-test");
+    expect(result).toContain("OPENROUTER_MODEL=provider/paid-model");
+    expect(result).toContain("CAPTURE_MODEL_PROVIDER=openrouter");
+  });
+
+  it("replaces existing OpenRouter settings without duplicating them", () => {
+    const existing = [
+      "OPENROUTER_API_KEY=old",
+      "OPENROUTER_MODEL=old/model",
+      "CAPTURE_MODEL_PROVIDER=groq",
+      "OPENROUTER_API_KEY=older",
+      "",
+    ].join("\n");
+    const result = setOpenRouterConfig(existing, "new", "new/model");
+
+    expect(result.split("\n").filter((line: string) => line.startsWith("OPENROUTER_API_KEY="))).toEqual(["OPENROUTER_API_KEY=new"]);
+    expect(result.split("\n").filter((line: string) => line.startsWith("OPENROUTER_MODEL="))).toEqual(["OPENROUTER_MODEL=new/model"]);
+    expect(result.split("\n").filter((line: string) => line.startsWith("CAPTURE_MODEL_PROVIDER="))).toEqual(["CAPTURE_MODEL_PROVIDER=openrouter"]);
+  });
+});
+
 describe("successMessage", () => {
   it("mentions the file path and next command", () => {
     const msg = successMessage(".env.local");
@@ -133,5 +174,19 @@ describe("setup terminal boundary", () => {
       "run 'npm run setup:cerebras' in your own terminal"
     );
     expect(result.stdout).not.toContain("csk_must_not_be_read");
+  });
+
+  it("refuses a piped OpenRouter key before reading it", () => {
+    const setup = resolve(process.cwd(), "scripts/setup-openrouter.mjs");
+    const result = spawnSync(process.execPath, [setup], {
+      cwd: process.cwd(),
+      input: "sk-or-must-not-be-read\nprovider/model\n",
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr.toLowerCase()).toContain(
+      "run 'npm run setup:openrouter' in your own terminal"
+    );
+    expect(result.stdout).not.toContain("sk-or-must-not-be-read");
   });
 });

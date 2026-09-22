@@ -83,13 +83,32 @@ create table public.capture_image_fresh_activation (
 alter table public.capture_image_fresh_activation enable row level security;
 revoke all on public.capture_image_fresh_activation from public, anon, authenticated;
 
--- Fingerprint the fixed fresh policy definitions, roles and commands, not just names.
+-- Fingerprint exact policy command/roles/USING/WITH CHECK plus any later
+-- service-owned direct-upload policy and publication-admission trigger. The
+-- latter are absent at first activation; the additive admission migration adds
+-- them and re-attests this row atomically.
 create function public.capture_image_fresh_policy_fingerprint() returns text
 language sql stable security definer set search_path=pg_catalog as $$
-  select md5(string_agg(polname || ':' || polcmd::text || ':' || polpermissive::text || ':' || polroles::text
-    || ':' || coalesce(pg_get_expr(polqual,polrelid),'') || ':' || coalesce(pg_get_expr(polwithcheck,polrelid),''), '|' order by polname))
-  from pg_policy where (polrelid='storage.objects'::regclass and polname like 'capture_fresh_%')
-    or polrelid='public.capture_image_publications'::regclass
+  select md5(
+    coalesce((select string_agg(policy.polrelid::regclass::text || ':' || policy.polname
+      || ':' || policy.polcmd::text || ':' || policy.polpermissive::text
+      || ':' || policy.polroles::text || ':' || coalesce(pg_get_expr(policy.polqual,policy.polrelid),'')
+      || ':' || coalesce(pg_get_expr(policy.polwithcheck,policy.polrelid),''),
+      '|' order by policy.polrelid::regclass::text,policy.polname)
+      from pg_policy policy
+      where (policy.polrelid='storage.objects'::regclass
+          and (policy.polname like 'capture_fresh_%'
+            or policy.polname='capture_image_app_only_insert'))
+        or policy.polrelid='public.capture_image_publications'::regclass),'')
+    || '|publication-admission:' ||
+    coalesce((select string_agg(trigger.tgenabled::text || ':' || trigger.tgtype::text
+      || ':' || pg_get_triggerdef(trigger.oid,true)
+      || ':' || pg_get_functiondef(trigger.tgfoid),'|' order by trigger.tgname)
+      from pg_trigger trigger
+      where trigger.tgrelid='public.capture_image_publications'::regclass
+        and trigger.tgname='capture_image_publication_admission_guard'
+        and not trigger.tgisinternal),'')
+  )
 $$;
 revoke all on function public.capture_image_fresh_policy_fingerprint() from public, anon, authenticated;
 
@@ -120,23 +139,35 @@ $$;
 revoke all on function public.capture_image_publication_config() from public, anon, authenticated;
 grant execute on function public.capture_image_publication_config() to authenticated;
 
-create policy capture_image_publication_owner on public.capture_image_publications
-  for all to authenticated using (user_id=(select auth.uid()) and public.capture_image_publication_ready()
+drop policy if exists capture_image_publication_owner on public.capture_image_publications;
+drop policy if exists capture_image_publication_owner_select on public.capture_image_publications;
+drop policy if exists capture_image_publication_owner_insert on public.capture_image_publications;
+create policy capture_image_publication_owner_select on public.capture_image_publications
+  for select to authenticated using (
+    user_id=(select auth.uid()) and public.capture_image_publication_ready()
+  );
+create policy capture_image_publication_owner_insert on public.capture_image_publications
+  for insert to authenticated with check (
+    user_id=(select auth.uid()) and public.capture_image_publication_ready()
     and exists(select 1 from public.capture_cloud_subscriptions s where s.user_id=(select auth.uid())
-      and s.is_entitled and s.access_expires_at > now()))
-  with check (user_id=(select auth.uid()) and public.capture_image_publication_ready()
-    and exists(select 1 from public.capture_cloud_subscriptions s where s.user_id=(select auth.uid())
-      and s.is_entitled and s.access_expires_at > now()));
+      and s.is_entitled and s.access_expires_at > now())
+  );
 -- Fresh deliberately has NO legacy collision trigger or old-bucket freeze.
+drop policy if exists capture_fresh_tenant on storage.objects;
 create policy capture_fresh_tenant on storage.objects
   as restrictive for all to authenticated using (
     bucket_id <> 'capture-image-candidates-fresh-20260914' or (
       public.capture_image_publication_ready()
       and cardinality(storage.foldername(name))=1
       and (storage.foldername(name))[1]=(select auth.uid())::text
-      and storage.filename(name) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-      and exists(select 1 from public.capture_cloud_subscriptions s where s.user_id=(select auth.uid())
-        and s.is_entitled and s.access_expires_at > now())));
+      and storage.filename(name) ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'));
+drop policy if exists capture_fresh_write_entitlement on storage.objects;
+create policy capture_fresh_write_entitlement on storage.objects
+  as restrictive for insert to authenticated with check (
+    bucket_id <> 'capture-image-candidates-fresh-20260914' or
+    exists(select 1 from public.capture_cloud_subscriptions s where s.user_id=(select auth.uid())
+      and s.is_entitled and s.access_expires_at > now())
+  );
 create policy capture_fresh_no_anon on storage.objects
   as restrictive for all to anon using (bucket_id <> 'capture-image-candidates-fresh-20260914');
 create policy capture_fresh_read_operation on storage.objects

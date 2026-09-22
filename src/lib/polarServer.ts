@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { createPolar, webhooks } from "@polar-sh/sdk/2026-04";
 import { createCloudServerClient } from "@/lib/supabase/server";
@@ -46,7 +47,10 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
       retryPending: async () => { throw new Error("billing is not configured"); },
       isCloudEnabled,
       identity,
+      isAccountErasing: async () => { throw new Error("billing is not configured"); },
       hasBlockingSubscription: async () => { throw new Error("billing is not configured"); },
+      acquireExternalWork: async () => { throw new Error("billing is not configured"); },
+      releaseExternalWork: async () => { throw new Error("billing is not configured"); },
       createCheckout: async () => { throw new Error("billing is not configured"); },
       createCustomerSession: async () => { throw new Error("billing is not configured"); },
       validateWebhook: async () => { throw new Error("billing is not configured"); },
@@ -64,19 +68,39 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
     if (!claim.data.pending) return;
     const ticket = claim.data;
     if (typeof ticket.version !== "string") throw new Error("reconciliation retry pending");
-    // Installed alpha.21 SDK: exact subscription GET, timeout in SECONDS.
-    // No customer-state shortcut: it would discard Capture's custom grace.
-    const snapshot = await polar.subscriptions.get(subscriptionId, { timeout: 2 });
-    const normalized = normalizeSubscription("subscription.updated", new Date().toISOString(), snapshot, config);
-    if (!normalized || (snapshot.status === "past_due" && !normalized.isEntitled)
-      || normalized.polarSubscriptionId !== subscriptionId
-      || normalized.userId !== ticket.userId || normalized.polarCustomerId !== ticket.customerId) throw new Error("reconciliation binding mismatch");
-    // normalizeSubscription binds product/plan to the configured Capture catalog;
-    // the authoritative subscription may legitimately have switched monthly/yearly.
-    const result = await admin.rpc("finish_polar_reconciliation", {
-      p_subscription_id: subscriptionId, p_version: ticket.version, p_snapshot: normalized,
+    const admissionId = randomUUID();
+    const now = new Date();
+    const admitted = await admin.rpc("acquire_capture_external_work", {
+      p_admission_id: admissionId,
+      p_owner_id: ticket.userId,
+      p_kind: "polar_reconcile",
+      p_now: now.toISOString(),
+      p_lease_expires_at: new Date(now.getTime() + 10 * 60_000).toISOString(),
+      p_capability_id: null,
+      p_capability_expires_at: null,
     });
-    if (result.error || result.data !== true) throw new Error("reconciliation superseded or failed");
+    if (admitted.error || admitted.data !== true) throw new Error("reconciliation admission failed");
+    try {
+      // Installed alpha.21 SDK: exact subscription GET, timeout in SECONDS.
+      // No customer-state shortcut: it would discard Capture's custom grace.
+      const snapshot = await polar.subscriptions.get(subscriptionId, { timeout: 2 });
+      const normalized = normalizeSubscription("subscription.updated", new Date().toISOString(), snapshot, config);
+      if (!normalized || (snapshot.status === "past_due" && !normalized.isEntitled)
+        || normalized.polarSubscriptionId !== subscriptionId
+        || normalized.userId !== ticket.userId || normalized.polarCustomerId !== ticket.customerId) throw new Error("reconciliation binding mismatch");
+      // normalizeSubscription binds product/plan to the configured Capture catalog;
+      // the authoritative subscription may legitimately have switched monthly/yearly.
+      const result = await admin.rpc("finish_polar_reconciliation", {
+        p_subscription_id: subscriptionId, p_version: ticket.version, p_snapshot: normalized,
+      });
+      if (result.error || result.data !== true) throw new Error("reconciliation superseded or failed");
+    } finally {
+      const released = await admin.rpc("release_capture_external_work", {
+        p_owner_id: ticket.userId,
+        p_admission_id: admissionId,
+      });
+      if (released.error || released.data !== true) throw new Error("reconciliation admission release failed");
+    }
   };
 
   return {
@@ -88,6 +112,11 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
     },
     isCloudEnabled,
     identity,
+    isAccountErasing: async (userId) => {
+      const { data, error } = await admin.rpc("capture_account_deleting", { p_user_id: userId });
+      if (error || typeof data !== "boolean") throw new Error("account lifecycle unavailable");
+      return data;
+    },
     hasBlockingSubscription: async (userId) => {
       const { data, error } = await admin
         .from("capture_cloud_subscriptions")
@@ -100,6 +129,27 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
       if (error) throw new Error("subscription status could not be read");
       return Array.isArray(data) && data.length > 0;
     },
+    acquireExternalWork: async ({ ownerId, kind, capabilityExpiresAt }) => {
+      const admissionId = randomUUID();
+      const now = new Date();
+      const { data, error } = await admin.rpc("acquire_capture_external_work", {
+        p_admission_id: admissionId,
+        p_owner_id: ownerId,
+        p_kind: kind,
+        p_now: now.toISOString(),
+        p_lease_expires_at: new Date(now.getTime() + 10 * 60_000).toISOString(),
+        p_capability_id: randomUUID(),
+        p_capability_expires_at: capabilityExpiresAt.toISOString(),
+      });
+      return !error && data === true ? { admissionId } : null;
+    },
+    releaseExternalWork: async (ownerId, admissionId) => {
+      const { data, error } = await admin.rpc("release_capture_external_work", {
+        p_owner_id: ownerId,
+        p_admission_id: admissionId,
+      });
+      if (error || data !== true) throw new Error("billing admission release failed");
+    },
     createCheckout: async (input: CheckoutInput) => {
       const result = await polar.checkouts.create({
         products: input.products,
@@ -111,14 +161,14 @@ export async function createPolarDependencies(env: Env = process.env): Promise<P
         allow_discount_codes: input.allowDiscountCodes,
         allow_trial: input.allowTrial,
         metadata: input.metadata,
-      });
+      }, { timeout: 30 });
       return { url: result.url };
     },
     createCustomerSession: async (input: PortalInput) => {
       const result = await polar.customerSessions.create({
         external_customer_id: input.externalCustomerId,
         return_url: input.returnUrl,
-      });
+      }, { timeout: 30 });
       return { customerPortalUrl: result.customer_portal_url };
     },
     validateWebhook: (body, headers, webhookSecret) => webhooks.validateEvent(body, headers, webhookSecret),

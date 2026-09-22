@@ -65,6 +65,7 @@ const CLIP = (s: string, n: number) =>
 export function compactBoard(board: Board): TidySnapshot {
   return {
     actions: board.actions
+      .filter((a) => !a.unsorted)
       .slice(0, SNAPSHOT_CAPS.actions)
       .map((a) => ({
         id: a.id,
@@ -82,6 +83,7 @@ export function compactBoard(board: Board): TidySnapshot {
         name: CLIP(t.name, 80),
         summary: t.summary ? CLIP(t.summary, 160) : undefined,
         frags: t.frags
+          .filter((f) => !f.unsorted)
           .slice(0, SNAPSHOT_CAPS.fragsPerThread)
           .map((f) => ({
             id: f.id,

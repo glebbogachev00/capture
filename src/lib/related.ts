@@ -502,7 +502,8 @@ export function bestActionDuplicate(
      * question. The question is how much of the shorter task the two
      * actually have in common. */
     const other = board.actions.find((a) => a.id === h.id);
-    return !!other && (coverage <= 0 || covers(words, contentWords(other.text), coverage));
+    return !!other && !other.unsorted &&
+      (coverage <= 0 || covers(words, contentWords(other.text), coverage));
   });
   if (!hit) return null;
   return { kind: "action", id: hit.id, name: hit.name, reason: hit.reason };

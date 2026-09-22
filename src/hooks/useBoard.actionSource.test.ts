@@ -61,6 +61,9 @@ it.each(["fold", "new thread", "resort", "share", "intention"])("sort→%s uses 
     await act(async () => { await result.current.resort(a); });
     expect(calls.find(c => c.url === "/api/sort")!.body.raw).toBe(mom);
     expect(result.current.data.actions.map(a => a.text).sort()).toEqual([mom, stripe].sort());
+    expect(result.current.data.ledger.some(entry =>
+      entry.kind === "action" && entry.clean === mom
+    )).toBe(true);
   } else if (operation === "share") {
     expect(shareAction(a).text).toBe(mom);
   } else {
@@ -70,9 +73,11 @@ it.each(["fold", "new thread", "resort", "share", "intention"])("sort→%s uses 
     expect(result.current.data.actions.some(x => x.id === a.id)).toBe(true);
   }
   expect(result.current.data.actions.some(a => a.text === stripe)).toBe(true);
-  expect(JSON.stringify(result.current.data.ledger)).toBe(record);
-  expect(result.current.data.ledger[0].raw).toBe(raw);
-  expect(result.current.data.ledger[0].clean).toBe(raw);
+  if (operation !== "resort") expect(JSON.stringify(result.current.data.ledger)).toBe(record);
+  expect(result.current.data.ledger.find(entry => entry.raw === raw)).toMatchObject({
+    raw,
+    clean: raw,
+  });
 });
 it("a multi-action-only capture does not fold its sibling with the selected action", async () => {
   const { result } = await mount({ ...sorted, kind: "action", primaryText: null });

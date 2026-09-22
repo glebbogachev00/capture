@@ -1,8 +1,10 @@
 import { generateText } from "ai";
 import { clientIp } from "@/lib/clientIp";
 import { transcribeRateLimit } from "@/lib/limiter";
+import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { withFallback } from "@/lib/providers";
 import { CLEANUP_SYSTEM } from "@/lib/dictationCleanup";
+import { opsEvent } from "@/lib/opsEvent.server";
 
 /**
  * Transcribe — recorded audio in, text out.
@@ -55,7 +57,7 @@ async function transcribeLocal(
     body: audio,
     signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!res.ok) throw new Error(`local transcriber: ${await res.text()}`);
+  if (!res.ok) throw new Error("local transcriber unavailable");
   const { text } = (await res.json()) as { text: string };
   return text;
 }
@@ -79,7 +81,7 @@ async function transcribeGroq(
     body: form,
     signal: AbortSignal.timeout(60_000),
   });
-  if (!res.ok) throw new Error(`groq: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw Object.assign(new Error("hosted transcriber unavailable"), { statusCode: res.status });
   const { text } = (await res.json()) as { text: string };
   return text;
 }
@@ -112,6 +114,9 @@ async function cleanUp(raw: string): Promise<string> {
 }
 
 export async function POST(request: Request) {
+  const authorization = await authorizeManagedAiRequest(request);
+  if (authorization instanceof Response) return authorization;
+  return withManagedAiAdmission(authorization, async () => {
   const gate = transcribeRateLimit(clientIp(request));
   if (!gate.allowed) {
     return Response.json(
@@ -141,14 +146,17 @@ export async function POST(request: Request) {
     } catch {
       try {
         raw = (await transcribeLocal(audio, contentType, 55_000)).trim();
-      } catch (err) {
+      } catch {
+        opsEvent({
+          event: "managed_ai_route",
+          outcome: "failure",
+          reason: "provider_unavailable",
+          count: "one",
+        });
         return Response.json(
           {
-            error:
-              err instanceof Error
-                ? err.message
-                : "transcription failed — is the local server running? " +
-                  "(~/whisper: uv run python server.py)",
+            error: "transcription failed — is the local server running? " +
+              "(~/whisper: uv run python server.py)",
           },
           { status: 502 }
         );
@@ -163,4 +171,5 @@ export async function POST(request: Request) {
      transcript is the evidence, and it must never be the thing that is
      silently thrown away. Omitted when cleanup changed nothing. */
   return Response.json(text === raw ? { text } : { text, raw });
+  });
 }

@@ -77,4 +77,39 @@ describe("overflow menu layout", () => {
     expect(oddRule).toMatch(/width:\s*calc\(\(100%\s*-\s*8px\)\s*\/\s*2\)/);
     expect(oddRule).toMatch(/justify-self:\s*center/);
   });
+
+  it("balances the shelf choices into equal columns with a centered final action", () => {
+    const { container } = render(
+      <Row
+        a={action}
+        now={action.at}
+        shelfOpen
+        onToggle={noop}
+        onShelfClick={noop}
+        onSetShelf={noop}
+        onRestore={noop}
+        onRemove={noop}
+        onMakeThread={noop}
+        onEditText={noop}
+        onResort={noop}
+        onMakeIntention={noop}
+        onCopy={noop}
+        busy={false}
+      />
+    );
+    expect(container.querySelector(".action-shelf")).toBeTruthy();
+
+    const css = readFileSync("src/app/globals.css", "utf8");
+    const menuRule = css.match(/\.action-shelf\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    const buttonRule = css.match(/\.action-shelf\s*>\s*button\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    const oddRule = css.match(/\.action-shelf\s*>\s*button:last-child:nth-child\(odd\)\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    expect(menuRule).toMatch(/display:\s*grid/);
+    expect(menuRule).toMatch(/grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+    expect(menuRule).toMatch(/width:\s*min\(100%,\s*320px\)/);
+    expect(menuRule).toMatch(/margin-inline:\s*auto/);
+    expect(buttonRule).toMatch(/width:\s*100%/);
+    expect(buttonRule).toMatch(/justify-content:\s*center/);
+    expect(oddRule).toMatch(/grid-column:\s*1\s*\/\s*-1/);
+    expect(oddRule).toMatch(/justify-self:\s*center/);
+  });
 });

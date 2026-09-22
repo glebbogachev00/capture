@@ -76,6 +76,8 @@ function deps(identity: VerifiedIdentity | null, repo: CloudBoardRepository) {
     verifyIdentity: async () => identity,
     requiresEntitlement: () => false,
     hasEntitlement: async () => true,
+    isAccountErasing: async () => false,
+    consumeQuota: vi.fn().mockResolvedValue({ allowed: true, retryAfterSec: 0 }),
     repository: repo,
   };
 }
@@ -149,6 +151,39 @@ describe("cloud board boundary", () => {
     expect(repo.documents).toEqual(new Map());
   });
 
+  it.each([true, false])("serves exact-owner backup reads without billing for subscription-required=%s cohorts", async (required) => {
+    const repo = repository();
+    repo.documents.set("alice", { state: state("recoverable"), rev: 3 });
+    const guarded = {
+      ...deps({ userId: "alice" }, repo),
+      requiresEntitlement: () => required,
+      hasEntitlement: vi.fn().mockResolvedValue(false),
+    };
+    const response = await handleCloudBoardGet(
+      ownedRequest("https://capture.test/api/cloud/board?backup=1"),
+      guarded,
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).board.actions[0].id).toBe("recoverable");
+    expect(guarded.hasEntitlement).not.toHaveBeenCalled();
+    expect(guarded.consumeQuota).toHaveBeenCalledWith("alice", expect.objectContaining({ scope: "backup_read" }));
+  });
+
+  it.each(["ordinary", "backup"])("denies %s board reads after confirmation installs the deletion fence", async (mode) => {
+    const repo = repository();
+    repo.documents.set("alice", { state: state("must-not-leak"), rev: 3 });
+    const guarded = {
+      ...deps({ userId: "alice" }, repo),
+      isAccountErasing: vi.fn().mockResolvedValue(true),
+    };
+    const response = await handleCloudBoardGet(ownedRequest(
+      `https://capture.test/api/cloud/board${mode === "backup" ? "?backup=1" : ""}`,
+    ), guarded);
+    expect(response.status).toBe(403);
+    expect(guarded.consumeQuota).not.toHaveBeenCalled();
+    expect(repo.documents.get("alice")?.state.board.actions[0]?.id).toBe("must-not-leak");
+  });
+
   it("fails closed when entitlement state cannot be checked", async () => {
     const repo = repository();
     const response = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), {
@@ -157,7 +192,41 @@ describe("cloud board boundary", () => {
       hasEntitlement: vi.fn().mockRejectedValue(new Error("database unavailable")),
     });
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "subscription status is unavailable" });
+    expect(await response.json()).toEqual({ error: "cloud authorization unavailable" });
+    expect(repo.documents).toEqual(new Map());
+  });
+
+  it("consumes distinct durable owner quota scopes before board access", async () => {
+    const repo = repository();
+    const getDeps = deps({ userId: "alice" }, repo);
+    expect((await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), getDeps)).status).toBe(200);
+    expect(getDeps.consumeQuota).toHaveBeenCalledWith("alice", expect.objectContaining({ scope: "board_read" }));
+
+    const putDeps = deps({ userId: "alice" }, repo);
+    const response = await handleCloudBoardPut(ownedRequest("https://capture.test/api/cloud/board", {
+      method: "PUT",
+      body: JSON.stringify(state("quota-write")),
+    }), putDeps);
+    expect(response.status).toBe(200);
+    expect(putDeps.consumeQuota).toHaveBeenCalledWith("alice", expect.objectContaining({ scope: "board_write" }));
+  });
+
+  it("does not read a PUT body or repository after durable quota denial", async () => {
+    const repo = repository();
+    const getReader = vi.fn(() => { throw new Error("body read after denial"); });
+    const request = {
+      method: "PUT",
+      headers: new Headers({ "X-Capture-Owner": "alice" }),
+      body: { getReader },
+    } as unknown as Request;
+    const response = await handleCloudBoardPut(request, {
+      ...deps({ userId: "alice" }, repo),
+      consumeQuota: vi.fn().mockResolvedValue({ allowed: false, retryAfterSec: 41 }),
+    });
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("41");
+    expect(await response.json()).toEqual({ error: "quota exceeded" });
+    expect(getReader).not.toHaveBeenCalled();
     expect(repo.documents).toEqual(new Map());
   });
 

@@ -18,8 +18,6 @@
  * it is not, and never blocking anything.
  */
 
-/** The tier the chain prefers, and the one everything was measured on. */
-export const BEST_TIER = "groq";
 
 /**
  * How many recent answers to weigh.
@@ -33,7 +31,13 @@ export const WINDOW = 4;
 /** Below this share of the window, it is noise rather than a state. */
 const ENOUGH = 0.75;
 
-export type Answered = { via?: string | null; at: number };
+export type Answered = {
+  via?: string | null;
+  preferred?: string | null;
+  fallback: boolean;
+  fallbackReason: "rate_limit" | "provider_failure" | null;
+  at: number;
+};
 
 /**
  * Is the app currently running on a stand-in?
@@ -46,7 +50,12 @@ export function degradedTier(recent: Answered[]): string | null {
   const seen = recent.filter((r) => r.via).slice(-WINDOW);
   if (seen.length < WINDOW) return null;
 
-  const off = seen.filter((r) => r.via !== BEST_TIER);
+  /* The existing UI wording specifically says rate-limited. Only show it
+     when the server observed that reason; an intentional provider choice or
+     a generic outage is not evidence for that claim. */
+  const off = seen.filter(
+    (r) => r.fallback && r.fallbackReason === "rate_limit"
+  );
   if (off.length / seen.length < ENOUGH) return null;
 
   /* Name the one actually answering, not just "not the best one" — which

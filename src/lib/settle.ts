@@ -1,5 +1,5 @@
 import { withLedger, sourceOf, type CaptureSource } from "./ledger";
-import type { Action, Board, Frag } from "./model";
+import type { Action, Board } from "./model";
 
 /**
  * Settling a capture the sorter could not sort — one computation, one
@@ -14,7 +14,8 @@ import type { Action, Board, Frag } from "./model";
  * lie. The audit radar found it, and its rule is now this module's rule:
  *
  *   The visible tab is not valid input to a transaction. An explicitly
- *   open thread is, because the person chose it.
+ *   open thread is retained only as the intended destination on the waiting
+ *   envelope; a failed sort never creates an un-retryable thread fragment.
  *
  * So the signature simply HAS no tab parameter — the defect is not fixed
  * here so much as made unwritable. Everything downstream (ledger kind,
@@ -60,50 +61,12 @@ export function settleUnsortedCapture(
     input.imgIds.length > 0
   );
 
-  if (openThread) {
-    /* An open thread IS a stated destination: the words join it as an
-       unsorted fragment, and the record calls it what it is — a thread
-       capture. */
-    const frag: Frag = {
-      id: ids.itemId,
-      at: input.at,
-      text: body,
-      imgs: input.imgIds,
-      unsorted: true,
-    };
-    const next = withLedger(
-      {
-        ...board,
-        threads: board.threads.map((t) =>
-          t.id === openThread.id ? { ...t, frags: [...t.frags, frag] } : t
-        ),
-      },
-      {
-        id: ids.ledgerId,
-        captureId: ids.captureId,
-        at: input.at,
-        raw: input.raw,
-        transcript: input.transcript,
-        clean: body,
-        kind: "thread",
-        source,
-        targetId: openThread.id,
-        targetFragId: frag.id,
-        imgs: input.imgIds.length ? input.imgIds : undefined,
-      }
-    );
-    return {
-      board: next,
-      target: { kind: "thread", id: openThread.id, fragId: frag.id },
-      receipt: openThread.name + " — saved unsorted",
-      ledgerId: ids.ledgerId,
-    };
-  }
-
-  /* No chosen destination: the words park as an unsorted ACTION — flat,
+  /* The words park as an unsorted ACTION envelope — flat,
      reversible, visibly marked, resortable later. A failed sort never
      invents a thread (an error path must not make structural decisions),
-     and the record says "action" because an action is what exists. */
+     and the record says "pending" because no classification exists yet. If a
+     thread was explicitly open, retain that destination on the envelope so
+     a later successful thread/both sort can honour the person's choice. */
   const action: Action = {
     id: ids.itemId,
     text: body,
@@ -114,6 +77,7 @@ export function settleUnsortedCapture(
     shelf: "keep",
     expires: null,
     unsorted: true,
+    ...(openThread ? { threadId: openThread.id } : {}),
   };
   const next = withLedger(
     { ...board, actions: [action, ...board.actions] },
@@ -124,7 +88,7 @@ export function settleUnsortedCapture(
       raw: input.raw,
       transcript: input.transcript,
       clean: body,
-      kind: "action",
+      kind: "pending",
       source,
       targetId: action.id,
       imgs: input.imgIds.length ? input.imgIds : undefined,
@@ -174,6 +138,9 @@ export type SortedFacts = {
   via?: string;
   /** Where the primary landed. */
   primary: { targetId: string; fragId?: string };
+  /** Explicit thread records mutated alongside a primary whose ledger target is
+      not itself a thread (for example an Action with a retained photo). */
+  summaryThreadIds?: string[];
   /** Where each further split share landed. */
   also: { text: string; threadId: string; fragId?: string }[];
 };
@@ -215,7 +182,11 @@ export function recordSortedCapture(
   }
   const summaryTargets = [
     ...new Set(
-      [f.primary.targetId, ...f.also.map((p) => p.threadId)].filter(Boolean)
+      [
+        ...(f.summaryThreadIds ?? []),
+        ...(f.kind === "thread" || f.kind === "both" ? [f.primary.targetId] : []),
+        ...f.also.map((p) => p.threadId),
+      ].filter(Boolean)
     ),
   ];
   return { board: next, summaryTargets };

@@ -7,7 +7,7 @@ import { EMPTY, KEY } from "@/lib/model";
 import { useBoard } from "./useBoard";
 
 const at = 1_756_000_000_000;
-const requests: { name: string; frags: { at: number; text: string }[]; resolve: (body: object) => void }[] = [];
+const requests: { name: string; frags: { at: number; text: string }[]; open: string[]; resolve: (body: object) => void }[] = [];
 
 beforeEach(async () => {
   requests.length = 0;
@@ -18,7 +18,15 @@ beforeEach(async () => {
     }
     return new Response(null, { status: 503 });
   }));
-  await set(KEY, JSON.stringify({ ...EMPTY, principles: [], threads: [{ id: "t", name: "Thread", summary: "Old summary", frags: [{ id: "f", text: "Old text", at }] }] }));
+  await set(KEY, JSON.stringify({
+    ...EMPTY,
+    principles: [],
+    actions: [
+      { id: "waiting", text: "Private offline draft", done: false, at, shelf: "keep", expires: null, unsorted: true },
+      { id: "ready", text: "Publish the launch note", done: false, at, shelf: "keep", expires: null },
+    ],
+    threads: [{ id: "t", name: "Thread", summary: "Old summary", frags: [{ id: "f", text: "Old text", at }] }],
+  }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -30,6 +38,7 @@ it.each(["attach image", "resolve note"])("accepts the manual edit's only summar
   await waitFor(() => expect(requests).toHaveLength(1));
   expect(requests[0].name).toBe("Thread");
   expect(requests[0].frags).toEqual([{ at, text: "Corrected text" }]);
+  expect(requests[0].open).toEqual(["Publish the launch note"]);
   expect(result.current.data.threads[0].summary).toBe("");
 
   await act(async () => {

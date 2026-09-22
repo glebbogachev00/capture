@@ -18,6 +18,7 @@ import { Markup } from "./Markup";
 import { BusyLine, Row, TCard } from "@/components/cards";
 import { GroupedActionRows } from "@/components/GroupedActionRows";
 import { SearchResults } from "@/components/SearchResults";
+import { createQuestionAnswerSession, QuestionAnswer } from "@/components/QuestionAnswer";
 import { ThreadView } from "@/components/ThreadView";
 import { ThreadChoices } from "@/components/ThreadChoices";
 import { degradedNote } from "@/lib/degraded";
@@ -56,6 +57,7 @@ import { useBoard } from "@/hooks/useBoard";
 import { ReportBug } from "@/components/ReportBug";
 import { PlaygroundNotice } from "@/components/PlaygroundNotice";
 import { TrialMeter } from "@/components/TrialMeter";
+import { UnsortedCaptures } from "@/components/UnsortedCaptures";
 import { InstallInvitation } from "@/components/InstallInvitation";
 import { OfflineInvitation } from "@/components/OfflineSettings";
 import { CheckoutReturnNotice } from "@/components/CloudBilling";
@@ -92,15 +94,14 @@ const TRY = {
 
 /** How long a ticked action shows itself done before it leaves. Long enough
     to read as a finish, short enough that nobody waits on it. */
-
 export function Capture() {
+  const [answerSession, setAnswerSession] = useState(createQuestionAnswerSession);
   /* The ticking clock the countdowns and shelf lives derive from. */
   const now = useSyncExternalStore(
     subscribeToClock,
     clockSnapshot,
     clockServerSnapshot
   );
-
   /* Input device plumbing: the hidden file picker, and the speech recogniser
      (shared with Distill — the mic routes to whichever surface is open). */
   const fileRef = useRef<HTMLInputElement>(null);
@@ -181,7 +182,8 @@ export function Capture() {
     recordDay,
     setRecordDay,
     setShowSettings,
-    ioNote,
+    leaveSettings,
+    ioNote, ioBusy,
     setIoNote,
     editing,
     setEditing,
@@ -194,6 +196,7 @@ export function Capture() {
     showResting,
     setShowResting,
     live,
+    unsorted,
     fadedList,
     active,
     resting,
@@ -204,6 +207,7 @@ export function Capture() {
     shareable,
     submit,
     resort,
+    editUnsorted, removeUnsorted,
     toggleAction,
     setShelf,
     restore,
@@ -272,7 +276,8 @@ export function Capture() {
     learnedRules,
     toggleLearnedRule,
   } = useBoard(now);
-
+  const updateQuery = (next: string) => { if (next !== query) {
+    setAnswerSession((value) => ({ ...value, revision: value.revision + 1 })); setQuery(next); } };
   /* The rollback days, read when Settings opens — a list this short is
      cheaper to re-read than to keep in sync with every write. */
   const [snapDays, setSnapDays] = useState<string[]>([]);
@@ -860,7 +865,7 @@ export function Capture() {
           />
         ) : showRecord ? (
           <RecordScreen
-            ledger={data.ledger ?? []}
+            ledger={(data.ledger ?? []).filter((entry) => entry.kind !== "pending")}
             now={now}
             day={recordDay}
             onDayChange={setRecordDay}
@@ -883,14 +888,9 @@ export function Capture() {
         ) : showSettings ? (
           <SettingsScreen
             principles={data.principles}
-            counts={{
-              actions: data.actions.length,
-              threads: data.threads.length,
-              intentions: data.intentions.length,
-            }}
+            counts={{ actions: data.actions.filter((action) => !action.unsorted).length, threads: data.threads.length, intentions: data.intentions.length }}
             onBack={() => {
-              setShowSettings(false);
-              setIoNote(null);
+              if (!leaveSettings()) return;
             }}
             onToggle={togglePrinciple}
             onAdd={addPrinciple}
@@ -904,14 +904,14 @@ export function Capture() {
             onRestoreSnapshot={(day) => void restoreSnapshot(day)}
             onImportIntent={importBackup}
             onLogout={logout}
-            ioNote={ioNote}
+            ioNote={ioNote} ioBusy={ioBusy}
             sync={sync}
             onSyncNow={syncNow}
             onOpenRecord={() => {
-              setShowSettings(false);
+              if (!leaveSettings()) return;
               setShowRecord(true);
             }}
-            ledgerCount={(data.ledger ?? []).length} profile={data.profile} onProfileChange={updateProfile}
+            ledgerCount={(data.ledger ?? []).filter((entry) => entry.kind !== "pending").length} profile={data.profile} onProfileChange={updateProfile}
           />
         ) : draft ? (
           <IntentionDraft
@@ -982,20 +982,26 @@ export function Capture() {
           />
         ) : (
           <>
+            <UnsortedCaptures items={unsorted} busy={!!busy} onSort={(action) => void resort(action)}
+              onEdit={editUnsorted} onDelete={removeUnsorted} />
             <div className="searchbar">
               <input
                 type="search"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search everything"
-                aria-label="Search everything"
+                onChange={(e) => updateQuery(e.target.value)}
+                placeholder="Search or ask a question"
+                aria-label="Search or ask a question"
               />
               {searching && (
-                <button className="ghost" onClick={() => setQuery("")}>
+                <button className="ghost" onClick={() => updateQuery("")}>
                   Clear
                 </button>
               )}
             </div>
+            <QuestionAnswer board={data} question={query} session={answerSession}
+              onOpenThread={(id, fragId) => {
+                setOpen(id); setOpenFrag(fragId || null);
+              }} onOpenIntention={(id) => setOpenIntention(id)} />
 
             {searching ? (
               <SearchResults
@@ -1070,7 +1076,7 @@ export function Capture() {
 
             {tab === "actions" && (
               <div>
-                {!data.actions.length && loaded && (
+                {!live.length && !unsorted.length && loaded && (
                   <div className="empty">
                     {/* An app about clearing clutter cannot open with a wall
                         of prose. What is actually needed here is three
