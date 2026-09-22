@@ -15,13 +15,15 @@ it("blocks checkout for denied pending billing using real dependencies and Supab
     expect(url.origin).toBe("https://synthetic.test"); // never forward any request
     urls.push(url);
     if (url.pathname.includes("/rpc/capture_account_deleting")) return Response.json(false);
+    if (url.pathname.includes("/rpc/capture_cloud_access_current")) return Response.json(false);
     if (url.pathname.includes("/rpc/acquire_capture_external_work")
       || url.pathname.includes("/rpc/release_capture_external_work")) return Response.json(true);
     expect(url.searchParams.get("user_id")).toBe(`eq.${owner}`);
     // Synthetic pending source: is_entitled=false, expiry in the past. The
     // previous effective-access-only query incorrectly filters this row out.
     const includesPending = url.searchParams.get("or")?.includes("reconciliation_required.eq.true");
-    return Response.json(includesPending ? [{ polar_subscription_id: "pending_charging" }] : []);
+    const isPortalLookup = !url.searchParams.has("or");
+    return Response.json(includesPending || isPortalLookup ? [{ polar_subscription_id: "pending_charging" }] : []);
   }));
   mocks.checkout.mockResolvedValue({ url: "https://synthetic.test/should-not-create" });
   mocks.portal.mockResolvedValue({ customer_portal_url: "https://synthetic.test/manage" });
@@ -35,6 +37,7 @@ it("blocks checkout for denied pending billing using real dependencies and Supab
   expect(subscriptionUrls[0].searchParams.has("is_entitled")).toBe(false);
   const portal = await handleCustomerPortal(new Request("https://capture.test/api/billing/portal"), deps);
   expect(portal.status).toBe(200);
+  expect(urls.filter(url => !url.pathname.includes("/rpc/"))).toHaveLength(2);
   expect(mocks.portal).toHaveBeenCalledWith(
     { external_customer_id: owner, return_url: "https://trycapture.app/app" },
     { timeout: 30 },

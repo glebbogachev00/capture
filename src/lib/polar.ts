@@ -60,7 +60,9 @@ export type PolarDependencies = {
   isCloudEnabled: () => boolean;
   identity: () => Promise<CaptureIdentity | null>;
   isAccountErasing: (userId: string) => Promise<boolean>;
+  hasCloudAccess: (userId: string) => Promise<boolean>;
   hasBlockingSubscription: (userId: string) => Promise<boolean>;
+  hasBillingSubscription: (userId: string) => Promise<boolean>;
   acquireExternalWork: (input: {
     ownerId: string;
     kind: "polar_checkout" | "polar_portal";
@@ -184,7 +186,8 @@ export async function handleCheckout(request: Request, deps: PolarDependencies):
   const plan = await requestPlan(request);
   if (!plan) return json({ error: "invalid plan" }, 400);
   try {
-    if (await deps.hasBlockingSubscription(identity.userId)) {
+    if (await deps.hasCloudAccess(identity.userId)
+        || await deps.hasBlockingSubscription(identity.userId)) {
       return json({ error: "an existing subscription requires billing management or status retry" }, 409);
     }
   } catch {
@@ -231,6 +234,9 @@ export async function handleCustomerPortal(_request: Request, deps: PolarDepende
     return json({ error: "account lifecycle is unavailable" }, 503);
   }
   try {
+    if (!await deps.hasBillingSubscription(identity.userId)) {
+      return json({ error: "no billing subscription to manage" }, 409);
+    }
     const admission = await deps.acquireExternalWork({
       ownerId: identity.userId,
       kind: "polar_portal",

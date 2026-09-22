@@ -83,6 +83,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   state.rpc.mockImplementation(async (name: string, args?: Record<string, unknown>) => {
     if (name === "capture_image_publication_config") return { data: { mode: state.mode, bucket: state.bucket }, error: null };
+    if (name === "capture_cloud_access_current") return { data: state.entitled, error: null };
     if (name === "consume_capture_cloud_quota") return { data: { allowed: true, retryAfterSec: 0 }, error: null };
     if (name === "capture_account_deleting") return { data: state.erasing, error: null };
     if (name === "capture_image_publication_ready" || name === "capture_image_admission_ready") {
@@ -410,10 +411,9 @@ describe("Cloud image resource boundary", () => {
     expect(head.status).toBe(204);
     expect(await head.text()).toBe("");
     expect(state.download).toHaveBeenCalledWith("alice/photo");
-    const query = state.subscriptions.mock.results[0].value;
-    expect(query.eq).toHaveBeenCalledWith("user_id", "alice");
-    expect(query.eq).toHaveBeenCalledWith("is_entitled", true);
-    expect(query.gt).toHaveBeenCalledWith("access_expires_at", expect.any(String));
+    expect(state.rpc).toHaveBeenCalledWith("capture_cloud_access_current", {
+      p_user_id: "alice",
+    });
     const recovered = await call("GET");
     expect(await recovered.json()).toEqual({ src });
     expect(recovered.headers.get("Cache-Control")).toBe("private, no-store");
@@ -500,7 +500,9 @@ it.each(["legacy-cutover", "fresh"])("%s has one durable winner across independe
 
 it.each([false, "missing"])("fails closed before touching storage when migration gate is %s", async (gate) => {
   state.identity = { userId: "alice" };
-  state.rpc.mockResolvedValue({ data: gate === false ? false : null, error: gate === "missing" ? { code: "PGRST202" } : null });
+  state.rpc.mockImplementation(async (name: string) => name === "capture_cloud_access_current"
+    ? { data: true, error: null }
+    : { data: gate === false ? false : null, error: gate === "missing" ? { code: "PGRST202" } : null });
   for (const method of ["GET", "HEAD", "PUT"] as const) expect((await call(method)).status).toBe(503);
   expect(state.download).not.toHaveBeenCalled();
   expect(state.upload).not.toHaveBeenCalled();

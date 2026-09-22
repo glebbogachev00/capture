@@ -80,7 +80,7 @@ export async function authorizeCloudRequest(
     // product access. It still requires exact identity, lifecycle availability,
     // and its own durable quota; writes and managed AI retain billing checks.
     if (scope !== "backup_read" && deps.requiresEntitlement() && !await deps.hasEntitlement(identity)) {
-      return json({ error: "capture cloud subscription required" }, 402);
+      return json({ error: "capture cloud access required" }, 402);
     }
 
     const quota = await deps.consumeQuota(identity.userId, cloudQuotaPolicy(scope));

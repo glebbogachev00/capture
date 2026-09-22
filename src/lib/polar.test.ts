@@ -24,7 +24,9 @@ function deps(overrides: Partial<PolarDependencies> = {}): PolarDependencies {
     isCloudEnabled: () => true,
     identity: vi.fn().mockResolvedValue({ userId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", email: "a@example.com" }),
     isAccountErasing: vi.fn().mockResolvedValue(false),
+    hasCloudAccess: vi.fn().mockResolvedValue(false),
     hasBlockingSubscription: vi.fn().mockResolvedValue(false),
+    hasBillingSubscription: vi.fn().mockResolvedValue(true),
     acquireExternalWork: vi.fn().mockResolvedValue({ admissionId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }),
     releaseExternalWork: vi.fn().mockResolvedValue(undefined),
     createCheckout: vi.fn().mockResolvedValue({ url: "https://sandbox.polar.sh/checkout/1" }),
@@ -145,13 +147,23 @@ describe("Polar checkout", () => {
   });
 
   it("does not create a second checkout while any paid entitlement remains active", async () => {
-    const d = deps({ hasBlockingSubscription: vi.fn().mockResolvedValue(true) });
+    const d = deps({ hasCloudAccess: vi.fn().mockResolvedValue(true) });
     const response = await handleCheckout(new Request("https://capture.test/api/cloud/checkout", {
       method: "POST",
       body: JSON.stringify({ plan: "monthly" }),
     }), d);
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "an existing subscription requires billing management or status retry" });
+    expect(d.createCheckout).not.toHaveBeenCalled();
+  });
+
+  it("does not create checkout for complimentary Cloud access", async () => {
+    const d = deps({ hasCloudAccess: vi.fn().mockResolvedValue(true) });
+    const response = await handleCheckout(new Request("https://capture.test/api/cloud/checkout", {
+      method: "POST",
+      body: JSON.stringify({ plan: "yearly" }),
+    }), d);
+    expect(response.status).toBe(409);
     expect(d.createCheckout).not.toHaveBeenCalled();
   });
 });
@@ -176,6 +188,16 @@ describe("Polar customer portal", () => {
       kind: "polar_portal", capabilityExpiresAt: expect.any(Date),
     }));
     expect(d.releaseExternalWork).toHaveBeenCalledOnce();
+  });
+
+  it("does not open Polar for an account with no billing subscription", async () => {
+    const d = deps({ hasBillingSubscription: vi.fn().mockResolvedValue(false) });
+    const response = await handleCustomerPortal(
+      new Request("https://capture.test/api/cloud/portal", { method: "POST" }),
+      d,
+    );
+    expect(response.status).toBe(409);
+    expect(d.createCustomerSession).not.toHaveBeenCalled();
   });
 });
 

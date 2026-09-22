@@ -27,6 +27,7 @@ function deps(overrides: Partial<CloudSubscriptionDependencies> = {}): CloudSubs
     verifyIdentity: vi.fn().mockResolvedValue({ userId: "user-1" }),
     isAccountErasing: vi.fn().mockResolvedValue(false),
     getSubscriptions: vi.fn().mockResolvedValue([active]),
+    getCloudAccess: vi.fn().mockResolvedValue({ current: true, complimentaryCurrent: false, complimentaryExpiresAt: null }),
     now: () => new Date("2026-09-11T10:00:00.000Z"),
     ...overrides,
   } as CloudSubscriptionDependencies;
@@ -77,9 +78,60 @@ describe("Capture Cloud subscription status", () => {
   it("gives a signed-in free account the same fifteen local captures", async () => {
     const response = await handleCloudSubscriptionStatus(
       new Request("https://capture.test/api/cloud/subscription"),
-      deps({ getSubscriptions: vi.fn().mockResolvedValue([]) }),
+      deps({
+        getSubscriptions: vi.fn().mockResolvedValue([]),
+        getCloudAccess: vi.fn().mockResolvedValue({ current: false, complimentaryCurrent: false, complimentaryExpiresAt: null }),
+      }),
     );
     expect(await response.json()).toMatchObject({ tier: "free", captureLimit: 15 });
+  });
+
+  it("reports a current complimentary grant as Cloud without inventing Polar billing", async () => {
+    const response = await handleCloudSubscriptionStatus(
+      new Request("https://capture.test/api/cloud/subscription"),
+      deps({
+        getSubscriptions: vi.fn().mockResolvedValue([]),
+        getCloudAccess: vi.fn().mockResolvedValue({
+          current: true,
+          complimentaryCurrent: true,
+          complimentaryExpiresAt: "2027-01-01T00:00:00.000Z",
+        }),
+      }),
+    );
+    expect(await response.json()).toEqual({
+      tier: "cloud",
+      accessSource: "complimentary",
+      status: "complimentary",
+      plan: null,
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: null,
+      accessExpiresAt: "2027-01-01T00:00:00.000Z",
+      captureLimit: null,
+      canManageBilling: false,
+    });
+  });
+
+  it("preserves unresolved paid reconciliation while complimentary access is active", () => {
+    expect(publicCloudSubscription(
+      [{ ...active, is_entitled: false, reconciliation_required: true }],
+      new Date("2026-09-11T10:00:00.000Z"),
+      true,
+      { current: true, complimentaryCurrent: true, complimentaryExpiresAt: null },
+    )).toMatchObject({
+      tier: "cloud",
+      accessSource: "complimentary",
+      reconciliationRequired: true,
+      canManageBilling: true,
+    });
+  });
+
+  it("fails closed when the canonical access predicate is unavailable", async () => {
+    const response = await handleCloudSubscriptionStatus(
+      new Request("https://capture.test/api/cloud/subscription"),
+      deps({ getCloudAccess: vi.fn().mockRejectedValue(new Error("missing predicate")) }),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "subscription status is unavailable" });
   });
 
   it("does not impose Capture's public limit when subscriptions are optional", async () => {
@@ -88,6 +140,7 @@ describe("Capture Cloud subscription status", () => {
       deps({
         requiresSubscription: () => false,
         getSubscriptions: vi.fn().mockResolvedValue([]),
+        getCloudAccess: vi.fn().mockResolvedValue({ current: false, complimentaryCurrent: false, complimentaryExpiresAt: null }),
       } as Partial<CloudSubscriptionDependencies>),
     );
     expect(await response.json()).toMatchObject({ tier: "free", captureLimit: null });

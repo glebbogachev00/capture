@@ -139,6 +139,10 @@ try:
     grant execute on function public.capture_image_publication_config() to authenticated;
     """)
     sql((root / "supabase/migrations/20260922200000_image_storage_admissions.sql").read_text())
+    sql((root / "supabase/migrations/20260922400000_complimentary_cloud_access.sql").read_text())
+    # The additive migration must be safe to replay during controlled hosted
+    # recovery and must leave one stable policy/function contract.
+    sql((root / "supabase/migrations/20260922400000_complimentary_cloud_access.sql").read_text())
 
     sql(f"""
       insert into auth.users values('{owner}'),('{other}'),('{third}'),('{race_owner}');
@@ -167,6 +171,77 @@ try:
       insert into storage.objects values('capture-images','{owner}/photo');
       insert into public.capture_cloud_owner_quotas values('{owner}','board_write',now(),1,now());
     """)
+
+    assert sql(f"set role service_role; select public.grant_capture_cloud_complimentary_access('{third}',null);") == "SET\nt"
+    assert sql(f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{third}'; select public.capture_cloud_access_current('{third}');") == "SET\nSET\nSET\nt"
+    grant_status = json.loads(sql(f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{third}'; select public.capture_cloud_complimentary_grant_status('{third}');").splitlines()[-1])
+    assert grant_status == {"current": True, "expiresAt": None}
+    assert "exact owner required" in sql(
+        f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{other}'; select public.capture_cloud_access_current('{third}');",
+        ok=False,
+    )
+    assert "exact owner required" in sql(
+        f"set role authenticated; reset request.jwt.claim.role; reset request.jwt.claim.sub; select public.capture_cloud_access_current('{third}');",
+        ok=False,
+    )
+    assert "permission denied" in sql(
+        f"set role authenticated; set request.jwt.claim.sub='{third}'; insert into public.capture_cloud_complimentary_grants(user_id) values('{third}');",
+        ok=False,
+    )
+    for statement in [
+        "select * from public.capture_cloud_complimentary_grants",
+        f"update public.capture_cloud_complimentary_grants set updated_at=clock_timestamp() where user_id='{third}'",
+        f"delete from public.capture_cloud_complimentary_grants where user_id='{third}'",
+    ]:
+        assert "permission denied" in sql(
+            f"set role authenticated; set request.jwt.claim.sub='{third}'; {statement};",
+            ok=False,
+        )
+
+    # Complimentary-only owners may use board and image write boundaries while
+    # current. Recovery SELECT remains available after access is revoked, but
+    # direct PostgREST-style mutations and new image work fail closed.
+    assert sql(f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{third}'; insert into public.capture_boards(user_id) values('{third}'); select rev from public.capture_boards where user_id='{third}';") == "SET\nSET\nSET\nINSERT 0 1\n1"
+    assert sql(f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{third}'; update public.capture_boards set rev=rev+1 where user_id='{third}';") == "SET\nSET\nSET\nUPDATE 1"
+    complimentary_image = json.loads(sql(
+        f"set role service_role; select public.reserve_capture_image_storage('{third}','complimentary-image',repeat('c',64),'image/png',100);"
+    ).splitlines()[-1])
+    assert complimentary_image["status"] == "reserved"
+    assert sql(f"set role service_role; select public.record_capture_image_storage_upload('{third}','{complimentary_image['operationId']}','{complimentary_image['leaseId']}');").splitlines()[-1] == "t"
+    complimentary_final = json.loads(sql(
+        f"set role service_role; select public.finalize_capture_image_storage('{third}','{complimentary_image['operationId']}','{complimentary_image['leaseId']}');"
+    ).splitlines()[-1])
+    assert complimentary_final["status"] == "published"
+
+    assert sql(f"set role service_role; select public.revoke_capture_cloud_complimentary_access('{third}',clock_timestamp());") == "SET\nt"
+    assert sql(f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{third}'; select public.capture_cloud_access_current('{third}');") == "SET\nSET\nSET\nf"
+    assert sql(f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{third}'; select rev from public.capture_boards where user_id='{third}';").splitlines()[-1] == "2"
+    assert sql(
+        f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{third}'; update public.capture_boards set rev=rev+1 where user_id='{third}';"
+    ).splitlines()[-1] == "UPDATE 0"
+    assert sql(
+        f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{third}'; delete from public.capture_boards where user_id='{third}';"
+    ).splitlines()[-1] == "DELETE 0"
+    assert sql(f"select rev from public.capture_boards where user_id='{third}';") == "2"
+    assert "image entitlement required" in sql(
+        f"set role service_role; select public.reserve_capture_image_storage('{third}','revoked-image',repeat('c',64),'image/png',100);",
+        ok=False,
+    )
+    assert sql(
+        f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{other}'; update public.capture_boards set rev=rev+1 where user_id='{other}';"
+    ).splitlines()[-1] == "UPDATE 0"
+    assert sql(f"select rev from public.capture_boards where user_id='{other}';") == "1"
+    sql(f"insert into public.capture_cloud_complimentary_grants(user_id,granted_at,expires_at) values('{third}',clock_timestamp()-interval '2 days',clock_timestamp()-interval '1 day') on conflict(user_id) do update set granted_at=excluded.granted_at,expires_at=excluded.expires_at,revoked_at=null;")
+    assert sql(f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{third}'; select public.capture_cloud_access_current('{third}');") == "SET\nSET\nSET\nf"
+    assert sql(
+        f"set role authenticated; set request.jwt.claim.role='authenticated'; set request.jwt.claim.sub='{third}'; update public.capture_boards set rev=rev+1 where user_id='{third}';"
+    ).splitlines()[-1] == "UPDATE 0"
+    assert sql(f"select rev from public.capture_boards where user_id='{third}';") == "2"
+    assert "image entitlement required" in sql(
+        f"set role service_role; select public.reserve_capture_image_storage('{third}','expired-image',repeat('c',64),'image/png',100);",
+        ok=False,
+    )
+    print("PASS: replay-safe service grants gate board/image writes and deny browser grant-table CRUD")
 
     # Service-only image reservations account object and byte capacity atomically.
     # Keep the source launch policy immutable in this acceptance run. A request
@@ -402,6 +477,7 @@ select public.reconcile_capture_image_operation(
     other_receipt = "1" * 64
     cross_operation = "14141414-1414-4414-8414-141414141414"
     cross_receipt = "2" * 64
+    assert sql(f"set role service_role; select public.grant_capture_cloud_complimentary_access('{other}',null);") == "SET\nt"
     blocker = subprocess.Popen(base + ["-d", database], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, text=True, env=env, bufsize=1)
     blocker.stdin.write(f"select pg_advisory_lock({write_pause_lock});\n\\echo WRITE_PAUSE_READY\n")
@@ -463,6 +539,8 @@ select public.confirm_capture_account_erasure('{other_operation}','{other}','{se
     confirmed_after_write = json.loads(sql(f"""set role service_role;
       select public.confirm_capture_account_erasure('{other_operation}','{other}','{session_hash}','{other_receipt}');""").splitlines()[-1])
     assert confirmed_after_write["stage"] == "polar"
+    assert sql(f"select revoked_at is not null from public.capture_cloud_complimentary_grants where user_id='{other}';") == "t"
+    assert sql(f"select public.capture_cloud_access_current('{other}');") == "f"
     assert sql(f"set role authenticated; set request.jwt.claim.sub='{other}'; update public.capture_boards set rev=3 where user_id='{other}';") == "SET\nSET\nUPDATE 0"
     sql(f"delete from public.capture_account_erasure_operations where operation_id in ('{other_operation}','{cross_operation}');")
 

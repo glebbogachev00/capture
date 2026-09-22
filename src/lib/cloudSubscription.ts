@@ -14,12 +14,14 @@ export type CloudSubscriptionRow = {
 
 export type PublicCloudSubscription = {
   tier: "free" | "cloud";
+  accessSource?: "complimentary";
   status: string;
   plan: "monthly" | "yearly" | null;
   cancelAtPeriodEnd: boolean;
   currentPeriodEnd: string | null;
   accessExpiresAt: string | null;
   captureLimit: number | null;
+  canManageBilling?: boolean;
   reconciliationRequired?: boolean;
 };
 
@@ -30,6 +32,11 @@ export type CloudSubscriptionDependencies = {
   verifyIdentity: (request: Request) => Promise<{ userId: string } | null>;
   isAccountErasing: (identity: { userId: string }) => Promise<boolean>;
   getSubscriptions: (userId: string) => Promise<CloudSubscriptionRow[]>;
+  getCloudAccess: (userId: string) => Promise<{
+    current: boolean;
+    complimentaryCurrent: boolean;
+    complimentaryExpiresAt: string | null;
+  }>;
   now?: () => Date;
 };
 
@@ -55,8 +62,28 @@ export function publicCloudSubscription(
   rows: CloudSubscriptionRow[] | null,
   now = new Date(),
   requiresSubscription = true,
+  access?: { current: boolean; complimentaryCurrent: boolean; complimentaryExpiresAt: string | null },
 ): PublicCloudSubscription {
-  const row = rows?.find((candidate) => isCurrentCloudEntitlement(candidate, now)) ?? rows?.[0] ?? null;
+  const paid = rows?.find((candidate) => isCurrentCloudEntitlement(candidate, now)) ?? null;
+  const currentAccess = access?.current ?? !!paid;
+  if (currentAccess && !paid && access?.complimentaryCurrent) {
+    const reconciliationRequired = rows?.some((row) => row.reconciliation_required === true) === true;
+    return {
+      tier: "cloud",
+      accessSource: "complimentary",
+      status: "complimentary",
+      plan: null,
+      cancelAtPeriodEnd: false,
+      currentPeriodEnd: null,
+      accessExpiresAt: validDate(access?.complimentaryExpiresAt)
+        ? access.complimentaryExpiresAt
+        : null,
+      captureLimit: null,
+      canManageBilling: !!rows?.length,
+      ...(reconciliationRequired ? { reconciliationRequired: true } : {}),
+    };
+  }
+  const row = paid ?? rows?.[0] ?? null;
   if (!row) {
     return {
       tier: "free",
@@ -69,7 +96,7 @@ export function publicCloudSubscription(
     };
   }
 
-  const isEntitled = isCurrentCloudEntitlement(row, now);
+  const isEntitled = currentAccess && isCurrentCloudEntitlement(row, now);
   return {
     tier: isEntitled ? "cloud" : "free",
     ...(row.reconciliation_required ? { reconciliationRequired: true } : {}),
@@ -107,11 +134,15 @@ export async function handleCloudSubscriptionStatus(
     if (await deps.isAccountErasing(identity)) {
       return json({ error: "account unavailable" }, 403);
     }
-    const rows = await deps.getSubscriptions(identity.userId);
+    const [rows, access] = await Promise.all([
+      deps.getSubscriptions(identity.userId),
+      deps.getCloudAccess(identity.userId),
+    ]);
     return json(publicCloudSubscription(
       rows,
       deps.now?.() ?? new Date(),
       deps.requiresSubscription(),
+      access,
     ));
   } catch {
     return json({ error: "subscription status is unavailable" }, 503);

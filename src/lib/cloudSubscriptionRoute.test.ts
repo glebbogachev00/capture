@@ -5,6 +5,8 @@ const state = vi.hoisted(() => ({
   rows: [] as (CloudSubscriptionRow & { user_id: string })[],
   retry: vi.fn().mockResolvedValue(undefined),
   erasing: false,
+  complimentary: false,
+  complimentaryExpiresAt: null as string | null,
   rpc: vi.fn(),
 }));
 vi.mock("@/lib/polarServer", () => ({ retryPolarSubscriptionsForUser: state.retry }));
@@ -33,8 +35,16 @@ import { GET } from "@/app/api/cloud/subscription/route";
 beforeEach(() => {
   state.retry.mockReset().mockResolvedValue(undefined);
   state.erasing = false;
+  state.complimentary = false;
+  state.complimentaryExpiresAt = null;
   state.rpc.mockReset().mockImplementation(async (name: string) => ({
-    data: name === "capture_account_deleting" ? state.erasing : null,
+    data: name === "capture_account_deleting"
+      ? state.erasing
+      : name === "capture_cloud_access_current"
+        ? state.complimentary || state.rows.some((row) => row.user_id === "owner" && row.is_entitled && Date.parse(row.access_expires_at ?? "") > Date.now())
+        : name === "capture_cloud_complimentary_grant_status"
+          ? { current: state.complimentary, expiresAt: state.complimentaryExpiresAt }
+          : null,
     error: null,
   }));
 });
@@ -85,6 +95,21 @@ it("finds the owner's current entitlement beyond twenty newer inactive subscript
     { ...inactive, status: "active", is_entitled: true, access_expires_at: "2099-01-01T00:00:00Z", last_event_at: "2026-01-01T00:00:00Z" },
   ];
   expect(await (await GET(new Request("https://capture.test/api/cloud/subscription"))).json()).toMatchObject({ tier: "cloud", captureLimit: null });
+});
+
+it("reports a service-managed complimentary grant without a Polar subscription", async () => {
+  vi.stubEnv("CAPTURE_CLOUD", "1");
+  state.rows = [];
+  state.complimentary = true;
+  state.complimentaryExpiresAt = "2099-01-01T00:00:00Z";
+  const response = await GET(new Request("https://capture.test/api/cloud/subscription"));
+  expect(await response.json()).toMatchObject({
+    tier: "cloud",
+    accessSource: "complimentary",
+    plan: null,
+    canManageBilling: false,
+    captureLimit: null,
+  });
 });
 
 it("falls back to the latest inactive subscription without borrowing another owner's access", async () => {

@@ -6,6 +6,7 @@ import { createCloudServerClient } from "@/lib/supabase/server";
 import { createCloudServiceClient } from "@/lib/supabase/service";
 import { identityFromClaims } from "@/lib/supabase/identity";
 import { consumeQuotaWithRpc } from "@/lib/cloudRequestGuard";
+import { hasCurrentCloudAccess } from "@/lib/cloudAccess.server";
 
 const SUPPORTED_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
 export const MAX_IMAGE_BYTES = 2_250_000;
@@ -165,12 +166,10 @@ export async function handleCloudImage(request: Request, id: string): Promise<Re
         "Retry-After": String(Math.max(1, quota.retryAfterSec)),
       });
     } else {
-      // Ordinary image reads and every write remain paid product access.
-      const { data, error } = await client.from("capture_cloud_subscriptions")
-        .select("polar_subscription_id").eq("user_id", identity.userId)
-        .eq("is_entitled", true).gt("access_expires_at", new Date().toISOString()).limit(1);
-      if (error) throw new Error("entitlement unavailable");
-      if (!Array.isArray(data) || !data.length) return reply(request, 402, { error: "Cloud subscription required" });
+      // Ordinary image reads and every write remain current Cloud access.
+      if (!await hasCurrentCloudAccess(client, identity.userId)) {
+        return reply(request, 402, { error: "Capture Cloud access required" });
+      }
     }
     if (!isSafeImageId(id) || !isSafeImageId(identity.userId)) return reply(request, 400, { error: "bad id" });
 
