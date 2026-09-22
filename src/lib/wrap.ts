@@ -21,6 +21,7 @@
 import type { Board, Completion } from "./model";
 import { dayKey } from "./record";
 import type { CaptureEntry } from "./ledger";
+import { settledLedgerEntries } from "./unsortedOps";
 
 const DAY_MS = 864e5;
 
@@ -76,7 +77,7 @@ export { dayKey };
 
 /** The ledger entries that count for a day: what was said, and still stands. */
 function entriesFor(board: Board, day: string): CaptureEntry[] {
-  return (board.ledger ?? [])
+  return settledLedgerEntries(board)
     .filter((e) => !e.undone && dayKey(e.at) === day)
     .sort((a, b) => a.at - b.at);
 }

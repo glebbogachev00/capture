@@ -77,6 +77,23 @@ describe("recallRequestFingerprint", () => {
   });
 });
 
+describe("recallSources", () => {
+  it("never sends a waiting-to-sort capture as answer evidence", () => {
+    const sources = recallSources(board({
+      actions: [
+        action("waiting", "private offline pricing draft", { unsorted: true }),
+        action("ready", "published pricing decision"),
+      ],
+      threads: [thread("legacy", "private fragment pricing draft", {
+        frags: [{ id: "legacy-frag", text: "private fragment pricing draft", at: 20, unsorted: true }],
+      })],
+    }), "pricing");
+    expect(sources.map((source) => source.targetId)).toEqual(["ready"]);
+    expect(JSON.stringify(sources)).not.toContain("private offline pricing draft");
+    expect(JSON.stringify(sources)).not.toContain("private fragment pricing draft");
+  });
+});
+
 describe("validateRecallAnswer", () => {
   const sources = recallSources(board({ threads: [thread("t", "Pricing stays\nfree. Café is open.")],
     actions: [action("a", "Pricing will change.")] }), "pricing");

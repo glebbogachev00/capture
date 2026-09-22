@@ -100,7 +100,75 @@ probability buckets, authoritative status, token count, and comparison flags.
 None contains question/note/candidate text, local IDs, keys, answer prose,
 citations, or response bodies.
 
-## Sync, only if you turn it on
+## Capture Cloud sync and complete backups
+
+Capture Cloud is a separate, authenticated path from the single-owner hub
+below. The server derives the owner from the Supabase session; the browser's
+`X-Capture-Owner` header is only a fail-closed precondition. Board rows and
+image publications are stored under that verified owner, and every browser
+operation is tied to one immutable `OwnershipLifetime`.
+
+Cloud image writes use a server-only admission path. After identity, lifecycle,
+entitlement, ID, MIME, signature, and size validation, PostgreSQL atomically
+reserves one physical object plus exact bytes under a database-owned per-owner
+policy. It chooses the active fresh/legacy candidate bucket and generates the
+owner/candidate path. The server secret client uploads only that path; browser
+authenticated roles cannot INSERT candidate objects or publications directly.
+Publication finalization binds the operation to digest/MIME/length, selects one
+logical winner, and reads back the exact stored winner before acknowledgment.
+Failed/losing/ambiguous candidates remain in the durable operation inventory and
+consume quota. Lease expiry removes only the in-flight erasure block, not storage
+capacity, until provider quiescence and exact absence are authoritative. See
+`docs/cloud-image-admission.md`.
+
+A v3 backup is assembled in the browser rather than in one long-running route:
+
+1. Verify the current account and require it to match the document owner.
+2. GET the authoritative board plus tombstones from `/api/cloud/board`.
+3. Enumerate `referencedImageIds(board)`. Use validated local raster bytes when
+   present; GET `/api/img/:id` for bytes missing or corrupt locally.
+4. Validate PNG/JPEG/WebP/GIF signatures and canonical base64 for every id.
+   If one image is absent or corrupt, no file is downloaded and the archive is
+   never marked `complete`.
+5. Serialize backup v3 with the exact board, tombstones, owner scope, and image
+   map. No image bytes pass through the board route.
+
+A Cloud v3 restore verifies the same owner encoded in the archive, reads the
+current authoritative state, and merges through the existing sync rules. It
+PUTs every immutable image first (a PUT validates the stored winner, unlike a
+metadata-only HEAD), then PUTs `/api/cloud/board`, GETs it back, and only then
+atomically commits board, tombstones, and images to that owner's IndexedDB.
+An owner transition, failed image, failed board write/readback, or aborted local
+transaction produces no success message. Image writes that precede a failure
+remain unreferenced; the prior board remains the visible local board and a retry
+is idempotent.
+
+Account-erasure state narrows this recovery path deliberately. A merely
+prepared, unconfirmed operation does not change access: the exact owner may
+still perform quota-bounded board and image backup reads. Confirmation installs
+the deletion fence atomically. From `polar` onward, ordinary reads and all
+backup/export reads are denied by both route guards and restrictive board,
+publication, and Storage SELECT policies. The only post-Auth read is the
+bounded, content-free erasure receipt. See `docs/cloud-account-erasure.md` for
+the admission, capability, provider-sweep, and hosted-activation contract.
+
+Destructive authorization is stricter than ordinary Cloud authorization. The
+server combines a live Supabase Auth `getUser()` response with signed
+`getClaims()` data and requires the same owner UUID, same normalized confirmed
+email, a non-empty `session_id`, and a timestamped email-OTP `amr` entry within
+the configured window. Confirmation and every admitted account mutation
+serialize on the same owner advisory lock. The worker then executes one leased
+stage per request: Polar anonymizing deletion and typed-absence readback,
+durable session-fence readback, allowlisted Storage API drain, app-row delete
+and empty readback, Auth hard-delete and typed-absence readback, then a
+content-free receipt. All source routes remain hidden until erasure is enabled;
+confirmation and worker execution additionally require hosted-readiness and
+Storage-inventory attestations. Prepare/status remain available with core
+service configuration so a receipt is not stranded by provider unavailability.
+
+See `docs/backup-v3.md` for the envelope and compatibility contract.
+
+## Self-hosted sync, only if you turn it on
 
 One hub holds the merged board so your devices converge. You choose where
 it lives:
@@ -111,7 +179,7 @@ it lives:
   account; the full board and photo bytes are stored there, readable by
   that account's credentials. Rotate the token if it ever leaks.
 
-## Trust boundaries
+## Self-hosted trust boundaries
 
 Who can read or change what, and what stands between them:
 
@@ -123,9 +191,10 @@ Who can read or change what, and what stands between them:
 | Device → device | nothing directly | devices only meet through the hub; merge is last-write-wins per item with tombstones |
 | Build → deployment | code only | `scripts/check-trace.mjs` fails the build if board data enters the trace |
 
-The server holds no accounts and no database of its own: it is a relay
-with one password. The two secrets that matter are the model keys (spend)
-and the Redis token (read the board).
+In self-hosted mode, the server holds no accounts and no database of its own:
+it is a relay with one password. The two secrets that matter there are the
+model keys (spend) and the Redis token (read the board). Capture Cloud instead
+uses the authenticated owner boundary described above.
 
 ## Working toward
 

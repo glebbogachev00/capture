@@ -87,7 +87,7 @@ export function useRecordedDictation(
                next to the tidied words. */
             if (text) onResultRef.current(text, raw);
           })
-          .catch((err) => console.error("transcription failed:", err))
+          .catch(() => {})
           .finally(() => setTranscribing(false));
       };
       r.start();

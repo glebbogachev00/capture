@@ -1,7 +1,11 @@
-import { ownerPrecondition } from "./ownerPrecondition";
 import { NextResponse } from "next/server";
 import { hydrate } from "@/lib/model";
 import { mergeSync, type SyncState, type Tombstone } from "@/lib/sync";
+import {
+  authorizeCloudRequest,
+  type CloudQuotaPolicy,
+  type CloudQuotaResult,
+} from "@/lib/cloudRequestGuard";
 
 type ServerEnv = Record<string, string | undefined>;
 
@@ -20,6 +24,8 @@ export interface CloudBoardDependencies {
   verifyIdentity: (request: Request) => Promise<VerifiedIdentity | null>;
   requiresEntitlement?: () => boolean;
   hasEntitlement?: (identity: VerifiedIdentity) => Promise<boolean>;
+  isAccountErasing?: (identity: VerifiedIdentity) => Promise<boolean>;
+  consumeQuota?: (ownerId: string, policy: CloudQuotaPolicy) => Promise<CloudQuotaResult>;
   repository: CloudBoardRepository;
 }
 
@@ -120,31 +126,22 @@ function responseDocument(document: CloudBoardDocument): SyncState & { rev: numb
   return { ...document.state, rev: document.rev };
 }
 
-async function identityOr401(
-  request: Request,
-  deps: CloudBoardDependencies
-): Promise<VerifiedIdentity | Response> {
-  const identity = await deps.verifyIdentity(request);
-  return identity && identity.userId.trim()
-    ? identity
-    : json({ error: "unauthorized" }, 401);
-}
-
-async function entitlementOrResponse(
-  identity: VerifiedIdentity,
-  deps: CloudBoardDependencies
-): Promise<true | Response> {
-  if (!deps.requiresEntitlement?.()) return true;
-  if (!deps.hasEntitlement) {
-    return json({ error: "subscription status is unavailable" }, 503);
-  }
-  try {
-    return (await deps.hasEntitlement(identity))
-      ? true
-      : json({ error: "capture cloud subscription required" }, 402);
-  } catch {
-    return json({ error: "subscription status is unavailable" }, 503);
-  }
+function guardDependencies(deps: CloudBoardDependencies) {
+  return {
+    isCloudHost: deps.isEnabled,
+    isConfigured: deps.isConfigured ?? (() => true),
+    requiresEntitlement: deps.requiresEntitlement ?? (() => false),
+    verifyIdentity: deps.verifyIdentity,
+    hasEntitlement: deps.hasEntitlement ?? (async () => {
+      throw new Error("Cloud entitlement unavailable");
+    }),
+    isAccountErasing: deps.isAccountErasing ?? (async () => {
+      throw new Error("Cloud account lifecycle unavailable");
+    }),
+    consumeQuota: deps.consumeQuota ?? (async () => {
+      throw new Error("Cloud quota unavailable");
+    }),
+  };
 }
 
 export async function handleCloudBoardGet(
@@ -154,12 +151,13 @@ export async function handleCloudBoardGet(
   if (!deps.isEnabled()) return json({ error: "not found" }, 404);
   if (deps.isConfigured && !deps.isConfigured()) return json({ error: "cloud is not configured" }, 503);
 
-  const identity = await identityOr401(request, deps);
-  if (identity instanceof Response) return identity;
-  const precondition = ownerPrecondition(request, identity.userId);
-  if (precondition) return precondition;
-  const entitlement = await entitlementOrResponse(identity, deps);
-  if (entitlement instanceof Response) return entitlement;
+  const scope = new URL(request.url).searchParams.get("backup") === "1"
+    ? "backup_read" as const
+    : "board_read" as const;
+  const authorization = await authorizeCloudRequest(request, scope, guardDependencies(deps));
+  if (authorization instanceof Response) return authorization;
+  if (authorization.mode !== "cloud") return json({ error: "not found" }, 404);
+  const identity: VerifiedIdentity = { userId: authorization.ownerId };
 
   try {
     const document = await deps.repository.get(identity.userId);
@@ -176,12 +174,10 @@ export async function handleCloudBoardPut(
   if (!deps.isEnabled()) return json({ error: "not found" }, 404);
   if (deps.isConfigured && !deps.isConfigured()) return json({ error: "cloud is not configured" }, 503);
 
-  const identity = await identityOr401(request, deps);
-  if (identity instanceof Response) return identity;
-  const precondition = ownerPrecondition(request, identity.userId);
-  if (precondition) return precondition;
-  const entitlement = await entitlementOrResponse(identity, deps);
-  if (entitlement instanceof Response) return entitlement;
+  const authorization = await authorizeCloudRequest(request, "board_write", guardDependencies(deps));
+  if (authorization instanceof Response) return authorization;
+  if (authorization.mode !== "cloud") return json({ error: "not found" }, 404);
+  const identity: VerifiedIdentity = { userId: authorization.ownerId };
 
   const body = await readBoundedBody(request);
   if (body.status === "too-large") {

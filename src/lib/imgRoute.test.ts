@@ -4,14 +4,21 @@ const state = vi.hoisted(() => ({ exists: vi.fn(), write: vi.fn() }));
 
 vi.mock("@/lib/clientIp", () => ({ clientIp: () => "test" }));
 vi.mock("@/lib/limiter", () => ({
-  limitFromEnv: () => 120,
+  limitFromEnv: (name: string) => name === "CAPTURE_BACKUP_IMG_LIMIT" ? 1000 : 120,
   rateLimit: () => ({ allowed: true }),
 }));
 vi.mock("@/lib/hubStore", () => ({
   hubStore: () => ({ exists: state.exists, write: state.write }),
 }));
 
-import { HEAD } from "@/app/api/img/[id]/route";
+import { HEAD, imageRequestPolicy } from "@/app/api/img/[id]/route";
+
+it("gives explicit backup transfer its own bounded lane above 120 images", () => {
+  expect(imageRequestPolicy(new Request("https://capture.test/api/img/photo?backup=1")))
+    .toMatchObject({ key: "img-backup:test", limit: 1000, windowMs: 60_000 });
+  expect(imageRequestPolicy(new Request("https://capture.test/api/img/photo")))
+    .toMatchObject({ key: "img:test", limit: 120, windowMs: 60_000 });
+});
 
 describe("HEAD /api/img/[id]", () => {
   beforeEach(() => {

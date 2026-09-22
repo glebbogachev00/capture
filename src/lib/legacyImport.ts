@@ -3,6 +3,7 @@ import { buildBackup } from "./backup";
 import { type OwnershipLifetime } from "./ownership";
 import { createStorage } from "./storage";
 import { KEY, IMG, type Board } from "./model";
+import { TOMBSTONE_KEY, type Tombstone } from "./sync";
 
 
 export const LEGACY_SNAPSHOT = "capture:legacy-import:snapshot:v1";
@@ -120,7 +121,15 @@ export async function readLegacyBackup(lifetime: OwnershipLifetime) {
   const entries = new Map(snapshot.entries);
   const board = JSON.parse(entries.get(KEY)!) as Board;
   const images = Object.fromEntries(snapshot.entries.filter(([key]) => key.startsWith(IMG(""))).map(([key, value]) => [key.slice(IMG("").length), value]));
-  return { ...buildBackup(board, images), deviceSnapshot: snapshot };
+  let tombstones: Tombstone[] = [];
+  try {
+    const value = JSON.parse(entries.get(TOMBSTONE_KEY) ?? "[]");
+    if (Array.isArray(value)) tombstones = value;
+  } catch { /* the device snapshot still preserves an unreadable entry */ }
+  const scope = lifetime.cloud && lifetime.owner
+    ? { kind: "cloud" as const, ownerId: lifetime.owner }
+    : { kind: "local" as const };
+  return { ...buildBackup(board, images, tombstones, scope), deviceSnapshot: snapshot };
 }
 
 export async function importLegacyBoard(lifetime: OwnershipLifetime, accessConfirmed: boolean): Promise<ImportReceipt> {

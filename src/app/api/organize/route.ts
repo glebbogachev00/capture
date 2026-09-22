@@ -3,7 +3,9 @@ import { z } from "zod";
 import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
-import { withFallback } from "@/lib/providers";
+import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
+import { sanitizeProviderError, withFallback } from "@/lib/providers";
+import { opsEvent } from "@/lib/opsEvent.server";
 import { preferredFor } from "@/lib/routing";
 import {
   mapAiProposals,
@@ -186,6 +188,9 @@ function promptFor(body: TidySnapshot) {
 }
 
 export async function POST(request: Request) {
+  const authorization = await authorizeManagedAiRequest(request);
+  if (authorization instanceof Response) return authorization;
+  return withManagedAiAdmission(authorization, async () => {
   // The review spends real model quota; a single client can't run it in a loop.
   const gate = modelRateLimit(clientIp(request));
   if (!gate.allowed) {
@@ -224,8 +229,9 @@ export async function POST(request: Request) {
     const proposals = mapAiProposals(body, value.proposals as RawAiProposal[]);
     return Response.json({ proposals, via });
   } catch (error) {
-    console.error("organize failed", error);
+    opsEvent({ event: "managed_ai_route", outcome: "failure", reason: sanitizeProviderError(error), count: "one" });
     const { message, status } = explain(error);
     return Response.json({ error: message }, { status });
   }
+  });
 }

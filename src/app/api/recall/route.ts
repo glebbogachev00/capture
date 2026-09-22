@@ -5,6 +5,7 @@ import { withFallback } from "@/lib/providers";
 import { PLAYGROUND } from "@/lib/playground";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
+import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { ownerPrecondition } from "@/lib/ownerPrecondition";
 import { getCloudConfig } from "@/lib/supabase/config";
 import { createCloudServerClient } from "@/lib/supabase/server";
@@ -112,6 +113,9 @@ async function authorize(request: Request, signal: AbortSignal): Promise<number 
 }
 
 export async function POST(request: Request) {
+  const cloudAuthorization = await authorizeManagedAiRequest(request);
+  if (cloudAuthorization instanceof Response) return cloudAuthorization;
+  return withManagedAiAdmission(cloudAuthorization, async () => {
   // Starts before auth/body reading: fallback waits do not get a fresh budget.
   const budget = deadline(request.signal, TOTAL_MS, new RecallError(499, "Recall request cancelled."));
   try {
@@ -169,10 +173,10 @@ export async function POST(request: Request) {
     /* The cited answer remains authoritative and is complete before this
        disabled-by-default observation is registered. Its default scheduler is
        Next's after(), so Decisions work cannot delay or rewrite this response. */
-    scheduleJevRecallShadow({
+    await scheduleJevRecallShadow({
       ...body,
       authoritativeAnswer: value,
-    });
+    }, { authorization: cloudAuthorization });
     return json(value);
   } catch (error) {
     return error instanceof RecallError
@@ -181,4 +185,5 @@ export async function POST(request: Request) {
   } finally {
     budget.dispose();
   }
+  });
 }

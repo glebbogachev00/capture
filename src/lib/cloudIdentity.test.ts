@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-beforeEach(() => { vi.spyOn(console, "warn").mockImplementation(() => {}); });
+beforeEach(() => { vi.spyOn(console, "info").mockImplementation(() => {}); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 const state = vi.hoisted(() => ({ configured: true, claims: vi.fn(), client: vi.fn() }));
 beforeEach(() => {
@@ -20,8 +20,13 @@ it("logs one fixed diagnostic for unavailable config without changing the respon
     const response = await GET();
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "cloud is not configured" });
-    expect(console.warn).toHaveBeenCalledExactlyOnceWith("[cloud-identity]", {
-      stage: "configuration", code: "unavailable", status: 503,
+    expect(console.info).toHaveBeenCalledExactlyOnceWith("[capture-ops]", {
+      version: 1,
+      event: "cloud_identity",
+      outcome: "failure",
+      reason: "not_configured",
+      latency: "not_measured",
+      count: "not_measured",
     });
   } finally { state.configured = true; }
 });
@@ -33,16 +38,15 @@ const sensitive = {
   claims: { sub: "PRIVATE_USER_ID", email: "PRIVATE_EMAIL" },
 };
 it.each([
-  ["client rejection", "client_creation", "exception"],
-  ["claims rejection", "get_claims", "exception"],
-  ["returned error", "get_claims", "provider_error"],
-  ["malformed claims", "claims_validation", "invalid_claims"],
-  ["expired claims", "claims_validation", "invalid_claims"],
-] as const)("classifies %s with one bounded safe log, still fail-closed", async (scenario, stage, code) => {
+  "client rejection",
+  "claims rejection",
+  "returned error",
+  "malformed claims",
+  "expired claims",
+] as const)("classifies %s with one bounded safe log, still fail-closed", async (scenario) => {
   vi.stubEnv("CAPTURE_CLOUD", "1");
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "log").mockImplementation(() => {});
-  vi.spyOn(console, "info").mockImplementation(() => {});
   if (scenario === "client rejection") state.client.mockRejectedValue(sensitive);
   else if (scenario === "claims rejection") state.claims.mockRejectedValue(sensitive);
   else if (scenario === "returned error") state.claims.mockResolvedValue({ data: { claims: sensitive.claims }, error: sensitive });
@@ -51,11 +55,17 @@ it.each([
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ error: "account verification unavailable" });
   expect(response.headers.get("cache-control")).toBe("private, no-store");
-  expect(console.warn).toHaveBeenCalledExactlyOnceWith("[cloud-identity]", { stage, code, status: 503 });
-  expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain("PRIVATE_");
+  expect(console.info).toHaveBeenCalledExactlyOnceWith("[capture-ops]", {
+    version: 1,
+    event: "cloud_identity",
+    outcome: "failure",
+    reason: "dependency_unavailable",
+    latency: "not_measured",
+    count: "not_measured",
+  });
+  expect(JSON.stringify(vi.mocked(console.info).mock.calls)).not.toContain("PRIVATE_");
   expect(console.error).not.toHaveBeenCalled();
   expect(console.log).not.toHaveBeenCalled();
-  expect(console.info).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
 });
 
@@ -72,7 +82,7 @@ it("keeps disabled and anonymous paths unchanged and silent", async () => {
     expect(response.status).toBe(200);
     expect((await response.json()).owner).toBeNull();
   }
-  expect(console.warn).not.toHaveBeenCalled();
+  expect(console.info).not.toHaveBeenCalled();
 });
 
 it("returns only verified owner and bounded expiry, never session material", async () => {
@@ -86,7 +96,7 @@ it("returns only verified owner and bounded expiry, never session material", asy
   expect(body.expiresAt).toBeLessThanOrEqual(Date.now() + 3600000);
   expect(Object.keys(body).sort()).toEqual(["expiresAt", "owner"]);
   expect(response.headers.get("cache-control")).toContain("no-store");
-  expect(console.warn).not.toHaveBeenCalled();
+  expect(console.info).not.toHaveBeenCalled();
   vi.unstubAllEnvs();
 });
 

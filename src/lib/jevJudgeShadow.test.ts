@@ -116,15 +116,20 @@ describe("Jev judge shadow gate", () => {
     })).toBe(true);
   });
 
-  it("does not schedule or call the network while disabled", () => {
+  it("does not schedule or call the network while disabled", async () => {
     const schedule = vi.fn();
     const fetcher = vi.fn();
-    expect(scheduleJevJudgeShadow(input, { env: {}, schedule, fetcher })).toBe(false);
+    const acquire = vi.fn();
+    expect(await scheduleJevJudgeShadow(input, {
+      authorization: { mode: "cloud", ownerId: "owner-a", acquireDeferredManagedAiAdmission: acquire },
+      env: {}, schedule, fetcher,
+    })).toBe(false);
+    expect(acquire).not.toHaveBeenCalled();
     expect(schedule).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("skips an oversized batch rather than observing only part of it", () => {
+  it("skips an oversized batch rather than observing only part of it", async () => {
     const schedule = vi.fn();
     const fetcher = vi.fn();
     const oversized = Array.from({ length: 15 }, (_, index) => ({
@@ -134,7 +139,7 @@ describe("Jev judge shadow gate", () => {
       target: `Synthetic target ${index}`,
     }));
 
-    expect(scheduleJevJudgeShadow({
+    expect(await scheduleJevJudgeShadow({
       candidates: oversized,
       generativeVerdicts: [],
     }, {
@@ -155,8 +160,15 @@ describe("Jev judge shadow gate", () => {
       task = callback;
     });
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const release = vi.fn().mockResolvedValue(undefined);
+    const acquire = vi.fn().mockResolvedValue({ release });
 
-    expect(scheduleJevJudgeShadow(input, {
+    expect(await scheduleJevJudgeShadow(input, {
+      authorization: {
+        mode: "cloud",
+        ownerId: "owner-a",
+        acquireDeferredManagedAiAdmission: acquire,
+      },
       env: {
         OPENROUTER_API_KEY: "synthetic-key",
         CAPTURE_JEV_JUDGE_SHADOW: "1",
@@ -164,14 +176,18 @@ describe("Jev judge shadow gate", () => {
       schedule,
       fetcher: async () => successResponse(),
     })).toBe(true);
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
     await Promise.resolve(task?.());
+    expect(release).toHaveBeenCalledOnce();
 
-    expect(info).toHaveBeenCalledWith("[capture] jev judge shadow", {
-      candidateCount: 2,
-      generativeKeepCount: 1,
-      generativeKeepScoreHistogram: [0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-      inputTokens: 180,
-      scoreHistogram: [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    expect(info).toHaveBeenCalledWith("[capture-ops]", {
+      version: 1,
+      event: "managed_ai_provider_attempt",
+      outcome: "success",
+      reason: "none",
+      latency: "not_measured",
+      count: "2_9",
     });
     const logged = JSON.stringify(info.mock.calls);
     expect(logged).not.toContain(candidates[0].source);
@@ -185,10 +201,10 @@ describe("Jev judge shadow gate", () => {
     ["timeout", async () => { throw new DOMException("timed out", "TimeoutError"); }],
   ])("contains %s and leaves the already-computed generative verdicts untouched", async (_name, fetcher) => {
     let task: (() => void | Promise<void>) | undefined;
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const original = structuredClone(input.generativeVerdicts);
 
-    expect(scheduleJevJudgeShadow(input, {
+    expect(await scheduleJevJudgeShadow(input, {
       env: {
         OPENROUTER_API_KEY: "synthetic-key",
         CAPTURE_JEV_JUDGE_SHADOW: "1",
@@ -199,10 +215,14 @@ describe("Jev judge shadow gate", () => {
     await expect(Promise.resolve(task?.())).resolves.toBeUndefined();
 
     expect(input.generativeVerdicts).toEqual(original);
-    expect(warn).toHaveBeenCalledWith(
-      "[capture] jev judge shadow failed",
-      expect.objectContaining({ name: "OpenRouterDecisionsError" })
-    );
-    expect(JSON.stringify(warn.mock.calls)).not.toContain(candidates[0].source);
+    expect(info).toHaveBeenCalledWith("[capture-ops]", {
+      version: 1,
+      event: "managed_ai_provider_attempt",
+      outcome: "failure",
+      reason: "provider_unavailable",
+      latency: "not_measured",
+      count: "one",
+    });
+    expect(JSON.stringify(info.mock.calls)).not.toContain(candidates[0].source);
   });
 });

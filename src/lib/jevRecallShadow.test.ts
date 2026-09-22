@@ -293,11 +293,16 @@ describe("Jev Recall shadow gate and containment", () => {
     })).toBe(true);
   });
 
-  it("does not schedule or touch the network while disabled", () => {
+  it("does not schedule or touch the network while disabled", async () => {
     const schedule = vi.fn();
     const fetcher = vi.fn();
+    const acquire = vi.fn();
 
-    expect(scheduleJevRecallShadow(input, { env: {}, schedule, fetcher })).toBe(false);
+    expect(await scheduleJevRecallShadow(input, {
+      authorization: { mode: "cloud", ownerId: "owner-a", acquireDeferredManagedAiAdmission: acquire },
+      env: {}, schedule, fetcher,
+    })).toBe(false);
+    expect(acquire).not.toHaveBeenCalled();
     expect(schedule).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -306,8 +311,15 @@ describe("Jev Recall shadow gate and containment", () => {
     let task: (() => void | Promise<void>) | undefined;
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const fetcher = vi.fn(async () => successResponse());
+    const release = vi.fn().mockResolvedValue(undefined);
+    const acquire = vi.fn().mockResolvedValue({ release });
 
-    expect(scheduleJevRecallShadow(input, {
+    expect(await scheduleJevRecallShadow(input, {
+      authorization: {
+        mode: "cloud",
+        ownerId: "owner-a",
+        acquireDeferredManagedAiAdmission: acquire,
+      },
       env: {
         OPENROUTER_API_KEY: "synthetic-key",
         CAPTURE_JEV_RECALL_SHADOW: "1",
@@ -315,23 +327,20 @@ describe("Jev Recall shadow gate and containment", () => {
       schedule: (callback) => { task = callback; },
       fetcher,
     })).toBe(true);
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
     await expect(Promise.resolve(task?.())).resolves.toBeUndefined();
+    expect(release).toHaveBeenCalledOnce();
     expect(fetcher).toHaveBeenCalledOnce();
 
-    expect(info).toHaveBeenCalledWith("[capture] jev recall shadow", {
-      authoritativeStatus: "answered",
-      bestCitedSourceRank: 2,
-      citedSourceCount: 1,
-      inputTokens: 140,
-      intent: "answer_fact",
-      intentConfidenceBucket: 8,
-      potentialAvoidedProseCallByIntent: false,
-      sourceCount: 2,
-      sufficiencyBucket: 7,
-      topSource: "source",
-      topSourceCited: false,
-      topSourceIndex: 1,
+    expect(info).toHaveBeenCalledWith("[capture-ops]", {
+      version: 1,
+      event: "managed_ai_provider_attempt",
+      outcome: "success",
+      reason: "none",
+      latency: "not_measured",
+      count: "2_9",
     });
     const logged = JSON.stringify(info.mock.calls);
     expect(logged).not.toContain(input.question);
@@ -348,10 +357,10 @@ describe("Jev Recall shadow gate and containment", () => {
     ["timeout", async () => { throw new DOMException("timed out", "TimeoutError"); }],
   ])("contains %s without changing the authoritative Recall result", async (_name, fetcher) => {
     let task: (() => void | Promise<void>) | undefined;
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const before = structuredClone(input);
 
-    expect(scheduleJevRecallShadow(input, {
+    expect(await scheduleJevRecallShadow(input, {
       env: {
         OPENROUTER_API_KEY: "synthetic-key",
         CAPTURE_JEV_RECALL_SHADOW: "1",
@@ -362,29 +371,44 @@ describe("Jev Recall shadow gate and containment", () => {
     await expect(Promise.resolve(task?.())).resolves.toBeUndefined();
 
     expect(input).toEqual(before);
-    expect(warn).toHaveBeenCalledWith(
-      "[capture] jev recall shadow failed",
-      expect.objectContaining({ name: "OpenRouterDecisionsError" })
-    );
-    const logged = JSON.stringify(warn.mock.calls);
+    expect(info).toHaveBeenCalledWith("[capture-ops]", {
+      version: 1,
+      event: "managed_ai_provider_attempt",
+      outcome: "failure",
+      reason: "provider_unavailable",
+      latency: "not_measured",
+      count: "one",
+    });
+    const logged = JSON.stringify(info.mock.calls);
     expect(logged).not.toContain(input.question);
     expect(logged).not.toContain(sources[0].text);
     expect(logged).not.toContain(sources[0].id);
   });
 
-  it("contains scheduler failure synchronously", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("contains scheduler failure", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const release = vi.fn().mockResolvedValue(undefined);
 
-    expect(scheduleJevRecallShadow(input, {
+    expect(await scheduleJevRecallShadow(input, {
+      authorization: {
+        mode: "cloud",
+        ownerId: "owner-a",
+        acquireDeferredManagedAiAdmission: vi.fn().mockResolvedValue({ release }),
+      },
       env: {
         OPENROUTER_API_KEY: "synthetic-key",
         CAPTURE_JEV_RECALL_SHADOW: "1",
       },
       schedule: () => { throw new Error("scheduler unavailable"); },
     })).toBe(false);
-    expect(warn).toHaveBeenCalledWith(
-      "[capture] jev recall shadow failed",
-      { name: "Error" }
-    );
+    expect(release).toHaveBeenCalledOnce();
+    expect(info).toHaveBeenCalledWith("[capture-ops]", {
+      version: 1,
+      event: "managed_ai_provider_attempt",
+      outcome: "failure",
+      reason: "provider_unavailable",
+      latency: "not_measured",
+      count: "one",
+    });
   });
 });

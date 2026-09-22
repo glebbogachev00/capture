@@ -1,19 +1,20 @@
 import { after } from "next/server";
 import { z } from "zod";
 
+import type { CloudAuthorization } from "./cloudRequestGuard";
+import { scheduleManagedAiDeferredWork } from "./cloudRequestGuard.server";
 import type { RecallAnswer, RecallSource } from "./recall";
 import {
   OpenRouterDecisionsError,
-  safeOpenRouterDecisionsFailure,
   submitOpenRouterDecisions,
 } from "./openRouterDecisions.server";
+import { countBucket, opsEvent } from "./opsEvent.server";
 
 export const JEV_RECALL_MODEL = "typesafe/jev-1.13";
 
 const MAX_SOURCES = 12;
 const MAX_QUESTION_CHARS = 500;
 const MAX_EXCERPT_CHARS = 1_000;
-const HISTOGRAM_BUCKETS = 10;
 
 const INTENT_QUESTION = "query_intent";
 const SOURCE_QUESTION = "best_source";
@@ -212,93 +213,44 @@ export function isJevRecallShadowEnabled(env: Env = process.env): boolean {
   return env.CAPTURE_JEV_RECALL_SHADOW === "1" && Boolean(env.OPENROUTER_API_KEY);
 }
 
-function probabilityBucket(value: number): number {
-  return Math.min(HISTOGRAM_BUCKETS - 1, Math.floor(value * HISTOGRAM_BUCKETS));
-}
-
-function citedSourceIndexes(input: JevRecallShadowInput): Set<number> {
-  const indexes = new Map(input.sources.map((source, index) => [source.id, index]));
-  const cited = new Set<number>();
-  input.authoritativeAnswer.claims.forEach((claim) => {
-    claim.citations.forEach((citation) => {
-      const index = indexes.get(citation.sourceId);
-      if (index !== undefined) cited.add(index);
-    });
-  });
-  return cited;
-}
-
 /**
  * Schedule a disabled-by-default observation through Next's post-response
  * primitive. Every failure is contained; the cited Recall result is immutable.
  */
-export function scheduleJevRecallShadow(
+export async function scheduleJevRecallShadow(
   input: JevRecallShadowInput,
   options: {
+    authorization?: CloudAuthorization;
     env?: Env;
     fetcher?: Fetcher;
     schedule?: Scheduler;
   } = {}
-): boolean {
+): Promise<boolean> {
   const env = options.env ?? process.env;
-  if (
-    !isJevRecallShadowEnabled(env) ||
-    !input.question.trim() ||
-    !input.sources.length ||
-    input.sources.length > MAX_SOURCES
-  ) {
-    return false;
-  }
-
+  const enabled =
+    isJevRecallShadowEnabled(env) &&
+    Boolean(input.question.trim()) &&
+    input.sources.length > 0 &&
+    input.sources.length <= MAX_SOURCES;
   const apiKey = env.OPENROUTER_API_KEY!;
-  const schedule = options.schedule ?? after;
-  const task = async () => {
-    try {
-      const result = await runJevRecallShadow(input, {
+  return scheduleManagedAiDeferredWork({
+    authorization: options.authorization ?? { mode: "non-cloud" },
+    enabled,
+    schedule: options.schedule ?? after,
+    work: async () => {
+      await runJevRecallShadow(input, {
         apiKey,
         fetcher: options.fetcher,
       });
-      const citedIndexes = citedSourceIndexes(input);
-      const top = result.rankedSources[0];
-      const bestCitedSourceRank = result.rankedSources.findIndex(
-        (rank) => rank.kind === "source" && citedIndexes.has(rank.sourceIndex)
-      );
-      const proseIntent = result.intent === "answer_fact" || result.intent === "synthesize";
-
-      console.info("[capture] jev recall shadow", {
-        authoritativeStatus: input.authoritativeAnswer.status,
-        ...(bestCitedSourceRank < 0 ? {} : { bestCitedSourceRank: bestCitedSourceRank + 1 }),
-        citedSourceCount: citedIndexes.size,
-        inputTokens: result.usage.inputTokens,
-        intent: result.intent,
-        intentConfidenceBucket: probabilityBucket(result.intentConfidence),
-        potentialAvoidedProseCallByIntent: !proseIntent,
-        sourceCount: input.sources.length,
-        sufficiencyBucket: probabilityBucket(result.sufficiency),
-        topSource: top.kind,
-        ...(top.kind === "source"
-          ? {
-              topSourceCited: citedIndexes.has(top.sourceIndex),
-              topSourceIndex: top.sourceIndex,
-            }
-          : {}),
+      opsEvent({
+        event: "managed_ai_provider_attempt",
+        outcome: "success",
+        reason: "none",
+        count: countBucket(input.sources.length),
       });
-    } catch (error) {
-      console.warn(
-        "[capture] jev recall shadow failed",
-        safeOpenRouterDecisionsFailure(error)
-      );
-    }
-  };
-
-  try {
-    schedule(task);
-    return true;
-  } catch (error) {
-    console.warn(
-      "[capture] jev recall shadow failed",
-      safeOpenRouterDecisionsFailure(error)
-    );
-    return false;
-  }
+    },
+    onError: () => {
+      opsEvent({ event: "managed_ai_provider_attempt", outcome: "failure", reason: "provider_unavailable", count: "one" });
+    },
+  });
 }

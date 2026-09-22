@@ -26,7 +26,10 @@ export type CaptureEntry = {
   raw: string;
   /** The wording that actually landed on the board. */
   clean: string;
-  kind: "action" | "thread" | "intention" | "both";
+  /** `pending` means the capture is preserved but has not been classified.
+      Pending entries never leave the device through model context or shares;
+      a later successful settlement appends the real classified entry. */
+  kind: "pending" | "action" | "thread" | "intention" | "both";
   source: CaptureSource;
   /** The item the capture became (or the thread it folded into). */
   targetId: string;
@@ -117,6 +120,24 @@ function limitRecent<T extends { importBatch?: string }>(entries: T[]): T[] {
   return entries.filter(entry => entry.importBatch || recent++ < LEDGER_CAP);
 }
 
+/** Unresolved pending captures are recovery records, not ordinary history.
+    Keep them until a classified row with the same capture identity exists;
+    settled history still obeys the rolling cap. */
+function limitLedgerRecent(entries: CaptureEntry[]): CaptureEntry[] {
+  const classified = new Set(
+    entries
+      .filter((entry) => entry.kind !== "pending" && !entry.undone)
+      .map((entry) => entry.captureId ?? entry.id),
+  );
+  let recent = 0;
+  return entries.filter((entry) => {
+    if (entry.importBatch) return true;
+    const identity = entry.captureId ?? entry.id;
+    if (entry.kind === "pending" && !entry.undone && !classified.has(identity)) return true;
+    return recent++ < LEDGER_CAP;
+  });
+}
+
 /**
  * Add a capture to the ledger, newest first.
  *
@@ -129,7 +150,7 @@ export function appendLedger(
   entry: CaptureEntry
 ): CaptureEntry[] {
   const out = [entry, ...ledger.filter((e) => e.id !== entry.id)];
-  return limitRecent(out);
+  return limitLedgerRecent(out);
 }
 
 /** Union two ledgers by id, newest first. Entries never change, so the merge
@@ -148,7 +169,7 @@ export function mergeLedgers(
     const prev = byId.get(e.id);
     byId.set(e.id, prev?.undone && !e.undone ? { ...e, undone: true } : e);
   }
-  return limitRecent([...byId.values()]
+  return limitLedgerRecent([...byId.values()]
     .sort((x, y) => y.at - x.at || (x.id < y.id ? 1 : -1)));
 }
 

@@ -6,7 +6,9 @@ import { explain } from "@/lib/aiError";
 import { captionPrompt, mergeCaption, tidyCaption } from "@/lib/caption";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
+import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { sanitizeProviderError, visionChain, withFallback } from "@/lib/providers";
+import { opsEvent } from "@/lib/opsEvent.server";
 import { DUE_RULE, ROUTING_RULE, todayLine } from "@/lib/engineRules";
 import { enforceStandingDecision, reconcileSorted } from "@/lib/sort";
 import { scheduleJevThreadRerankShadow } from "@/lib/jevThreadRerank";
@@ -363,6 +365,9 @@ function prompt(
 }
 
 export async function POST(request: Request) {
+  const authorization = await authorizeManagedAiRequest(request);
+  if (authorization instanceof Response) return authorization;
+  return withManagedAiAdmission(authorization, async () => {
   // Sorting spends real model quota; a single client can't run it in a loop.
   const gate = modelRateLimit(clientIp(request));
   if (!gate.allowed) {
@@ -393,7 +398,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { value, via } = await withFallback(async (tier) => {
+    const { value, via, preferred, fallback, fallbackReason } = await withFallback(async (tier) => {
       const { object } = await generateObject({
         model: tier.model,
         // A spent free tier reports "retry in 26s"; fail fast so the chain
@@ -499,20 +504,26 @@ export async function POST(request: Request) {
       (reconciled.kind === "thread" || reconciled.kind === "both") &&
       jevCapture
     ) {
-      scheduleJevThreadRerankShadow({
+      await scheduleJevThreadRerankShadow({
         capture: jevCapture,
         candidates: body.threads,
         sorterThreadId: reconciled.threadId,
         sorterCreatedNewThread: !reconciled.threadId,
-      });
+      }, { authorization });
     }
-    return Response.json({ ...value, ...reconciled, via });
+    return Response.json({
+      ...value,
+      ...reconciled,
+      via,
+      routing: { preferred, fallback, fallbackReason },
+    });
   } catch (error) {
     /* AI SDK errors can carry the full request body, including the person's
        capture. Keep server logs useful without turning them into a second,
        invisible copy of what someone said. */
-    console.error("sort failed", sanitizeProviderError(error));
+    opsEvent({ event: "managed_ai_route", outcome: "failure", reason: sanitizeProviderError(error), count: "one" });
     const { message, status } = explain(error);
     return Response.json({ error: message }, { status });
   }
+  });
 }

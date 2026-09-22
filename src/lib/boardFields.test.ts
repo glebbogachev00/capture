@@ -4,6 +4,8 @@ import { mergeBoards, applyTombstones } from "./sync";
 import { buildBackup, restoreBackup } from "./backup";
 import type { DayWrap } from "./wrap";
 
+const PROFILE_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=";
+
 /**
  * No field left behind.
  *
@@ -89,14 +91,14 @@ describe("every Board field survives", () => {
   });
 
   it("a backup export and restore", () => {
-    const { board } = restoreBackup(buildBackup(fullBoard()), hydrate(null));
+    const { board } = restoreBackup(buildBackup(fullBoard(), { "profile-photo": PROFILE_IMAGE }), hydrate(null));
     assertNothingLost("restoreBackup", board);
   });
 
   it("a full round trip through all of them", () => {
     const stored = hydrate(fullBoard());
     const pulled = mergeBoards(stored, hydrate(JSON.parse(JSON.stringify(stored))));
-    const { board } = restoreBackup(buildBackup(pulled), hydrate(null));
+    const { board } = restoreBackup(buildBackup(pulled, { "profile-photo": PROFILE_IMAGE }), hydrate(null));
     assertNothingLost("full round trip", hydrate(board));
   });
 });

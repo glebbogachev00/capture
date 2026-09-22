@@ -154,7 +154,7 @@ it("schedules an inert Jev shadow with only the reconciled thinking decision", a
     ],
     sorterThreadId: "pricing",
     sorterCreatedNewThread: false,
-  });
+  }, { authorization: { mode: "non-cloud" } });
 });
 
 it("does not schedule Jev for an action result", async () => {
@@ -231,7 +231,8 @@ it("uses clean thinking for an unsplit thread whose primaryText is null", async 
 
   expect(response.status).toBe(200);
   expect(jev.scheduleJevThreadRerankShadow).toHaveBeenCalledWith(
-    expect.objectContaining({ capture: thinking, sorterThreadId: "pricing" })
+    expect.objectContaining({ capture: thinking, sorterThreadId: "pricing" }),
+    { authorization: { mode: "non-cloud" } },
   );
 });
 
@@ -263,6 +264,7 @@ it("marks a missing existing id as the sorter's new-thread abstention when think
       capture: thinking,
       sorterThreadId: null,
       sorterCreatedNewThread: true,
-    })
+    }),
+    { authorization: { mode: "non-cloud" } },
   );
 });

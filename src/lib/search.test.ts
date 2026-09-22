@@ -57,12 +57,14 @@ describe("search", () => {
     });
     expect(search(b, "")).toEqual({
       actions: [],
+      unsorted: [],
       threads: [],
       intentions: [],
       total: 0,
     });
     expect(search(b, "   ")).toEqual({
       actions: [],
+      unsorted: [],
       threads: [],
       intentions: [],
       total: 0,
@@ -147,5 +149,22 @@ describe("search", () => {
     });
     expect(search(b, "invoice")).toMatchObject({ total: 1 });
     expect(search(b, "client")).toMatchObject({ total: 1 });
+  });
+
+  it("keeps waiting-to-sort captures out of ordinary Search", () => {
+    const b = board({
+      actions: [action({ text: "offline launch notes", unsorted: true })],
+      threads: [{
+        id: "legacy",
+        name: "Legacy",
+        summary: "",
+        frags: [{ id: "waiting-frag", text: "offline launch fragment", at: 1, unsorted: true }],
+      }],
+    });
+    const result = search(b, "offline launch");
+    expect(result.actions).toEqual([]);
+    expect(result.unsorted).toEqual([]);
+    expect(result.threads).toEqual([]);
+    expect(result.total).toBe(0);
   });
 });

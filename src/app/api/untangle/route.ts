@@ -2,6 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
+import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { withFallback } from "@/lib/providers";
 import { preferredFor } from "@/lib/routing";
 
@@ -125,6 +126,9 @@ function promptFor(b: z.infer<typeof Body>) {
 }
 
 export async function POST(request: Request) {
+  const authorization = await authorizeManagedAiRequest(request);
+  if (authorization instanceof Response) return authorization;
+  return withManagedAiAdmission(authorization, async () => {
   const gate = modelRateLimit(clientIp(request));
   if (!gate.allowed) {
     return Response.json(
@@ -189,4 +193,5 @@ export async function POST(request: Request) {
        get asked about until the next time. */
     return Response.json({ error: "offline" }, { status: 503 });
   }
+  });
 }

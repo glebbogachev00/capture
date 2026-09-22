@@ -7,7 +7,11 @@ vi.mock("@/lib/providers", () => ({
   NoProvidersError: class extends Error {},
   sanitizeProviderError: () => "synthetic failure",
   withFallback: async (run: (tier: { model: object }) => Promise<unknown>) => ({
-    value: await run({ model: {} }), via: "mock-provider",
+    value: await run({ model: {} }),
+    via: "mock-fallback",
+    preferred: "mock-primary",
+    fallback: true,
+    fallbackReason: "rate_limit",
   }),
 }));
 
@@ -43,7 +47,13 @@ describe("explicit task count in the actual model prompts", () => {
     expect(prompt).toMatch(/(?:never invent|not invent)/i);
     expect(prompt).toMatch(/(?:clauses|clause)/i);
     expect(prompt).toMatch(/(?:return one|one action|one item)/i);
-    expect((await res.json()).actions).toEqual(explicitTasks);
+    const body = await res.json();
+    expect(body.actions).toEqual(explicitTasks);
+    expect(body.routing).toEqual({
+      preferred: "mock-primary",
+      fallback: true,
+      fallbackReason: "rate_limit",
+    });
   });
 
   it("Distill settlement requests every distinct agreed task, not one to three", async () => {

@@ -40,10 +40,21 @@ const keyFor = (id: string) => `img/${id}`;
 const MAX_BYTES = 3_000_000;
 
 const IMG_LIMIT = limitFromEnv("CAPTURE_IMG_LIMIT", 120);
+const BACKUP_IMG_LIMIT = limitFromEnv("CAPTURE_BACKUP_IMG_LIMIT", 1000);
 const IMG_WINDOW = 60_000;
 
+export function imageRequestPolicy(request: Request) {
+  const backup = new URL(request.url).searchParams.get("backup") === "1";
+  return {
+    key: `${backup ? "img-backup" : "img"}:${clientIp(request)}`,
+    limit: backup ? BACKUP_IMG_LIMIT : IMG_LIMIT,
+    windowMs: IMG_WINDOW,
+  };
+}
+
 function gate(request: Request) {
-  return rateLimit("img:" + clientIp(request), IMG_LIMIT, IMG_WINDOW);
+  const policy = imageRequestPolicy(request);
+  return rateLimit(policy.key, policy.limit, policy.windowMs);
 }
 
 function tooMany(retryAfterSec: number) {

@@ -1,13 +1,18 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { CloudSubscriptionRow } from "./cloudSubscription";
 
-const state = vi.hoisted(() => ({ rows: [] as (CloudSubscriptionRow & { user_id: string })[], retry: vi.fn().mockResolvedValue(undefined) }));
+const state = vi.hoisted(() => ({
+  rows: [] as (CloudSubscriptionRow & { user_id: string })[],
+  retry: vi.fn().mockResolvedValue(undefined),
+  erasing: false,
+  rpc: vi.fn(),
+}));
 vi.mock("@/lib/polarServer", () => ({ retryPolarSubscriptionsForUser: state.retry }));
 vi.mock("@/lib/cloudBoard", () => ({ isCloudEnabled: () => true }));
 vi.mock("@/lib/supabase/config", () => ({ getCloudConfig: () => ({ status: "ready" }) }));
 vi.mock("@/lib/supabase/identity", () => ({ identityFromClaims: async () => ({ userId: "owner" }) }));
 vi.mock("@/lib/supabase/server", () => ({
-  createCloudServerClient: async () => ({ from: () => {
+  createCloudServerClient: async () => ({ rpc: state.rpc, from: () => {
     let rows = [...state.rows];
     const query = {
       select: () => query,
@@ -25,7 +30,18 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 import { GET } from "@/app/api/cloud/subscription/route";
 
-afterEach(() => { vi.unstubAllEnvs(); state.retry.mockReset().mockResolvedValue(undefined); });
+beforeEach(() => {
+  state.retry.mockReset().mockResolvedValue(undefined);
+  state.erasing = false;
+  state.rpc.mockReset().mockImplementation(async (name: string) => ({
+    data: name === "capture_account_deleting" ? state.erasing : null,
+    error: null,
+  }));
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 it("retries durable pending reconciliation for only the verified owner, even after webhook retries end", async () => {
   vi.stubEnv("CAPTURE_CLOUD", "1");
@@ -34,6 +50,21 @@ it("retries durable pending reconciliation for only the verified owner, even aft
   const response = await GET(new Request("https://capture.test/api/cloud/subscription?userId=attacker"));
   expect(state.retry).toHaveBeenCalledWith("owner");
   expect(await response.json()).toMatchObject({ tier: "free" });
+});
+
+it("checks the account lifecycle before retrying Polar or reading subscription rows", async () => {
+  vi.stubEnv("CAPTURE_CLOUD", "1");
+  state.erasing = true;
+  state.rows = [{
+    user_id: "owner", status: "active", plan: "monthly", is_entitled: true,
+    current_period_end: "2099-01-01T00:00:00Z", access_expires_at: "2099-01-01T00:00:00Z",
+    cancel_at_period_end: false, last_event_at: "2026-09-13T00:00:00Z",
+  }];
+  const response = await GET(new Request("https://capture.test/api/cloud/subscription"));
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: "account unavailable" });
+  expect(state.rpc).toHaveBeenCalledWith("capture_account_deleting", { p_user_id: "owner" });
+  expect(state.retry).not.toHaveBeenCalled();
 });
 
 it("surfaces older pending billing instead of a newer inactive row and retries only its owner", async () => {

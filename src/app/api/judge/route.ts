@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
+import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { withFallback } from "@/lib/providers";
 import { preferredFor } from "@/lib/routing";
 import { scheduleJevJudgeShadow } from "@/lib/jevJudgeShadow";
@@ -121,6 +122,9 @@ function render(
 }
 
 export async function POST(request: Request) {
+  const authorization = await authorizeManagedAiRequest(request);
+  if (authorization instanceof Response) return authorization;
+  return withManagedAiAdmission(authorization, async () => {
   const gate = modelRateLimit(clientIp(request));
   if (!gate.allowed) {
     return Response.json(
@@ -171,10 +175,10 @@ export async function POST(request: Request) {
     /* Separate disabled-by-default observation only. The generative judge has
        already seen the full batch and supplied the user-facing reasons; Jev
        cannot remove, rewrite, delay, or replace any candidate in this route. */
-    scheduleJevJudgeShadow({
+    await scheduleJevJudgeShadow({
       candidates: body.candidates,
       generativeVerdicts: verdicts,
-    });
+    }, { authorization });
 
     return Response.json({ verdicts, via });
   } catch {
@@ -182,4 +186,5 @@ export async function POST(request: Request) {
        the strict local scan rather than showing nothing. */
     return Response.json({ error: "no judgement" }, { status: 503 });
   }
+  });
 }

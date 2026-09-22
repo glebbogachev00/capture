@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Board } from "./model";
+import { appendLedger, LEDGER_CAP, type CaptureEntry } from "./ledger";
 import { ensureHubImage, isSafeImageId, referencedImageIds } from "./imgSync";
 
 const board = (over: Partial<Board> = {}): Board => ({
@@ -35,6 +36,48 @@ describe("referencedImageIds", () => {
       ],
     });
     expect(referencedImageIds(b).sort()).toEqual(["i1", "i2", "i3"]);
+  });
+
+  it("keeps intention images referenced after their ledger row is evicted", () => {
+    const intentionPhoto = "intention-photo";
+    let ledger: CaptureEntry[] = [{
+      id: "intention-row",
+      at: 0,
+      raw: "I live deliberately",
+      clean: "I live deliberately",
+      kind: "intention",
+      source: "typed",
+      targetId: "intention",
+      imgs: [intentionPhoto],
+    }];
+    for (let index = 1; index <= LEDGER_CAP + 1; index++) {
+      ledger = appendLedger(ledger, {
+        id: `row-${index}`,
+        at: index,
+        raw: `capture ${index}`,
+        clean: `capture ${index}`,
+        kind: "action",
+        source: "typed",
+        targetId: `action-${index}`,
+      });
+    }
+    expect(ledger.some((entry) => entry.id === "intention-row")).toBe(false);
+
+    const b = board({
+      ledger,
+      intentions: [{
+        id: "intention",
+        number: 1,
+        rawInput: "I live deliberately",
+        expandedIntention: "I live deliberately.",
+        recommendedActions: [],
+        counterIntentions: [],
+        imgs: [intentionPhoto],
+        at: 0,
+        updatedAt: 0,
+      }],
+    });
+    expect(referencedImageIds(b)).toContain(intentionPhoto);
   });
 
   it("de-duplicates an image referenced twice", () => {

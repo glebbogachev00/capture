@@ -25,16 +25,15 @@ it("waits for successful board load and never grants by rendering", async () => 
   expect(screen.getByRole("heading", { name: "Enable offline on this device?" })).toBeTruthy();
   expect(resumeOfflineIdentity()).toBeNull();
   const confirm = screen.getByRole("button", { name: "Enable offline" }) as HTMLButtonElement;
-  expect(confirm.disabled).toBe(true);
-  fireEvent.click(screen.getByRole("checkbox", { name: "Offline on this device" }));
   expect(confirm.disabled).toBe(false);
+  expect(screen.queryByRole("checkbox", { name: "Offline on this device" })).toBeNull();
   expect(resumeOfflineIdentity()).toBeNull();
-  expect(screen.getByText("You can always disable this in Settings.")).toBeTruthy();
+  expect(screen.getByText(/Shared device/)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Not now" })).toBeTruthy();
 });
 it("accepts explicitly for the verified owner and Settings can disable without a new invitation", async () => {
   const { OfflineInvitation, OfflineSettings, resumeOfflineIdentity } = await setup();
   render(<><OfflineInvitation boardReady /><OfflineSettings /></>);
-  fireEvent.click(screen.getByRole("checkbox", { name: "Offline on this device" }));
   fireEvent.click(screen.getByRole("button", { name: "Enable offline" }));
   expect(resumeOfflineIdentity()?.owner).toBe("A");
   expect(screen.queryByRole("button", { name: "Enable offline" })).toBeNull();
@@ -57,7 +56,6 @@ it("Not now survives a document reload for this account, but does not grant or s
   api = await setup("B");
   render(<api.OfflineInvitation boardReady />);
   expect(api.resumeOfflineIdentity()).toBeNull();
-  fireEvent.click(screen.getByRole("checkbox", { name: "Offline on this device" }));
   fireEvent.click(screen.getByRole("button", { name: "Enable offline" }));
   expect(api.resumeOfflineIdentity()?.owner).toBe("B");
 });
@@ -82,7 +80,6 @@ it.each(["anonymous", "local", "offline", "expired", "revoked"])("skips %s docum
 it("a revoked account cannot accept an invitation left on screen", async () => {
   const { OfflineInvitation, lifetime, resumeOfflineIdentity } = await setup();
   render(<OfflineInvitation boardReady />);
-  fireEvent.click(screen.getByRole("checkbox", { name: "Offline on this device" }));
   const button = screen.getByRole("button", { name: "Enable offline" });
   act(() => lifetime.revoke());
   fireEvent.click(button);
@@ -91,7 +88,6 @@ it("a revoked account cannot accept an invitation left on screen", async () => {
 it("expired or disconnected acceptance fails without recording consent", async () => {
   const { OfflineInvitation, lifetime, resumeOfflineIdentity } = await setup();
   render(<OfflineInvitation boardReady />);
-  fireEvent.click(screen.getByRole("checkbox", { name: "Offline on this device" }));
   lifetime.expiresAt = Date.now() - 1;
   fireEvent.click(screen.getByRole("button", { name: "Enable offline" }));
   expect(resumeOfflineIdentity()).toBeNull();
@@ -116,7 +112,6 @@ it("Escape dismisses without consent and does not nag on remount", async () => {
 it("disconnected acceptance cannot grant offline permission", async () => {
   const { OfflineInvitation, resumeOfflineIdentity } = await setup();
   render(<OfflineInvitation boardReady />);
-  fireEvent.click(screen.getByRole("checkbox", { name: "Offline on this device" }));
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   fireEvent.click(screen.getByRole("button", { name: "Enable offline" }));
   expect(resumeOfflineIdentity()).toBeNull();
@@ -124,7 +119,6 @@ it("disconnected acceptance cannot grant offline permission", async () => {
 it("blocked permission storage reports failure and leaves retry and decline available", async () => {
   const { OfflineInvitation, resumeOfflineIdentity } = await setup();
   render(<OfflineInvitation boardReady />);
-  fireEvent.click(screen.getByRole("checkbox", { name: "Offline on this device" }));
   vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
   fireEvent.click(screen.getByRole("button", { name: "Enable offline" }));
   expect(resumeOfflineIdentity()).toBeNull();

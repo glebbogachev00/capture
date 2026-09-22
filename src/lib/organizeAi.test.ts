@@ -64,6 +64,17 @@ describe("compactBoard", () => {
     expect(s.intentions[0]).toMatchObject({ id: "i1", expanded: "I live somewhere with light" });
   });
 
+  it("does not send waiting-to-sort captures to Tidy", () => {
+    const waiting = { ...act("waiting", "raw offline thought"), unsorted: true };
+    const waitingFrag = { ...frag("waiting-frag", "raw offline fragment"), unsorted: true };
+    const s = compactBoard(board({
+      actions: [waiting, act("ready", "Call the vet")],
+      threads: [thread("thread", "Settled thread", [waitingFrag, frag("ready-frag", "Settled note")])],
+    }));
+    expect(s.actions.map((action) => action.id)).toEqual(["ready"]);
+    expect(s.threads[0].frags.map((item) => item.id)).toEqual(["ready-frag"]);
+  });
+
   it("caps a huge board so one prompt stays small", () => {
     const actions = Array.from({ length: SNAPSHOT_CAPS.actions + 5 }, (_, i) =>
       act("a" + i, "task number " + i)

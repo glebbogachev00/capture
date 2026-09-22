@@ -14,6 +14,9 @@ it("blocks checkout for denied pending billing using real dependencies and Supab
     const url = new URL(input instanceof Request ? input.url : input.toString());
     expect(url.origin).toBe("https://synthetic.test"); // never forward any request
     urls.push(url);
+    if (url.pathname.includes("/rpc/capture_account_deleting")) return Response.json(false);
+    if (url.pathname.includes("/rpc/acquire_capture_external_work")
+      || url.pathname.includes("/rpc/release_capture_external_work")) return Response.json(true);
     expect(url.searchParams.get("user_id")).toBe(`eq.${owner}`);
     // Synthetic pending source: is_entitled=false, expiry in the past. The
     // previous effective-access-only query incorrectly filters this row out.
@@ -26,10 +29,14 @@ it("blocks checkout for denied pending billing using real dependencies and Supab
   const response = await handleCheckout(new Request("https://capture.test/api/billing/checkout", { method: "POST", body: JSON.stringify({ plan: "monthly" }) }), deps);
   expect(response.status).toBe(409);
   expect(mocks.checkout).not.toHaveBeenCalled();
-  expect(urls).toHaveLength(1);
-  expect(urls[0].searchParams.get("or")).toMatch(/^\(reconciliation_required.eq.true,and\(is_entitled.eq.true,access_expires_at.gt\..+\)\)$/);
-  expect(urls[0].searchParams.has("is_entitled")).toBe(false);
+  const subscriptionUrls = urls.filter(url => !url.pathname.includes("/rpc/"));
+  expect(subscriptionUrls).toHaveLength(1);
+  expect(subscriptionUrls[0].searchParams.get("or")).toMatch(/^\(reconciliation_required.eq.true,and\(is_entitled.eq.true,access_expires_at.gt\..+\)\)$/);
+  expect(subscriptionUrls[0].searchParams.has("is_entitled")).toBe(false);
   const portal = await handleCustomerPortal(new Request("https://capture.test/api/billing/portal"), deps);
   expect(portal.status).toBe(200);
-  expect(mocks.portal).toHaveBeenCalledWith({ external_customer_id: owner, return_url: "https://trycapture.app/app" });
+  expect(mocks.portal).toHaveBeenCalledWith(
+    { external_customer_id: owner, return_url: "https://trycapture.app/app" },
+    { timeout: 30 },
+  );
 });

@@ -31,6 +31,8 @@ export type SaveDraftInput = {
 export type CaptureOrigin = {
   raw: string;
   source: CaptureSource;
+  at?: number;
+  imgs?: string[];
   transcript?: string;
   via?: string;
   captureId?: string;
@@ -57,6 +59,7 @@ export function applySaveDraft(
     expandedIntention: draft.expandedIntention,
     recommendedActions: draft.recommendedActions,
     counterIntentions: draft.counterIntentions,
+    ...(origin.capture?.imgs?.length ? { imgs: origin.capture.imgs } : {}),
     at,
     updatedAt: at,
   };
@@ -74,11 +77,12 @@ export function applySaveDraft(
     next = withLedger(next, {
       id: ids.ledgerId,
       captureId: origin.capture.captureId,
-      at,
+      at: origin.capture.at ?? at,
       raw: origin.capture.raw,
       clean: draft.expandedIntention,
       kind: "intention",
       source: origin.capture.source,
+      ...(origin.capture.imgs?.length ? { imgs: origin.capture.imgs } : {}),
       ...(origin.capture.transcript ? { transcript: origin.capture.transcript } : {}),
       targetId: intention.id,
       modelVia: origin.capture.via,

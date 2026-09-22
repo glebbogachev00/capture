@@ -57,6 +57,7 @@ import { useBoard } from "@/hooks/useBoard";
 import { ReportBug } from "@/components/ReportBug";
 import { PlaygroundNotice } from "@/components/PlaygroundNotice";
 import { TrialMeter } from "@/components/TrialMeter";
+import { UnsortedCaptures } from "@/components/UnsortedCaptures";
 import { InstallInvitation } from "@/components/InstallInvitation";
 import { OfflineInvitation } from "@/components/OfflineSettings";
 import { CheckoutReturnNotice } from "@/components/CloudBilling";
@@ -181,7 +182,8 @@ export function Capture() {
     recordDay,
     setRecordDay,
     setShowSettings,
-    ioNote,
+    leaveSettings,
+    ioNote, ioBusy,
     setIoNote,
     editing,
     setEditing,
@@ -194,6 +196,7 @@ export function Capture() {
     showResting,
     setShowResting,
     live,
+    unsorted,
     fadedList,
     active,
     resting,
@@ -204,6 +207,7 @@ export function Capture() {
     shareable,
     submit,
     resort,
+    editUnsorted, removeUnsorted,
     toggleAction,
     setShelf,
     restore,
@@ -861,7 +865,7 @@ export function Capture() {
           />
         ) : showRecord ? (
           <RecordScreen
-            ledger={data.ledger ?? []}
+            ledger={(data.ledger ?? []).filter((entry) => entry.kind !== "pending")}
             now={now}
             day={recordDay}
             onDayChange={setRecordDay}
@@ -884,14 +888,9 @@ export function Capture() {
         ) : showSettings ? (
           <SettingsScreen
             principles={data.principles}
-            counts={{
-              actions: data.actions.length,
-              threads: data.threads.length,
-              intentions: data.intentions.length,
-            }}
+            counts={{ actions: data.actions.filter((action) => !action.unsorted).length, threads: data.threads.length, intentions: data.intentions.length }}
             onBack={() => {
-              setShowSettings(false);
-              setIoNote(null);
+              if (!leaveSettings()) return;
             }}
             onToggle={togglePrinciple}
             onAdd={addPrinciple}
@@ -905,14 +904,14 @@ export function Capture() {
             onRestoreSnapshot={(day) => void restoreSnapshot(day)}
             onImportIntent={importBackup}
             onLogout={logout}
-            ioNote={ioNote}
+            ioNote={ioNote} ioBusy={ioBusy}
             sync={sync}
             onSyncNow={syncNow}
             onOpenRecord={() => {
-              setShowSettings(false);
+              if (!leaveSettings()) return;
               setShowRecord(true);
             }}
-            ledgerCount={(data.ledger ?? []).length} profile={data.profile} onProfileChange={updateProfile}
+            ledgerCount={(data.ledger ?? []).filter((entry) => entry.kind !== "pending").length} profile={data.profile} onProfileChange={updateProfile}
           />
         ) : draft ? (
           <IntentionDraft
@@ -983,6 +982,8 @@ export function Capture() {
           />
         ) : (
           <>
+            <UnsortedCaptures items={unsorted} busy={!!busy} onSort={(action) => void resort(action)}
+              onEdit={editUnsorted} onDelete={removeUnsorted} />
             <div className="searchbar">
               <input
                 type="search"
@@ -997,7 +998,6 @@ export function Capture() {
                 </button>
               )}
             </div>
-
             <QuestionAnswer board={data} question={query} session={answerSession}
               onOpenThread={(id, fragId) => {
                 setOpen(id); setOpenFrag(fragId || null);
@@ -1076,7 +1076,7 @@ export function Capture() {
 
             {tab === "actions" && (
               <div>
-                {!data.actions.length && loaded && (
+                {!live.length && !unsorted.length && loaded && (
                   <div className="empty">
                     {/* An app about clearing clutter cannot open with a wall
                         of prose. What is actually needed here is three

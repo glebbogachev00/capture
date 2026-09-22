@@ -1,6 +1,8 @@
 import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
 import { clientIp } from "@/lib/clientIp";
 import { ttsRateLimit } from "@/lib/limiter";
+import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
+import { opsEvent } from "@/lib/opsEvent.server";
 
 /**
  * Text-to-speech, with a human voice even when the Mac is off.
@@ -100,7 +102,10 @@ async function edgeSpeak(text: string): Promise<ArrayBuffer> {
 }
 
 /** Is any voice engine up? Kokoro first; Edge second. */
-export async function GET() {
+export async function GET(request: Request) {
+  const authorization = await authorizeManagedAiRequest(request);
+  if (authorization instanceof Response) return authorization;
+  return withManagedAiAdmission(authorization, async () => {
   try {
     const res = await fetch(`${TTS_URL}/models`, {
       signal: AbortSignal.timeout(TTS_PROBE_TIMEOUT_MS),
@@ -117,9 +122,13 @@ export async function GET() {
   } catch {
     return Response.json({ up: false });
   }
+  });
 }
 
 export async function POST(request: Request) {
+  const authorization = await authorizeManagedAiRequest(request);
+  if (authorization instanceof Response) return authorization;
+  return withManagedAiAdmission(authorization, async () => {
   // TTS spends real resources; one open deployment shouldn't synthesise
   // audio for strangers, but the bucket is generous because a long spoken
   // reply is many sentences.
@@ -164,12 +173,14 @@ export async function POST(request: Request) {
         },
       });
     }
-    console.warn(
-      `[capture] kokoro ${upstream.status}, falling back to Edge`,
-      (await upstream.text().catch(() => "")).slice(0, 200)
-    );
+    opsEvent({
+      event: "managed_ai_route",
+      outcome: "degraded",
+      reason: upstream.status === 429 ? "rate_limited" : "provider_rejected",
+      count: "one",
+    });
   } catch {
-    console.warn("[capture] kokoro unreachable, falling back to Edge");
+    opsEvent({ event: "managed_ai_route", outcome: "degraded", reason: "provider_unavailable", count: "one" });
   }
 
   // 2) Edge neural voice — the near-human fallback that replaces the
@@ -183,11 +194,12 @@ export async function POST(request: Request) {
         "Cache-Control": "no-store",
       },
     });
-  } catch (error) {
-    console.error("[capture] edge tts failed", error);
+  } catch {
+    opsEvent({ event: "managed_ai_route", outcome: "failure", reason: "provider_unavailable", count: "one" });
     return Response.json(
       { error: "The voice server couldn't speak right now." },
       { status: 502 }
     );
   }
+  });
 }

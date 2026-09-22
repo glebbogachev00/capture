@@ -142,6 +142,8 @@ export type Intention = {
   recommendedActions: string[];
   /** Two to four recurring behaviours pulling against this one. */
   counterIntentions: string[];
+  /** Images attached to the capture that became this intention. */
+  imgs?: string[];
   at: number;
   updatedAt: number;
 };
@@ -261,6 +263,108 @@ export const EMPTY: Board = {
   corrections: [],
 };
 
+type PendingMigration = Pick<Board, "actions" | "threads" | "ledger">;
+
+/** Older failed sorts were stored as an `unsorted` Action or thread fragment
+ * while their ledger row still claimed a settled kind. Normalize both shapes
+ * at every hydrate boundary so no downstream reader can mistake the source for
+ * classified material. The original ids, timestamps, text, images and chosen
+ * thread survive, and generated rows use deterministic ids so retrying hydrate
+ * cannot duplicate history. */
+function migrateLegacyPending(
+  actions: Action[],
+  threads: Thread[],
+  ledger: CaptureEntry[]
+): PendingMigration {
+  const nextActions = [...actions];
+  const nextLedger = [...ledger];
+  const usedActionIds = new Set(nextActions.map((action) => action.id));
+  const usedLedgerIds = new Set(nextLedger.map((entry) => entry.id));
+  const claimedRows = new Set<number>();
+
+  const uniqueId = (base: string, used: Set<string>) => {
+    let candidate = base;
+    let suffix = 2;
+    while (used.has(candidate)) candidate = `${base}-${suffix++}`;
+    used.add(candidate);
+    return candidate;
+  };
+
+  const normalizeRows = (
+    envelope: Action,
+    matches: (entry: CaptureEntry) => boolean
+  ) => {
+    const indexes: number[] = [];
+    for (let index = 0; index < nextLedger.length; index++) {
+      if (!claimedRows.has(index) && matches(nextLedger[index])) indexes.push(index);
+    }
+    const identityRow = indexes.find((index) => !nextLedger[index].undone) ?? indexes[0];
+    const captureId = identityRow === undefined
+      ? envelope.id
+      : nextLedger[identityRow].captureId ?? nextLedger[identityRow].id;
+    for (const index of indexes) {
+      claimedRows.add(index);
+      nextLedger[index] = {
+        ...nextLedger[index],
+        captureId,
+        kind: "pending",
+        targetId: envelope.id,
+        targetFragId: undefined,
+      };
+    }
+    if (indexes.some((index) => !nextLedger[index].undone)) return;
+    const raw = envelope.src || envelope.text;
+    nextLedger.push({
+      id: uniqueId(`legacy-pending-${envelope.id}`, usedLedgerIds),
+      captureId,
+      at: envelope.at,
+      raw,
+      clean: envelope.text || raw,
+      kind: "pending",
+      source: !raw && envelope.imgs?.length ? "image" : "typed",
+      targetId: envelope.id,
+      imgs: envelope.imgs?.length ? [...envelope.imgs] : undefined,
+    });
+  };
+
+  for (const action of nextActions.filter((candidate) => candidate.unsorted)) {
+    normalizeRows(action, (entry) => entry.targetId === action.id);
+  }
+
+  const nextThreads = threads.map((thread) => {
+    const kept: Frag[] = [];
+    for (const frag of thread.frags ?? []) {
+      if (!frag.unsorted) {
+        kept.push(frag);
+        continue;
+      }
+      const id = usedActionIds.has(frag.id)
+        ? uniqueId(`legacy-frag-${thread.id}-${frag.id}`, usedActionIds)
+        : (usedActionIds.add(frag.id), frag.id);
+      const envelope: Action = {
+        id,
+        text: frag.text,
+        src: frag.text,
+        done: false,
+        at: frag.at,
+        imgs: frag.imgs ? [...frag.imgs] : undefined,
+        shelf: "keep",
+        expires: null,
+        unsorted: true,
+        threadId: thread.id,
+        updatedAt: frag.updatedAt ?? frag.at,
+      };
+      nextActions.push(envelope);
+      normalizeRows(envelope, (entry) =>
+        entry.targetFragId === frag.id && entry.targetId === thread.id
+      );
+    }
+    return kept.length === (thread.frags ?? []).length ? thread : { ...thread, frags: kept };
+  });
+
+  return { actions: nextActions, threads: nextThreads, ledger: nextLedger };
+}
+
 /**
  * Fill in anything a board saved by an older version is missing.
  *
@@ -274,23 +378,27 @@ export function hydrate(raw: Partial<Board> | null | undefined): Board {
     ...x,
     updatedAt: x.updatedAt ?? x.at ?? 0,
   });
+  const actions = (raw?.actions ?? []).map(stamped);
+  const threads = (raw?.threads ?? []).map((t) => ({
+    ...t,
+    updatedAt: t.updatedAt ?? t.frags?.at(-1)?.at ?? 0,
+    frags: (t.frags ?? []).map(stamped),
+  }));
+  /* Boards written before the ledger existed carry no ledger key at all;
+     hydrate to empty rather than crash. Malformed entries are dropped. */
+  const ledger = (raw?.ledger ?? []).filter(
+    (e) => e && typeof e.id === "string" && typeof e.at === "number"
+  );
+  const pending = migrateLegacyPending(actions, threads, ledger);
   return {
     ...raw,
-    actions: (raw?.actions ?? []).map(stamped),
-    threads: (raw?.threads ?? []).map((t) => ({
-      ...t,
-      updatedAt: t.updatedAt ?? t.frags?.at(-1)?.at ?? 0,
-      frags: (t.frags ?? []).map(stamped),
-    })),
+    actions: pending.actions,
+    threads: pending.threads,
     intentions: (raw?.intentions ?? []).map(stamped),
     principles: (raw?.principles?.length ? raw.principles : SEED_PRINCIPLES).map(
       (p) => ({ ...p, updatedAt: p.updatedAt ?? 0 })
     ),
-    /* Boards written before the ledger existed carry no ledger key at all;
-       hydrate to empty rather than crash. Malformed entries are dropped. */
-    ledger: (raw?.ledger ?? []).filter(
-      (e) => e && typeof e.id === "string" && typeof e.at === "number"
-    ),
+    ledger: pending.ledger,
     historyEpoch: typeof raw?.historyEpoch === "number" ? raw.historyEpoch : 0,
     corrections: (raw?.corrections ?? []).filter(
       (e) =>

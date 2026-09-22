@@ -28,6 +28,7 @@ export type CloudSubscriptionDependencies = {
   isConfigured: () => boolean;
   requiresSubscription: () => boolean;
   verifyIdentity: (request: Request) => Promise<{ userId: string } | null>;
+  isAccountErasing: (identity: { userId: string }) => Promise<boolean>;
   getSubscriptions: (userId: string) => Promise<CloudSubscriptionRow[]>;
   now?: () => Date;
 };
@@ -102,6 +103,9 @@ export async function handleCloudSubscriptionStatus(
         error: "unauthorized",
         captureLimit: deps.requiresSubscription() ? TRIAL_LIMIT : null,
       }, 401);
+    }
+    if (await deps.isAccountErasing(identity)) {
+      return json({ error: "account unavailable" }, 403);
     }
     const rows = await deps.getSubscriptions(identity.userId);
     return json(publicCloudSubscription(

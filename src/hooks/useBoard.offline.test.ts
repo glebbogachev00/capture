@@ -44,9 +44,12 @@ it("offline baseline: model-free capture, edit, find, manual move, downloaded ph
   await act(async () => { await hook.result.current.submit(); });
   const action = hook.result.current.data.actions.find(a => a.text === "Offline capture baseline")!;
   expect(action.unsorted).toBe(true);
-  await act(async () => { await hook.result.current.editActionText(action.id, "Edited offline baseline"); });
+  expect(hook.result.current.live.some(a => a.id === action.id)).toBe(false);
+  expect(hook.result.current.unsorted.map(a => a.id)).toContain(action.id);
+  await act(async () => { await hook.result.current.editUnsorted(action.id, "Edited offline baseline"); });
   act(() => hook.result.current.setQuery("Edited offline"));
-  await waitFor(() => expect(hook.result.current.hits.total).toBeGreaterThan(0));
+  await waitFor(() => expect(hook.result.current.hits.total).toBe(0));
+  expect(hook.result.current.unsorted.find(a => a.id === action.id)?.text).toBe("Edited offline baseline");
   await act(async () => { await hook.result.current.moveFrag("one", "frag", "two"); });
   expect(hook.result.current.data.threads.find(t => t.id === "two")?.frags[0].text).toBe("photo note");
   expect(await get(IMG("pic"))).toBe("downloaded bytes");

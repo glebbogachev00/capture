@@ -59,7 +59,14 @@ export type PolarDependencies = {
   config: PolarConfig | null;
   isCloudEnabled: () => boolean;
   identity: () => Promise<CaptureIdentity | null>;
+  isAccountErasing: (userId: string) => Promise<boolean>;
   hasBlockingSubscription: (userId: string) => Promise<boolean>;
+  acquireExternalWork: (input: {
+    ownerId: string;
+    kind: "polar_checkout" | "polar_portal";
+    capabilityExpiresAt: Date;
+  }) => Promise<{ admissionId: string } | null>;
+  releaseExternalWork: (ownerId: string, admissionId: string) => Promise<void>;
   createCheckout: (input: CheckoutInput) => Promise<{ url: string }>;
   createCustomerSession: (input: PortalInput) => Promise<{ customerPortalUrl: string }>;
   validateWebhook: (body: string, headers: Record<string, string>, secret: string) => Promise<unknown>;
@@ -74,6 +81,17 @@ const SUBSCRIPTION_EVENTS = new Set([
   "subscription.uncanceled", "subscription.revoked", "subscription.paused", "subscription.resumed",
   "subscription.past_due", "subscription.cycled",
 ]);
+const DEFAULT_POLAR_CAPABILITY_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function polarCapabilityLifetimeMs(env: Env = process.env): number {
+  const raw = env.CAPTURE_POLAR_CAPABILITY_MAX_SECONDS;
+  if (raw === undefined || raw === "") return DEFAULT_POLAR_CAPABILITY_MS;
+  const seconds = Number(raw);
+  if (!Number.isSafeInteger(seconds) || seconds < 60 || seconds > 30 * 24 * 60 * 60) {
+    throw new Error("Invalid Polar capability lifetime");
+  }
+  return seconds * 1000;
+}
 
 function cleanUrl(value: string | undefined): string | null {
   try {
@@ -158,6 +176,11 @@ export async function handleCheckout(request: Request, deps: PolarDependencies):
   if (!deps.config) return json({ error: "billing is not configured" }, 503);
   const identity = await deps.identity();
   if (!identity) return json({ error: "unauthorized" }, 401);
+  try {
+    if (await deps.isAccountErasing(identity.userId)) return json({ error: "account unavailable" }, 403);
+  } catch {
+    return json({ error: "account lifecycle is unavailable" }, 503);
+  }
   const plan = await requestPlan(request);
   if (!plan) return json({ error: "invalid plan" }, 400);
   try {
@@ -168,20 +191,30 @@ export async function handleCheckout(request: Request, deps: PolarDependencies):
     return json({ error: "subscription status is unavailable" }, 503);
   }
   try {
-    const productId = plan === "monthly" ? deps.config.monthlyProductId : deps.config.yearlyProductId;
-    const customerIpAddress = forwardedIp(request);
-    const checkout = await deps.createCheckout({
-      products: [productId],
-      externalCustomerId: identity.userId,
-      customerEmail: identity.email,
-      ...(customerIpAddress ? { customerIpAddress } : {}),
-      successUrl: `${deps.config.siteUrl}/app?checkout_id={CHECKOUT_ID}`,
-      returnUrl: `${deps.config.siteUrl}/pricing`,
-      allowDiscountCodes: true,
-      allowTrial: false,
-      metadata: { capturePlan: plan },
+    const admission = await deps.acquireExternalWork({
+      ownerId: identity.userId,
+      kind: "polar_checkout",
+      capabilityExpiresAt: new Date(Date.now() + polarCapabilityLifetimeMs()),
     });
-    return json({ url: checkout.url });
+    if (!admission) return json({ error: "account lifecycle is unavailable" }, 503);
+    const productId = plan === "monthly" ? deps.config.monthlyProductId : deps.config.yearlyProductId;
+    try {
+      const customerIpAddress = forwardedIp(request);
+      const checkout = await deps.createCheckout({
+        products: [productId],
+        externalCustomerId: identity.userId,
+        customerEmail: identity.email,
+        ...(customerIpAddress ? { customerIpAddress } : {}),
+        successUrl: `${deps.config.siteUrl}/app?checkout_id={CHECKOUT_ID}`,
+        returnUrl: `${deps.config.siteUrl}/pricing`,
+        allowDiscountCodes: true,
+        allowTrial: false,
+        metadata: { capturePlan: plan },
+      });
+      return json({ url: checkout.url });
+    } finally {
+      await deps.releaseExternalWork(identity.userId, admission.admissionId);
+    }
   } catch {
     return json({ error: "checkout could not be created" }, 502);
   }
@@ -193,8 +226,23 @@ export async function handleCustomerPortal(_request: Request, deps: PolarDepende
   const identity = await deps.identity();
   if (!identity) return json({ error: "unauthorized" }, 401);
   try {
-    const session = await deps.createCustomerSession({ externalCustomerId: identity.userId, returnUrl: `${deps.config.siteUrl}/app` });
-    return json({ url: session.customerPortalUrl });
+    if (await deps.isAccountErasing(identity.userId)) return json({ error: "account unavailable" }, 403);
+  } catch {
+    return json({ error: "account lifecycle is unavailable" }, 503);
+  }
+  try {
+    const admission = await deps.acquireExternalWork({
+      ownerId: identity.userId,
+      kind: "polar_portal",
+      capabilityExpiresAt: new Date(Date.now() + polarCapabilityLifetimeMs()),
+    });
+    if (!admission) return json({ error: "account lifecycle is unavailable" }, 503);
+    try {
+      const session = await deps.createCustomerSession({ externalCustomerId: identity.userId, returnUrl: `${deps.config.siteUrl}/app` });
+      return json({ url: session.customerPortalUrl });
+    } finally {
+      await deps.releaseExternalWork(identity.userId, admission.admissionId);
+    }
   } catch {
     return json({ error: "subscription portal is unavailable" }, 502);
   }

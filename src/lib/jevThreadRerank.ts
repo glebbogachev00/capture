@@ -1,11 +1,13 @@
 import { after } from "next/server";
 import { z } from "zod";
+import type { CloudAuthorization } from "./cloudRequestGuard";
+import { scheduleManagedAiDeferredWork } from "./cloudRequestGuard.server";
 import {
   OPENROUTER_DECISIONS_ENDPOINT,
   OpenRouterDecisionsError,
-  safeOpenRouterDecisionsFailure,
   submitOpenRouterDecisions,
 } from "./openRouterDecisions.server";
+import { countBucket, opsEvent } from "./opsEvent.server";
 
 /**
  * Jev is not a chat model. OpenRouter serves it through the Decisions API,
@@ -211,57 +213,40 @@ export function isJevThreadRerankShadowEnabled(env: Env = process.env): boolean 
  * The task cannot alter, delay, or reject the normal sort. Logs contain only
  * aggregate comparison fields: never captures, candidate text, ids, or keys.
  */
-export function scheduleJevThreadRerankShadow(
+export async function scheduleJevThreadRerankShadow(
   input: JevThreadRerankInput,
   options: {
+    authorization?: CloudAuthorization;
     env?: Env;
     fetcher?: Fetcher;
     schedule?: Scheduler;
   } = {}
-): boolean {
+): Promise<boolean> {
   const env = options.env ?? process.env;
-  if (
-    !isJevThreadRerankShadowEnabled(env) ||
-    !input.capture.trim() ||
-    !input.candidates.length ||
-    input.candidates.length > MAX_CANDIDATES
-  ) {
-    return false;
-  }
-
+  const enabled =
+    isJevThreadRerankShadowEnabled(env) &&
+    Boolean(input.capture.trim()) &&
+    input.candidates.length > 0 &&
+    input.candidates.length <= MAX_CANDIDATES;
   const apiKey = env.OPENROUTER_API_KEY!;
-  const schedule = options.schedule ?? after;
-  const task = async () => {
-    try {
-      const result = await runJevThreadRerank(input, {
+  return scheduleManagedAiDeferredWork({
+    authorization: options.authorization ?? { mode: "non-cloud" },
+    enabled,
+    schedule: options.schedule ?? after,
+    work: async () => {
+      await runJevThreadRerank(input, {
         apiKey,
         fetcher: options.fetcher,
       });
-      const selectedIndex =
-        result.selected.kind === "existing"
-          ? result.selected.candidateIndex
-          : undefined;
-      const agreesWithSorter =
-        result.selected.kind === "new_thread"
-          ? Boolean(input.sorterCreatedNewThread)
-          : result.selected.threadId === input.sorterThreadId;
-      console.info("[capture] jev thread shadow", {
-        agreesWithSorter,
-        candidateCount: Math.min(input.candidates.length, MAX_CANDIDATES),
-        confidence: result.confidence,
-        inputTokens: result.usage.inputTokens,
-        selected: result.selected.kind === "existing" ? "existing" : "new_thread",
-        ...(selectedIndex === undefined ? {} : { selectedIndex }),
+      opsEvent({
+        event: "managed_ai_provider_attempt",
+        outcome: "success",
+        reason: "none",
+        count: countBucket(Math.min(input.candidates.length, MAX_CANDIDATES)),
       });
-    } catch (error) {
-      console.warn("[capture] jev thread shadow failed", safeOpenRouterDecisionsFailure(error));
-    }
-  };
-  try {
-    schedule(task);
-    return true;
-  } catch (error) {
-    console.warn("[capture] jev thread shadow failed", safeOpenRouterDecisionsFailure(error));
-    return false;
-  }
+    },
+    onError: () => {
+      opsEvent({ event: "managed_ai_provider_attempt", outcome: "failure", reason: "provider_unavailable", count: "one" });
+    },
+  });
 }

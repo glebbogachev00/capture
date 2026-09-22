@@ -84,8 +84,9 @@ export function actionsForThread(
   const take = <T extends { id: string }>(list: T[]): T[] =>
     list.filter((a) => (seen.has(a.id) ? false : (seen.add(a.id), true)));
 
-  const mine = board.actions.filter(isMine);
-  const related = board.actions.filter((a) => !isMine(a) && isRelated(a));
+  const actions = board.actions.filter((a) => !a.unsorted);
+  const mine = actions.filter(isMine);
+  const related = actions.filter((a) => !isMine(a) && isRelated(a));
   /* The finished work, from the completion receipts. A tick REMOVES the
      action from the board (the receipt is the fact that survives), so
      until this read the done list was always empty — a thread with a week

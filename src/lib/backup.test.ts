@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BACKUP_APP,
   buildBackup,
+  parseBackupV3,
   restoreBackup,
 } from "@/lib/backup";
 import type { Board } from "@/lib/model";
@@ -52,6 +53,9 @@ describe("restoreBackup", () => {
       "isn't a capture backup"
     );
     expect(() => restoreBackup(null, board({}))).toThrow("isn't a capture backup");
+    expect(() => restoreBackup({ ...backup({}), version: 4 }, board({}))).toThrow(
+      "version is not supported"
+    );
   });
 
   it("adds new actions, threads, intentions, and principles", () => {
@@ -181,10 +185,41 @@ describe("restoreBackup", () => {
     expect(r.images).toBeUndefined();
   });
 
-  it("buildBackup embeds the image map", () => {
-    const b = buildBackup(board({}), { "img-9": "data:image/jpeg;base64,BBBB" });
-    expect(b.version).toBe(2);
-    expect(b.images).toEqual({ "img-9": "data:image/jpeg;base64,BBBB" });
+  it("buildBackup emits v3 with complete media and tombstone metadata", () => {
+    const image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=";
+    const deleted = [{ kind: "action" as const, id: "gone", deletedAt: 10 }];
+    const b = buildBackup(
+      board({ actions: [{ id: "a", imgs: ["img-9"] } as never] }),
+      { "img-9": image },
+      deleted,
+      { kind: "cloud", ownerId: "owner" }
+    );
+    expect(b.version).toBe(3);
+    expect(b.complete).toBe(true);
+    expect(b.scope).toEqual({ kind: "cloud", ownerId: "owner" });
+    expect(b.tombstones).toEqual(deleted);
+    expect(b.images).toEqual({ "img-9": image });
+  });
+
+  it.each([
+    ["action", { actions: [{ id: "a", imgs: ["../bad"] } as never] }],
+    ["intention", { intentions: [{ id: "i", imgs: ["bad.id"] } as never] }],
+    ["pending ledger", { ledger: [{ id: "l", kind: "pending", imgs: ["bad id"] } as never] }],
+    ["fragment", { threads: [{ id: "t", frags: [{ id: "f", imgs: ["a/b"] }] } as never] }],
+    ["cover", { threads: [{ id: "t", frags: [], cover: "img:.." } as never] }],
+    ["profile", { profile: { name: "Owner", imageId: "x".repeat(65) } }],
+  ])("strict v3 rejects a noncanonical %s image reference", (_kind, partial) => {
+    const payload = {
+      app: BACKUP_APP,
+      version: 3,
+      exportedAt: "2026-01-01T00:00:00.000Z",
+      board: board(partial as Partial<Board>),
+      images: {},
+      scope: { kind: "local" as const },
+      tombstones: [],
+      complete: true as const,
+    };
+    expect(() => parseBackupV3(payload)).toThrow(/noncanonical|image id/i);
   });
 });
 

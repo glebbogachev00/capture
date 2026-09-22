@@ -385,7 +385,7 @@ describe("POST /api/recall", () => {
       ...body(),
       question: "When is launch?",
       authoritativeAnswer: answer,
-    });
+    }, { authorization: { mode: "non-cloud" } });
   });
 
   it("does not schedule the shadow when authoritative Recall fails", async () => {

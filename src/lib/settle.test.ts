@@ -31,9 +31,9 @@ describe("settling a capture the sorter could not sort", () => {
     expect(out.target.kind).toBe("action");
     expect(out.board.actions[0].unsorted).toBe(true);
     expect(out.board.threads).toHaveLength(0);
-    /* The history entry describes the same event. */
+    /* The history entry remains private and unclassified until Sort now succeeds. */
     const entry = out.board.ledger!.find((e) => e.id === "led1")!;
-    expect(entry.kind).toBe("action");
+    expect(entry.kind).toBe("pending");
     expect(entry.targetId).toBe(out.target.id);
     /* The banner frames this as "Landed in <receipt>." — the receipt must
        complete that sentence, not start its own ("Landed in Kept in
@@ -44,22 +44,21 @@ describe("settling a capture the sorter could not sort", () => {
     );
   });
 
-  it("an open thread is a chosen destination: fragment there, record says thread", () => {
+  it("an open thread is retained on the retryable envelope without creating a fragment", () => {
     const b = board({
       threads: [
         { id: "t1", name: "Reality Creation Game", at: 1, frags: [] } as never,
       ],
     });
     const out = settleUnsortedCapture(b, input({ openThreadId: "t1" }), ids);
-    expect(out.target).toEqual({ kind: "thread", id: "t1", fragId: "item1" });
-    const t = out.board.threads[0];
-    expect(t.frags).toHaveLength(1);
-    expect(t.frags[0].unsorted).toBe(true);
+    expect(out.target).toEqual({ kind: "action", id: "item1" });
+    expect(out.board.actions[0]).toMatchObject({ unsorted: true, threadId: "t1" });
+    expect(out.board.threads[0].frags).toHaveLength(0);
     const entry = out.board.ledger!.find((e) => e.id === "led1")!;
-    expect(entry.kind).toBe("thread");
-    expect(entry.targetId).toBe("t1");
-    expect(entry.targetFragId).toBe("item1");
-    expect(out.receipt).toBe("Reality Creation Game — saved unsorted");
+    expect(entry.kind).toBe("pending");
+    expect(entry.targetId).toBe("item1");
+    expect(entry.targetFragId).toBeUndefined();
+    expect(out.receipt).toMatch(/^Actions, unsorted/);
   });
 
   it("never invents a thread, whatever the failure", () => {
@@ -72,7 +71,7 @@ describe("settling a capture the sorter could not sort", () => {
        capture starting and failing. A stale choice is no choice. */
     const out = settleUnsortedCapture(board(), input({ openThreadId: "gone" }), ids);
     expect(out.target.kind).toBe("action");
-    expect(out.board.ledger![0].kind).toBe("action");
+    expect(out.board.ledger![0].kind).toBe("pending");
   });
 
   it("the words survive exactly, photos and all", () => {
@@ -97,8 +96,8 @@ describe("settling a capture the sorter could not sort", () => {
     expect(entry.raw).toBe("Call Sarah about the draft.");
     expect(entry.clean).toBe("Call Sarah about the draft.");
     expect(entry.source).toBe("dictated");
-    const text = openThreadId ? out.board.threads[0].frags[0].text : out.board.actions[0].text;
-    expect(text).toBe("Call Sarah about the draft.");
+    expect(out.board.actions[0].text).toBe("Call Sarah about the draft.");
+    expect(out.board.actions[0].threadId).toBe(openThreadId);
   });
 
   it("keeps the original capture identity when a correction is saved unsorted", () => {
@@ -172,6 +171,35 @@ describe("recording a successful capture", () => {
       mkId
     );
     expect(dup.summaryTargets).toEqual(["t-retake"]);
+  });
+
+  it("never mistakes an action ledger target for a thread summary target", () => {
+    n = 0;
+    const actionOnly = recordSortedCapture(
+      { ...EMPTY },
+      facts({
+        kind: "action",
+        primary: { targetId: "action-id" },
+        primaryText: null,
+        also: [],
+      }),
+      mkId,
+    );
+    expect(actionOnly.summaryTargets).toEqual([]);
+
+    const withPhotoThreadAndSplit = recordSortedCapture(
+      { ...EMPTY },
+      facts({
+        kind: "action",
+        primary: { targetId: "action-id" },
+        primaryText: "Primary action share",
+        summaryThreadIds: ["photo-thread"],
+        also: [{ text: "Secondary share", threadId: "split-thread", fragId: "split-frag" }],
+      }),
+      mkId,
+    );
+    expect(withPhotoThreadAndSplit.summaryTargets).toEqual(["photo-thread", "split-thread"]);
+    expect(withPhotoThreadAndSplit.summaryTargets).not.toContain("action-id");
   });
 
   it("entries and targets describe the same landing", () => {

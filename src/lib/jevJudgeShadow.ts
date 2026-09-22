@@ -1,10 +1,10 @@
 import { after } from "next/server";
 import { z } from "zod";
 
-import {
-  safeOpenRouterDecisionsFailure,
-  submitOpenRouterDecisions,
-} from "./openRouterDecisions.server";
+import type { CloudAuthorization } from "./cloudRequestGuard";
+import { scheduleManagedAiDeferredWork } from "./cloudRequestGuard.server";
+import { submitOpenRouterDecisions } from "./openRouterDecisions.server";
+import { countBucket, opsEvent } from "./opsEvent.server";
 
 export const JEV_JUDGE_MODEL = "typesafe/jev-1.13";
 
@@ -13,7 +13,6 @@ const MAX_KIND_CHARS = 80;
 const MAX_SOURCE_CHARS = 400;
 const MAX_TARGET_CHARS = 400;
 const MAX_CONTEXT_CHARS = 700;
-const HISTOGRAM_BUCKETS = 10;
 
 type Env = Record<string, string | undefined>;
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -141,73 +140,44 @@ export function isJevJudgeShadowEnabled(env: Env = process.env): boolean {
   return env.CAPTURE_JEV_JUDGE_SHADOW === "1" && Boolean(env.OPENROUTER_API_KEY);
 }
 
-function histogram(values: number[]): number[] {
-  const buckets = Array.from({ length: HISTOGRAM_BUCKETS }, () => 0);
-  values.forEach((value) => {
-    buckets[Math.min(HISTOGRAM_BUCKETS - 1, Math.floor(value * HISTOGRAM_BUCKETS))] += 1;
-  });
-  return buckets;
-}
-
 /**
  * Observe Jev only after the generative judge has already answered. There is
  * deliberately no prefilter function: missing/malformed/timeout/privacy errors
  * and every confidence level leave the full original candidate batch intact.
  */
-export function scheduleJevJudgeShadow(
+export async function scheduleJevJudgeShadow(
   input: JevJudgeShadowInput,
   options: {
+    authorization?: CloudAuthorization;
     env?: Env;
     fetcher?: Fetcher;
     schedule?: Scheduler;
   } = {}
-): boolean {
+): Promise<boolean> {
   const env = options.env ?? process.env;
-  if (
-    !isJevJudgeShadowEnabled(env) ||
-    !input.candidates.length ||
-    input.candidates.length > MAX_CANDIDATES
-  ) {
-    return false;
-  }
-
+  const enabled =
+    isJevJudgeShadowEnabled(env) &&
+    input.candidates.length > 0 &&
+    input.candidates.length <= MAX_CANDIDATES;
   const apiKey = env.OPENROUTER_API_KEY!;
-  const schedule = options.schedule ?? after;
-  const task = async () => {
-    try {
-      const result = await runJevJudgeShadow(input, {
+  return scheduleManagedAiDeferredWork({
+    authorization: options.authorization ?? { mode: "non-cloud" },
+    enabled,
+    schedule: options.schedule ?? after,
+    work: async () => {
+      await runJevJudgeShadow(input, {
         apiKey,
         fetcher: options.fetcher,
       });
-      const keptIds = new Set(
-        input.generativeVerdicts.filter((verdict) => verdict.keep).map((verdict) => verdict.id)
-      );
-      const keptScores = result.scores
-        .filter(({ candidateIndex }) => keptIds.has(input.candidates[candidateIndex].id))
-        .map(({ noul }) => noul);
-      console.info("[capture] jev judge shadow", {
-        candidateCount: input.candidates.length,
-        generativeKeepCount: keptIds.size,
-        generativeKeepScoreHistogram: histogram(keptScores),
-        inputTokens: result.usage.inputTokens,
-        scoreHistogram: histogram(result.scores.map(({ noul }) => noul)),
+      opsEvent({
+        event: "managed_ai_provider_attempt",
+        outcome: "success",
+        reason: "none",
+        count: countBucket(input.candidates.length),
       });
-    } catch (error) {
-      console.warn(
-        "[capture] jev judge shadow failed",
-        safeOpenRouterDecisionsFailure(error)
-      );
-    }
-  };
-
-  try {
-    schedule(task);
-    return true;
-  } catch (error) {
-    console.warn(
-      "[capture] jev judge shadow failed",
-      safeOpenRouterDecisionsFailure(error)
-    );
-    return false;
-  }
+    },
+    onError: () => {
+      opsEvent({ event: "managed_ai_provider_attempt", outcome: "failure", reason: "provider_unavailable", count: "one" });
+    },
+  });
 }

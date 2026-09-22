@@ -57,7 +57,6 @@ function OfflineDetails() {
 export function OfflineInvitation({ boardReady }: { boardReady: boolean }) {
   const choice = useOfflineChoice();
   const dialog = useRef<HTMLDialogElement>(null);
-  const [selected, setSelected] = useState(false);
   const visible = boardReady && choice.lifetime.cloud && !!choice.lifetime.owner && choice.canEnable && !choice.enabled && !choice.answered;
   useEffect(() => {
     const node = dialog.current;
@@ -68,20 +67,13 @@ export function OfflineInvitation({ boardReady }: { boardReady: boolean }) {
   if (!visible) return null;
   return <dialog ref={dialog} className={styles.card} aria-labelledby="offline-invitation-title"
     aria-describedby="offline-invitation-benefit offline-invitation-privacy" onCancel={event => { event.preventDefault(); choice.dismiss(); }}>
-    <p className={styles.brand}>Capture</p>
     <h2 id="offline-invitation-title">Enable offline on this device?</h2>
     <p id="offline-invitation-benefit" className={styles.copy}>Open and edit saved notes without a connection.</p>
-    <label className={styles.toggle}>
-      <input type="checkbox" checked={selected} onChange={event => setSelected(event.target.checked)} />
-      <span>Offline on this device</span>
-      <span className={styles.state} aria-hidden="true">{selected ? "On" : "Off"}</span>
-    </label>
     <p id="offline-invitation-privacy" className={styles.warning}>Shared device? Anyone using this browser could open your saved notes and downloaded photos.</p>
     <div className={styles.actions}>
-      <button className="capture-btn" type="button" disabled={!selected} onClick={() => { if (selected) choice.change(true); }}>Enable offline</button>
+      <button className="capture-btn" type="button" onClick={() => choice.change(true)}>Enable offline</button>
       <button className="ghost" type="button" onClick={choice.dismiss}>Not now</button>
     </div>
-    <p className={styles.hint}>You can always disable this in Settings.</p>
     {choice.error && <p role="alert">{choice.error}</p>}
   </dialog>;
 }

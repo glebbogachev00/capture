@@ -70,12 +70,16 @@ describe("saving a reviewed intention draft", () => {
           raw: draft.rawInput,
           source: "typed",
           captureId: "original-capture",
+          at: 42,
+          imgs: ["photo"],
         },
       },
       ids,
       100
     );
     expect(out.board.ledger![0].captureId).toBe("original-capture");
+    expect(out.board.ledger![0]).toMatchObject({ at: 42, imgs: ["photo"] });
+    expect(out.intention.imgs).toEqual(["photo"]);
   });
 
   it("carries every field the Board declares", () => {

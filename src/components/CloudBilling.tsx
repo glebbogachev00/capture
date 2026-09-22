@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PolarPlan } from "@/lib/polar";
 import type { PublicCloudSubscription } from "@/lib/cloudSubscription";
 import { safePolarDestination } from "@/lib/cloudCheckoutClient";
+import { hasCheckoutReturnState } from "@/lib/urlPrivacy";
 
 export { safePolarDestination } from "@/lib/cloudCheckoutClient";
 
@@ -209,11 +210,14 @@ export function CloudAccountPanel() {
 
 export function CheckoutReturnNotice() {
   const searchParams = useSearchParams();
-  const checkoutId = searchParams.get("checkout_id");
+  // Snapshot during render. If Analytics hydrated first, its history-state
+  // handoff contains only a boolean marker, never the checkout identifier.
+  const [checkoutReturn] = useState(() => searchParams.has("checkout_id")
+    || (typeof window !== "undefined" && hasCheckoutReturnState(window.history.state)));
   const [state, setState] = useState<"confirming" | "active" | "delayed">("confirming");
 
   useEffect(() => {
-    if (!checkoutId) return;
+    if (!checkoutReturn) return;
     let stopped = false;
     let attempts = 0;
     const check = async () => {
@@ -233,9 +237,9 @@ export function CheckoutReturnNotice() {
     };
     void check();
     return () => { stopped = true; };
-  }, [checkoutId]);
+  }, [checkoutReturn]);
 
-  if (!checkoutId) return null;
+  if (!checkoutReturn) return null;
   return (
     <div className={`cloud-return ${state}`} role="status">
       <strong>{state === "active" ? "Capture Cloud is active." : state === "delayed" ? "Cloud access is not confirmed." : "Checking checkout status…"}</strong>

@@ -32,7 +32,10 @@ function fixture(scheme: "standard" | "legacy") {
   const deps: PolarDependencies = {
     config: { environment: "sandbox", accessToken: "synthetic-unused", webhookSecret: secret,
       monthlyProductId: product, yearlyProductId: "22222222-2222-4222-8222-222222222222", siteUrl: "https://capture.test" },
-    isCloudEnabled: () => true, identity: async () => null, hasBlockingSubscription: async () => false,
+    isCloudEnabled: () => true, identity: async () => null, isAccountErasing: async () => false,
+    hasBlockingSubscription: async () => false,
+    acquireExternalWork: async () => { throw new Error("No network allowed"); },
+    releaseExternalWork: async () => { throw new Error("No network allowed"); },
     createCheckout: async () => { throw new Error("No network allowed"); },
     createCustomerSession: async () => { throw new Error("No network allowed"); },
     validateWebhook: webhooks.validateEvent,

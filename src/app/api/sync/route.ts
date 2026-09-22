@@ -6,6 +6,7 @@ import { getSync, pushSync } from "@/lib/syncStore";
 import { usingBlob } from "@/lib/hubStore";
 import { type SyncState, type Tombstone } from "@/lib/sync";
 import { isCloudEnabled } from "@/lib/cloudBoard";
+import { opsEvent } from "@/lib/opsEvent.server";
 import {
   GET as getCloudBoard,
   PUT as putCloudBoard,
@@ -63,15 +64,15 @@ export async function GET(request: Request) {
   let stored;
   try {
     stored = await getSync();
-  } catch (error) {
-    /* The store could not be read. Say it in the log in words — the stack
-       Next prints for an unhandled throw is how a suspended blob store went
-       unnamed for an evening — and give the device the same honest answer a
-       failed push gets. */
-    console.error(
-      "sync read failed:",
-      error instanceof Error ? error.message : error
-    );
+  } catch {
+    /* Keep provider details out of logs while preserving an actionable,
+       fixed operational signal and the existing client response. */
+    opsEvent({
+      event: "self_hosted_sync_read",
+      outcome: "failure",
+      reason: "dependency_unavailable",
+      count: "one",
+    });
     return NextResponse.json({ error: hubUnavailable() }, { status: 503 });
   }
   /* A poll that already knows this revision gets a two-field answer instead
@@ -140,15 +141,15 @@ export async function POST(request: Request) {
       tombstones,
     });
     return NextResponse.json(stored);
-  } catch (error) {
-    /* Say it out loud. This catch was silent, and a push that failed every
-       single time for a day left no trace in the logs — the board looked
-       reachable, the blob simply stopped changing. A hub that cannot store
-       is the most important thing this route can report. */
-    console.error(
-      "sync push failed:",
-      error instanceof Error ? error.message : error
-    );
+  } catch {
+    /* Keep provider details out of logs while preserving an actionable,
+       fixed operational signal and the existing client response. */
+    opsEvent({
+      event: "self_hosted_sync_write",
+      outcome: "failure",
+      reason: "dependency_unavailable",
+      count: "one",
+    });
     /* A hub that cannot store must say so in words the person can act on.
        The old code let the write fail and kept a copy in memory, so a
        deployment with nowhere to write still looked healthy right up until

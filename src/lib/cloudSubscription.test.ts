@@ -25,6 +25,7 @@ function deps(overrides: Partial<CloudSubscriptionDependencies> = {}): CloudSubs
     isConfigured: () => true,
     requiresSubscription: () => true,
     verifyIdentity: vi.fn().mockResolvedValue({ userId: "user-1" }),
+    isAccountErasing: vi.fn().mockResolvedValue(false),
     getSubscriptions: vi.fn().mockResolvedValue([active]),
     now: () => new Date("2026-09-11T10:00:00.000Z"),
     ...overrides,
@@ -60,6 +61,17 @@ describe("Capture Cloud subscription status", () => {
       accessExpiresAt: "2027-09-11T10:00:00.000Z",
       captureLimit: null,
     });
+  });
+
+  it("fences billing reads for a stale authenticated session immediately after confirmation", async () => {
+    const d = deps({ isAccountErasing: vi.fn().mockResolvedValue(true) });
+    const response = await handleCloudSubscriptionStatus(
+      new Request("https://capture.test/api/cloud/subscription"),
+      d,
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "account unavailable" });
+    expect(d.getSubscriptions).not.toHaveBeenCalled();
   });
 
   it("gives a signed-in free account the same fifteen local captures", async () => {

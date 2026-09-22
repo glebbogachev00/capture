@@ -152,12 +152,14 @@ export function recallSources(board: Board, question: string): RecallSource[] {
   };
   for (const thread of board.threads) {
     for (const frag of thread.frags) {
+      if (frag.unsorted) continue;
       add({ kind: "thread", title: thread.name, text: frag.text, at: frag.at,
         targetId: thread.id, fragId: frag.id,
         state: typeof frag.resolvedAt === "number" && Number.isFinite(frag.resolvedAt) ? "resolved" : "active" });
     }
   }
   for (const action of board.actions) {
+    if (action.unsorted) continue;
     add({ kind: "action", title: action.text, text: action.text, at: action.at, targetId: action.id,
       state: action.done ? "done" : action.faded ? "faded" : "active" });
   }

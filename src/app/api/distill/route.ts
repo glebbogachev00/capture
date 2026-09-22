@@ -3,7 +3,9 @@ import { z } from "zod";
 import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
-import { NoProvidersError, chain, withFallback } from "@/lib/providers";
+import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
+import { NoProvidersError, chain, sanitizeProviderError, withFallback } from "@/lib/providers";
+import { opsEvent } from "@/lib/opsEvent.server";
 import { countAssistantQuestions, resolveSettled } from "@/lib/distill";
 import { DUE_RULE, ROUTING_RULE, todayLine } from "@/lib/engineRules";
 
@@ -29,6 +31,15 @@ import { DUE_RULE, ROUTING_RULE, todayLine } from "@/lib/engineRules";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+function recordProviderFailure(error: unknown): void {
+  opsEvent({
+    event: "managed_ai_route",
+    outcome: "failure",
+    reason: sanitizeProviderError(error),
+    count: "one",
+  });
+}
 
 const Turn = z.object({
   role: z.enum(["user", "assistant"]),
@@ -186,6 +197,9 @@ function transcript(turns: { role: string; text: string }[]) {
 }
 
 export async function POST(request: Request) {
+  const authorization = await authorizeManagedAiRequest(request);
+  if (authorization instanceof Response) return authorization;
+  return withManagedAiAdmission(authorization, async () => {
   // Distill spends real model quota; a single client can't run it in a loop.
   const gate = modelRateLimit(clientIp(request));
   if (!gate.allowed) {
@@ -280,14 +294,14 @@ export async function POST(request: Request) {
             lastError = new Error(
               `${tier.name} returned an empty stream`
             );
-            console.warn(`[capture] distill ${tier.name} empty, trying next`);
+            opsEvent({ event: "managed_ai_route", outcome: "degraded", reason: "provider_unavailable", count: "one" });
             continue;
           }
           return;
         } catch (error) {
           if (emitted) throw error;
           lastError = error;
-          console.warn(`[capture] distill ${tier.name} failed, trying next`, error);
+          recordProviderFailure(error);
         }
       }
       throw lastError;
@@ -303,7 +317,7 @@ export async function POST(request: Request) {
     try {
       first = await gen.next();
     } catch (error) {
-      console.error("distill chat failed", error);
+      recordProviderFailure(error);
       const { message } = explain(error);
       return Response.json({ error: message }, { status: 502 });
     }
@@ -336,8 +350,8 @@ export async function POST(request: Request) {
             controller.enqueue(encoder.encode("\n\n[ready]"));
           }
         } catch (error) {
-          console.error("distill chat failed mid-stream", error);
-          controller.error(error);
+          recordProviderFailure(error);
+          controller.error(new Error("distill stream unavailable"));
         } finally {
           controller.close();
         }
@@ -373,7 +387,7 @@ export async function POST(request: Request) {
       });
       return Response.json({ ...value, via });
     } catch (error) {
-      console.error("polish failed", error);
+      recordProviderFailure(error);
       const { message, status } = explain(error);
       return Response.json({ error: message }, { status });
     }
@@ -396,7 +410,7 @@ export async function POST(request: Request) {
       });
       return Response.json({ ...value, via });
     } catch (error) {
-      console.error("proofread failed", error);
+      recordProviderFailure(error);
       const { message, status } = explain(error);
       return Response.json({ error: message }, { status });
     }
@@ -426,8 +440,9 @@ export async function POST(request: Request) {
     // the review screen shows the corrected kind, not just the save path.
     return Response.json({ ...resolveSettled(value), via });
   } catch (error) {
-    console.error("settle failed", error);
+    recordProviderFailure(error);
     const { message, status } = explain(error);
     return Response.json({ error: message }, { status });
   }
+  });
 }

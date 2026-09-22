@@ -197,22 +197,25 @@ describe("Jev shadow gate", () => {
     ).toBe(true);
   });
 
-  it("does not schedule or call the network while disabled", () => {
+  it("does not schedule or call the network while disabled", async () => {
     const schedule = vi.fn();
     const fetcher = vi.fn();
+    const acquire = vi.fn();
 
     expect(
-      scheduleJevThreadRerankShadow(input, {
+      await scheduleJevThreadRerankShadow(input, {
+        authorization: { mode: "cloud", ownerId: "owner-a", acquireDeferredManagedAiAdmission: acquire },
         env: {},
         schedule,
         fetcher,
       })
     ).toBe(false);
+    expect(acquire).not.toHaveBeenCalled();
     expect(schedule).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("skips an unbounded candidate set rather than logging a partial comparison", () => {
+  it("skips an unbounded candidate set rather than logging a partial comparison", async () => {
     const schedule = vi.fn();
     const many = Array.from({ length: 41 }, (_, index) => ({
       id: `thread-${index}`,
@@ -221,7 +224,7 @@ describe("Jev shadow gate", () => {
     }));
 
     expect(
-      scheduleJevThreadRerankShadow({ ...input, candidates: many }, {
+      await scheduleJevThreadRerankShadow({ ...input, candidates: many }, {
         env: {
           OPENROUTER_API_KEY: "synthetic-key",
           CAPTURE_JEV_THREAD_RERANK_SHADOW: "1",
@@ -232,11 +235,17 @@ describe("Jev shadow gate", () => {
     expect(schedule).not.toHaveBeenCalled();
   });
 
-  it("fails closed when the platform cannot schedule after-response work", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("fails closed when the platform cannot schedule after-response work", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const release = vi.fn().mockResolvedValue(undefined);
 
     expect(
-      scheduleJevThreadRerankShadow(input, {
+      await scheduleJevThreadRerankShadow(input, {
+        authorization: {
+          mode: "cloud",
+          ownerId: "owner-a",
+          acquireDeferredManagedAiAdmission: vi.fn().mockResolvedValue({ release }),
+        },
         env: {
           OPENROUTER_API_KEY: "synthetic-key",
           CAPTURE_JEV_THREAD_RERANK_SHADOW: "1",
@@ -246,10 +255,16 @@ describe("Jev shadow gate", () => {
         },
       })
     ).toBe(false);
-    expect(warn).toHaveBeenCalledWith("[capture] jev thread shadow failed", {
-      name: "Error",
+    expect(release).toHaveBeenCalledOnce();
+    expect(info).toHaveBeenCalledWith("[capture-ops]", {
+      version: 1,
+      event: "managed_ai_provider_attempt",
+      outcome: "failure",
+      reason: "provider_unavailable",
+      latency: "not_measured",
+      count: "one",
     });
-    expect(JSON.stringify(warn.mock.calls)).not.toContain(input.capture);
+    expect(JSON.stringify(info.mock.calls)).not.toContain(input.capture);
   });
 
   it("runs after the response and logs only aggregate comparison fields", async () => {
@@ -258,6 +273,8 @@ describe("Jev shadow gate", () => {
       task = callback;
     });
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const release = vi.fn().mockResolvedValue(undefined);
+    const acquire = vi.fn().mockResolvedValue({ release });
     const fetcher = vi.fn(async () =>
       Response.json({
         answers: {
@@ -275,7 +292,12 @@ describe("Jev shadow gate", () => {
     );
 
     expect(
-      scheduleJevThreadRerankShadow(input, {
+      await scheduleJevThreadRerankShadow(input, {
+        authorization: {
+          mode: "cloud",
+          ownerId: "owner-a",
+          acquireDeferredManagedAiAdmission: acquire,
+        },
         env: {
           OPENROUTER_API_KEY: "synthetic-key",
           CAPTURE_JEV_THREAD_RERANK_SHADOW: "1",
@@ -284,16 +306,19 @@ describe("Jev shadow gate", () => {
         fetcher,
       })
     ).toBe(true);
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
     await Promise.resolve(task?.());
+    expect(release).toHaveBeenCalledOnce();
 
-    expect(info).toHaveBeenCalledWith("[capture] jev thread shadow", {
-      agreesWithSorter: true,
-      candidateCount: 2,
-      confidence: 0.8,
-      inputTokens: 250,
-      selected: "existing",
-      selectedIndex: 0,
+    expect(info).toHaveBeenCalledWith("[capture-ops]", {
+      version: 1,
+      event: "managed_ai_provider_attempt",
+      outcome: "success",
+      reason: "none",
+      latency: "not_measured",
+      count: "2_9",
     });
     const logged = JSON.stringify(info.mock.calls);
     expect(logged).not.toContain(input.capture);
@@ -307,11 +332,11 @@ describe("Jev shadow gate", () => {
     const schedule = (callback: () => void | Promise<void>) => {
       task = callback;
     };
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const fetcher = vi.fn(async () => new Response(input.capture, { status: 503 }));
 
     expect(
-      scheduleJevThreadRerankShadow(input, {
+      await scheduleJevThreadRerankShadow(input, {
         env: {
           OPENROUTER_API_KEY: "synthetic-key",
           CAPTURE_JEV_THREAD_RERANK_SHADOW: "1",
@@ -321,11 +346,14 @@ describe("Jev shadow gate", () => {
       })
     ).toBe(true);
     await expect(Promise.resolve(task?.())).resolves.toBeUndefined();
-    expect(warn).toHaveBeenCalledWith("[capture] jev thread shadow failed", {
-      name: "OpenRouterDecisionsError",
-      code: "http_error",
-      status: 503,
+    expect(info).toHaveBeenCalledWith("[capture-ops]", {
+      version: 1,
+      event: "managed_ai_provider_attempt",
+      outcome: "failure",
+      reason: "provider_unavailable",
+      latency: "not_measured",
+      count: "one",
     });
-    expect(JSON.stringify(warn.mock.calls)).not.toContain(input.capture);
+    expect(JSON.stringify(info.mock.calls)).not.toContain(input.capture);
   });
 });

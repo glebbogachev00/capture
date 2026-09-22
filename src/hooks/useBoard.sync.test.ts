@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { set } from "@/lib/storage";
-import { KEY, type Board } from "@/lib/model";
+import { EMPTY, KEY, type Board } from "@/lib/model";
 import { useBoard } from "./useBoard";
 import { imgLoad } from "@/lib/imgCache";
 
@@ -278,6 +278,32 @@ describe("the real hook, pushing to the real seam", () => {
 
     expect(result.current.data.profile?.imageId).toBe("backup-profile-photo");
     expect(await imgLoad("backup-profile-photo")).toBe(src);
+    unmount();
+  });
+
+  it("schedules one hub push after a successful local v3 restore", async () => {
+    const { result, unmount } = renderHook(() => useBoard(T0 + 60_000));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    const { buildBackup } = await import("@/lib/backup");
+    const restored = {
+      ...EMPTY,
+      ...seedBoard(),
+      threads: [{
+        id: "restored-thread", name: "Restored for hub", summary: "",
+        frags: [{ id: "restored-frag", text: "Push this restored fragment", at: T0 + 2 }],
+      }],
+    };
+    const file = {
+      name: "local-v3.json",
+      text: async () => JSON.stringify(buildBackup(restored, {}, [], { kind: "local" })),
+    } as File;
+
+    await act(async () => { await result.current.restoreFromFile(file); });
+    await waitFor(() => expect(sync.posts).toHaveLength(1), { timeout: 4000 });
+    expect(JSON.stringify(sync.posts[0].body.board)).toContain("Push this restored fragment");
+    await act(async () => { sync.release(); });
+    await new Promise((resolve) => setTimeout(resolve, 1700));
+    expect(sync.posts).toHaveLength(1);
     unmount();
   });
 });

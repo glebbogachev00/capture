@@ -3,8 +3,8 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { del, get, keys, set } from "@/lib/storage";
-import { EMPTY, KEY, type Board } from "@/lib/model";
-import { _clearImgCache, imgSave } from "@/lib/imgCache";
+import { EMPTY, IMG, KEY, type Board } from "@/lib/model";
+import { imgSave } from "@/lib/imgCache";
 import * as React from "react";
 import { createStorage } from "@/lib/storage";
 import { OwnershipLifetime } from "@/lib/ownership";
@@ -18,7 +18,7 @@ vi.doMock("react", () => React);
  */
 const NOW = 1_789_286_400_000;
 const secret = "Account A private capture";
-const photo = "data:image/png;base64,QUFDQ09VTlRfQV9QUklWQVRF";
+const photo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=";
 const aBoard: Board = {
   ...EMPTY,
   threads: [{ id: "a-thread", name: secret, summary: "",
@@ -33,7 +33,7 @@ let holdNextPull: boolean;
 beforeEach(async () => {
   localStorage.clear();
   for (const key of await keys()) await del(key);
-  _clearImgCache();
+  (await import("@/lib/imgCache"))._clearImgCache();
   for (const owner of ["A", "B", null]) {
     const store = createStorage(new OwnershipLifetime({ owner, expiresAt: Date.now() + 60000 }));
     for (const key of await store.keys()) await store.del(key);
@@ -52,6 +52,11 @@ beforeEach(async () => {
     if (url === "/api/cloud/subscription") {
       return account ? Response.json({ tier: "cloud", captureLimit: null })
         : Response.json({ error: "unauthorized", captureLimit: 15 }, { status: 401 });
+    }
+    if (url.startsWith("/api/cloud/board")) {
+      if (!account) return Response.json({ error: "unauthorized" }, { status: 401 });
+      if (init?.method === "PUT") return Response.json({ ...JSON.parse(String(init.body)), rev: 2 });
+      return Response.json({ board: account === "A" ? aBoard : EMPTY, tombstones: [], rev: 1 });
     }
     if (url.startsWith("/api/sync")) {
       if (!account) return Response.json({ error: "unauthorized" }, { status: 401 });
@@ -144,15 +149,16 @@ it.each(["checking", "revoked", "focus", "online", "pageshow"])("%s blocks share
   const download = vi.spyOn(backup, "downloadJSON").mockImplementation(() => {});
   const share = vi.fn(async () => {});
   const writeText = vi.fn(async () => {});
-  vi.stubGlobal("navigator", { share, clipboard: { writeText } });
-  let finish!: (value: string | null) => void;
-  const originalGet = a.storage.get;
-  const read = vi.spyOn(a.storage, "get").mockImplementation(key => key === "capture:img:a-photo"
-    ? new Promise(resolve => { finish = resolve; }) : originalGet(key));
+  vi.stubGlobal("navigator", { onLine: true, share, clipboard: { writeText } });
+  await a.storage.del(IMG("a-photo"));
+  (await import("@/lib/imgCache"))._clearImgCache();
+  let finish!: (response: Response) => void;
+  const network = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn((url, init) => String(url).startsWith("/api/img/a-photo") && !init?.method
+    ? new Promise<Response>(resolve => { finish = resolve; }) : network(url, init)));
   let exporting!: Promise<void>;
   await act(async () => { exporting = a.result.current.exportBoard(); });
   await waitFor(() => expect(finish).toBeDefined());
-  const network = globalThis.fetch;
   vi.stubGlobal("fetch", vi.fn((url, init) => String(url) === "/api/cloud/identity"
     ? new Promise<Response>(() => {}) : network(url, init)));
   const ordinary = ["focus", "online", "pageshow"].includes(state);
@@ -162,8 +168,7 @@ it.each(["checking", "revoked", "focus", "online", "pageshow"])("%s blocks share
   if (state === "revoked") act(() => a.lifetime.revoke());
   let editing: Promise<void> | undefined;
   await act(async () => {
-    finish(photo);
-    await exporting;
+    finish(Response.json({ src: photo }));
     await a.result.current.copyFragment("a-thread", "a-frag");
     await a.result.current.doShare();
     if (state !== "revoked") {
@@ -178,13 +183,16 @@ it.each(["checking", "revoked", "focus", "online", "pageshow"])("%s blocks share
   expect(writeText).not.toHaveBeenCalled();
   if (state !== "revoked") {
     expect(a.result.current.text).toBe("draft typed while pending");
+    expect(JSON.stringify(a.result.current.data)).toContain("checking local write");
     expect(await disk.get(KEY)).toContain("checking local write");
     await waitFor(async () => expect(await disk.get(KEY)).toContain("edited while pending"));
     expect(() => a.lifetime.assertDisclosure()).toThrow("verification pending");
     act(() => a.lifetime.revoke());
-    await act(async () => { await editing; });
+    await act(async () => { await Promise.all([editing, exporting]); });
+  } else {
+    await act(async () => { await exporting; });
   }
-  read.mockRestore(); download.mockRestore();
+  download.mockRestore();
 });
 
 it.each(["pending", "same-owner", "mismatch"])("routine poll %s gates clipboard, export and held-image share without hiding the board", async (resolution) => {
@@ -197,10 +205,15 @@ it.each(["pending", "same-owner", "mismatch"])("routine poll %s gates clipboard,
   const share = vi.fn(async () => {});
   const writeText = vi.fn(async () => {});
   vi.stubGlobal("navigator", { onLine: true, share, clipboard: { writeText } });
+  (await import("@/lib/imgCache"))._clearImgCache();
   const reads: ((value: string | null) => void)[] = [];
   const originalGet = a.storage.get;
   vi.spyOn(a.storage, "get").mockImplementation(key => key === "capture:img:a-photo"
     ? new Promise(resolve => { reads.push(resolve); }) : originalGet(key));
+  let exporting!: Promise<void>;
+  let sharing!: Promise<void>;
+  await act(async () => { exporting = a.result.current.exportBoard(); sharing = a.result.current.doShare(); });
+  expect(reads).toHaveLength(2);
   let finish!: (response: Response) => void;
   const network = globalThis.fetch;
   const imageResponse = new Response(null);
@@ -208,10 +221,6 @@ it.each(["pending", "same-owner", "mismatch"])("routine poll %s gates clipboard,
   vi.stubGlobal("fetch", vi.fn((url, init) => String(url) === "/api/cloud/identity"
     ? new Promise<Response>(resolve => { finish = resolve; })
     : String(url) === photo ? Promise.resolve(imageResponse) : network(url, init)));
-  let exporting!: Promise<void>;
-  let sharing!: Promise<void>;
-  await act(async () => { exporting = a.result.current.exportBoard(); sharing = a.result.current.doShare(); });
-  expect(reads).toHaveLength(2);
   // Replace the real watcher before faking timers, keeping only one watcher.
   a.stopWatching();
   // Fake only intervals: IDB and the existing lease clock remain real.
@@ -258,6 +267,236 @@ it.each(["pending", "same-owner", "mismatch"])("routine poll %s gates clipboard,
       expect(a.lifetime.snapshot()).toBe("revoked");
     }
   } finally { stop(); vi.useRealTimers(); }
+});
+
+it("exports the authoritative Cloud board, tombstones, and remote-only image as v3", async () => {
+  const a = await mount();
+  await a.storage.del(IMG("a-photo"));
+  (await import("@/lib/imgCache"))._clearImgCache();
+  const deletedAt = Date.now();
+  const remote = {
+    ...aBoard,
+    threads: [{ ...aBoard.threads[0], name: "Authoritative Cloud thread" }],
+  };
+  const network = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn((input, init) => {
+    const url = String(input);
+    if (url.startsWith("/api/cloud/board") && !init?.method) {
+      return Promise.resolve(Response.json({ board: remote, tombstones: [
+        { kind: "action", id: "deleted", deletedAt },
+      ], rev: 9 }));
+    }
+    if (url.startsWith("/api/img/a-photo") && !init?.method) return Promise.resolve(Response.json({ src: photo }));
+    return network(input, init);
+  }));
+  const backup = await import("@/lib/backup");
+  const download = vi.spyOn(backup, "downloadJSON").mockImplementation(() => {});
+
+  await act(async () => { await a.result.current.exportBoard(); });
+
+  expect(download).toHaveBeenCalledTimes(1);
+  expect(download.mock.calls[0][0]).toMatchObject({
+    version: 3,
+    complete: true,
+    scope: { kind: "cloud", ownerId: "A" },
+    board: remote,
+    tombstones: [{ kind: "action", id: "deleted", deletedAt }],
+    images: { "a-photo": photo },
+  });
+  download.mockRestore();
+});
+
+it("coalesces same-turn duplicate export calls before React can render busy state", async () => {
+  const a = await mount();
+  const backup = await import("@/lib/backup");
+  const download = vi.spyOn(backup, "downloadJSON").mockImplementation(() => {});
+  const network = globalThis.fetch;
+  let finish!: (response: Response) => void;
+  let reads = 0;
+  vi.stubGlobal("fetch", vi.fn((input, init) => {
+    if (String(input) === "/api/cloud/board?backup=1") {
+      reads++;
+      return new Promise<Response>((resolve) => { finish = resolve; });
+    }
+    return network(input, init);
+  }));
+  let first!: Promise<void>;
+  let duplicate!: Promise<void>;
+  act(() => {
+    first = a.result.current.exportBoard();
+    duplicate = a.result.current.exportBoard();
+  });
+  await waitFor(() => expect(reads).toBe(1));
+  finish(Response.json({ board: EMPTY, tombstones: [], rev: 1 }));
+  await act(async () => { await Promise.all([first, duplicate]); });
+  expect(download).toHaveBeenCalledTimes(1);
+  download.mockRestore();
+});
+
+it("coalesces same-turn duplicate restore calls and releases the mutex after failure", async () => {
+  const disk = createStorage(new OwnershipLifetime({ owner: "A", expiresAt: Date.now() + 60_000 }));
+  await disk.setMany([[KEY, JSON.stringify(aBoard)], [IMG("a-photo"), photo]]);
+  const a = await mount();
+  await waitFor(() => expect(a.result.current.data.threads.some((thread) => thread.id === "a-thread")).toBe(true));
+  await (await import("@/lib/imgCache")).imgSave("a-photo", photo);
+  let finish!: (value: string) => void;
+  let reads = 0;
+  const file = new File([""], "backup.json");
+  Object.defineProperty(file, "text", { value: () => {
+    reads++;
+    return new Promise<string>((resolve) => { finish = resolve; });
+  } });
+  let first!: Promise<void>;
+  let duplicate!: Promise<void>;
+  act(() => {
+    first = a.result.current.restoreFromFile(file);
+    duplicate = a.result.current.restoreFromFile(file);
+  });
+  expect(reads).toBe(1);
+  act(() => a.result.current.setShowSettings(true));
+  expect(a.result.current.showSettings).toBe(true);
+  expect(a.result.current.leaveSettings()).toBe(false);
+  expect(a.result.current.showSettings).toBe(true);
+  act(() => {
+    a.result.current.setText("must remain in the composer");
+    a.result.current.setPics([{ id: "draft-photo", src: photo }]);
+  });
+  const sortCalls = vi.mocked(fetch).mock.calls.filter(([input]) => String(input) === "/api/sort").length;
+  const boardBeforeRefusedMutations = JSON.stringify(a.result.current.data);
+  await act(async () => {
+    expect(await a.result.current.submit()).toBe(false);
+    expect(await a.result.current.deleteFrag("a-thread", "a-frag")).toBe(false);
+  });
+  expect(a.result.current.text).toBe("must remain in the composer");
+  expect(a.result.current.pics).toEqual([{ id: "draft-photo", src: photo }]);
+  expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input) === "/api/sort")).toHaveLength(sortCalls);
+  expect(await a.storage.get(IMG("a-photo"))).toBe(photo);
+  expect(JSON.stringify(a.result.current.data)).toBe(boardBeforeRefusedMutations);
+  const navigation = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(navigation);
+  expect(navigation.defaultPrevented).toBe(true);
+  const pushes = posts.length;
+  await act(async () => {
+    await a.result.current.addPrinciple("blocked during restore", "must not commit");
+    await a.result.current.syncNow();
+  });
+  expect(JSON.stringify(a.result.current.data)).not.toContain("blocked during restore");
+  expect(posts).toHaveLength(pushes);
+  finish("not json");
+  await act(async () => { await Promise.all([first, duplicate]); });
+  const releasedNavigation = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(releasedNavigation);
+  expect(releasedNavigation.defaultPrevented).toBe(false);
+  let leftSettings = false;
+  act(() => { leftSettings = a.result.current.leaveSettings(); });
+  expect(leftSettings).toBe(true);
+  expect(a.result.current.showSettings).toBe(false);
+  await act(async () => { await a.result.current.restoreFromFile({
+    name: "valid.json",
+    text: async () => JSON.stringify({ app: "capture", version: 2, board: EMPTY }),
+  } as File); });
+  expect(a.result.current.ioNote).toMatchObject({ ok: true });
+});
+
+it("reports a legacy restore transaction failure and reloads the unchanged durable state", async () => {
+  const a = await mount();
+  const prior = await a.storage.get(KEY);
+  const restored: Board = {
+    ...EMPTY,
+    actions: [{
+      id: "legacy-restored", text: "Must not survive an aborted transaction", done: false,
+      at: NOW + 1, shelf: "keep", expires: null, imgs: ["legacy-photo"],
+    }],
+  };
+  const file = {
+    name: "legacy-v2.json",
+    text: async () => JSON.stringify({
+      app: "capture", version: 2, exportedAt: new Date(NOW).toISOString(),
+      board: restored, images: { "legacy-photo": photo },
+    }),
+  } as File;
+  const originalPut = IDBObjectStore.prototype.put;
+  const put = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function(
+    this: IDBObjectStore, value, key,
+  ) {
+    if (key === IMG("legacy-photo")) throw new DOMException("Disk full", "QuotaExceededError");
+    return originalPut.call(this, value, key);
+  });
+
+  await act(async () => { await a.result.current.restoreFromFile(file); });
+
+  expect(a.result.current.ioNote).toMatchObject({ ok: false });
+  expect(a.result.current.ioNote?.text).toMatch(/disk full|save|transaction/i);
+  expect(JSON.stringify(a.result.current.data)).not.toContain("legacy-restored");
+  expect(await a.storage.get(KEY)).toBe(prior);
+  expect(await a.storage.get(IMG("legacy-photo"))).toBeNull();
+  put.mockRestore();
+  a.unmount();
+  const reloaded = await mount();
+  expect(JSON.stringify(reloaded.result.current.data)).not.toContain("legacy-restored");
+  expect(await reloaded.storage.get(KEY)).toBe(prior);
+});
+
+it("drops an in-flight same-document sync reply when restore takes exclusivity", async () => {
+  const a = await mount();
+  holdNextPull = true;
+  let syncing!: Promise<void>;
+  act(() => { syncing = a.result.current.syncNow(); });
+  await waitFor(() => expect(holdPull).not.toBeNull());
+
+  let finishRestore!: (value: string) => void;
+  const file = new File([""], "backup.json");
+  Object.defineProperty(file, "text", { value: () => new Promise<string>((resolve) => {
+    finishRestore = resolve;
+  }) });
+  let restoring!: Promise<void>;
+  act(() => { restoring = a.result.current.restoreFromFile(file); });
+  const stale = {
+    ...EMPTY,
+    principles: [{ id: "stale", name: "STALE SYNC", description: "", enabled: true }],
+  };
+  holdPull!(Response.json({ board: stale, tombstones: [], rev: 99 }));
+  await act(async () => { await syncing; });
+  expect(JSON.stringify(a.result.current.data)).not.toContain("STALE SYNC");
+  finishRestore("not json");
+  await act(async () => { await restoring; });
+});
+
+it("restores v3 into a clean Cloud account only after image PUT, board PUT, and readback", async () => {
+  const a = await mount();
+  const { backupImageAttestation, buildBackup } = await import("@/lib/backup");
+  const imageAck = await backupImageAttestation(photo);
+  const { TOMBSTONE_KEY } = await import("@/lib/sync");
+  const source = { ...aBoard, threads: [{ ...aBoard.threads[0], name: "Recovered Cloud thread" }] };
+  const deletedAt = Date.now();
+  const archive = buildBackup(source, { "a-photo": photo }, [
+    { kind: "action", id: "deleted", deletedAt },
+  ], { kind: "cloud", ownerId: "A" });
+  let cloud = { board: EMPTY, tombstones: [] as { kind: "action"; id: string; deletedAt: number }[] };
+  const events: string[] = [];
+  const network = globalThis.fetch;
+  vi.stubGlobal("fetch", vi.fn(async (input, init) => {
+    const url = String(input);
+    if (url.startsWith("/api/img/a-photo") && init?.method === "PUT") {
+      events.push("image-put"); return Response.json({ ok: true, stored: true, ...imageAck });
+    }
+    if (url === "/api/cloud/board" && init?.method === "PUT") {
+      events.push("board-put"); cloud = JSON.parse(String(init.body)); return Response.json({ ...cloud, rev: 2 });
+    }
+    if (url.startsWith("/api/cloud/board")) {
+      events.push("board-get"); return Response.json({ ...cloud, rev: events.length });
+    }
+    return network(input, init);
+  }));
+  const file = { name: "capture-v3.json", text: async () => JSON.stringify(archive) } as File;
+
+  await act(async () => { await a.result.current.restoreFromFile(file); });
+
+  expect(a.result.current.ioNote).toMatchObject({ ok: true });
+  expect(a.result.current.data.threads[0].name).toBe("Recovered Cloud thread");
+  expect(events).toEqual(["board-get", "image-put", "board-put", "board-get"]);
+  expect(JSON.parse((await a.storage.get(TOMBSTONE_KEY))!)).toEqual([]);
+  expect(await a.storage.get(IMG("a-photo"))).toBe(photo);
 });
 
 it("held hook native share cannot copy A after another tab revokes it", async () => {

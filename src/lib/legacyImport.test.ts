@@ -9,6 +9,7 @@ import { hydrate } from "./model";
 import { mergeBoards } from "./sync";
 import { referencedImageIds } from "./imgSync";
 import { appendLedger } from "./ledger";
+const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=";
 const scope = () => new OwnershipLifetime({ owner: "import-test", expiresAt: Date.now() + 60000 });
 const legacy = createStorage(new OwnershipLifetime());
 it("preserves colliding entries, references and different photo bytes without replacing the destination", async () => {
@@ -119,7 +120,15 @@ it("retains an unpaid local import across offline reopen and reconciles after en
     }),
   };
   const request = () => new Request("https://capture.test/api/cloud/board", { method: "PUT", headers: { "X-Capture-Owner": life.owner! }, body: JSON.stringify({ board: local, tombstones: [] }) });
-  const deps = { isEnabled: () => true, verifyIdentity: async () => ({ userId: life.owner! }), requiresEntitlement: () => true, hasEntitlement: async () => paid, repository };
+  const deps = {
+    isEnabled: () => true,
+    verifyIdentity: async () => ({ userId: life.owner! }),
+    requiresEntitlement: () => true,
+    hasEntitlement: async () => paid,
+    isAccountErasing: async () => false,
+    consumeQuota: async () => ({ allowed: true, retryAfterSec: 0 }),
+    repository,
+  };
   expect((await handleCloudBoardPut(request(), deps)).status).toBe(402);
   expect(repository.get).not.toHaveBeenCalled();
   expect(await createStorage(offline).get(KEY)).toBe(raw);
@@ -173,7 +182,7 @@ beforeEach(async () => {
 it("detects without reading contents; consent imports to the verified unpaid account with recoverable snapshot and untouched originals", async () => {
   const source = { ...EMPTY, futureField: { original: true }, profile: { name: "Earlier", imageId: "photo", futureProfile: "preserve" }, threads: [{ id: "thread", name: "PRIVATE", summary: "", at: 10, frags: [{ id: "frag", at: 11, text: "original", imgs: ["photo"] }], cover: "img:photo" }], historyEpoch: 123 };
   const raw = JSON.stringify(source);
-  await legacy.setMany([[KEY, raw], [IMG("photo"), "data:image/png;base64,AAAA"], ["future-device-setting", "opaque original"]]);
+  await legacy.setMany([[KEY, raw], [IMG("photo"), PNG], ["future-device-setting", "opaque original"]]);
   const opened = vi.spyOn(indexedDB, "open");
   expect(await hasLegacyDatabase()).toBe(true);
   expect(opened).not.toHaveBeenCalled();
@@ -187,12 +196,12 @@ it("detects without reading contents; consent imports to the verified unpaid acc
   expect(imported.threads[0].name).toBe("PRIVATE");
   expect(imported.threads[0].frags[0].at).toBe(11);
   expect(imported.historyEpoch).toBe(0); // Source epoch remains only in the archive.
-  expect(await target.get(IMG(imported.profile.imageId))).toBe("data:image/png;base64,AAAA");
+  expect(await target.get(IMG(imported.profile.imageId))).toBe(PNG);
   expect(JSON.parse((await target.get(LEGACY_SNAPSHOT))!).entries).toContainEqual([KEY, raw]);
   expect(result.missingPhotos).toEqual([]);
   expect(await target.get(LEGACY_RECEIPT)).not.toBeNull();
   expect(await legacy.get(KEY)).toBe(raw);
-  expect(await legacy.get(IMG("photo"))).toBe("data:image/png;base64,AAAA");
+  expect(await legacy.get(IMG("photo"))).toBe(PNG);
   const { readLegacyBackup } = await import("./legacyImport");
   const backup = await readLegacyBackup(life);
   expect(backup.board).toEqual(source);
@@ -200,7 +209,7 @@ it("detects without reading contents; consent imports to the verified unpaid acc
   const { restoreBackup } = await import("./backup");
   const recovered = hydrate(restoreBackup(backup, EMPTY).board);
   expect(recovered).toMatchObject({ futureField: source.futureField, profile: source.profile });
-  expect(backup.images?.photo).toBe("data:image/png;base64,AAAA");
+  expect(backup.images?.photo).toBe(PNG);
   const again = await importLegacyBoard(life, true);
   expect(again).toEqual(result);
   expect(await target.get(KEY)).toBe(JSON.stringify(imported));

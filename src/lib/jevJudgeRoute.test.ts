@@ -79,6 +79,6 @@ describe("judge route Jev shadow", () => {
     expect(mocks.scheduleJevJudgeShadow).toHaveBeenCalledWith({
       candidates,
       generativeVerdicts: payload.verdicts,
-    });
+    }, { authorization: { mode: "non-cloud" } });
   });
 });

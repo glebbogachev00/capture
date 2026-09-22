@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Analytics } from "@vercel/analytics/next";
 import { Fraunces, IBM_Plex_Mono, Instrument_Sans } from "next/font/google";
 import { FreshBuild } from "@/components/FreshBuild";
+import { PrivateAnalytics } from "@/components/PrivateAnalytics";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import "./globals.css";
 
@@ -65,7 +65,7 @@ export default function RootLayout({
         {children}
         <ServiceWorkerRegistrar />
         <FreshBuild />
-        {process.env.NODE_ENV === "production" && <Analytics />}
+        {process.env.NODE_ENV === "production" && <PrivateAnalytics />}
       </body>
     </html>
   );
