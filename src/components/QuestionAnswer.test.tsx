@@ -396,8 +396,7 @@ it("answers without stealing search focus", async () => {
   searchView.unmount();
 });
 
-it.each(["anonymous", "offline", "playground"])("guards %s before retrieval or network", async mode => {
-  if (mode === "playground") vi.stubEnv("NEXT_PUBLIC_PLAYGROUND", "1");
+it.each(["anonymous", "offline"])("guards %s before retrieval or network", async mode => {
   if (mode === "offline") vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   if (mode === "anonymous") {
     const { installDocumentLifetime } = await import("@/lib/ownership");
@@ -409,6 +408,14 @@ it.each(["anonymous", "offline", "playground"])("guards %s before retrieval or n
   expect(view.container.textContent).toBe("");
   await startAnswer();
   expect(fetch).not.toHaveBeenCalled();
+});
+
+it("keeps cited answers available in the local playground product", async () => {
+  vi.stubEnv("NEXT_PUBLIC_PLAYGROUND", "1");
+  await setup();
+  await startAnswer();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledWith("/api/recall", expect.objectContaining({ method: "POST" }));
 });
 
 it("does not even retrieve matching notes during render or query edits", async () => {

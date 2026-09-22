@@ -4,7 +4,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 import { useOwnedState } from "@/hooks/useOwnedState";
 import type { Board } from "@/lib/model";
 import { getDocumentLifetime, ownedFetch } from "@/lib/ownership";
-import { PLAYGROUND } from "@/lib/playground";
 import {
   isLikelyRecallQuestion,
   recallRequestFingerprint,
@@ -88,7 +87,6 @@ export function QuestionAnswer(props: Props) {
   useEffect(() => lifetime.subscribe(() => setReadinessRevision((value) => value + 1)), [lifetime]);
 
   if (!isLikelyRecallQuestion(props.question)) return null;
-  if (PLAYGROUND) return null;
   if (lifetime.cloud && !lifetime.owner) return null;
   if (status !== "active" || !lifetime.active || !online) return null;
   // The outer component survives readiness changes. A transmitted fingerprint
@@ -120,7 +118,7 @@ function AnswerSession({ board, question, onOpenThread, onOpenIntention, readine
   useLayoutEffect(() => () => retire(), [retire]);
 
   const canDisclose = useCallback(() => {
-    if (PLAYGROUND || !navigator.onLine || (lifetime.cloud && !lifetime.owner)) return false;
+    if (!navigator.onLine || (lifetime.cloud && !lifetime.owner)) return false;
     try { lifetime.assertOnline(); return true; } catch { return false; }
   }, [lifetime]);
 
