@@ -18,6 +18,21 @@ function hits(overrides: Partial<Hits> = {}): Hits {
 }
 
 describe("SearchResults", () => {
+  it("does not claim there are no results while a question answer is loading", () => {
+    const { container } = render(
+      <SearchResults
+        hits={hits()}
+        now={2}
+        awaitingAnswer
+        onOpenThread={vi.fn()}
+        onOpenIntention={vi.fn()}
+      />,
+    );
+
+    expect(container.textContent).toBe("");
+    expect(screen.queryByText("Nothing by that shape.")).toBeNull();
+  });
+
   it("does not duplicate waiting captures from the strip into Search results", () => {
     render(
       <SearchResults

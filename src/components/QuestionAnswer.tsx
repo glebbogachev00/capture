@@ -20,7 +20,9 @@ type Props = {
   onOpenThread: (id: string, fragId?: string | null) => void;
   onOpenIntention: (id: string) => void;
   session?: QuestionAnswerSession;
+  onProgress?: (progress: AnswerProgress) => void;
 };
+export type AnswerProgress = { question: string; phase: "inactive" | "loading" | "settled" };
 export type QuestionAnswerSession = {
   attempted: Map<string, number>;
   successful: Set<string>;
@@ -86,9 +88,14 @@ export function QuestionAnswer(props: Props) {
   const [readinessRevision, setReadinessRevision] = useState(0);
   useEffect(() => lifetime.subscribe(() => setReadinessRevision((value) => value + 1)), [lifetime]);
 
-  if (!isLikelyRecallQuestion(props.question)) return null;
-  if (lifetime.cloud && !lifetime.owner) return null;
-  if (status !== "active" || !lifetime.active || !online) return null;
+  const progress = props.onProgress;
+  const progressQuestion = props.question;
+  const active = isLikelyRecallQuestion(props.question) && !(lifetime.cloud && !lifetime.owner) &&
+    status === "active" && lifetime.active && online;
+  useEffect(() => {
+    progress?.({ question: progressQuestion, phase: active ? "loading" : "inactive" });
+  }, [active, progress, progressQuestion]);
+  if (!active) return null;
   // The outer component survives readiness changes. A transmitted fingerprint
   // gets one attempt per deliberate query visit, while successful fingerprints
   // remain deduplicated for the document lifetime.
@@ -98,7 +105,7 @@ export function QuestionAnswer(props: Props) {
 }
 
 function AnswerSession({ board, question, onOpenThread, onOpenIntention, readinessRevision,
-  attemptRevision, attempted, successful, answers }: SessionProps) {
+  attemptRevision, attempted, successful, answers, onProgress }: SessionProps) {
   const { lifetime, data: result, setData: setResult } = useOwnedState<Result | null>(null);
   const pending = useRef<PendingRequest | null>(null);
   const currentFingerprint = useRef<string | null>(null);
@@ -106,6 +113,9 @@ function AnswerSession({ board, question, onOpenThread, onOpenIntention, readine
   const previousBoard = useRef(board);
   const [prepared, setPrepared] = useState<PreparedRequest | null>(null);
   const [sourceRevision, setSourceRevision] = useState(0);
+  useEffect(() => {
+    onProgress?.({ question, phase: !result || result.busy ? "loading" : "settled" });
+  }, [onProgress, question, result]);
 
   const retire = useCallback(() => {
     const request = pending.current;
@@ -224,7 +234,14 @@ function AnswerSession({ board, question, onOpenThread, onOpenIntention, readine
     return () => clearTimeout(timer);
   }, [attemptRevision, attempted, prepared, readinessRevision, send, successful]);
 
-  if (!result) return null;
+  if (!result || result.busy) return <>
+    <p role="status" aria-live="polite" aria-atomic="true" aria-busy="true"
+      className={styles.visuallyHidden}>Answering from matching notes…</p>
+    <div className={styles.loading} data-testid="answer-loading" aria-hidden="true">
+      <div className={styles.loadingDots}><span /><span /><span /></div>
+      <p>Capture is answering your question…</p>
+    </div>
+  </>;
   const statusText = result.busy
     ? "Answering from matching notes…"
     : result.error

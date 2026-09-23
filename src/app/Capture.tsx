@@ -18,7 +18,7 @@ import { Markup } from "./Markup";
 import { BusyLine, Row, TCard } from "@/components/cards";
 import { GroupedActionRows } from "@/components/GroupedActionRows";
 import { SearchResults } from "@/components/SearchResults";
-import { createQuestionAnswerSession, QuestionAnswer } from "@/components/QuestionAnswer";
+import { createQuestionAnswerSession, QuestionAnswer, type AnswerProgress } from "@/components/QuestionAnswer";
 import { ThreadView } from "@/components/ThreadView";
 import { ThreadChoices } from "@/components/ThreadChoices";
 import { degradedNote } from "@/lib/degraded";
@@ -33,11 +33,7 @@ import { useRecordedDictation } from "@/hooks/useRecordedDictation";
 import { appendDictationTranscript } from "@/lib/voiceSource";
 import { get, set } from "@/lib/storage";
 import { shrinkFile } from "@/lib/shrink";
-import {
-  type Action,
-  fmt,
-  uid,
-} from "@/lib/model";
+import { type Action, fmt, uid } from "@/lib/model";
 import {
   IntentionCard,
   IntentionDetail,
@@ -64,6 +60,7 @@ import { CheckoutReturnNotice } from "@/components/CloudBilling";
 import { PLAYGROUND } from "@/lib/playground";
 import { groupActions } from "@/lib/group";
 import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
+import { isLikelyRecallQuestion } from "@/lib/recall";
 /** Where the grouped-view toggle is remembered, in the same kv store as the
     board — a view preference that survives reloads on this device. */
 const GROUP_VIEW_KEY = "capture:groupView:v1";
@@ -96,6 +93,7 @@ const TRY = {
     to read as a finish, short enough that nobody waits on it. */
 export function Capture() {
   const [answerSession, setAnswerSession] = useState(createQuestionAnswerSession);
+  const [answerProgress, setAnswerProgress] = useState<AnswerProgress>({ question: "", phase: "inactive" });
   /* The ticking clock the countdowns and shelf lives derive from. */
   const now = useSyncExternalStore(
     subscribeToClock,
@@ -277,7 +275,8 @@ export function Capture() {
     toggleLearnedRule,
   } = useBoard(now);
   const updateQuery = (next: string) => { if (next !== query) {
-    setAnswerSession((value) => ({ ...value, revision: value.revision + 1 })); setQuery(next); } };
+    setAnswerSession((value) => ({ ...value, revision: value.revision + 1 }));
+    setAnswerProgress({ question: next, phase: isLikelyRecallQuestion(next) ? "loading" : "inactive" }); setQuery(next); } };
   /* The rollback days, read when Settings opens — a list this short is
      cheaper to re-read than to keep in sync with every write. */
   const [snapDays, setSnapDays] = useState<string[]>([]);
@@ -998,7 +997,7 @@ export function Capture() {
                 </button>
               )}
             </div>
-            <QuestionAnswer board={data} question={query} session={answerSession}
+            <QuestionAnswer board={data} question={query} session={answerSession} onProgress={setAnswerProgress}
               onOpenThread={(id, fragId) => {
                 setOpen(id); setOpenFrag(fragId || null);
               }} onOpenIntention={(id) => setOpenIntention(id)} />
@@ -1007,6 +1006,7 @@ export function Capture() {
               <SearchResults
                 hits={hits}
                 now={now}
+                awaitingAnswer={answerProgress.question === query && answerProgress.phase === "loading"}
                 onOpenThread={(id, fragId) => {
                   setOpen(id);
                   setOpenFrag(fragId || null);

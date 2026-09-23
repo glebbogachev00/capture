@@ -28,6 +28,12 @@ describe("isLikelyRecallQuestion", () => {
     "ماذا قررت بشأن التسعير؟",
     "为什么推迟发布？",
     "Τι αποφασίσαμε για την τιμολόγηση;",
+    "ow should Capture handle rough thoughts?",
+    "should Capture handle rough thoughts?",
+    "Capture handle rough thoughts?",
+    "handle rough thoughts?",
+    "Quick brown fox?",
+    "Question answer design?",
   ])("recognizes an explicit question: %s", (query) => {
     expect(isLikelyRecallQuestion(query)).toBe(true);
   });
@@ -44,13 +50,6 @@ describe("isLikelyRecallQuestion", () => {
     "Will Smith?",
     "Project Alpha?",
     "Roadmap: Q4？",
-    "What We Do?",
-    "Washington launch notes?",
-    "Quick brown fox?",
-    "Question answer design?",
-    "Workspace pricing notes？",
-    "Washington launch notes;",
-    "Quick brown fox؟",
     "Qué launch notes;",
     "Qué launch notes；",
     "what-did-I-decide?.md",

@@ -24,14 +24,17 @@ export function SearchResults({
   onOpenThread,
   onOpenIntention,
   profile,
+  awaitingAnswer = false,
 }: {
   hits: Hits;
   now: number;
   onOpenThread: (id: string, fragId?: string | null) => void;
   onOpenIntention: (id: string) => void;
   profile?: ProfileIdentity;
+  awaitingAnswer?: boolean;
 }) {
   if (!hits.total) {
+    if (awaitingAnswer) return null;
     return (
       <div className="empty">
         <p className="big">Nothing by that shape.</p>

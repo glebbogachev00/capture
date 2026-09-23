@@ -13,15 +13,11 @@ const ENGLISH_SUBJECT = new Set((
   "i me we us you he she it they there this that these those the a an my mine our ours your yours his her hers its their theirs"
 ).split(" "));
 const CJK_QUESTION_LEAD = /^(?:什么|为什么|何时|什么时候|哪里|哪儿|谁|怎么|如何|是否|有没有|いつ|なぜ|どこ|誰|どう|何)/u;
-const MULTILINGUAL_QUESTION_LEAD = new Set((
-  "qué que cuándo cuando dónde donde cómo como cuál cual quién quien що что когда где почему зачем как кто какой " +
-  "ماذا متى أين لماذا كيف من هل τι πότε πού γιατί πώς ποιος wer was wann wo warum wie welche qui quand où pourquoi comment quel"
-).split(" "));
 const QUESTION_WORD = /[\p{L}\p{N}][\p{L}\p{M}\p{N}'’_-]*/gu;
 
 const normalizeQuestion = (question: string): string => question.normalize("NFC").trim().replace(/\s+/gu, " ").toLowerCase();
 
-/** Conservative automatic gate: punctuation alone is never enough. */
+/** A question mark is an explicit Ask signal; grammar covers unpunctuated questions. */
 export function isLikelyRecallQuestion(query: string): boolean {
   // Inspect punctuation before normalization so a Greek question mark remains
   // distinguishable from an ordinary semicolon, which must stay local-only.
@@ -32,6 +28,7 @@ export function isLikelyRecallQuestion(query: string): boolean {
   if (punctuated && CJK_QUESTION_LEAD.test(body) && body.length >= 4) return true;
   const words = (body.match(QUESTION_WORD) ?? []).map((word) => word.toLowerCase());
   if (words.length < 3) return false;
+  if (punctuated) return true;
 
   const first = words[0];
   const second = words[1];
@@ -43,8 +40,7 @@ export function isLikelyRecallQuestion(query: string): boolean {
     if (["much", "many", "long", "often", "far", "old", "soon", "well"].includes(second)) return words.length >= 4;
   }
   if (ENGLISH_AUX.has(first)) return words.length >= 3 && ENGLISH_SUBJECT.has(second);
-  if (punctuated && first === "what" && second === "about") return words.length >= 3;
-  return punctuated && (MULTILINGUAL_QUESTION_LEAD.has(first) || (first === "por" && second === "qué"));
+  return false;
 }
 
 export function recallRequestFingerprint(question: string, sources: RecallSource[]): string {

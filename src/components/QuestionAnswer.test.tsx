@@ -76,7 +76,7 @@ it("automatically answers a stable question only after the debounce", async () =
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it("stays visually quiet while answering, then shows only the answer and connected items", async () => {
+it("shows a quiet visible wait while answering, then replaces it with the answer", async () => {
   const response = deferred<Response>();
   vi.mocked(fetch).mockReset().mockReturnValueOnce(response.promise);
   const board = fixture();
@@ -85,11 +85,13 @@ it("stays visually quiet while answering, then shows only the answer and connect
   await startAnswer();
   expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
   expect(screen.getByRole("status").className).toMatch(/visuallyHidden/);
+  expect(screen.getByTestId("answer-loading").textContent).toContain("Capture is answering your question…");
   expect(screen.queryByText(/Sends up to/i)).toBeNull();
 
   await act(async () => { response.resolve(Response.json(await answered(board, "CURRENT ANSWER"))); });
 
   const answer = screen.getByRole("region", { name: "Answer" });
+  expect(screen.queryByTestId("answer-loading")).toBeNull();
   expect(answer.textContent).toContain("CURRENT ANSWER");
   expect(screen.getByRole("heading", { name: "Answer" })).toBeTruthy();
   expect(screen.getAllByRole("button", { name: "Open thread: Orchard plan" })).toHaveLength(1);
