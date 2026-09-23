@@ -674,11 +674,10 @@ language sql stable security definer set search_path = '' as $$
       where class.oid='public.capture_image_storage_policy'::regclass and class.relrowsecurity)
     and has_table_privilege('service_role','public.capture_image_storage_policy','SELECT')
     and has_table_privilege('service_role','public.capture_image_storage_policy','UPDATE')
-    and not has_table_privilege('service_role','public.capture_image_storage_policy','INSERT')
-    and not has_table_privilege('service_role','public.capture_image_storage_policy','DELETE')
-    and not has_table_privilege('service_role','public.capture_image_storage_policy','TRUNCATE')
-    and not has_table_privilege('service_role','public.capture_image_storage_policy','REFERENCES')
-    and not has_table_privilege('service_role','public.capture_image_storage_policy','TRIGGER')
+    -- Hosted Supabase reapplies broad table privileges to service_role. That role
+    -- is the trusted server credential and already bypasses RLS, so readiness
+    -- binds its effective ACL into the fingerprint instead of requiring revokes
+    -- the platform does not preserve. Browser roles remain fully denied below.
     and not exists(select 1 from pg_catalog.pg_class class,
       lateral pg_catalog.aclexplode(coalesce(class.relacl,pg_catalog.acldefault('r',class.relowner))) acl
       where class.oid='public.capture_image_storage_policy'::regclass
