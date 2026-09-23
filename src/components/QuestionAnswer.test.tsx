@@ -435,11 +435,15 @@ it.each(["", "ab", " ".repeat(10), "x".repeat(501)])("blocks invalid question le
   expect(fetch).not.toHaveBeenCalled();
 });
 
-it("reports no matching evidence locally without sending an empty or unrelated board", async () => {
+it("lets the model assess bounded recent originals when exact wording has no match", async () => {
   await setup(fixture(), "What about volcanoes?");
   await startAnswer();
-  expect(screen.getByRole("status").textContent).toMatch(/No matching evidence.*Try more specific words/i);
-  expect(fetch).not.toHaveBeenCalled();
+  expect(screen.getByRole("status").textContent).toMatch(/Not enough evidence/i);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string);
+  expect(body.sources.length).toBeGreaterThan(0);
+  expect(body.sources.length).toBeLessThanOrEqual(4);
+  expect(JSON.stringify(body.sources)).not.toContain("PRIVATE");
   expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
 });
 

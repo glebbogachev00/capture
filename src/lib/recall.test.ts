@@ -28,6 +28,18 @@ describe("isLikelyRecallQuestion", () => {
     "ماذا قررت بشأن التسعير؟",
     "为什么推迟发布？",
     "Τι αποφασίσαμε για την τιμολόγηση;",
+    "ow should Capture handle rough thoughts?",
+    "should Capture handle rough thoughts?",
+    "Capture handle rough thoughts?",
+    "handle rough thoughts?",
+    "What We Do?",
+    "Washington launch notes?",
+    "Quick brown fox?",
+    "Question answer design?",
+    "Workspace pricing notes？",
+    "Washington launch notes;",
+    "Quick brown fox؟",
+
   ])("recognizes an explicit question: %s", (query) => {
     expect(isLikelyRecallQuestion(query)).toBe(true);
   });
@@ -44,13 +56,10 @@ describe("isLikelyRecallQuestion", () => {
     "Will Smith?",
     "Project Alpha?",
     "Roadmap: Q4？",
-    "What We Do?",
-    "Washington launch notes?",
-    "Quick brown fox?",
-    "Question answer design?",
-    "Workspace pricing notes？",
-    "Washington launch notes;",
-    "Quick brown fox؟",
+    "Quick brown fox",
+    "Question answer design",
+    "Workspace pricing notes",
+    "Washington launch notes",
     "Qué launch notes;",
     "Qué launch notes；",
     "what-did-I-decide?.md",
@@ -91,6 +100,31 @@ describe("recallSources", () => {
     expect(sources.map((source) => source.targetId)).toEqual(["ready"]);
     expect(JSON.stringify(sources)).not.toContain("private offline pricing draft");
     expect(JSON.stringify(sources)).not.toContain("private fragment pricing draft");
+  });
+});
+
+describe("recallCandidateSources", () => {
+  it("uses a bounded recent settled evidence pool when wording has no lexical overlap", async () => {
+    const { recallCandidateSources } = await import("./recall");
+    const input = board({
+      threads: [thread("article", "Collect observations, make an outline, and publish one useful post each week.", {
+        name: "Writing practice",
+      })],
+      actions: [
+        action("recent", "Email the Capture article draft to a reviewer", { at: 50 }),
+        action("waiting", "Private unsorted process note", { at: 60, unsorted: true }),
+      ],
+    });
+    const sources = recallCandidateSources(input, "What is my creative workflow?");
+    expect(sources.map((source) => source.targetId)).toEqual(["recent", "article"]);
+    expect(JSON.stringify(sources)).not.toContain("Private unsorted process note");
+  });
+
+  it("does not turn broad or non-question searches into a board disclosure", async () => {
+    const { recallCandidateSources } = await import("./recall");
+    const input = board({ actions: [action("private", "A private unrelated note", { at: 10 })] });
+    expect(recallCandidateSources(input, "unicorn")).toEqual([]);
+    expect(recallCandidateSources(input, "What is important?")).toEqual([]);
   });
 });
 

@@ -39,17 +39,26 @@ export function threadBriefs(
   threads: Thread[]
 ): { id: string; name: string; about: string }[] {
   const limit = briefLength(threads.length);
-  return threads.map((t) => ({
-    id: t.id,
-    name: t.name,
-    /* The boundary first, because it is the part that decides. A summary
-       says what the thread contains, which two threads about the same
-       subject will say almost identically; the boundary says what belongs,
-       which is the only question being asked here. Threads summarised
-       before boundaries existed have none, and fall back to the summary
-       alone exactly as before. */
-    about: t.belongs
-      ? `${t.belongs.trim()}\n\n${brief(t.summary, Math.max(MIN, limit - t.belongs.length))}`
-      : brief(t.summary, limit),
-  }));
+  return threads.map((t) => {
+    /* Summary generation is deliberately asynchronous. A newly created
+       thread can receive the next capture before summary/belongs exists, so
+       sending only those fields made the real subject invisible to Sort and
+       encouraged a duplicate thread. Recent settled fragments are immediate,
+       authoritative semantic context — not a lexical matching heuristic. */
+    const recent = t.frags
+      .filter((fragment) => !fragment.unsorted && fragment.text.trim())
+      .slice(-3)
+      .map((fragment) => fragment.text.trim())
+      .join("\n\n");
+    const sections = [
+      t.belongs?.trim(),
+      t.summary?.trim(),
+      recent ? `Recent material:\n${recent}` : "",
+    ].filter(Boolean).join("\n\n");
+    return {
+      id: t.id,
+      name: t.name,
+      about: brief(sections, limit),
+    };
+  });
 }

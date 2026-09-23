@@ -6,8 +6,8 @@ import type { Board } from "@/lib/model";
 import { getDocumentLifetime, ownedFetch } from "@/lib/ownership";
 import {
   isLikelyRecallQuestion,
+  recallCandidateSources,
   recallRequestFingerprint,
-  recallSources,
   validateRecallAnswer,
   type RecallAnswer,
   type RecallSource,
@@ -130,7 +130,7 @@ function AnswerSession({ board, question, onOpenThread, onOpenIntention, readine
     if (previousBoard.current === board) return;
     previousBoard.current = board;
     if (!currentFingerprint.current) return;
-    const sources = recallSources(board, question);
+    const sources = recallCandidateSources(board, question);
     const fingerprint = recallRequestFingerprint(question, sources);
     if (fingerprint === currentFingerprint.current) return;
     retire();
@@ -144,7 +144,7 @@ function AnswerSession({ board, question, onOpenThread, onOpenIntention, readine
   // timer independent of unrelated board identity churn during those 600ms.
   useEffect(() => {
     const timer = setTimeout(() => {
-      const sources = recallSources(boardRef.current, question);
+      const sources = recallCandidateSources(boardRef.current, question);
       const fingerprint = recallRequestFingerprint(question, sources);
       currentFingerprint.current = fingerprint;
       const cached = answers.get(fingerprint);

@@ -121,12 +121,75 @@ it("runs the real route schema, reconciliation and filing without a provider cal
   expect(out.clean).toBe(raw);
 });
 
-it("does not carry selected action provenance into a different series-overridden home", async () => {
+it("does not force a same-shape series hint over the model's different-subject thread", async () => {
   ai.generateObject.mockImplementation(async ({ schema }) => ({ object: schema.parse({ ...modelResult, threadId: null, threadName: "Webhook reliability", primaryActions: [modelResult.actions[0]] }) }));
   const response = await POST(new Request("http://localhost/api/sort", { method: "POST", body: JSON.stringify({ raw, threads: [{ id: "pricing", name: "Annual pricing", about: thinking }], series: { threadId: "pricing", threadName: "Annual pricing", minutesAgo: 1 } }) }));
   const out = await response.json();
-  expect(out.threadId).toBe("pricing");
-  expect(out.primaryActions).toEqual([]);
+  expect(out.threadId).toBeNull();
+  expect(out.threadName).toBe("Webhook reliability");
+  expect(out.primaryActions).toEqual([modelResult.actions[0]]);
+});
+
+it("uses a focused semantic check to reuse a product thread for another feature", async () => {
+  ai.generateObject
+    .mockImplementationOnce(async ({ schema }) => ({ object: schema.parse({
+      ...modelResult,
+      clean: "Capture should answer questions from a person's notes.",
+      kind: "thread",
+      actions: [],
+      primaryActions: [],
+      primaryText: null,
+      threadId: null,
+      threadName: "Capture answer sources",
+    }) }))
+    .mockImplementationOnce(async ({ schema, prompt }) => {
+      expect(prompt).toContain("one narrow routing question");
+      expect(prompt).toContain("notes about different features of Capture belong together");
+      expect(prompt).toContain("an article, launch video, campaign, or demo");
+      return { object: schema.parse({ threadId: "product" }) };
+    });
+  const response = await POST(new Request("http://localhost/api/sort", { method: "POST", body: JSON.stringify({
+    raw: "Capture should answer questions from a person's notes.",
+    threads: [{ id: "product", name: "Preserving rough thoughts", about: "How Capture preserves rough thoughts" }],
+  }) }));
+  expect(await response.json()).toMatchObject({ threadId: "product", threadName: null });
+});
+
+it("keeps a deliverable separate when the focused semantic check finds no fit", async () => {
+  ai.generateObject
+    .mockImplementationOnce(async ({ schema }) => ({ object: schema.parse({
+      ...modelResult,
+      threadId: null,
+      threadName: "Capture article",
+    }) }))
+    .mockImplementationOnce(async ({ schema }) => ({ object: schema.parse({ threadId: null }) }));
+  const response = await POST(new Request("http://localhost/api/sort", { method: "POST", body: JSON.stringify({
+    raw: "I am writing an article about Capture and need to outline it.",
+    threads: [{ id: "product", name: "Capture product", about: "How Capture preserves rough thoughts" }],
+  }) }));
+  expect(await response.json()).toMatchObject({ threadId: null, threadName: "Capture article" });
+});
+
+it("describes a series as semantic evidence rather than a mandatory merge", async () => {
+  ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
+    expect(prompt).toContain("Only reuse that thread when these captures are clearly members of the same set or work product");
+    expect(prompt).not.toContain("even if the two are about different subjects");
+    expect(prompt).not.toContain("even when the two drafts are about different things");
+    expect(prompt).toContain("Shape and timing alone never override the subject");
+    expect(prompt).toContain("A named product or project is normally the durable subject");
+    expect(prompt).toContain("A separate deliverable made ABOUT the product");
+    expect(prompt).toContain("Product design is one durable subject, not one thread per feature");
+    expect(prompt).toContain("An article, launch video, campaign, or demo about Capture");
+    expect(prompt).toContain("not a fifth \"Write the article\" duplicate");
+    return { object: schema.parse({ ...modelResult, threadId: null, threadName: "Capture article" }) };
+  });
+  const response = await POST(new Request("http://localhost/api/sort", { method: "POST", body: JSON.stringify({
+    raw,
+    threads: [{ id: "product", name: "Capture product", about: "How Capture preserves rough thoughts" }],
+    series: { threadId: "product", threadName: "Capture product", minutesAgo: 1 },
+  }) }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ threadId: null, threadName: "Capture article" });
 });
 
 it("schedules an inert Jev shadow with only the reconciled thinking decision", async () => {

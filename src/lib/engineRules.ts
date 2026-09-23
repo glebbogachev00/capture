@@ -39,12 +39,10 @@ export const ROUTING_RULE =
   "\nChoosing a thread — read this before you set threadId:\n" +
   "- FIRST, a series. If the capture immediately before this one landed " +
   "minutes ago and this is the same kind of thing — another draft in a set, " +
-  "the next entry in a log, another paste of the same shape — then this one " +
-  "goes on the thread that one opened or joined. That holds even when the " +
-  "thread is named after the app and even when the two drafts are about " +
-  "different things: the person is building a set, not changing subject, " +
-  "and three drafts in three threads is a pile. Only when this is NOT a " +
-  "continuation do the tests below apply.\n" +
+  "the next entry in a log, another paste from the same work product — treat " +
+  "that destination as strong evidence. Shape and timing alone never override " +
+  "the subject: a different project, deliverable, or area of thought still " +
+  "needs its correct existing thread or a new one.\n" +
   "- A thread fits when the capture is ABOUT the same subject and would " +
   "genuinely be read alongside what is already in it. That is the only test.\n" +
   "- Words in common are not a reason. A capture that merely uses a word " +
@@ -58,6 +56,14 @@ export const ROUTING_RULE =
   "(its sorting engine, its board, its sync, a bug in it) belongs in that " +
   "thread exactly as any other subject would. The caution is against the " +
   "word, not the subject.\n" +
+  "- A named product or project is normally the durable subject; its individual " +
+  "features are parts of that subject. When the capture explicitly discusses " +
+  "how a named product should behave and no thread exists for it yet, prefer a " +
+  "short product/project thread name over a narrow name for the first feature. " +
+  "Later notes about another feature of that same product should reuse it. A " +
+  "separate deliverable made ABOUT the product — an article, launch video, or " +
+  "campaign — is its own work product and must not be swallowed by the product " +
+  "thread.\n" +
   "- Before inventing anything, go through the threads above one at a time " +
   "and ask of each: is this capture about the same SUBJECT? Same subject in " +
   "different words still belongs there. A note about a demo you are recording belongs in the thread about that tool; a note about something "  +

@@ -3,25 +3,26 @@ import type { Board } from "./model";
 
 export const RECALL_MAX_SOURCES = 12;
 export const RECALL_MAX_SOURCE_CHARS = 1500;
+export const RECALL_SEMANTIC_FALLBACK_MAX = 4;
 
 const QUESTION_END = /[?？؟;]$/u;
 const OUTER_QUOTED = /^(?:"[\s\S]*"|'[\s\S]*'|“[\s\S]*”|‘[\s\S]*’|«[\s\S]*»|「[\s\S]*」|『[\s\S]*』)$/u;
 const FILE_NAME = /(?:^|[/\\])?[^/\\\s]+\.[\p{L}\p{N}]{1,10}[?？؟;]?$/iu;
 const ENGLISH_AUX = new Set("do does did is are was were can could will would should have has had".split(" "));
-const ENGLISH_WH = new Set("what when where why who whom whose which".split(" "));
+const ENGLISH_WH = new Set("what when where why who whom whose which how".split(" "));
 const ENGLISH_SUBJECT = new Set((
   "i me we us you he she it they there this that these those the a an my mine our ours your yours his her hers its their theirs"
 ).split(" "));
 const CJK_QUESTION_LEAD = /^(?:什么|为什么|何时|什么时候|哪里|哪儿|谁|怎么|如何|是否|有没有|いつ|なぜ|どこ|誰|どう|何)/u;
-const MULTILINGUAL_QUESTION_LEAD = new Set((
-  "qué que cuándo cuando dónde donde cómo como cuál cual quién quien що что когда где почему зачем как кто какой " +
-  "ماذا متى أين لماذا كيف من هل τι πότε πού γιατί πώς ποιος wer was wann wo warum wie welche qui quand où pourquoi comment quel"
-).split(" "));
 const QUESTION_WORD = /[\p{L}\p{N}][\p{L}\p{M}\p{N}'’_-]*/gu;
 
 const normalizeQuestion = (question: string): string => question.normalize("NFC").trim().replace(/\s+/gu, " ").toLowerCase();
 
-/** Conservative automatic gate: punctuation alone is never enough. */
+/**
+ * Ask is an explicit interaction shape, not a grammar quiz. Requiring three
+ * words plus question punctuation tolerates typos and missing lead words while
+ * keeping short labels, quoted text and filenames in ordinary local Search.
+ */
 export function isLikelyRecallQuestion(query: string): boolean {
   // Inspect punctuation before normalization so a Greek question mark remains
   // distinguishable from an ordinary semicolon, which must stay local-only.
@@ -29,22 +30,12 @@ export function isLikelyRecallQuestion(query: string): boolean {
   if (trimmed.length < 3 || trimmed.length > 500 || OUTER_QUOTED.test(trimmed) || FILE_NAME.test(trimmed)) return false;
   const punctuated = QUESTION_END.test(trimmed);
   const body = trimmed.replace(/^¿\s*/u, "").replace(/[?？؟;]\s*$/u, "").trim().normalize("NFC");
-  if (punctuated && CJK_QUESTION_LEAD.test(body) && body.length >= 4) return true;
   const words = (body.match(QUESTION_WORD) ?? []).map((word) => word.toLowerCase());
-  if (words.length < 3) return false;
-
-  const first = words[0];
-  const second = words[1];
-  if (ENGLISH_WH.has(first) && ENGLISH_AUX.has(second)) {
-    return words.length >= (first === "who" || first === "whom" ? 3 : 4);
-  }
-  if (first === "how") {
-    if (ENGLISH_AUX.has(second)) return words.length >= 4;
-    if (["much", "many", "long", "often", "far", "old", "soon", "well"].includes(second)) return words.length >= 4;
-  }
-  if (ENGLISH_AUX.has(first)) return words.length >= 3 && ENGLISH_SUBJECT.has(second);
-  if (punctuated && first === "what" && second === "about") return words.length >= 3;
-  return punctuated && (MULTILINGUAL_QUESTION_LEAD.has(first) || (first === "por" && second === "qué"));
+  if (punctuated && CJK_QUESTION_LEAD.test(body) && body.length >= 4) return true;
+  if (punctuated) return words.length >= 3;
+  const [first, second] = words;
+  if (ENGLISH_WH.has(first) && ENGLISH_AUX.has(second)) return words.length >= 4;
+  return ENGLISH_AUX.has(first) && ENGLISH_SUBJECT.has(second) && words.length >= 3;
 }
 
 export function recallRequestFingerprint(question: string, sources: RecallSource[]): string {
@@ -134,7 +125,7 @@ function excerpt(raw: string, terms: string[]): { text: string; truncated: boole
  * never factual evidence. All states remain eligible; recency breaks ties, not
  * contradictions. This bounded lexical selection is not a complete history.
  */
-export function recallSources(board: Board, question: string): RecallSource[] {
+function selectRecallSources(board: Board, question: string, recentFallback: boolean): RecallSource[] {
   const terms = [...new Set(tokens(question).filter((term) => !STOP.has(term) && !GENERIC.has(term)))].sort();
   if (!terms.length) return [];
   const sources: RecallSource[] = [];
@@ -168,12 +159,17 @@ export function recallSources(board: Board, question: string): RecallSource[] {
       at: intention.at, targetId: intention.id, state: "active" });
   }
   // Even an unmatched duplicate makes navigation/citation identity ambiguous.
-  const candidates = sources.filter((source) => identities.get(source.id) === 1).map((source) => {
+  const uniqueSources = sources.filter((source) => identities.get(source.id) === 1);
+  const candidates = uniqueSources.map((source) => {
     const words = new Set(tokens(source.text));
     const context = new Set(source.kind === "thread" ? tokens(source.title) : []);
     return { source, evidenceMatches: terms.filter((term) => words.has(term)).length,
       matched: terms.filter((term) => words.has(term) || context.has(term)) };
   }).filter(({ matched }) => matched.length > 0);
+  if (!candidates.length && recentFallback) {
+    return uniqueSources.sort((a, b) => b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .slice(0, RECALL_SEMANTIC_FALLBACK_MAX);
+  }
   const frequencies = new Map<string, number>();
   for (const { matched } of candidates) {
     for (const term of matched) frequencies.set(term, (frequencies.get(term) ?? 0) + 1);
@@ -186,4 +182,23 @@ export function recallSources(board: Board, question: string): RecallSource[] {
     b.evidenceMatches - a.evidenceMatches || b.matched.length - a.matched.length || b.specificity - a.specificity ||
     b.source.at - a.source.at || (a.source.id < b.source.id ? -1 : a.source.id > b.source.id ? 1 : 0)
   ).slice(0, RECALL_MAX_SOURCES).map(({ source }) => source);
+}
+
+/** Exact lexical evidence used by local retrieval and deterministic tests. */
+export function recallSources(board: Board, question: string): RecallSource[] {
+  return selectRecallSources(board, question, false);
+}
+
+/**
+ * Evidence candidates for an explicit Ask request. Prefer exact lexical
+ * matches; when wording differs, let the answering model assess at most four
+ * of the most recent settled originals instead of pretending there is no
+ * answer. Broad questions whose meaningful terms all collapse to stop words do
+ * not disclose a board snapshot.
+ */
+export function recallCandidateSources(board: Board, question: string): RecallSource[] {
+  if (!isLikelyRecallQuestion(question)) return [];
+  const meaningful = [...new Set(tokens(question).filter((term) => !STOP.has(term) && !GENERIC.has(term)))];
+  if (!meaningful.length) return [];
+  return selectRecallSources(board, question, true);
 }
