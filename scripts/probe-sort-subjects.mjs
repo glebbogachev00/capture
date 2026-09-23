@@ -22,6 +22,7 @@ function options(args) {
   }
   const url = new URL('/api/sort', base);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw Error('Use an HTTP(S) base URL without credentials');
+  if (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw Error('This probe is local-only; start the candidate on localhost');
   return { url: url.href, repeat, out };
 }
 
@@ -42,6 +43,12 @@ function judge(test, result) {
   check(result.also == null || Array.isArray(result.also), 'also is not an array/null');
   const also = Array.isArray(result.also) ? result.also : [];
   const actions = Array.isArray(result.actions) ? result.actions : [];
+  const actionMeta = Array.isArray(result.actionMeta) ? result.actionMeta : [];
+  check(actionMeta.length === actions.length, `actionMeta has ${actionMeta.length} rows for ${actions.length} actions`);
+  for (const row of actionMeta) {
+    check(nonempty(row?.source), 'Action source ownership is missing');
+    check(['hours', 'days', 'weeks', 'keep'].includes(row?.shelfLife), 'Action shelf ownership is invalid');
+  }
   const destinations = [
     { threadId: result.threadId, threadName: result.threadName, text: also.length ? result.primaryText : result.clean },
     ...also,
@@ -111,7 +118,11 @@ async function main() {
       try {
         const response = await fetch(url, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(test.request), signal: AbortSignal.timeout(60000), redirect: 'error',
+          body: JSON.stringify({
+            ...test.request,
+            localDate: new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          }), signal: AbortSignal.timeout(60000), redirect: 'error',
         });
         run.status = response.status;
         run.responseText = await response.text();

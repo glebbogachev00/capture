@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { REFILE_WINDOW_MS, commandRule, isRefile, refileRule, undoRule } from "./refiled";
+import {
+  REFILE_WINDOW_MS,
+  answeredKindCorrection,
+  commandRule,
+  isRefile,
+  refileRule,
+  undoRule,
+} from "./refiled";
 import { deriveRules } from "./rules";
 
 const MIN = 60 * 1000;
@@ -96,6 +103,26 @@ describe("undoRule — what an answered undo teaches", () => {
     const a = undoRule("cold brew is out again", "action", "thread");
     const b = undoRule("cold brew, we ran out this week too", "action", "thread");
     expect(a).toBe(b);
+  });
+});
+
+describe("answeredKindCorrection — semantic evidence from an explicit correction", () => {
+  it("records the chosen meaning alongside the original capture", () => {
+    expect(answeredKindCorrection(
+      "  I want to develop a book from several essays.  ",
+      "action",
+      "thread",
+    )).toMatchObject({
+      proposalKind: "undone",
+      accepted: true,
+      context: "I want to develop a book from several essays.",
+      chosenKind: "thread",
+    });
+  });
+
+  it("records nothing when the answer did not correct the filing", () => {
+    expect(answeredKindCorrection("Call the dentist", "action", "action")).toBeNull();
+    expect(answeredKindCorrection("   ", "action", "thread")).toBeNull();
   });
 });
 

@@ -82,6 +82,22 @@
   white-space: pre-wrap;
 }
 
+.claim + .claim {
+  margin-top: 14px;
+}
+
+.support {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.support li + li {
+  margin-top: 5px;
+}
+
 .connections {
   display: flex;
   flex-wrap: wrap;

@@ -51,6 +51,9 @@ Extracted and owned (policy in `lib`, tested):
 | Undo restore | `undoOps.ts` | one Undo destroying every wrap and receipt; field-drop class (5 shipments) |
 | Untangle merge | `tangleOps.ts` | "Merge" that moved 22 and merged nothing; unreachable merge |
 | Sort application | `boardOps.ts` | failed sorts minting junk threads |
+| Sort interpretation | `sortInterpretation.ts` | one semantic pass losing, overlapping, or duplicating shares; stale destinations; per-action ownership |
+| Sort learning | `sortCorrections.ts` | invisible lexical overrides replacing explicit advisory corrections |
+| Recall retrieval | `recall.ts` | broad latest-note disclosure; metadata/evidence boundary; unsupported cited prose |
 | Word matching | `related.ts` / `organize.ts` | two-word coincidences offered as suggestions |
 | Image bytes | `imgCache.ts` | pictures blanking behind the store's write lock |
 | Provider chain | `providers.ts` / `routing.ts` | 30-second sorts probing dead tiers |

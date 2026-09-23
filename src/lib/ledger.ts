@@ -52,6 +52,9 @@ export type CaptureEntry = {
    * threshold on its own. Absent on entries written before splits existed,
    * and on every ordinary capture, where the entry is the utterance. */
   captureId?: string;
+  /** Exactly one current row per capture is the stable primary identity used
+      by Undo, recent context, and series continuity. */
+  primary?: boolean;
   /** Added by a backup/snapshot restore on this device. Restored history is
    * visible in The Record but never spends the public playground allowance. */
   restored?: boolean;
@@ -110,6 +113,13 @@ export type CorrectionEntry = {
   correctionText?: string;
   /** A distilled rule the correction implies ("threads get renamed to…"). */
   rule?: string;
+  /** The answer the person explicitly chose after a wrong filing. Unlike
+      `rule`, this is semantic training evidence rather than a phrase matcher. */
+  chosenKind?: "action" | "thread" | "intention";
+  /** The exact destination chosen for a thread correction, when it still
+      exists. The name preserves the meaning if that thread is later removed. */
+  chosenThreadId?: string;
+  chosenThreadName?: string;
 };
 
 /** How many entries the board keeps: a real record, yet light enough that
@@ -238,6 +248,21 @@ export function markUndone(
   if (!ids?.length) return ledger;
   const take = new Set(ids);
   return ledger.map((e) => (take.has(e.id) ? { ...e, undone: true } : e));
+}
+
+/** One deterministic representative per capture. Explicit primary markers
+ * win; legacy groups fall back to their first stored row without guessing. */
+export function primaryLedgerEntries(entries: CaptureEntry[]): CaptureEntry[] {
+  const groups = new Map<string, CaptureEntry[]>();
+  for (const entry of entries) {
+    const key = entry.captureId ?? entry.id;
+    const group = groups.get(key) ?? [];
+    group.push(entry);
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .map((group) => group.find((entry) => entry.primary === true) ?? group[0])
+    .sort((a, b) => b.at - a.at || (a.id < b.id ? 1 : -1));
 }
 
 /** Fold an entry into a board's ledger in one step. */

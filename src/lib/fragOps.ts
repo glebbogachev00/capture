@@ -104,6 +104,9 @@ export type FragMove = {
   /** The refile lesson to record, when the move is the sorter being told
       it was wrong — null for an old note simply being reorganised. */
   lesson: string | null;
+  /** True when the move is an immediate correction of the sorter, even if
+      the old lexical rule builder cannot name a safe shared phrase. */
+  corrected: boolean;
   /** The words that moved, for the correction record. */
   movedText: string;
   toName: string;
@@ -134,7 +137,8 @@ export function applyFragMove(
     ? threads.filter((t) => t.id !== fromId)
     : threads.map((t) => (t.id === fromId ? { ...t, frags: remaining } : t));
 
-  const lesson = isRefile(frag.at, now)
+  const corrected = isRefile(frag.at, now);
+  const lesson = corrected
     ? refileRule(
         frag.text,
         to.name,
@@ -143,9 +147,18 @@ export function applyFragMove(
     : null;
 
   return {
-    board: { ...board, threads },
+    board: {
+      ...board,
+      threads,
+      actions: board.actions.map((action) =>
+        action.threadId === fromId && action.sourceFragId === fragId
+          ? { ...action, threadId: toId }
+          : action
+      ),
+    },
     emptied,
     lesson,
+    corrected,
     movedText: frag.text,
     toName: to.name,
     fromName: from.name,
@@ -185,7 +198,19 @@ export function applyFragSplit(
           t.id === fromId ? { ...t, frags: remaining } : t
         )),
   ];
-  return { board: { ...board, threads }, freshId: fresh.id, emptied };
+  return {
+    board: {
+      ...board,
+      threads,
+      actions: board.actions.map((action) =>
+        action.threadId === fromId && action.sourceFragId === fragId
+          ? { ...action, threadId: fresh.id }
+          : action
+      ),
+    },
+    freshId: fresh.id,
+    emptied,
+  };
 }
 
 export type FragResolve = {

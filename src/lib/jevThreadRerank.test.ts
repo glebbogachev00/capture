@@ -255,7 +255,7 @@ describe("Jev shadow gate", () => {
         },
       })
     ).toBe(false);
-    expect(release).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
     expect(info).toHaveBeenCalledWith("[capture-ops]", {
       version: 1,
       event: "managed_ai_provider_attempt",
@@ -306,10 +306,11 @@ describe("Jev shadow gate", () => {
         fetcher,
       })
     ).toBe(true);
-    expect(acquire).toHaveBeenCalledOnce();
+    expect(acquire).not.toHaveBeenCalled();
     expect(release).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
     await Promise.resolve(task?.());
+    expect(acquire).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledOnce();
 
     expect(info).toHaveBeenCalledWith("[capture-ops]", {

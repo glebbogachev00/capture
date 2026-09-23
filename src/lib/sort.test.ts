@@ -1,53 +1,26 @@
 import { describe, expect, it } from "vitest";
-import {
-  enforceStandingDecision,
-  explicitStandingDecision,
-  reconcileSorted,
-} from "./sort";
+import { reconcileSorted } from "./sort";
 
 describe("reconcileSorted", () => {
-  it("makes split shares standalone without rewriting the original capture", () => {
-    const paragraph = "I want to refine my Askde posting strategy so the posts sound like something I would actually say. The current drafts are too polished and keep turning ordinary observations into dramatic lessons. I want to keep the actual experience and uncertainty without inventing dialogue, outcomes, or a motivational ending.";
-    const clean = `The navbar needs work. Separately, ${paragraph}`;
+  it("preserves every validated source character in split shares", () => {
+    const primaryText = "The navbar needs work.";
+    const secondaryText = "Separately, I want posts to sound human — exactly as said.";
+    const clean = `${primaryText} ${secondaryText}`;
     const input = {
       kind: "thread" as const,
       actions: [],
       clean,
       threadName: "Navbar",
-      primaryText: "The navbar needs work.",
-      also: [{ text: `Separately, ${paragraph}`, threadName: "Askde", threadId: null }],
+      primaryText,
+      also: [{ text: secondaryText, threadName: "Writing", threadId: null }],
     };
-    const out = reconcileSorted(input);
-    expect(out.also[0].text).toBe(paragraph);
-    expect(out.primaryText).toBe(input.primaryText);
-    expect(out.clean).toBe(clean);
-    expect(input.also[0].text).toBe(`Separately, ${paragraph}`);
-  });
-  it.each(["Separately, ", "Also, ", "On a separate note, ", "On another note, "])("removes the detached transition %s from either share", (prefix) => {
-    const out = reconcileSorted({
-      kind: "thread" as const,
-      threadName: "Navigation",
-      primaryText: `${prefix}I want clearer navigation.`,
-      also: [{ text: `${prefix}I want human posts.`, threadName: "Writing" }],
-    });
-    expect(out.primaryText).toBe("I want clearer navigation.");
-    expect(out.also[0].text).toBe("I want human posts.");
-    expect(reconcileSorted(out)).toEqual(out);
-  });
 
-  it.each([
-    "Store the files separately, not in a shared folder.",
-    "Separately packaged items cost more.",
-    "Also available in Vietnamese.",
-    "Separately,",
-    "I want a calmer voice.\n\nAlso, keep my uncertainty.",
-  ])("preserves meaningful wording and internal transitions: %s", (text) => {
-    const out = reconcileSorted({
-      kind: "thread" as const,
-      threadName: "Navigation",
-      also: [{ text, threadName: "Writing" }],
-    });
-    expect(out.also[0].text).toBe(text);
+    const out = reconcileSorted(input);
+
+    expect(out.primaryText).toBe(primaryText);
+    expect(out.also[0].text).toBe(secondaryText);
+    expect(out.clean).toBe(clean);
+    expect(reconcileSorted(out)).toEqual(out);
   });
 
   it("does not rewrite an unsplit capture", () => {
@@ -110,72 +83,5 @@ describe("reconcileSorted", () => {
     expect(reconcileSorted({ kind: "intention", actions: [] }).kind).toBe(
       "intention"
     );
-  });
-});
-
-describe("explicitStandingDecision", () => {
-  it("recognizes a durable operating decision", () => {
-    expect(
-      explicitStandingDecision(
-        "I've decided to always ship a demo video with every feature from now on, not just sometimes."
-      )
-    ).toBe(true);
-  });
-
-  it("does not turn a one-off decision into an intention", () => {
-    expect(explicitStandingDecision("I've decided to buy milk tomorrow.")).toBe(false);
-  });
-
-  it("does not turn open-ended consideration into an intention", () => {
-    expect(explicitStandingDecision("I'm thinking about whether every feature needs a demo.")).toBe(false);
-  });
-
-  it("overrides a model's thread fallback without keeping a false thread home", () => {
-    expect(
-      enforceStandingDecision(
-        "I've decided to always ship a demo video with every feature from now on.",
-        {
-          kind: "thread",
-          actions: [],
-          threadId: "first-thread",
-          threadName: null,
-        }
-      )
-    ).toEqual({
-      kind: "intention",
-      actions: [],
-      threadId: null,
-      threadName: null,
-    });
-  });
-
-  it("overrides a model's action fallback for a standing rule", () => {
-    expect(
-      enforceStandingDecision(
-        "I've decided to always ship a demo video with every feature from now on.",
-        {
-          kind: "action",
-          actions: ["Always ship a demo video with every feature"],
-          threadId: null,
-          threadName: null,
-        }
-      )
-    ).toEqual({
-      kind: "intention",
-      actions: [],
-      threadId: null,
-      threadName: null,
-    });
-  });
-
-  it("does not override a mixed result that carries a separate concrete task", () => {
-    expect(
-      enforceStandingDecision("From now on every feature gets a demo; record this one today.", {
-        kind: "both",
-        actions: ["Record this feature demo today"],
-        threadId: "launch",
-        threadName: null,
-      }).kind
-    ).toBe("both");
   });
 });

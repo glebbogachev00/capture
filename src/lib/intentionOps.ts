@@ -76,7 +76,8 @@ export function applySaveDraft(
   if (origin.capture) {
     next = withLedger(next, {
       id: ids.ledgerId,
-      captureId: origin.capture.captureId,
+      captureId: origin.capture.captureId ?? ids.ledgerId,
+      primary: true,
       at: origin.capture.at ?? at,
       raw: origin.capture.raw,
       clean: draft.expandedIntention,

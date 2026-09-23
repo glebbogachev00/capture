@@ -6,6 +6,7 @@ import {
   LEDGER_CAP,
   mergeCorrections,
   mergeLedgers,
+  primaryLedgerEntries,
   sourceOf,
   withCorrection,
   withLedger,
@@ -137,6 +138,15 @@ describe("sourceOf", () => {
   });
   it("prefers words over images for the source", () => {
     expect(sourceOf("words", false, true)).toBe("typed");
+  });
+});
+
+describe("primaryLedgerEntries", () => {
+  it("groups split rows by captureId and selects the explicit primary regardless of array order", () => {
+    const primary = { ...entry("primary", 10), captureId: "capture", primary: true };
+    const secondary = { ...entry("secondary", 10), captureId: "capture", primary: false };
+    expect(primaryLedgerEntries([secondary, primary])).toEqual([primary]);
+    expect(primaryLedgerEntries([primary, secondary])).toEqual([primary]);
   });
 });
 

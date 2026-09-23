@@ -83,7 +83,8 @@ export function settleUnsortedCapture(
     { ...board, actions: [action, ...board.actions] },
     {
       id: ids.ledgerId,
-      captureId: ids.captureId,
+      captureId: ids.captureId ?? ids.ledgerId,
+      primary: true,
       at: input.at,
       raw: input.raw,
       transcript: input.transcript,
@@ -135,6 +136,7 @@ export type SortedFacts = {
   kind: "action" | "thread" | "intention" | "both";
   clean: string;
   primaryText?: string | null;
+  primaryOwnsImages?: boolean;
   via?: string;
   /** Where the primary landed. */
   primary: { targetId: string; fragId?: string };
@@ -142,7 +144,7 @@ export type SortedFacts = {
       not itself a thread (for example an Action with a retained photo). */
   summaryThreadIds?: string[];
   /** Where each further split share landed. */
-  also: { text: string; threadId: string; fragId?: string }[];
+  also: { text: string; threadId: string; fragId?: string; ownsImages?: boolean }[];
 };
 
 export function recordSortedCapture(
@@ -155,6 +157,7 @@ export function recordSortedCapture(
   let next = withLedger(board, {
     id: mkId(),
     captureId: f.captureId,
+    primary: true,
     at: f.at,
     raw: f.raw,
     clean: (split ? f.primaryText!.trim() : f.clean) || f.payload,
@@ -164,12 +167,13 @@ export function recordSortedCapture(
     targetFragId: f.primary.fragId,
     modelVia: f.via,
     transcript: f.transcript?.trim() || undefined,
-    imgs: f.imgIds.length ? f.imgIds : undefined,
+    imgs: f.imgIds.length && f.primaryOwnsImages !== false ? f.imgIds : undefined,
   });
   for (const piece of f.also) {
     next = withLedger(next, {
       id: mkId(),
       captureId: f.captureId,
+      primary: false,
       at: f.at,
       raw: f.raw,
       clean: piece.text,
@@ -178,6 +182,7 @@ export function recordSortedCapture(
       targetId: piece.threadId,
       targetFragId: piece.fragId,
       modelVia: f.via,
+      imgs: f.imgIds.length && piece.ownsImages ? f.imgIds : undefined,
     });
   }
   const summaryTargets = [

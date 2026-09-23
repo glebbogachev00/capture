@@ -176,9 +176,10 @@ describe("Jev judge shadow gate", () => {
       schedule,
       fetcher: async () => successResponse(),
     })).toBe(true);
-    expect(acquire).toHaveBeenCalledOnce();
+    expect(acquire).not.toHaveBeenCalled();
     expect(release).not.toHaveBeenCalled();
     await Promise.resolve(task?.());
+    expect(acquire).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledOnce();
 
     expect(info).toHaveBeenCalledWith("[capture-ops]", {

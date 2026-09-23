@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CaptureEntry } from "./ledger";
-import { caughtWords, dayCaptures, heatGrid, monthLabels, recentCaptures, recordStats } from "./record";
+import { caughtWords, dayCaptures, dayKey, heatGrid, monthLabels, recentCaptures, recordStats } from "./record";
 
 const DAY = 24 * 60 * 60 * 1000;
 /* A fixed local noon keeps day bucketing away from midnight edges. */
@@ -224,5 +224,70 @@ describe("the record shows a day's story, not the whole history", () => {
     expect(dayCaptures([
       { ...entry("waiting", at("2026-08-30", 8), "private draft"), kind: "pending" },
     ], "2026-08-30")).toEqual([]);
+  });
+});
+
+describe("capture identity across split and corrected filings", () => {
+  const words = Array.from({ length: 130 }, () => "word").join(" ");
+  const row = (over: Partial<CaptureEntry> & Pick<CaptureEntry, "id" | "kind">): CaptureEntry => ({
+    at: NOON,
+    raw: words,
+    clean: words,
+    source: "dictated",
+    targetId: "primary-thread",
+    captureId: "one-capture",
+    ...over,
+  });
+
+  it("counts and tells a split capture once while keeping the explicit primary destination", () => {
+    const primary = row({ id: "primary", kind: "both", primary: true });
+    const secondary = row({
+      id: "secondary",
+      kind: "thread",
+      primary: false,
+      targetId: "secondary-thread",
+      clean: "secondary share",
+    });
+    const ledger = [secondary, primary];
+
+    expect(recordStats(ledger)).toMatchObject({
+      total: 1, actions: 1, threads: 1, dictated: 1,
+    });
+    expect(recentCaptures(ledger).map((entry) => entry.id)).toEqual(["primary"]);
+    const [story] = dayCaptures(ledger, dayKey(NOON));
+    expect(story.targetId).toBe("primary-thread");
+    expect(story.destinations).toEqual([
+      expect.objectContaining({ entryId: "primary", targetId: "primary-thread", kind: "both" }),
+      expect.objectContaining({ entryId: "secondary", targetId: "secondary-thread", kind: "thread", filed: "secondary share" }),
+    ]);
+    expect(heatGrid(ledger, NOON, 1).flat().at(-1)?.count).toBe(1);
+    expect(caughtWords(ledger)?.words).toBe(130);
+  });
+
+  it("uses the current explicit primary after a corrected re-sort instead of the undone filing", () => {
+    const original = row({ id: "original", kind: "action", primary: true, undone: true });
+    const corrected = row({
+      id: "corrected",
+      kind: "thread",
+      primary: true,
+      targetId: "correct-thread",
+    });
+    const secondary = row({
+      id: "corrected-secondary",
+      kind: "thread",
+      primary: false,
+      targetId: "secondary-thread",
+    });
+    const ledger = [corrected, secondary, original];
+
+    expect(recordStats(ledger)).toMatchObject({ total: 1, actions: 0, threads: 1 });
+    expect(recentCaptures(ledger).map((entry) => entry.id)).toEqual(["corrected"]);
+    const [story] = dayCaptures(ledger, dayKey(NOON));
+    expect(story.targetId).toBe("correct-thread");
+    expect(story.destinations.map((destination) => destination.targetId))
+      .toEqual(["correct-thread", "secondary-thread"]);
+    expect(story.destinations.some((destination) => destination.entryId === "original")).toBe(false);
+    expect(heatGrid(ledger, NOON, 1).flat().at(-1)?.count).toBe(1);
+    expect(caughtWords(ledger)?.words).toBe(130);
   });
 });

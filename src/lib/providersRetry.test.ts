@@ -35,6 +35,24 @@ describe("when every provider refuses", () => {
     vi.useRealTimers();
   });
 
+  it("aborts the full fallback sleep instead of leaving a retry running", async () => {
+    vi.useFakeTimers();
+    const { withFallback } = await load();
+    const controller = new AbortController();
+    let calls = 0;
+    const pending = withFallback(async () => {
+      calls += 1;
+      throw limit();
+    }, undefined, controller.signal);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toBe(2);
+    controller.abort(new DOMException("cancelled", "AbortError"));
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(calls).toBe(2);
+    vi.useRealTimers();
+  });
+
   it("gives up at once on a real outage", async () => {
     /* An outage does not get better for being asked twice, and the person
        is waiting on this capture. */

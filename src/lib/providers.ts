@@ -244,7 +244,8 @@ export async function withFallback<T>(
  
      It is a preference, not a pin: if the named provider is missing or
      refuses, the rest of the chain still answers. */
-  prefer?: string
+  prefer?: string,
+  signal?: AbortSignal,
 ): Promise<{
   value: T;
   via: string;
@@ -320,6 +321,7 @@ export async function withFallback<T>(
       }
     }
     for (const tier of live) {
+      signal?.throwIfAborted();
       try {
         return {
           ok: true,
@@ -375,7 +377,19 @@ export async function withFallback<T>(
     reason: "rate_limited",
     count: "not_measured",
   });
-  await new Promise((r) => setTimeout(r, wait));
+  await new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return; }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, wait);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(signal?.reason);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 
   const second = await round();
   if (second.ok) return routed(second.value, second.via, second.fallbackReason);

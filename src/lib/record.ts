@@ -21,8 +21,42 @@ export type RecordStats = {
   dictated: number;
 };
 
+type RecordCaptureGroup = {
+  primary: CaptureEntry;
+  rows: CaptureEntry[];
+  active: boolean;
+};
+
+/** Capture-level Record surfaces keep one count per intake while retaining all
+ * active rows for split-destination detail. A corrected re-sort supersedes the
+ * undone filing; an entirely undone capture remains visible as one event. */
+function recordCaptureGroups(ledger: CaptureEntry[]): RecordCaptureGroup[] {
+  const groups = new Map<string, CaptureEntry[]>();
+  for (const entry of ledger) {
+    const identity = entry.captureId ?? entry.id;
+    const group = groups.get(identity) ?? [];
+    group.push(entry);
+    groups.set(identity, group);
+  }
+  return [...groups.values()].flatMap((group) => {
+    const settled = group.filter((entry) => entry.kind !== "pending");
+    if (!settled.length) return [];
+    const current = settled.filter((entry) => !entry.undone);
+    const rows = current.length ? current : settled;
+    const primary = rows.find((entry) => entry.primary === true)
+      ?? rows[0];
+    const ordered = [primary, ...rows.filter((entry) => entry !== primary)
+      .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))];
+    return [{ primary, rows: ordered, active: current.length > 0 }];
+  });
+}
+
+export function recordCaptureCount(ledger: CaptureEntry[]): number {
+  return recordCaptureGroups(ledger).length;
+}
+
 export function recordStats(ledger: CaptureEntry[]): RecordStats {
-  const settled = ledger.filter((entry) => entry.kind !== "pending");
+  const settled = recordCaptureGroups(ledger);
   const stats: RecordStats = {
     total: settled.length,
     since: null,
@@ -31,14 +65,15 @@ export function recordStats(ledger: CaptureEntry[]): RecordStats {
     intentions: 0,
     dictated: 0,
   };
-  for (const e of settled) {
+  for (const group of settled) {
+    const e = group.primary;
     if (stats.since === null || e.at < stats.since) stats.since = e.at;
     /* An undone capture was said, but became nothing. */
-    if (e.undone) continue;
-    /* "both" filed an action AND joined a thread — count it in each. */
-    if (e.kind === "action" || e.kind === "both") stats.actions++;
-    if (e.kind === "thread" || e.kind === "both") stats.threads++;
-    if (e.kind === "intention") stats.intentions++;
+    if (!group.active) continue;
+    const kinds = new Set(group.rows.map((row) => row.kind));
+    if (kinds.has("action") || kinds.has("both")) stats.actions++;
+    if (kinds.has("thread") || kinds.has("both")) stats.threads++;
+    if (kinds.has("intention")) stats.intentions++;
     if (e.source === "dictated") stats.dictated++;
   }
   return stats;
@@ -53,6 +88,14 @@ export function recordStats(ledger: CaptureEntry[]): RecordStats {
  * the engine changed the words, which are the only ones worth showing the
  * original for. When it rewrote nothing, showing both is noise.
  */
+export type RecordDestination = {
+  entryId: string;
+  kind: CaptureEntry["kind"];
+  filed: string;
+  targetId?: string;
+  targetFragId?: string;
+};
+
 export type RecordEntry = {
   id: string;
   at: number;
@@ -62,8 +105,10 @@ export type RecordEntry = {
   differs: boolean;
   /** Undone after it landed — shown, but folded. */
   undone: boolean;
-  /** The thread it landed on, when it landed on one. */
+  /** The primary thread it landed on, retained for older consumers. */
   targetId?: string;
+  /** Every active landing row from this capture, including split shares. */
+  destinations: RecordDestination[];
 };
 
 /** Compare the way a reader would: case, spacing and trailing punctuation
@@ -71,7 +116,8 @@ export type RecordEntry = {
 const normalise = (s: string) =>
   s.toLowerCase().replace(/\s+/g, " ").replace(/[.,;:!?]+$/g, "").trim();
 
-const asEntry = (e: CaptureEntry): RecordEntry => {
+const asEntry = (group: RecordCaptureGroup): RecordEntry => {
+  const e = group.primary;
   const said = (e.transcript || e.raw || "").trim();
   const filed = (e.clean || "").trim();
   return {
@@ -80,11 +126,18 @@ const asEntry = (e: CaptureEntry): RecordEntry => {
     said,
     filed,
     kind: e.kind,
-    undone: !!e.undone,
+    undone: !group.active,
     targetId:
       (e.kind === "thread" || e.kind === "both") && e.targetId
         ? e.targetId
         : undefined,
+    destinations: group.rows.map((row) => ({
+      entryId: row.id,
+      kind: row.kind,
+      filed: (row.clean || "").trim(),
+      targetId: row.targetId || undefined,
+      targetFragId: row.targetFragId,
+    })),
     differs: !!said && !!filed && normalise(said) !== normalise(filed),
   };
 };
@@ -94,9 +147,8 @@ export function recentCaptures(
   ledger: CaptureEntry[],
   limit = 12
 ): RecordEntry[] {
-  return ledger
-    .filter((entry) => entry.kind !== "pending")
-    .sort((a, b) => b.at - a.at)
+  return recordCaptureGroups(ledger)
+    .sort((a, b) => b.primary.at - a.primary.at)
     .slice(0, limit)
     .map(asEntry);
 }
@@ -109,9 +161,9 @@ export function recentCaptures(
  * the recent feed this is chronological.
  */
 export function dayCaptures(ledger: CaptureEntry[], day: string): RecordEntry[] {
-  return ledger
-    .filter((e) => e.kind !== "pending" && dayKey(e.at) === day)
-    .sort((a, b) => a.at - b.at)
+  return recordCaptureGroups(ledger)
+    .filter((group) => dayKey(group.primary.at) === day)
+    .sort((a, b) => a.primary.at - b.primary.at)
     .map(asEntry);
 }
 
@@ -164,8 +216,7 @@ export function heatGrid(
 ): HeatCell[][] {
   const days = weeks * 7;
   const counts = new Map<string, number>();
-  for (const e of ledger) {
-    if (e.kind === "pending") continue;
+  for (const { primary: e } of recordCaptureGroups(ledger)) {
     const key = dayKey(e.at);
     counts.set(key, (counts.get(key) || 0) + 1);
   }
@@ -214,8 +265,7 @@ export type CaughtWords = { words: number; like: string } | null;
     first rung — "seven words, about a postcard" is a joke at nobody. */
 export function caughtWords(ledger: CaptureEntry[]): CaughtWords {
   let words = 0;
-  for (const e of ledger) {
-    if (e.kind === "pending") continue;
+  for (const { primary: e } of recordCaptureGroups(ledger)) {
     const said = (e.raw || e.clean || "").trim();
     if (said) words += said.split(/\s+/).length;
   }

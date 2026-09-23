@@ -152,7 +152,7 @@ describe("retrying a waiting-to-sort capture", () => {
     expect(hook.result.current.data.actions.every((action) => !action.unsorted)).toBe(true);
     expect(hook.result.current.data.threads[0].frags.at(-1)?.imgs).toEqual(["pic"]);
     expect(hook.result.current.data.ledger.some((entry) =>
-      entry.kind === "action" && entry.imgs?.includes("pic")
+      entry.kind === "both" && entry.imgs?.includes("pic")
     )).toBe(true);
     expect(await get(IMG("pic"))).toBe(image);
   });

@@ -1,4 +1,10 @@
-import { markUndone, mergeCorrections, mergeLedgers } from "./ledger";
+import {
+  markUndone,
+  mergeCorrections,
+  mergeLedgers,
+  primaryLedgerEntries,
+  type CaptureEntry,
+} from "./ledger";
 import { mergeCompletions, mergeWraps } from "./wrap";
 import type { Board } from "./model";
 
@@ -36,6 +42,16 @@ export type UndoSnapshot = {
   /** The ledger entries the capture wrote. */
   ledgerIds?: string[];
 };
+
+/** The semantic identity Undo asks about. Split rows may be prepended in any
+ * order, so only the explicit primary marker can choose this reliably. */
+export function undoPrimaryEntry(live: Board, snap: UndoSnapshot): CaptureEntry | undefined {
+  const ids = new Set(snap.ledgerIds ?? []);
+  const candidates = live.ledger.filter((entry) => ids.size
+    ? ids.has(entry.id)
+    : !snap.board.ledger.some((previous) => previous.id === entry.id));
+  return primaryLedgerEntries(candidates)[0];
+}
 
 export function restoreCapture(
   live: Board,

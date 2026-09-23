@@ -2,7 +2,7 @@ import type { CaptureOrigin, SaveDraftInput } from "./intentionOps";
 import type { CaptureEntry } from "./ledger";
 import { sourceOf } from "./ledger";
 import type { Action, Board, Principle } from "./model";
-import type { Applied, SortResult } from "./boardOps";
+import { pinSortedThreadDestination, type Applied, type SortResult } from "./boardOps";
 import { recordSortedCapture } from "./settle";
 
 export function pendingEntry(board: Board, actionId: string): CaptureEntry | undefined {
@@ -28,10 +28,16 @@ export function matchingPendingAction(board: Board, expected: Action): Action | 
 }
 
 /** Preserve a destination explicitly selected before an offline/provider failure. */
-export function pinResortDestination(sorted: SortResult, action: Action): SortResult {
-  return action.threadId
-    ? { ...sorted, threadId: action.threadId, threadName: null }
-    : sorted;
+export function pinResortDestination(
+  sorted: SortResult,
+  action: Action,
+  latestBoard: Board,
+): SortResult | null {
+  if (!action.threadId || sorted.kind === "intention") return sorted;
+  return pinSortedThreadDestination({
+    ...sorted,
+    primaryOwnsImages: action.imgs?.length ? true : sorted.primaryOwnsImages,
+  }, action.threadId, latestBoard);
 }
 
 export function resortIntentionOrigin(
@@ -123,6 +129,7 @@ export function recordResortedCapture(
       kind: out.kind,
       clean: out.clean,
       primaryText: out.primaryText,
+      primaryOwnsImages: out.kind === "action" || out.primaryOwnsImages,
       via: out.via,
       primary: {
         targetId:
@@ -137,6 +144,7 @@ export function recordResortedCapture(
         text: piece.text,
         threadId: piece.threadId,
         fragId: piece.fragId,
+        ownsImages: piece.ownsImages,
       })),
     },
     mkId

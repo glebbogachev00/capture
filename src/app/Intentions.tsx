@@ -48,6 +48,7 @@ import {
   dayCaptures,
   dayKey,
   monthLabels,
+  recordCaptureCount,
   recordStats,
 } from "@/lib/record";
 
@@ -609,7 +610,7 @@ export function RecordScreen({
 
 
 
-      {!ledger.length ? (
+      {!stats.total ? (
         <div className="empty record-empty">
           <p className="big">The record is quiet.</p>
           <p>Your first capture will leave a trace here.</p>
@@ -731,6 +732,13 @@ export function RecordScreen({
                       className={e.undone ? "record-undone" : undefined}
                     >
                       <p className="record-filed">{e.filed || e.said}</p>
+                      {e.destinations.slice(1).map((destination) =>
+                        destination.filed && destination.filed !== e.filed ? (
+                          <p className="record-filed" key={destination.entryId}>
+                            {destination.filed}
+                          </p>
+                        ) : null
+                      )}
                       {e.differs && (
                         <p className="record-said">
                           <span>said</span> {e.said}
@@ -747,18 +755,29 @@ export function RecordScreen({
                       <p className="record-meta">
                         {e.kind} · {e.undone && "undone · "}
                         {(() => {
-                          const home = e.targetId
-                            ? threads.find((t) => t.id === e.targetId)
-                            : undefined;
-                          return home ? (
+                          const seen = new Set<string>();
+                          const homes = e.destinations.flatMap((destination) => {
+                            const home = destination.targetId
+                              ? threads.find((thread) => thread.id === destination.targetId)
+                              : undefined;
+                            if (!home || seen.has(home.id)) return [];
+                            seen.add(home.id);
+                            return [home];
+                          });
+                          return homes.length ? (
                             <>
                               in{" "}
-                              <button
-                                className="record-home"
-                                onClick={() => onOpenThread(home.id)}
-                              >
-                                {home.name}
-                              </button>{" "}
+                              {homes.map((home, index) => (
+                                <span key={home.id}>
+                                  {index > 0 ? ", " : ""}
+                                  <button
+                                    className="record-home"
+                                    onClick={() => onOpenThread(home.id)}
+                                  >
+                                    {home.name}
+                                  </button>
+                                </span>
+                              ))}{" "}
                               ·{" "}
                             </>
                           ) : null;
@@ -883,7 +902,7 @@ export function SettingsScreen({
   sync,
   onSyncNow,
   onOpenRecord,
-  ledgerCount,
+  ledger,
   profile,
   onProfileChange,
 }: {
@@ -910,7 +929,7 @@ export function SettingsScreen({
       but Settings is where people go looking, especially on phones where
       the header count is hidden. */
   onOpenRecord: () => void;
-  ledgerCount: number;
+  ledger: CaptureEntry[];
   profile?: ProfileIdentity;
   onProfileChange: (profile: ProfileUpdate) => Promise<void>;
 }) {
@@ -921,6 +940,7 @@ export function SettingsScreen({
   >(null);
   const [reporting, setReporting] = useState(false);
   const activePrinciples = principles.filter((p) => p.enabled).length;
+  const ledgerCount = recordCaptureCount(ledger);
   const itemCount = counts.actions + counts.threads + counts.intentions;
   const toggleSection = (section: NonNullable<typeof openSection>) =>
     setOpenSection((current) => (current === section ? null : section));

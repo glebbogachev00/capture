@@ -20,7 +20,6 @@ import {
   left,
   uid,
 } from "./model";
-import { thinkingShares } from "./sort";
 import { bestActionDuplicate } from "./related";
 
 /** What /api/sort returns. Validated server-side against a schema. */
@@ -29,6 +28,13 @@ export type SortResult = {
   kind: "action" | "thread" | "intention" | "both";
   title: string;
   actions?: string[];
+  actionMeta?: {
+    text: string;
+    source: string;
+    shelfLife: ShelfLife;
+    due: string | null;
+    thinkingIndex?: number | null;
+  }[];
   /** Exact action lines explicitly about the primary thinking subject.
       Missing on older responses: co-capture alone never establishes a link. */
   primaryActions?: string[] | null;
@@ -41,10 +47,18 @@ export type SortResult = {
       destination. `clean` remains the whole capture, because the ledger and
       Undo are written around it. */
   primaryText?: string | null;
+  primaryOwnsImages?: boolean;
   /** Further threads this capture also belongs in, each carrying only its
       own share of the words. Empty for the ordinary one-subject capture. */
   also?:
-    | { text: string; threadId?: string | null; threadName?: string | null }[]
+    | {
+        text: string;
+        threadId?: string | null;
+        threadName?: string | null;
+        /** Exact action lines that directly advance this thinking share. */
+        actions?: string[] | null;
+        ownsImages?: boolean;
+      }[]
     | null;
   /** Which model tier sorted it — recorded in the capture ledger. */
   via?: string;
@@ -71,10 +85,48 @@ export type Applied = {
   /** Where each further subject went, so the caller can record one ledger
       entry per destination. The ledger is what Undo and the daily wrap read
       from, so a fragment with no entry is a fragment they cannot see. */
-  alsoLanded?: { threadId: string; fragId: string; text: string }[];
+  alsoLanded?: { threadId: string; fragId: string; text: string; ownsImages?: boolean }[];
+  /** Internal application map from semantic thinking index to new action ids. */
+  actionLinks?: Record<number, string[]>;
 };
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+/** An explicit destination is authoritative, but only while it still exists.
+ * Collapse all thinking into that one home so secondary model routing cannot
+ * partially override the person's choice. */
+export function pinSortedThreadDestination(
+  out: SortResult,
+  threadId: string,
+  board: Board,
+): SortResult | null {
+  if (!board.threads.some((thread) => thread.id === threadId)) return null;
+  const actionOnly = out.kind === "action";
+  const shares = [
+    out.primaryText?.trim() || ((out.kind === "thread" || out.kind === "both") ? out.clean.trim() : ""),
+    ...(out.also ?? []).map((piece) => piece.text.trim()),
+  ].filter(Boolean);
+  const related = new Set([
+    ...(out.primaryActions ?? []),
+    ...(out.also ?? []).flatMap((piece) => piece.actions ?? []),
+  ]);
+  return {
+    ...out,
+    kind: (out.actions?.length ?? 0) ? "both" : "thread",
+    threadId,
+    threadName: null,
+    primaryText: shares.join("\n\n") || out.clean,
+    primaryActions: actionOnly
+      ? [...(out.actions ?? [])]
+      : (out.actions ?? []).filter((action) => related.has(action)),
+    primaryOwnsImages: out.primaryOwnsImages === true || (out.also ?? []).some((piece) => piece.ownsImages),
+    also: null,
+    actionMeta: out.actionMeta?.map((action) => ({
+      ...action,
+      thinkingIndex: actionOnly ? 0 : action.thinkingIndex == null ? null : 0,
+    })),
+  };
+}
 
 /**
  * Fold a sorted capture into a board, returning the new board plus what it
@@ -99,6 +151,9 @@ export function applySorted(
   at: number,
   board: Board
 ): Applied {
+  const stale = [out.threadId, ...(out.also ?? []).map((piece) => piece.threadId)]
+    .filter((id): id is string => !!id && !board.threads.some((thread) => thread.id === id));
+  if (stale.length) throw new Error("Stale destination: the selected thread no longer exists.");
   /* Split captures file their own share in the primary thread, not the whole
      capture — otherwise the half that went to `also` is sitting in two
      places and the person has to notice the copy and delete it. `clean`
@@ -108,43 +163,72 @@ export function applySorted(
      and filing the whole capture plus a copy of half of it is worse than not
      splitting at all: the person has to spot the duplicate and delete it.
      So an unusable split is refused outright rather than half-applied. */
-  const pieces = thinkingShares(out.also, out.actions);
+  const pieces = (out.also ?? []).filter((piece) => piece.text.trim());
   const share = out.primaryText?.trim();
   const splitting = pieces.length > 0 && !!share;
   const thinking = (splitting || (out.kind === "both" && share)) ? share! : out.clean;
-  const primary = applyPrimary(out, imgIds, at, board, thinking);
-  return splitting ? foldAlso(primary, pieces, at, board) : primary;
+  const primaryImages = out.primaryOwnsImages === false ? [] : imgIds;
+  const primary = applyPrimary(out, primaryImages, at, board, thinking);
+  return splitting ? foldAlso(primary, pieces, imgIds, at) : primary;
 }
 
 type Piece = NonNullable<SortResult["also"]>[number];
+
+function linkLandedActions(
+  board: Board,
+  piece: Piece,
+  landedIds: string[],
+  threadId: string,
+  fragId: string,
+  actionIds?: string[],
+): Board {
+  const proven = new Set(actionIds ?? []);
+  const related = new Set((piece.actions ?? []).map((text) => text.trim()).filter(Boolean));
+  if (!proven.size && !related.size) return board;
+  const landed = new Set(landedIds);
+  return {
+    ...board,
+    actions: board.actions.map((action) =>
+      landed.has(action.id) && (proven.size ? proven.has(action.id) : related.has(action.text))
+        ? { ...action, threadId, sourceFragId: fragId }
+        : action
+    ),
+  };
+}
 
 /** Add each further subject to its thread, opening one where none was named. */
 function foldAlso(
   applied: Applied,
   pieces: Piece[],
+  imgIds: string[],
   at: number,
-  original: Board
 ): Applied {
   let board = applied.next;
   const alsoLanded: Applied["alsoLanded"] = [];
   const landedIds = [...applied.landedIds];
   const names: string[] = [];
 
-  for (const piece of pieces) {
-    const frag: Frag = { id: uid(), at, text: piece.text.trim(), imgs: [] };
+  for (const [offset, piece] of pieces.entries()) {
+    const frag: Frag = {
+      id: uid(),
+      at,
+      text: piece.text.trim(),
+      imgs: piece.ownsImages ? imgIds : [],
+    };
     landedIds.push(frag.id);
     const home = piece.threadId
       ? board.threads.find((t) => t.id === piece.threadId)
       : undefined;
     if (home) {
       names.push(home.name);
-      alsoLanded.push({ threadId: home.id, fragId: frag.id, text: frag.text });
+      alsoLanded.push({ threadId: home.id, fragId: frag.id, text: frag.text, ownsImages: piece.ownsImages });
       board = {
         ...board,
         threads: board.threads.map((t) =>
           t.id === home.id ? { ...t, frags: [...t.frags, frag] } : t
         ),
       };
+      board = linkLandedActions(board, piece, landedIds, home.id, frag.id, applied.actionLinks?.[offset + 1]);
       continue;
     }
     /* No thread named, or one that no longer exists: open a new one rather
@@ -157,11 +241,11 @@ function foldAlso(
     };
     names.push(fresh.name);
     landedIds.push(fresh.id);
-    alsoLanded.push({ threadId: fresh.id, fragId: frag.id, text: frag.text });
+    alsoLanded.push({ threadId: fresh.id, fragId: frag.id, text: frag.text, ownsImages: piece.ownsImages });
     board = { ...board, threads: [fresh, ...board.threads] };
+    board = linkLandedActions(board, piece, landedIds, fresh.id, frag.id, applied.actionLinks?.[offset + 1]);
   }
 
-  void original;
   return {
     ...applied,
     next: board,
@@ -180,10 +264,18 @@ function applyPrimary(
   board: Board,
   thinking: string
 ): Applied {
+  const meta = out.actionMeta?.length
+    ? out.actionMeta
+    : (out.actions ?? []).map((text) => ({
+        text,
+        source: (out.actions?.length ?? 0) > 1 || out.primaryText?.trim() || out.also?.length
+          ? text
+          : out.clean,
+        shelfLife: (out.shelfLife || "keep") as ShelfLife,
+        due: (out.actions?.length ?? 0) === 1 ? (out.due ?? null) : null,
+        thinkingIndex: null,
+      }));
   if (out.kind === "action") {
-    const span = SHELF[out.shelfLife as ShelfLife] ?? null;
-    const due = parseDue((out.actions?.length ?? 0) > 1 ? null : out.due, stamp());
-
     /* A picture that arrives with a task has nowhere to live on an action:
        nothing renders an action's images, and ticking the action off would
        take the picture with it. So the capture lands in both places — the
@@ -218,27 +310,34 @@ function applyPrimary(
         : threads[0].id
       : null;
 
-    const items: Action[] = (out.actions?.length ? out.actions : [out.title]).map(
-      (t: string) => ({
+    const selected = meta.length ? meta : [{
+      text: out.title,
+      source: out.clean,
+      shelfLife: (out.shelfLife || "keep") as ShelfLife,
+      due: out.due ?? null,
+      thinkingIndex: null,
+    }];
+    const items: Action[] = selected.map((row) => {
+      const span = SHELF[row.shelfLife] ?? null;
+      const due = parseDue(row.due, stamp());
+      return {
         id: uid(),
-        text: t,
+        text: row.text,
         done: false,
         at,
-        // A single task may keep its fuller wording; siblings must not travel
-        // together. Whole-capture provenance belongs to the immutable Record.
-        src: (out.actions?.length ?? 0) > 1 || out.primaryText?.trim() || out.also?.length
-          ? t : out.clean,
+        src: row.source,
         /* Never the action's own: the fragment owns the picture. */
         imgs: [],
         ...(shotFrag && shotThreadId
           ? { shot: { threadId: shotThreadId, fragId: shotFrag.id } }
           : {}),
-        shelf: (out.shelfLife || "keep") as ShelfLife,
+        shelf: row.shelfLife,
         /* A stated deadline never lets the action fade before its date. */
         due,
         expires: expiryFor(span, due, stamp()),
-      })
-    );
+      };
+    });
+    const span = items.length === 1 ? SHELF[items[0].shelf] : null;
     const plain =
       items.length +
       " action" +
@@ -270,21 +369,21 @@ function applyPrimary(
   // fragment) and the task(s) become actions with no images of their own —
   // deleting a closed action must never drop an image the thread still uses.
   if (out.kind === "both") {
-    const span = SHELF[out.shelfLife as ShelfLife] ?? null;
-    const due = parseDue((out.actions?.length ?? 0) > 1 ? null : out.due, stamp());
-    const items: Action[] = (out.actions ?? []).map((t) => ({
-      id: uid(),
-      text: t,
-      done: false,
-      at,
-      // src is operational text for this action (fold, resort, share, intention),
-      // never either the whole mixed capture or its thinking-only fragment.
-      src: t,
-      imgs: [],
-      shelf: (out.shelfLife || "keep") as ShelfLife,
-      due,
-      expires: expiryFor(span, due, stamp()),
-    }));
+    const items: Action[] = meta.map((row) => {
+      const span = SHELF[row.shelfLife] ?? null;
+      const due = parseDue(row.due, stamp());
+      return {
+        id: uid(),
+        text: row.text,
+        done: false,
+        at,
+        src: row.source,
+        imgs: [],
+        shelf: row.shelfLife,
+        due,
+        expires: expiryFor(span, due, stamp()),
+      };
+    });
     const bothFrag: Frag = { id: uid(), at, text: thinking, imgs: imgIds };
     const home = board.threads.find((x) => x.id === out.threadId);
     const threads = home
@@ -308,14 +407,21 @@ function applyPrimary(
        of thinking destinations (errands do not get their own threads). */
     const primaryActions = new Set(Array.isArray(out.primaryActions)
       ? out.primaryActions.filter((text): text is string => typeof text === "string") : []);
-    const linked = items.map((item) => primaryActions.has(item.text)
-      ? { ...item, threadId: homeId }
-      : item);
+    const actionLinks: Record<number, string[]> = {};
+    meta.forEach((row, index) => {
+      if (row.thinkingIndex == null) return;
+      (actionLinks[row.thinkingIndex] ??= []).push(items[index].id);
+    });
+    const linked = items.map((item, index) =>
+      meta[index]?.thinkingIndex === 0 || (!out.actionMeta?.length && primaryActions.has(item.text))
+        ? { ...item, threadId: homeId, sourceFragId: bothFrag.id }
+        : item);
     return {
       next: { ...board, actions: [...linked, ...board.actions], threads },
       targetId: homeId,
       source: { kind: "thread", id: homeId, fragId: bothFrag.id },
       landedIds: [...linked.map((i) => i.id), homeId],
+      actionLinks,
       /* A layer is something added to a thread that was already there. A
          thread this capture just created has no layers yet — calling its
          first fragment "a layer on X" describes a history that does not

@@ -910,7 +910,7 @@ export function Capture() {
               if (!leaveSettings()) return;
               setShowRecord(true);
             }}
-            ledgerCount={(data.ledger ?? []).filter((entry) => entry.kind !== "pending").length} profile={data.profile} onProfileChange={updateProfile}
+            ledger={data.ledger ?? []} profile={data.profile} onProfileChange={updateProfile}
           />
         ) : draft ? (
           <IntentionDraft

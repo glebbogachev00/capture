@@ -17,7 +17,7 @@ import { logoutAndNavigate, ownedFetch as fetch } from "@/lib/ownership";
  * reactive state React renders and the ref the handlers read.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { stamp } from "@/lib/clock";
+import { clientDateContext, stamp } from "@/lib/clock";
 import { del, get, keys, set, setMany } from "@/lib/storage";
 import {
   type Action,
@@ -91,15 +91,11 @@ import {
   byRecency,
   applySorted,
   computeSuggestion,
+  pinSortedThreadDestination,
   type Suggestion,
 } from "@/lib/boardOps";
 import { resolveCapture } from "@/lib/command";
-import {
-  refileRule,
-  undoRule,
-  answeredKindCorrection,
-  type SortKind,
-} from "@/lib/refiled";
+import { refileRule, answeredKindCorrection, type SortKind } from "@/lib/refiled";
 import { expiryFor, parseDue } from "@/lib/due";
 import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
@@ -136,12 +132,12 @@ import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
 import { applySaveDraft, type CaptureOrigin } from "@/lib/intentionOps";
-import { editUnsortedCapture, removeUnsortedCapture, settledLedgerEntries } from "@/lib/unsortedOps";
+import { editUnsortedCapture, removeUnsortedCapture } from "@/lib/unsortedOps";
 import { matchingPendingAction, pendingDraftAction, pendingEntry, pinResortDestination,
   recordResortedCapture, requestIntentionExpansion, resortIntentionOrigin } from "@/lib/resortOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
 import { assemblePanel } from "@/lib/tidyPanel";
-import { restoreCapture } from "@/lib/undoOps";
+import { restoreCapture, undoPrimaryEntry } from "@/lib/undoOps";
 import { ensureHubImage, referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
@@ -162,7 +158,14 @@ import {
   withLedger,
   type CorrectionEntry,
 } from "@/lib/ledger";
-import { deriveRules, setRuleEnabled, type RulePreference } from "@/lib/rules";
+import { type RulePreference } from "@/lib/rules";
+import {
+  canonicalForgottenCorrectionKeys,
+  correctionExamples,
+  correctionPreferences,
+  setCorrectionEnabled,
+} from "@/lib/sortCorrections";
+import { sortHistoryContext } from "@/lib/sortHistory";
 import {
   scanStale,
   type OrganizeProposal,
@@ -806,15 +809,7 @@ export function useBoard(now: number) {
     const board: Board = restoreCapture(latest.current, snap, now);
 
     const added = stampChanges(latest.current, board, now).tombstones;
-
-    /* The capture being undone: the one ledger entry the snapshot does not
-       have. It carries both halves of the question — what was said, and
-       what the sorter decided it was. */
-    const undoneEntry = snap.ledgerIds?.length
-      ? latest.current.ledger.find((e) => e.id === snap.ledgerIds![0])
-      : latest.current.ledger.find(
-          (e) => !snap.board.ledger.some((x) => x.id === e.id)
-        );
+    const undoneEntry = undoPrimaryEntry(latest.current, snap);
     /* "both" is not a kind anyone can pick, so there is nothing to ask. */
     const wrongKind: SortKind | null =
       undoneEntry && undoneEntry.kind !== "both" && undoneEntry.kind !== "pending"
@@ -914,29 +909,24 @@ export function useBoard(now: number) {
     /* The box may have been edited since Undo put the words back; what is
        re-sorted and what the lesson cites is the draft as it stands. */
     const words = text.trim() || m?.text || "";
-    if (m) {
-      const rule = undoRule(words, m.wrong, right);
-      if (rule) {
-        const learned = withCorrection(latest.current, {
-          id: uid(),
-          at: stamp(),
-          proposalKind: "undone",
-          accepted: true,
-          context: words.slice(0, 160),
-          rule,
-        });
-        latest.current = learned;
-        setData(learned);
-        try {
-          await set(KEY, JSON.stringify(learned));
-        } catch {
-          /* disk hiccup; the next commit writes it */
-        }
+    const correction = m ? answeredKindCorrection(words, m.wrong, right) : null;
+    if (correction) {
+      const learned = withCorrection(latest.current, {
+        id: uid(),
+        at: stamp(),
+        ...correction,
+      });
+      latest.current = learned;
+      setData(learned);
+      try {
+        await set(KEY, JSON.stringify(learned));
+      } catch {
+        /* disk hiccup; the next commit writes it */
       }
       /* The box holds the restored words, but a re-sort must not depend on
          that: if anything cleared them, the capture being corrected is
          still right here. */
-      if (!text.trim()) setText(m.text);
+      if (!text.trim() && m) setText(m.text);
     }
     await submit(false, right, words || undefined, undefined, m?.captureId);
     /* After the capture lands, not before — the banner says where it went,
@@ -975,24 +965,25 @@ export function useBoard(now: number) {
         home.name,
         [home.name, home.summary, ...home.frags.map((f) => f.text)].join(" ")
       );
-      if (rule) {
-        /* Answered strength: they were asked outright and picked a thread,
-           which is the same kind of evidence as answering the kind. */
-        const learned = withCorrection(latest.current, {
-          id: uid(),
-          at: stamp(),
-          proposalKind: "undone",
-          accepted: true,
-          context: words.slice(0, 160),
-          rule,
-        });
-        latest.current = learned;
-        setData(learned);
-        try {
-          await set(KEY, JSON.stringify(learned));
-        } catch {
-          /* disk hiccup; the next commit writes it */
-        }
+      /* The full corrected example is the learning signal. The optional
+         rule remains only for the visible learned-rules control. */
+      const learned = withCorrection(latest.current, {
+        id: uid(),
+        at: stamp(),
+        proposalKind: "undone",
+        accepted: true,
+        context: words.trim().slice(0, 500),
+        chosenKind: "thread",
+        chosenThreadId: home.id,
+        chosenThreadName: home.name,
+        ...(rule ? { rule } : {}),
+      });
+      latest.current = learned;
+      setData(learned);
+      try {
+        await set(KEY, JSON.stringify(learned));
+      } catch {
+        /* disk hiccup; the next commit writes it */
       }
       if (!text.trim()) setText(m.text);
     }
@@ -1150,7 +1141,17 @@ export function useBoard(now: number) {
       // Cleared learning rules survive a reload too.
       try {
         const frRaw = await get(FORGOTTEN_RULES_KEY);
-        if (frRaw) setForgottenRules(JSON.parse(frRaw));
+        if (frRaw) {
+          const parsed = JSON.parse(frRaw);
+          const legacy = Array.isArray(parsed)
+            ? parsed.filter((value): value is string => typeof value === "string")
+            : [];
+          const migrated = canonicalForgottenCorrectionKeys(next.corrections ?? [], legacy);
+          setForgottenRules(migrated);
+          if (JSON.stringify(migrated) !== JSON.stringify(legacy)) {
+            await set(FORGOTTEN_RULES_KEY, JSON.stringify(migrated));
+          }
+        }
       } catch {
         /* first run */
       }
@@ -1287,42 +1288,26 @@ export function useBoard(now: number) {
     // person files and routes into the thread they'd choose. Kept small on
     // purpose — every capture pays for this context, so it stays recent and
     // compact rather than the whole 500-entry ledger.
-    const threadName = (id: string) =>
-      latest.current.threads.find((t) => t.id === id)?.name || "";
-    const settledHistory = settledLedgerEntries(latest.current).filter((entry) => !entry.undone);
+    const history = sortHistoryContext(latest.current);
     /* The capture just before this one, if it went to a thread — the only
        thing a series can continue. */
-    const prev = settledHistory.find(
-      (e) =>
-        (e.kind === "thread" || e.kind === "both") &&
-        e.targetId &&
-        latest.current.threads.some((t) => t.id === e.targetId)
-    );
+    const prev = history.previousThread;
     const series = prev
       ? seriesFor(raw, {
           raw: prev.raw,
           at: prev.at,
           threadId: prev.targetId,
-          threadName: threadName(prev.targetId),
+          threadName: latest.current.threads.find((thread) => thread.id === prev.targetId)?.name ?? "",
         })
       : null;
-    const recent = settledHistory
-      .slice(0, 30)
-      .map((e) => ({
-        raw: e.raw.length > 120 ? e.raw.slice(0, 120) : e.raw,
-        kind: e.kind,
-        at: e.at,
-        target:
-          e.kind === "thread" || e.kind === "both" ? threadName(e.targetId) : "",
-      }));
-    // The bounded personal model, advisory: top learned rules as plain
-    // sentences. Empty until the user has accepted or dismissed enough
-    // suggestions for a rule to form — a fresh board sorts exactly as before.
-    const rules = deriveRules(
+    const recent = history.recent;
+    // Corrections are semantic examples for the same reasoning pass, not
+    // phrase rules that can override it after the fact.
+    const corrections = correctionExamples(
       latest.current.corrections ?? [],
+      latest.current.threads.map(({ id, name }) => ({ id, name })),
       forgottenRules,
-      stamp()
-    ).map((r) => r.text);
+    );
     const res = await fetch("/api/sort", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1332,8 +1317,9 @@ export function useBoard(now: number) {
         recent,
         series: series ?? undefined,
         force,
-        rules,
+        corrections,
         imgs: imgSrc ? [imgSrc] : undefined,
+        ...clientDateContext(),
       }),
     });
     if (!res.ok) {
@@ -1557,7 +1543,8 @@ export function useBoard(now: number) {
       const sorted = await requestSort(a.src || a.text, pinned, imgSrc);
       const current = matchingPendingAction(latest.current, a);
       if (!current) { setBusy(null); return; }
-      const out = pinResortDestination(sorted, current);
+      const out = pinResortDestination(sorted, current, latest.current);
+      if (!out) throw new SortError("That thread changed before the capture could land.");
       const pending = pendingEntry(latest.current, current.id);
       if (out.kind === "intention") {
         const origin = resortIntentionOrigin(current, pending, out.via);
@@ -1613,12 +1600,13 @@ export function useBoard(now: number) {
       The forced-intention branch hands off to the intention engine and
       never reaches the capture's commit, so its lesson is recorded here or
       nowhere. Same shape as the one folded into a filed capture. */
-  const noteCommand = async (rule: string, context: string) => {
+  const noteCommand = async (correction: { chosenKind: SortKind; subject: string }, rule: string | null) => {
     const learned = noteCorrection(latest.current, {
       proposalKind: "commanded",
       accepted: true,
-      context: context.slice(0, 160),
-      rule,
+      context: correction.subject,
+      chosenKind: correction.chosenKind,
+      ...(rule ? { rule } : {}),
     });
     latest.current = learned;
     setData(learned);
@@ -1649,7 +1637,7 @@ export function useBoard(now: number) {
     const raw = (override ?? text).trim();
     /* What the capture's opening decides — command prefix, undo-answer
        precedence, and whether it teaches — lives in lib/command. */
-    const { payload, force, commandLesson } = resolveCapture(raw, pinned);
+    const { payload, force, commandLesson, commandCorrection } = resolveCapture(raw, pinned);
     if (!payload && !pics.length) return;
     if (!captureGate.current.enter()) return;
     if (!existingCaptureId && trialExhaustedNow()) {
@@ -1699,7 +1687,7 @@ export function useBoard(now: number) {
         setTranscript("");
         /* This branch never reaches the commit below, so the lesson is
            written here or not at all. */
-        if (commandLesson) await noteCommand(commandLesson, payload);
+        if (commandCorrection) await noteCommand(commandCorrection, commandLesson);
         await expandIntention(payload, {
           raw: payload,
           source: sourceOf(payload, dictated, imgIds.length > 0),
@@ -1718,8 +1706,9 @@ export function useBoard(now: number) {
         pics[0]?.src
       );
       const out = pinnedThread
-        ? { ...sorted, threadId: pinnedThread, threadName: null }
+        ? pinSortedThreadDestination(sorted, pinnedThread, latest.current)
         : sorted;
+      if (!out) throw new SortError("That thread changed before the capture could land.");
 
       // An intention is declared rather than filed, so it takes a second
       // pass through its own engine and stops at a review step instead of
@@ -1770,6 +1759,7 @@ export function useBoard(now: number) {
           kind: out.kind,
           clean: out.clean,
           primaryText: out.primaryText,
+          primaryOwnsImages: out.kind === "action" || out.primaryOwnsImages,
           via: out.via,
           primary: {
             targetId:
@@ -1783,17 +1773,19 @@ export function useBoard(now: number) {
             text: p.text,
             threadId: p.threadId,
             fragId: p.fragId,
+            ownsImages: p.ownsImages,
           })),
         },
         uid
       );
       const withAll = preserveDraftOrigin(latest.current, sortedBoard, origin);
-      const recorded = commandLesson
+      const recorded = commandCorrection
         ? noteCorrection(withAll, {
             proposalKind: "commanded",
             accepted: true,
-            context: payload.slice(0, 160),
-            rule: commandLesson,
+            context: commandCorrection.subject,
+            chosenKind: commandCorrection.chosenKind,
+            ...(commandLesson ? { rule: commandLesson } : {}),
           })
         : withAll;
       showReceipt(landed);
@@ -2839,12 +2831,15 @@ export function useBoard(now: number) {
     const out = applyActionFold(latest.current, actionId, threadId, stamp(), uid);
     if (!out) return;
     await commit(
-      out.lesson
+      out.corrected
         ? noteCorrection(out.board, {
             proposalKind: "refiled",
             accepted: true,
-            context: out.foldedText.slice(0, 160),
-            rule: out.lesson,
+            context: out.foldedText.slice(0, 500),
+            chosenKind: "thread",
+            chosenThreadId: threadId,
+            chosenThreadName: out.threadName,
+            ...(out.lesson ? { rule: out.lesson } : {}),
           })
         : out.board
     );
@@ -3050,12 +3045,15 @@ export function useBoard(now: number) {
        was wrong, with the right home attached) all live in fragOps. */
     const out = applyFragMove(latest.current, fromId, fragId, toId, stamp());
     if (!out) return;
-    const next = out.lesson
+    const next = out.corrected
       ? noteCorrection(out.board, {
           proposalKind: "refiled",
           accepted: true,
-          context: out.movedText.slice(0, 160),
-          rule: out.lesson,
+          context: out.movedText.slice(0, 500),
+          chosenKind: "thread",
+          chosenThreadId: toId,
+          chosenThreadName: out.toName,
+          ...(out.lesson ? { rule: out.lesson } : {}),
         })
       : out.board;
     await commit(next);
@@ -4170,17 +4168,14 @@ export function useBoard(now: number) {
      back on. Only enabled rules reach the sort prompt above. */
   const learnedRules: RulePreference[] = useMemo(
     () =>
-      deriveRules(data.corrections ?? [], [], now).map((rule) => ({
-        ...rule,
-        enabled: !forgottenRules.includes(rule.key),
-      })),
-    [data.corrections, forgottenRules, now]
+      correctionPreferences(data.corrections ?? [], forgottenRules),
+    [data.corrections, forgottenRules]
   );
 
   /** Enable or disable one advisory sorting preference. The correction
       history stays intact, and this device remembers only the switch state. */
   const toggleLearnedRule = async (key: string, enabled: boolean) => {
-    const next = setRuleEnabled(forgottenRules, key, enabled);
+    const next = setCorrectionEnabled(data.corrections ?? [], forgottenRules, key, enabled);
     setForgottenRules(next);
     try {
       await set(FORGOTTEN_RULES_KEY, JSON.stringify(next));

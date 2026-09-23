@@ -3,6 +3,9 @@ import type { Board } from "./model";
 
 export const RECALL_MAX_SOURCES = 12;
 export const RECALL_MAX_SOURCE_CHARS = 1500;
+export const RECALL_MAX_TOPICS = 64;
+export const RECALL_MAX_SELECTED_TOPICS = 4;
+export const RECALL_TOPIC_CONTEXT_BUDGET = 12_000;
 
 const QUESTION_END = /[?？؟;]$/u;
 const OUTER_QUOTED = /^(?:"[\s\S]*"|'[\s\S]*'|“[\s\S]*”|‘[\s\S]*’|«[\s\S]*»|「[\s\S]*」|『[\s\S]*』)$/u;
@@ -47,6 +50,14 @@ export function recallRequestFingerprint(question: string, sources: RecallSource
   return JSON.stringify([normalizeQuestion(question), sources]);
 }
 
+export function recallRetrievalFingerprint(
+  question: string,
+  sources: RecallSource[],
+  topics: RecallTopic[]
+): string {
+  return JSON.stringify([normalizeQuestion(question), sources, topics]);
+}
+
 const nonblank = (max: number, min = 1) => z.string().min(min).max(max).refine((s) => /\S/u.test(s));
 const SourceIdSchema = nonblank(400);
 const MAX_DATE_MS = 8_640_000_000_000_000;
@@ -63,6 +74,19 @@ export const RecallSourceSchema = z.object({
   truncated: z.boolean(),
 }).strict();
 export type RecallSource = z.infer<typeof RecallSourceSchema>;
+
+export const RecallTopicSchema = z.object({
+  id: SourceIdSchema,
+  name: nonblank(160),
+  about: z.string().max(700),
+  at: TimestampSchema,
+}).strict();
+export type RecallTopic = z.infer<typeof RecallTopicSchema>;
+
+export const RecallSelectionSchema = z.object({
+  threadIds: z.array(SourceIdSchema).max(RECALL_MAX_SELECTED_TOPICS),
+}).strict();
+export type RecallSelection = z.infer<typeof RecallSelectionSchema>;
 
 const CitationSchema = z.object({ sourceId: SourceIdSchema, quote: nonblank(600, 8) }).strict();
 const ClaimSchema = z.object({
@@ -92,6 +116,8 @@ export function validateRecallAnswer(value: unknown, sources: RecallSource[]): R
     for (const citation of claim.citations) {
       if (!byId.get(citation.sourceId)?.text.includes(citation.quote)) return null;
     }
+    const extractive = claim.citations.map((citation) => citation.quote).join(" ");
+    if (claim.text !== extractive) return null;
   }
   return parsedAnswer.data;
 }
@@ -114,6 +140,10 @@ const normalize = (text: string): string => text.normalize("NFC").toLowerCase();
 const tokens = (text: string): string[] => (text.match(WORD) ?? []).map(normalize);
 const validId = (id: string): boolean => !!id.trim() && id.length <= 400;
 
+function meaningfulTerms(question: string, includeGeneric = false): string[] {
+  return [...new Set(tokens(question).filter((term) => !STOP.has(term) && (includeGeneric || !GENERIC.has(term))))];
+}
+
 /** One contiguous verbatim excerpt; never concatenate separated evidence. */
 function excerpt(raw: string, terms: string[]): { text: string; truncated: boolean } {
   const trimmed = raw.trim();
@@ -130,8 +160,8 @@ function excerpt(raw: string, terms: string[]): { text: string; truncated: boole
  * never factual evidence. All states remain eligible; recency breaks ties, not
  * contradictions. This bounded lexical selection is not a complete history.
  */
-export function recallSources(board: Board, question: string): RecallSource[] {
-  const terms = [...new Set(tokens(question).filter((term) => !STOP.has(term) && !GENERIC.has(term)))].sort();
+function selectRecallSources(board: Board, question: string): RecallSource[] {
+  const terms = meaningfulTerms(question).sort();
   if (!terms.length) return [];
   const sources: RecallSource[] = [];
   const identities = new Map<string, number>();
@@ -182,4 +212,104 @@ export function recallSources(board: Board, question: string): RecallSource[] {
     b.evidenceMatches - a.evidenceMatches || b.matched.length - a.matched.length || b.specificity - a.specificity ||
     b.source.at - a.source.at || (a.source.id < b.source.id ? -1 : a.source.id > b.source.id ? 1 : 0)
   ).slice(0, RECALL_MAX_SOURCES).map(({ source }) => source);
+}
+
+/** Exact lexical evidence used by local retrieval and deterministic tests. */
+export function recallSources(board: Board, question: string): RecallSource[] {
+  return selectRecallSources(board, question);
+}
+
+/**
+ * Bounded semantic routing context. These topic briefs can help a selector find
+ * the right thread, but they are never quotable evidence. Every thread keeps
+ * its name; the shared context budget shrinks evenly as the board grows. This
+ * avoids replacing semantic retrieval with an unrelated "latest notes" dump.
+ */
+export function recallTopics(board: Board): RecallTopic[] {
+  const counts = new Map<string, number>();
+  for (const thread of board.threads) counts.set(thread.id, (counts.get(thread.id) ?? 0) + 1);
+  const threads = board.threads
+    .filter((thread) => counts.get(thread.id) === 1 && validId(thread.id) && thread.name.trim())
+    .sort((a, b) => {
+      const aAt = Math.max(a.updatedAt ?? 0, ...a.frags.filter((frag) => !frag.unsorted).map((frag) => frag.at));
+      const bAt = Math.max(b.updatedAt ?? 0, ...b.frags.filter((frag) => !frag.unsorted).map((frag) => frag.at));
+      return bAt - aAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    })
+    .slice(0, RECALL_MAX_TOPICS);
+  const perThread = Math.min(700, Math.max(0, Math.floor(RECALL_TOPIC_CONTEXT_BUDGET / Math.max(1, threads.length))));
+  return threads.flatMap((thread) => {
+    const settled = thread.frags.filter((frag) => !frag.unsorted && frag.text.trim());
+    // Selector metadata only. Original fragment text is disclosed only after
+    // this topic is selected and can then be cited by the answer route.
+    const context = [thread.belongs?.trim(), thread.summary?.trim()].filter(Boolean).join("\n\n");
+    const at = Math.max(thread.updatedAt ?? 0, ...settled.map((frag) => frag.at));
+    const topic = { id: thread.id, name: thread.name.trim().slice(0, 160), about: context.slice(0, perThread), at };
+    return RecallTopicSchema.safeParse(topic).success ? [topic] : [];
+  });
+}
+
+/** Accept only unique IDs from the exact topic snapshot supplied by the client. */
+export function validateRecallSelection(value: unknown, topics: RecallTopic[]): RecallSelection | null {
+  const parsedTopics = z.array(RecallTopicSchema).max(RECALL_MAX_TOPICS).safeParse(topics);
+  const parsed = RecallSelectionSchema.safeParse(value);
+  if (!parsedTopics.success || !parsed.success) return null;
+  const available = new Set(parsedTopics.data.map((topic) => topic.id));
+  if (available.size !== parsedTopics.data.length || new Set(parsed.data.threadIds).size !== parsed.data.threadIds.length) return null;
+  return parsed.data.threadIds.every((id) => available.has(id)) ? parsed.data : null;
+}
+
+/**
+ * Original, settled evidence from semantically selected threads. Selection
+ * context is not evidence: the answer route receives only these originals.
+ * Round-robin allocation prevents one large thread from crowding every other
+ * selected topic out of the twelve-source citation boundary.
+ */
+export function recallSourcesForThreads(board: Board, threadIds: string[], question: string): RecallSource[] {
+  const selected = [...new Set(threadIds)].slice(0, RECALL_MAX_SELECTED_TOPICS);
+  const wanted = new Set(selected);
+  const terms = meaningfulTerms(question, true);
+  const buckets = new Map<string, RecallSource[]>();
+  for (const thread of board.threads) {
+    if (!wanted.has(thread.id)) continue;
+    const identities = new Map<string, number>();
+    const sources = thread.frags.flatMap((frag) => {
+      if (frag.unsorted || !validId(thread.id) || !validId(frag.id) || !TimestampSchema.safeParse(frag.at).success) return [];
+      const id = JSON.stringify(["thread", thread.id, frag.id]);
+      identities.set(id, (identities.get(id) ?? 0) + 1);
+      const clipped = excerpt(frag.text, terms);
+      if (!validId(id) || !clipped.text) return [];
+      return [{
+        id,
+        kind: "thread" as const,
+        title: thread.name.trim().slice(0, 160),
+        text: clipped.text,
+        at: frag.at,
+        targetId: thread.id,
+        fragId: frag.id,
+        state: typeof frag.resolvedAt === "number" && Number.isFinite(frag.resolvedAt) ? "resolved" as const : "active" as const,
+        truncated: clipped.truncated,
+      }];
+    }).filter((source) => identities.get(source.id) === 1);
+    sources.sort((a, b) => {
+      const aWords = new Set(tokens(a.text));
+      const bWords = new Set(tokens(b.text));
+      const aMatches = terms.filter((term) => aWords.has(term)).length;
+      const bMatches = terms.filter((term) => bWords.has(term)).length;
+      return bMatches - aMatches || b.at - a.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    });
+    buckets.set(thread.id, sources);
+  }
+  const result: RecallSource[] = [];
+  for (let index = 0; result.length < RECALL_MAX_SOURCES; index++) {
+    let added = false;
+    for (const id of selected) {
+      const source = buckets.get(id)?.[index];
+      if (!source) continue;
+      result.push(source);
+      added = true;
+      if (result.length === RECALL_MAX_SOURCES) break;
+    }
+    if (!added) break;
+  }
+  return result;
 }
