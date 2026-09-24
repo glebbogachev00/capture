@@ -1,12 +1,13 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import type { Tier } from "./providers";
 
 const ai = vi.hoisted(() => ({ generateText: vi.fn() }));
 vi.mock("ai", () => ai);
 vi.mock("@/lib/clientIp", () => ({ clientIp: () => "test" }));
 vi.mock("@/lib/limiter", () => ({ modelRateLimit: () => ({ allowed: true }) }));
 vi.mock("@/lib/providers", () => ({
-  withFallback: async (call: (tier: object) => Promise<string>) => ({
-    value: await call({ model: "test-model", providerOptions: { test: {} } }), via: "test",
+  withFallback: async (call: (tier: Tier) => Promise<string>) => ({
+    value: await call({ name: "test", modelId: "test-model", model: "test-model" as Tier["model"], providerOptions: { test: {} } }), via: "test",
   }),
 }));
 import { POST } from "@/app/api/summarize/route";

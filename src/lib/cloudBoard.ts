@@ -6,8 +6,7 @@ import {
   type CloudQuotaPolicy,
   type CloudQuotaResult,
 } from "@/lib/cloudRequestGuard";
-
-type ServerEnv = Record<string, string | undefined>;
+export { isCloudEnabled } from "@/lib/cloudMode";
 
 export type VerifiedIdentity = { userId: string };
 export type CloudBoardDocument = { state: SyncState; rev: number };
@@ -31,10 +30,6 @@ export interface CloudBoardDependencies {
 
 const MAX_BODY_BYTES = 2_000_000;
 const PUT_ATTEMPTS = 4;
-
-export function isCloudEnabled(env: ServerEnv = process.env): boolean {
-  return env.CAPTURE_CLOUD === "1";
-}
 
 function json(body: unknown, status = 200): Response {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });

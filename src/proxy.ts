@@ -5,6 +5,7 @@ import { AUTH_COOKIE, isValidSession } from "@/lib/auth";
 import { isPublicHome } from "@/lib/seo";
 import { getCloudConfig } from "@/lib/supabase/config";
 import { refreshCloudSession } from "@/lib/supabase/proxy";
+import { isCloudEnabled } from "@/lib/cloudMode";
 
 /** Paths that must stay reachable without the session cookie. */
 const PUBLIC_PATHS = [
@@ -57,7 +58,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.json({ error: "not available in the playground" }, { status: 404 });
   }
   const { pathname } = request.nextUrl;
-  const cloudEnabled = process.env.CAPTURE_CLOUD === "1";
+  const cloudEnabled = isCloudEnabled();
   // These services still use a single-owner hub, local upstream, or issue
   // token. Cloud identity does not make them tenant-safe. Keep them closed
   // on public/Cloud deployments until they have their own authorization.

@@ -8,14 +8,16 @@ import { useBoard } from "@/hooks/useBoard";
 import { undoRule } from "@/lib/refiled";
 
 const ai = vi.hoisted(() => ({ generateObject: vi.fn(), generateText: vi.fn() }));
+const openRouter = vi.hoisted(() => ({ generateOpenRouterStructured: vi.fn() }));
 vi.mock("ai", () => ai);
+vi.mock("@/lib/openRouterStructured.server", () => openRouter);
 vi.mock("@/lib/clientIp", () => ({ clientIp: () => "synthetic" }));
 vi.mock("@/lib/limiter", () => ({ modelRateLimit: () => ({ allowed: true }) }));
 vi.mock("@/lib/providers", () => ({
   NoProvidersError: class extends Error {},
   sanitizeProviderError: () => "synthetic failure",
   withFallback: async (call: (tier: object) => Promise<unknown>) => ({
-    value: await call({ model: "mock-no-provider" }),
+    value: await call({ name: "openrouter", modelId: "openai/gpt-5-mini", model: "mock-no-provider" }),
     via: "mock-no-provider",
   }),
 }));
@@ -30,23 +32,29 @@ let hook: ReturnType<typeof renderHook<ReturnType<typeof useBoard>, unknown>>;
 let sortCall = 0;
 
 const intention = (clean: string) => ({
-  clean,
   title: "Training schedule",
-  thinking: [],
-  actions: [],
-  intention: clean,
-  shelfLife: "keep",
-  due: null,
+  segments: [{
+    role: "intention", source: clean, intention: clean,
+    threadId: null, threadName: null, ownsImage: null, action: null,
+    thinkingOrdinal: null, actionOrdinals: null, shelfLife: null, due: null,
+  }],
 });
 
 const thinking = (clean: string) => ({
-  clean,
   title: "Training schedule",
-  thinking: [{ text: clean, threadId: "r0", threadName: null }],
-  actions: [],
-  intention: null,
-  shelfLife: "keep",
-  due: null,
+  segments: [{
+    role: "thinking",
+    source: clean,
+    threadId: "r0",
+    threadName: null,
+    ownsImage: false,
+    action: null,
+    thinkingOrdinal: null,
+    intention: null,
+    actionOrdinals: null,
+    shelfLife: null,
+    due: null,
+  }],
 });
 
 beforeEach(async () => {
@@ -54,9 +62,10 @@ beforeEach(async () => {
   responseKinds.length = 0;
   sortCall = 0;
   ai.generateObject.mockReset();
-  ai.generateObject.mockImplementation(async ({ schema }) => {
+  openRouter.generateOpenRouterStructured.mockReset();
+  openRouter.generateOpenRouterStructured.mockImplementation(async ({ schema }) => {
     sortCall += 1;
-    return { object: schema.parse(sortCall === 1 ? intention(raw) : thinking(sortCall === 2 ? raw : paraphrase)) };
+    return schema.parse(sortCall === 1 ? intention(raw) : thinking(sortCall === 2 ? raw : paraphrase));
   });
   vi.stubGlobal("fetch", vi.fn(async (input, init) => {
     if (String(input) === "/api/sort") {
@@ -132,17 +141,24 @@ it("a corrected draft becomes semantic training evidence after reload", async ()
 });
 
 it("legacy phrase rules cannot override the model's semantic interpretation", async () => {
-  ai.generateObject.mockImplementation(async ({ schema }) => ({
-    object: schema.parse({
-      clean: raw,
+  openRouter.generateOpenRouterStructured.mockImplementation(async ({ schema }) => (
+    schema.parse({
       title: "Run twice weekly",
-      thinking: [],
-      actions: [{ text: "Run twice every week for thirty minutes", sourceText: raw, thinkingIndex: null, shelfLife: "keep", due: null }],
-      intention: null,
-      shelfLife: "keep",
-      due: null,
-    }),
-  }));
+      segments: [{
+        role: "action",
+        source: raw,
+        action: "Run twice every week for thirty minutes",
+        thinkingOrdinal: null,
+        threadId: null,
+        threadName: null,
+        ownsImage: null,
+        intention: null,
+        actionOrdinals: null,
+        shelfLife: "keep",
+        due: null,
+      }],
+    })
+  ));
   const response = await POST(new Request("http://localhost/api/sort", {
     method: "POST",
     body: JSON.stringify({

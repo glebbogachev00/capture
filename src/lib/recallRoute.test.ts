@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Tier } from "./providers";
 
 // Mock external boundaries only; recall schemas, quote validator, owner
 // precondition, and verified-claims identity extraction remain real.
@@ -34,6 +35,11 @@ const request = (value: unknown = body(), headers?: HeadersInit) => new Request(
   method: "POST", headers, body: JSON.stringify(value),
 });
 const post = async (req = request()) => (await import("@/app/api/recall/route")).POST(req);
+const tier = (name: string): Tier => ({
+  name,
+  modelId: `${name}-model`,
+  model: `${name}-model` as Tier["model"],
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -43,7 +49,7 @@ beforeEach(() => {
   mocks.server.mockResolvedValue({ auth: { getClaims: mocks.claims } });
   mocks.claims.mockResolvedValue({ data: { claims: { sub: "owner", exp: Date.now() / 1000 + 3600 } }, error: null });
   mocks.generateText.mockResolvedValue({ output: answer });
-  mocks.fallback.mockImplementation(async (attempt) => ({ value: await attempt({ name: "fixture", model: "fixture-model", providerOptions: { fixture: { mode: "fast" } } }), via: "fixture" }));
+  mocks.fallback.mockImplementation(async (attempt: (value: Tier) => Promise<unknown>) => ({ value: await attempt({ ...tier("fixture"), providerOptions: { fixture: { mode: "fast" } } }), via: "fixture" }));
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
@@ -203,7 +209,7 @@ describe("POST /api/recall", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.fallback.mockImplementation(async (attempt) => {
-      try { return { value: await attempt({ name: "fixture", model: "fixture" }) }; }
+      try { return { value: await attempt(tier("fixture")) }; }
       catch (failure) { console.warn(failure); throw failure; }
     });
     const response = await post();
@@ -256,8 +262,8 @@ describe("POST /api/recall", () => {
       vi.useFakeTimers();
       mocks.generateText.mockImplementationOnce(() => new Promise(() => {})).mockResolvedValue({ output: answer });
       mocks.fallback.mockImplementation(async (attempt) => {
-        try { return { value: await attempt({ name: "first", model: "first" }) }; }
-        catch { return { value: await attempt({ name: "second", model: "second" }) }; }
+        try { return { value: await attempt(tier("first")) }; }
+        catch { return { value: await attempt(tier("second")) }; }
       });
       let response: Response | undefined;
       void post().then((value) => { response = value; });
@@ -289,8 +295,8 @@ describe("POST /api/recall", () => {
       } });
       mocks.generateText.mockRejectedValue(Object.assign(new Error("limited"), { statusCode: 429 }));
       mocks.fallback.mockImplementation(async (attempt) => {
-        try { return { value: await attempt({ name: "fixture", model: "fixture" }) }; }
-        catch { await new Promise((resolve) => setTimeout(resolve, 18_000)); return { value: await attempt({ name: "retry", model: "retry" }) }; }
+        try { return { value: await attempt(tier("fixture")) }; }
+        catch { await new Promise((resolve) => setTimeout(resolve, 18_000)); return { value: await attempt(tier("retry")) }; }
       });
       let response: Response | undefined;
       void post(new Request("http://localhost/api/recall", { method: "POST", body: stream, duplex: "half" } as RequestInit)).then((value) => { response = value; });
@@ -331,8 +337,8 @@ describe("POST /api/recall", () => {
       const abort = new AbortController();
       mocks.generateText.mockRejectedValue(Object.assign(new Error("limited"), { statusCode: 429 }));
       mocks.fallback.mockImplementation(async (attempt) => {
-        try { return { value: await attempt({ name: "fixture", model: "fixture" }) }; }
-        catch { await new Promise((resolve) => setTimeout(resolve, 18_000)); return { value: await attempt({ name: "retry", model: "retry" }) }; }
+        try { return { value: await attempt(tier("fixture")) }; }
+        catch { await new Promise((resolve) => setTimeout(resolve, 18_000)); return { value: await attempt(tier("retry")) }; }
       });
       let response: Response | undefined;
       void post(new Request("http://localhost/api/recall", { method: "POST", body: JSON.stringify(body()), signal: abort.signal })).then((value) => { response = value; });
@@ -350,7 +356,7 @@ describe("POST /api/recall", () => {
       mocks.generateText.mockImplementation(() => new Promise(() => {}));
       mocks.fallback.mockImplementation(async (attempt) => {
         for (let i = 0; i < 8; i++) {
-          try { return { value: await attempt({ name: `fixture-${i}`, model: "fixture" }) }; }
+          try { return { value: await attempt(tier(`fixture-${i}`)) }; }
           catch { /* a configured fallback tier is available */ }
         }
         throw new Error("all failed");

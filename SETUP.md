@@ -78,7 +78,19 @@ The CLI reads each value from stdin. Enter the exact chat-capable model slug
 for `OPENROUTER_MODEL` and `openrouter` for `CAPTURE_MODEL_PROVIDER`; do not put
 key values in shell history or documentation.
 
-### Optional Jev Decisions shadows
+### Optional Preview Jev routing and Decisions shadows
+
+`CAPTURE_JEV_THREAD_ROUTING_PREVIEW=1` enables the dedicated Thread-destination
+stage only when Vercel also sets `VERCEL_ENV=preview` and
+`OPENROUTER_API_KEY` is present. It is ignored in Production even if the flag
+is accidentally present. After the interpretation model has finished cleanup,
+semantic decomposition, Actions, Intentions, dates, source ownership, and new
+Thread naming, one bounded Decisions request asks one typed Choice question per
+thinking share. Jev may replace only each share's existing-versus-new Thread
+destination. Missing configuration, no candidates/thinking, oversized input,
+quota or transport failure, timeout, malformed answers, or unsafe local mapping
+preserves the interpreter's original routing exactly. The flag defaults off;
+do not add it to Production.
 
 `CAPTURE_JEV_THREAD_RERANK_SHADOW=1` observes thread-destination agreement. A
 pure-thread result may use bounded reconciled `clean` text when `primaryText`
@@ -91,15 +103,18 @@ full verdict list and user-facing reasons.
 ranking (including `none`), and evidence sufficiency in one Decisions request
 after the existing cited Recall answer is complete. It does not reorder
 sources, gate the prose model, write prose/citations, or change the response.
-All three flags default off, require `OPENROUTER_API_KEY`, use locked
+All three shadow flags default off, require `OPENROUTER_API_KEY`, use locked
 ZDR/no-collection/no-fallback routing, and never alter the board or response.
+The Preview routing flag uses the same locked transport but can alter only
+Thread destination under the stricter Preview gate described above.
 No judge or Recall generative calls are eliminated; calibration is blocked as
 documented in `research/jev-judge-calibration.md` and
 `research/jev-recall-calibration.md`.
 
-Before any private-data shadow is enabled, exclude its OpenRouter key from
+Before any private-data Jev flag is enabled, exclude its OpenRouter key from
 Input & Output Logging and verify the Jev endpoint accepts the required privacy
-routing with a non-private payload. A routing failure simply skips the shadow.
+routing with a non-private payload. A failure discards a shadow or preserves the
+interpreter's routing in the Preview destination stage.
 
 ## 2. Run it
 

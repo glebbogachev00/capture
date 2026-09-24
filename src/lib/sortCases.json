@@ -30,6 +30,30 @@
     }
   },
   {
+    "id": "present-tense-principle",
+    "why": "a concise first-person principle about a desired way of living is an intention, not a routine thread",
+    "raw": "I protect two quiet hours every morning and finish the day with energy.",
+    "threads": [],
+    "expect": {
+      "kindOneOf": [
+        "intention"
+      ],
+      "noActions": true
+    }
+  },
+  {
+    "id": "detailed-recurring-plan",
+    "why": "a detailed recurring schedule remains thinking rather than being compressed into an intention",
+    "raw": "I am planning six weeks of training: run Tuesday and Saturday for forty minutes, lift Monday and Thursday, and increase mileage each week.",
+    "threads": [],
+    "expect": {
+      "kindOneOf": [
+        "thread"
+      ],
+      "noActions": true
+    }
+  },
+  {
     "id": "resolve",
     "why": "a resolve about how to live is an intention even without the word want",
     "raw": "I stop taking on client work I secretly resent",
@@ -121,6 +145,25 @@
     }
   },
   {
+    "id": "context-misuse-omitted-action",
+    "why": "the real provider must not hide an independently completable commitment inside a context segment; deterministic structure checks cannot prove that semantic fact",
+    "raw": "Buy milk, and call the doctor to book the follow-up.",
+    "threads": [],
+    "expect": {
+      "kindOneOf": [
+        "action"
+      ],
+      "actionsBetween": [
+        2,
+        2
+      ],
+      "actionsMention": [
+        "milk",
+        "doctor"
+      ]
+    }
+  },
+  {
     "id": "thinking-plus-deadline",
     "why": "live deliberation plus a committed demo is both — neither side may be dropped",
     "raw": "still circling whether to rebuild the capture app in swift or keep the pwa, anyway I told marc I'd demo it to him on friday",
@@ -134,7 +177,7 @@
         1
       ],
       "actionsMention": [
-        "friday"
+        "demo"
       ]
     }
   },

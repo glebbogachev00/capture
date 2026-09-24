@@ -1,0 +1,41 @@
+{
+  "name": "release-critical",
+  "cases": [
+    {
+      "id": "exact-four-action-report",
+      "why": "the exact reported mixed capture must preserve all four explicit commitments and the separate product idea",
+      "raw": "I need to fix the signup error that only appears after an invite is accepted, and test the pricing experiment comparing usage-based billing with seats. The build is getting slow after the new analytics package, so I should profile the render path before we add another dashboard. I also need to document onboarding so a new developer can run the app without asking me where the environment variables come from. While I am in there, I keep thinking about a later product idea: a tiny release assistant that turns a pull request into a clear customer update.",
+      "threads": [],
+      "expect": {
+        "kindOneOf": ["both"],
+        "actionsBetween": [4, 4],
+        "actionsMention": ["signup", "pricing", "render", "onboarding"],
+        "newThread": true
+      }
+    },
+    {
+      "id": "obvious-existing-thread-reuse",
+      "fromSortCase": "no-duplicate-thread"
+    },
+    {
+      "id": "unrelated-name-trap",
+      "fromSortCase": "name-word-trap"
+    },
+    {
+      "id": "context-misuse-two-action",
+      "fromSortCase": "context-misuse-omitted-action"
+    },
+    {
+      "id": "mixed-thinking-deadline",
+      "fromSortCase": "thinking-plus-deadline"
+    },
+    {
+      "id": "new-subject",
+      "fromSortCase": "new-thread"
+    },
+    {
+      "id": "rambling-multi-topic-formatting",
+      "fromSortCase": "rambling-multi-topic"
+    }
+  ]
+}

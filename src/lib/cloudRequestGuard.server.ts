@@ -16,6 +16,7 @@ import { getCloudConfig } from "@/lib/supabase/config";
 import { identityFromClaims } from "@/lib/supabase/identity";
 import { createCloudServerClient } from "@/lib/supabase/server";
 import { hasCurrentCloudAccess } from "@/lib/cloudAccess.server";
+import { isCloudEnabled } from "@/lib/cloudMode";
 
 export type CloudServerClient = Awaited<ReturnType<typeof createCloudServerClient>>;
 
@@ -80,7 +81,7 @@ export async function createCloudGuardServerContext(signal?: AbortSignal): Promi
     return {
       client: null,
       guard: {
-        isCloudHost: () => process.env.CAPTURE_CLOUD === "1",
+        isCloudHost: () => isCloudEnabled(),
         isConfigured: () => false,
         requiresEntitlement: () => isSubscriptionRequired(),
         verifyIdentity: async () => null,
@@ -97,7 +98,7 @@ export async function createCloudGuardServerContext(signal?: AbortSignal): Promi
   return {
     client,
     guard: {
-      isCloudHost: () => process.env.CAPTURE_CLOUD === "1",
+      isCloudHost: () => isCloudEnabled(),
       isConfigured: () => true,
       requiresEntitlement: () => isSubscriptionRequired(),
       verifyIdentity: async (_request, dependencySignal) => dependencySignal
@@ -150,7 +151,7 @@ export async function authorizeManagedAiRequest(
   options: { signal?: AbortSignal } = {},
 ): Promise<GuardResult | Response> {
   // Avoid initializing Cloud adapters on self-hosted/playground deployments.
-  if (process.env.CAPTURE_CLOUD !== "1") return { mode: "non-cloud" };
+  if (!isCloudEnabled()) return { mode: "non-cloud" };
   try {
     const { guard } = await abortableCloudDependency(
       () => createCloudGuardServerContext(options.signal),

@@ -21,7 +21,6 @@ import { SearchResults } from "@/components/SearchResults";
 import { createQuestionAnswerSession, QuestionAnswer, type AnswerProgress } from "@/components/QuestionAnswer";
 import { ThreadView } from "@/components/ThreadView";
 import { ThreadChoices } from "@/components/ThreadChoices";
-import { degradedNote } from "@/lib/degraded";
 import { TangleCallout, TangleReview } from "./Tangle";
 import { DistillView } from "./Distill";
 import {
@@ -34,6 +33,7 @@ import { appendDictationTranscript } from "@/lib/voiceSource";
 import { get, set } from "@/lib/storage";
 import { shrinkFile } from "@/lib/shrink";
 import { type Action, fmt, uid } from "@/lib/model";
+import { receiptLines } from "@/lib/receiptCopy";
 import {
   IntentionCard,
   IntentionDetail,
@@ -156,7 +156,6 @@ export function Capture() {
     closeOrganize,
     wrap,
     dismissWrap,
-    degraded,
     tangle,
     acceptTangle,
     dismissTangle,
@@ -469,17 +468,6 @@ export function Capture() {
                   where days live, and this says one is waiting. */}
               {wrap && !wrap.seen && <span className="wrap-dot" />}
             </button>
-            {/* Which model is doing the work — shown only while it is not
-                the usual one. There is nothing a person can do about a rate
-                limit, so this asks for nothing and blocks nothing. It exists
-                because the alternative was weeks of the app quietly getting
-                worse with no way to know why. It names the consequence, not
-                the plumbing. */}
-            {degraded && (
-              <span className="model-note" title={degradedNote(degraded)}>
-                backup model · sorting will be rougher
-              </span>
-            )}
             {!PLAYGROUND && (
               <button
                 className={
@@ -706,11 +694,12 @@ export function Capture() {
         {err && <div className="err">{err}</div>}
         {landed && (
           <div className="landed">
-            {/* Wrapped in a span so the flex row keeps the sentence whole
-                and only the button sits on its own. */}
-            <span>
-              Landed in <em>{landed}</em>.
-            </span>
+            <div className="landed-copy">
+              <span className="landed-label">Capture sorted this into:</span>
+              <ul className="landed-list">
+                {receiptLines(landed).map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            </div>
             {canUndo && (
               <button className="undo-btn" onClick={() => void undo()}>
                 Undo

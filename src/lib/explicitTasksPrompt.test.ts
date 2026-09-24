@@ -3,11 +3,20 @@ import { explicitTasks, explicitTasksRaw } from "./explicitTasks.fixture";
 
 const model = vi.hoisted(() => ({ generate: vi.fn() }));
 vi.mock("ai", () => ({ generateObject: model.generate }));
+vi.mock("@/lib/routing", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./routing")>();
+  return {
+    ...actual,
+    // This suite verifies prompt/task preservation, not the exact production
+    // provider allowlist, which is covered by routing.test.ts.
+    supportsSemanticSort: () => true,
+  };
+});
 vi.mock("@/lib/providers", () => ({
   NoProvidersError: class extends Error {},
   sanitizeProviderError: () => "synthetic failure",
-  withFallback: async (run: (tier: { model: object }) => Promise<unknown>) => ({
-    value: await run({ model: {} }),
+  withFallback: async (run: (tier: { model: object; name: string; modelId: string }) => Promise<unknown>) => ({
+    value: await run({ model: {}, name: "gemini", modelId: "gemini-3.6-flash" }),
     via: "mock-fallback",
     preferred: "mock-primary",
     fallback: true,
@@ -36,6 +45,83 @@ const sortInterpretation = {
   shelfLife: "keep",
   due: null,
 };
+
+function withSourceSegments(value: typeof sortInterpretation) {
+  const semantic = [
+    ...value.thinking.map((share, ownerIndex) => ({ text: share.text, role: "thinking" as const, ownerIndex })),
+    ...value.actions.map((action, ownerIndex) => ({ text: action.sourceText, role: "action" as const, ownerIndex })),
+  ].map((segment) => ({ ...segment, start: value.clean.indexOf(segment.text) }))
+    .sort((left, right) => left.start - right.start);
+  const sourceSegments: {
+    text: string;
+    role: "thinking" | "action" | "context";
+    ownerIndex: number | null;
+    actionOwnerIndexes: number[] | null;
+  }[] = [];
+  let cursor = 0;
+  for (const segment of semantic) {
+    const gap = value.clean.slice(cursor, segment.start);
+    if (gap) sourceSegments.push({ text: gap, role: "context", ownerIndex: null, actionOwnerIndexes: null });
+    sourceSegments.push({ text: segment.text, role: segment.role, ownerIndex: segment.ownerIndex, actionOwnerIndexes: null });
+    cursor = segment.start + segment.text.length;
+  }
+  const tail = value.clean.slice(cursor);
+  if (tail) sourceSegments.push({ text: tail, role: "context", ownerIndex: null, actionOwnerIndexes: null });
+  let thinkingIndex = 0;
+  let actionIndex = 0;
+  return {
+    title: value.title,
+    segments: sourceSegments.map((segment) => {
+      if (segment.role === "context") {
+        return {
+          role: "context" as const,
+          source: segment.text,
+          threadId: null,
+          threadName: null,
+          ownsImage: null,
+          action: null,
+          thinkingOrdinal: null,
+          intention: null,
+          actionOrdinals: null,
+          shelfLife: null,
+          due: null,
+        };
+      }
+      if (segment.role === "thinking") {
+        const share = value.thinking[thinkingIndex];
+        thinkingIndex += 1;
+        return {
+          role: "thinking" as const,
+          source: segment.text,
+          threadId: share.threadId,
+          threadName: share.threadName,
+          ownsImage: false,
+          action: null,
+          thinkingOrdinal: null,
+          intention: null,
+          actionOrdinals: null,
+          shelfLife: null,
+          due: null,
+        };
+      }
+      const action = value.actions[actionIndex];
+      actionIndex += 1;
+      return {
+        role: "action" as const,
+        source: segment.text,
+        threadId: null,
+        threadName: null,
+        ownsImage: null,
+        action: action.text,
+        thinkingOrdinal: action.thinkingIndex === null ? null : action.thinkingIndex + 1,
+        intention: null,
+        actionOrdinals: null,
+        shelfLife: action.shelfLife,
+        due: action.due,
+      };
+    }),
+  };
+}
 
 const settled = {
   clean: explicitTasksRaw,
@@ -75,7 +161,7 @@ describe("explicit task count in the actual model prompts", () => {
               : action),
           }
         : sortInterpretation;
-      return { object: schema.parse(value) };
+      return { object: schema.parse(withSourceSegments(value)) };
     });
     const res = await sort(request({ raw: explicitTasksRaw, threads: [], force }));
 

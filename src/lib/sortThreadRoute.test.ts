@@ -1,3 +1,4 @@
+import { NoObjectGeneratedError } from "ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applySorted } from "./boardOps";
 import { EMPTY, hydrate } from "./model";
@@ -7,20 +8,45 @@ import { BRIEF_BUDGET, threadBriefs } from "./threadBrief";
 const ai = vi.hoisted(() => ({ generateObject: vi.fn(), generateText: vi.fn() }));
 const jev = vi.hoisted(() => ({ scheduleJevThreadRerankShadow: vi.fn() }));
 const providers = vi.hoisted(() => ({ fallback: vi.fn() }));
+const cloud = vi.hoisted(() => ({ mode: "non-cloud" as "non-cloud" | "cloud", released: vi.fn() }));
 
-vi.mock("ai", () => ai);
-vi.mock("@/lib/jevThreadRerank", () => jev);
+vi.mock("ai", async (importOriginal) => ({
+  ...await importOriginal<typeof import("ai")>(),
+  ...ai,
+}));
+vi.mock("@/lib/jevThreadRerank", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./jevThreadRerank")>();
+  return { ...actual, scheduleJevThreadRerankShadow: jev.scheduleJevThreadRerankShadow };
+});
 vi.mock("@/lib/clientIp", () => ({ clientIp: () => "synthetic" }));
 vi.mock("@/lib/limiter", () => ({ modelRateLimit: () => ({ allowed: true }) }));
+vi.mock("@/lib/routing", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./routing")>();
+  return {
+    ...actual,
+    // Route behavior is tested with synthetic providers here. Exact
+    // production provider/model qualification has its own routing.test.ts.
+    supportsSemanticSort: (tier: { name: string }) => tier.name !== "cerebras",
+  };
+});
+vi.mock("@/lib/cloudRequestGuard.server", () => ({
+  authorizeManagedAiRequest: async () => cloud.mode === "cloud"
+    ? { mode: "cloud", admissionId: "sort-test" }
+    : { mode: "non-cloud" },
+  withManagedAiAdmission: async (authorization: { mode: string }, work: () => Promise<unknown>) => {
+    try { return await work(); }
+    finally { if (authorization.mode === "cloud") cloud.released(); }
+  },
+}));
 vi.mock("@/lib/providers", () => ({
   NoProvidersError: class extends Error {},
   sanitizeProviderError: () => "synthetic provider rejection",
-  visionChain: () => [{ name: "vision", model: "mock-vision", providerOptions: {} }],
+  visionChain: () => [{ name: "vision", modelId: "mock-vision", model: "mock-vision", providerOptions: {} }],
   withFallback: providers.fallback,
 }));
 
 providers.fallback.mockImplementation(async (call: (tier: object) => Promise<unknown>) => ({
-    value: await call({ model: "mock-text-provider" }),
+    value: await call({ name: "gemini", modelId: "gemini-3.6-flash", model: "mock-text-provider" }),
     via: "mock-no-provider",
     preferred: "mock-primary",
     fallback: false,
@@ -38,6 +64,12 @@ type Interpretation = {
     thinkingIndex: number | null;
     shelfLife: "hours" | "days" | "weeks" | "keep";
     due: string | null;
+  }[];
+  sourceSegments?: {
+    text: string;
+    role: "thinking" | "action" | "intention" | "context";
+    ownerIndex: number | null;
+    actionOwnerIndexes?: number[] | null;
   }[];
   intention: string | null;
   imageThinkingIndex?: number | null;
@@ -66,10 +98,180 @@ const request = (body: object) => new Request("http://localhost/api/sort", {
   body: JSON.stringify({ localDate: "2026-09-23", timeZone: "Asia/Ho_Chi_Minh", ...body }),
 });
 
+function malformedStructuredOutput(text = "not valid structured output") {
+  return new NoObjectGeneratedError({
+    message: "No object generated: response did not match schema.",
+    text,
+    response: { id: "synthetic", modelId: "synthetic", timestamp: new Date(0) },
+    usage: {
+      inputTokens: undefined,
+      inputTokenDetails: {
+        noCacheTokens: undefined,
+        cacheReadTokens: undefined,
+        cacheWriteTokens: undefined,
+      },
+      outputTokens: undefined,
+      outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
+      totalTokens: undefined,
+    },
+    finishReason: "stop",
+  });
+}
+
+function actionInterpretation(source: string): Interpretation {
+  return {
+    clean: source,
+    title: "Call the dentist",
+    thinking: [],
+    actions: [{
+      text: "Call the dentist",
+      sourceText: source,
+      thinkingIndex: null,
+      shelfLife: "days",
+      due: null,
+    }],
+    intention: null,
+    shelfLife: "days",
+    due: null,
+  };
+}
+
+function providerValue(value: Interpretation) {
+  const semantic = [
+    ...value.thinking.map((share, ownerIndex) => ({ text: share.text, role: "thinking" as const, ownerIndex })),
+    ...value.actions.map((action, ownerIndex) => ({ text: action.sourceText, role: "action" as const, ownerIndex })),
+    ...(value.intention ? [{ text: value.intention, role: "intention" as const, ownerIndex: 0 }] : []),
+  ].map((segment) => ({ ...segment, start: value.clean.indexOf(segment.text) }))
+    .filter((segment) => segment.start >= 0)
+    .sort((left, right) => left.start - right.start);
+  const sourceSegments: NonNullable<Interpretation["sourceSegments"]> = value.sourceSegments
+    ? value.sourceSegments
+    : [];
+  let cursor = 0;
+  if (!value.sourceSegments) {
+    for (const segment of semantic) {
+      const gap = value.clean.slice(cursor, segment.start);
+      if (gap) sourceSegments.push({ text: gap, role: "context", ownerIndex: null });
+      sourceSegments.push({ text: segment.text, role: segment.role, ownerIndex: segment.ownerIndex });
+      cursor = segment.start + segment.text.length;
+    }
+    const tail = value.clean.slice(cursor);
+    if (tail) sourceSegments.push({ text: tail, role: "context", ownerIndex: null });
+  }
+
+  let thinkingIndex = 0;
+  let actionIndex = 0;
+  return {
+    title: value.title,
+    segments: sourceSegments.map((segment) => {
+      if (segment.role === "context") {
+        const owners = segment.actionOwnerIndexes ?? [];
+        const first = owners.length ? value.actions[owners[0]] : null;
+        return {
+          role: "context" as const,
+          source: segment.text,
+          threadId: null,
+          threadName: null,
+          ownsImage: null,
+          action: null,
+          thinkingOrdinal: null,
+          intention: null,
+          actionOrdinals: owners.length ? owners.map((index) => index + 1) : null,
+          shelfLife: first?.shelfLife ?? null,
+          due: first?.due ?? null,
+        };
+      }
+      if (segment.role === "thinking") {
+        const share = value.thinking[thinkingIndex];
+        const index = thinkingIndex;
+        thinkingIndex += 1;
+        return {
+          role: "thinking" as const,
+          source: segment.text,
+          threadId: share.threadId,
+          threadName: share.threadName,
+          ownsImage: (value.imageThinkingIndex ?? null) === index,
+          action: null,
+          thinkingOrdinal: null,
+          intention: null,
+          actionOrdinals: null,
+          shelfLife: null,
+          due: null,
+        };
+      }
+      if (segment.role === "action") {
+        const action = value.actions[actionIndex];
+        actionIndex += 1;
+        return {
+          role: "action" as const,
+          source: segment.text,
+          threadId: null,
+          threadName: null,
+          ownsImage: null,
+          action: action.text,
+          thinkingOrdinal: action.thinkingIndex === null ? null : action.thinkingIndex + 1,
+          intention: null,
+          actionOrdinals: null,
+          shelfLife: action.shelfLife,
+          due: action.due,
+        };
+      }
+      return {
+        role: "intention" as const,
+        source: segment.text,
+        threadId: null,
+        threadName: null,
+        ownsImage: null,
+        action: null,
+        thinkingOrdinal: null,
+        intention: value.intention!,
+        actionOrdinals: null,
+        shelfLife: null,
+        due: null,
+      };
+    }),
+  };
+}
+
 function answer(value: Interpretation) {
   ai.generateObject.mockImplementation(async ({ schema }) => ({
-    object: schema.parse(value),
+    object: schema.parse(providerValue(value)),
   }));
+}
+
+type JevChoice = number | "new";
+
+function enablePreviewJev(...choices: JevChoice[]) {
+  vi.stubEnv("VERCEL_ENV", "preview");
+  vi.stubEnv("CAPTURE_JEV_THREAD_ROUTING_PREVIEW", "1");
+  vi.stubEnv("OPENROUTER_API_KEY", "synthetic-key");
+  const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as {
+      state: { candidateThreads: { label: string }[] };
+      questions: Record<string, { criteria: Record<string, string> }>;
+    };
+    const candidateLabels = body.state.candidateThreads.map((candidate) => candidate.label);
+    const answers = Object.fromEntries(Object.entries(body.questions).map(([question, value], index) => {
+      const options = Object.keys(value.criteria);
+      const newOption = options.find((option) => !candidateLabels.includes(option))!;
+      const requested = choices[index];
+      const choice = requested === "new" ? newOption : candidateLabels[requested];
+      return [question, {
+        type: "choice",
+        choice,
+        confidence: 1,
+        probabilities: Object.fromEntries(options.map((option) => [option, option === choice ? 1 : 0])),
+      }];
+    }));
+    return Response.json({
+      answers,
+      model: "typesafe/jev-1.13-20260917",
+      provider: "TypeSafe",
+      usage: { input_tokens: 200, output_tokens: 20 },
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+  return fetcher;
 }
 
 beforeEach(() => {
@@ -77,17 +279,258 @@ beforeEach(() => {
   ai.generateText.mockReset();
   providers.fallback.mockClear();
   jev.scheduleJevThreadRerankShadow.mockReset();
+  cloud.mode = "non-cloud";
+  cloud.released.mockReset();
+  vi.stubEnv("VERCEL_ENV", "test");
+  vi.stubEnv("CAPTURE_JEV_THREAD_ROUTING_PREVIEW", "0");
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
-describe("the single-pass semantic sorter", () => {
+describe("the semantic sorter route", () => {
+  it("hard-bounds a stalled body reader at the route deadline and releases Cloud admission", async () => {
+    vi.useFakeTimers();
+    cloud.mode = "cloud";
+    const pending = POST(Object.assign(new Request("http://localhost/api/sort", { method: "POST" }), {
+      json: () => new Promise<never>(() => {}),
+    }));
+
+    await vi.advanceTimersByTimeAsync(55_000);
+
+    await expect(pending).resolves.toMatchObject({ status: 400 });
+    expect(cloud.released).toHaveBeenCalledOnce();
+  });
+
+  it("hard-bounds a stalled vision provider at the route deadline and releases Cloud admission", async () => {
+    vi.useFakeTimers();
+    cloud.mode = "cloud";
+    ai.generateText.mockReturnValue(new Promise(() => {}));
+    const pending = POST(request({
+      raw: "Keep this image.",
+      threads: [],
+      imgs: ["data:image/png;base64,AA=="],
+    }));
+
+    await vi.advanceTimersByTimeAsync(55_000);
+
+    await expect(pending).resolves.toMatchObject({ status: 502 });
+    expect(cloud.released).toHaveBeenCalledOnce();
+  });
+
+  it("cancels a provider attempt even when the provider promise ignores abort", async () => {
+    let attemptSignal: AbortSignal | undefined;
+    ai.generateObject.mockImplementation(({ abortSignal }) => {
+      attemptSignal = abortSignal;
+      return new Promise(() => {});
+    });
+
+    const abort = new AbortController();
+    const pending = POST(new Request("http://localhost/api/sort", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        raw: "A thought that cannot be stranded.",
+        threads: [],
+        localDate: "2026-09-24",
+        timeZone: "Asia/Bangkok",
+      }),
+      signal: abort.signal,
+    }));
+    await vi.waitFor(() => expect(ai.generateObject).toHaveBeenCalledTimes(1));
+    abort.abort(new DOMException("test cancellation", "AbortError"));
+    await expect(pending).resolves.toMatchObject({ status: 502 });
+
+    expect(attemptSignal?.aborted).toBe(true);
+    expect(ai.generateObject).toHaveBeenCalledOnce();
+  });
+
+  it("retries one malformed structured response on the same provider, then succeeds", async () => {
+    const source = "Call the dentist.";
+    const valid = providerValue(actionInterpretation(source));
+    const privateProviderText = "PRIVATE PROVIDER OUTPUT";
+    ai.generateObject
+      .mockRejectedValueOnce(malformedStructuredOutput(privateProviderText))
+      .mockImplementationOnce(async ({ schema }) => ({ object: schema.parse(valid) }));
+
+    const response = await POST(request({ raw: source, threads: [] }));
+    const out = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(ai.generateObject).toHaveBeenCalledTimes(2);
+    expect(ai.generateObject.mock.calls.map(([options]) => options.model))
+      .toEqual(["mock-text-provider", "mock-text-provider"]);
+    expect(out).toMatchObject({
+      kind: "action",
+      via: "mock-no-provider",
+    });
+    expect(JSON.stringify(out)).not.toContain(privateProviderText);
+  });
+
+  it("falls through only after two malformed responses from the same provider", async () => {
+    const source = "Call the dentist.";
+    const valid = providerValue(actionInterpretation(source));
+    providers.fallback.mockImplementationOnce(async (call: (tier: object) => Promise<unknown>) => {
+      try {
+        await call({ name: "gemini", modelId: "gemini-3.6-flash", model: "gemini-model" });
+        throw new Error("expected the first provider to fail");
+      } catch (error) {
+        if (!(error instanceof NoObjectGeneratedError)) throw error;
+      }
+      return {
+        value: await call({ name: "groq", modelId: "openai/gpt-oss-120b", model: "groq-model" }),
+        via: "groq",
+        preferred: "gemini",
+        fallback: true,
+        fallbackReason: "provider_failure",
+      };
+    });
+    ai.generateObject.mockImplementation(async ({ model, schema }) => {
+      if (model === "gemini-model") throw malformedStructuredOutput();
+      return { object: schema.parse(valid) };
+    });
+
+    const response = await POST(request({ raw: source, threads: [] }));
+    const out = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(ai.generateObject.mock.calls.map(([options]) => options.model))
+      .toEqual(["gemini-model", "gemini-model", "groq-model"]);
+    expect(out).toMatchObject({
+      via: "groq",
+      routing: {
+        fallback: true,
+        fallbackReason: "provider_failure",
+      },
+    });
+  });
+
+  it.each([402, 429])("does not same-provider retry a fatal provider status %s", async (statusCode) => {
+    const source = "Call the dentist.";
+    const valid = providerValue(actionInterpretation(source));
+    providers.fallback.mockImplementationOnce(async (call: (tier: object) => Promise<unknown>) => {
+      try {
+        await call({ name: "gemini", modelId: "gemini-3.6-flash", model: "gemini-model" });
+        throw new Error("expected the first provider to fail");
+      } catch (error) {
+        expect(error).toMatchObject({ statusCode });
+      }
+      return {
+        value: await call({ name: "groq", modelId: "openai/gpt-oss-120b", model: "groq-model" }),
+        via: "groq",
+        preferred: "gemini",
+        fallback: true,
+        fallbackReason: statusCode === 429 ? "rate_limit" : "provider_failure",
+      };
+    });
+    ai.generateObject.mockImplementation(async ({ model, schema }) => {
+      if (model === "gemini-model") {
+        throw Object.assign(new Error("fatal provider refusal"), { statusCode });
+      }
+      return { object: schema.parse(valid) };
+    });
+
+    const response = await POST(request({ raw: source, threads: [] }));
+    const out = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(ai.generateObject.mock.calls.map(([options]) => options.model))
+      .toEqual(["gemini-model", "groq-model"]);
+    expect(out.routing).toMatchObject({
+      fallback: true,
+      fallbackReason: statusCode === 429 ? "rate_limit" : "provider_failure",
+    });
+  });
+
+  it("does not let a malformed-output retry outlive the shared route deadline", async () => {
+    vi.useFakeTimers();
+    const source = "Call the dentist.";
+    providers.fallback.mockImplementationOnce(async (call: (tier: object) => Promise<unknown>) => {
+      await new Promise((resolve) => setTimeout(resolve, 54_500));
+      return {
+        value: await call({ name: "gemini", modelId: "gemini-3.6-flash", model: "gemini-model" }),
+        via: "gemini",
+        preferred: "gemini",
+        fallback: false,
+        fallbackReason: null,
+      };
+    });
+    ai.generateObject
+      .mockRejectedValueOnce(malformedStructuredOutput())
+      .mockImplementationOnce(() => new Promise(() => {}));
+
+    const pending = POST(request({ raw: source, threads: [] }));
+    await vi.advanceTimersByTimeAsync(54_500);
+    expect(ai.generateObject).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(500);
+
+    await expect(pending).resolves.toMatchObject({ status: 502 });
+    expect(ai.generateObject).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves a successful first interpretation unchanged", async () => {
+    const source = "Call the dentist.";
+    answer(actionInterpretation(source));
+
+    const response = await POST(request({ raw: source, threads: [] }));
+    const out = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(ai.generateObject).toHaveBeenCalledOnce();
+    expect(out).toMatchObject({
+      kind: "action",
+      actions: ["Call the dentist"],
+      via: "mock-no-provider",
+    });
+  });
+
+  it("rejects an unqualified fallback result and accepts only a verified semantic Sort provider", async () => {
+    const source = "Call the dentist tomorrow.";
+    answer({
+      clean: source,
+      title: "Call the dentist",
+      thinking: [],
+      actions: [{
+        text: "Call the dentist",
+        sourceText: source,
+        thinkingIndex: null,
+        shelfLife: "days",
+        due: "2026-09-24",
+      }],
+      intention: null,
+      shelfLife: "days",
+      due: "2026-09-24",
+    });
+    providers.fallback.mockImplementationOnce(async (call: (tier: object) => Promise<unknown>) => {
+      await expect(call({ name: "cerebras", modelId: "gpt-oss-120b", model: "unqualified" })).rejects.toMatchObject({
+        statusCode: 422,
+      });
+      return {
+        value: await call({ name: "gemini", modelId: "gemini-3.6-flash", model: "verified" }),
+        via: "gemini",
+        preferred: "gemini",
+        fallback: true,
+        fallbackReason: "rate_limit",
+      };
+    });
+
+    const response = await POST(request({ raw: source, threads: [] }));
+
+    expect(response.status).toBe(200);
+    expect(ai.generateObject).toHaveBeenCalledTimes(1);
+    expect((await response.json()).via).toBe("gemini");
+  });
+
   it("accepts the legacy nested client calendar context while clients migrate to flat fields", async () => {
     const source = "Call the dentist tomorrow.";
     ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
       expect(prompt).toContain("client local date 2026-09-23 in timezone Asia/Ho_Chi_Minh");
       return {
-        object: schema.parse({
+        object: schema.parse(providerValue({
           clean: source,
           title: "Call the dentist",
           thinking: [],
@@ -98,10 +541,12 @@ describe("the single-pass semantic sorter", () => {
             shelfLife: "days",
             due: "2026-09-24",
           }],
+          sourceSegments: [{ text: source, role: "action", ownerIndex: 0, actionOwnerIndexes: null }],
           intention: null,
+          imageThinkingIndex: null,
           shelfLife: "days",
           due: "2026-09-24",
-        }),
+        })),
       };
     });
     const response = await POST(new Request("http://localhost/api/sort", {
@@ -122,6 +567,120 @@ describe("the single-pass semantic sorter", () => {
       kind: "action",
       due: "2026-09-24",
     });
+  });
+
+  it.each([
+    ["missing", {}],
+    ["malformed", { localDate: "not-a-date", timeZone: "Mars/Olympus" }],
+    ["impossible", { localDate: "2026-02-30", timeZone: "Asia/Bangkok" }],
+  ])("uses a safe bounded calendar fallback for %s stale-client fields", async (_label, calendar) => {
+    const source = "Call the dentist.";
+    ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
+      expect(prompt).toMatch(/client local date \d{4}-\d{2}-\d{2} in timezone UTC/u);
+      expect(prompt).not.toContain("Today is");
+      return {
+        object: schema.parse(providerValue({
+          clean: source,
+          title: "Call the dentist",
+          thinking: [],
+          actions: [{
+            text: "Call the dentist",
+            sourceText: source,
+            thinkingIndex: null,
+            shelfLife: "days",
+            due: null,
+          }],
+          sourceSegments: [{ text: source, role: "action", ownerIndex: 0, actionOwnerIndexes: null }],
+          intention: null,
+          imageThinkingIndex: null,
+          shelfLife: "days",
+          due: null,
+        })),
+      };
+    });
+
+    const response = await POST(new Request("http://localhost/api/sort", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ raw: source, threads: [], ...calendar }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).kind).toBe("action");
+  });
+
+  it.each(["action", "intention"] as const)(
+    "ignores an irrelevant hallucinated thread route when %s is authoritative",
+    async (force) => {
+      const source = force === "action"
+        ? "Send the final draft."
+        : "I protect two quiet hours every morning.";
+      answer({
+        clean: source,
+        title: force === "action" ? "Send final draft" : "Quiet mornings",
+        thinking: [{ text: source, threadId: "guessed-route", threadName: null }],
+        actions: force === "action" ? [{
+          text: "Send the final draft",
+          sourceText: source,
+          thinkingIndex: null,
+          shelfLife: "days",
+          due: null,
+        }] : [],
+        intention: force === "intention" ? source : null,
+        shelfLife: force === "action" ? "days" : "keep",
+        due: null,
+      });
+
+      const response = await POST(request({
+        raw: source,
+        force,
+        threads: threadBriefs([{ id: "real-thread", name: "Real thread", summary: "", frags: [] }]),
+      }));
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ kind: force });
+    },
+  );
+
+  it("uses only the current flat client-local calendar in the provider prompt", async () => {
+    const source = "Call the dentist before Friday.";
+    ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
+      expect(prompt).toContain("client local date 2026-09-24 in timezone Asia/Bangkok");
+      expect(prompt).not.toContain("Today is");
+      return {
+        object: schema.parse(providerValue({
+          clean: source,
+          title: "Call the dentist",
+          thinking: [],
+          actions: [{
+            text: "Call the dentist",
+            sourceText: source,
+            thinkingIndex: null,
+            shelfLife: "days",
+            due: "2026-09-25",
+          }],
+          sourceSegments: [{ text: source, role: "action", ownerIndex: 0, actionOwnerIndexes: null }],
+          intention: null,
+          imageThinkingIndex: null,
+          shelfLife: "days",
+          due: "2026-09-25",
+        })),
+      };
+    });
+
+    const response = await POST(new Request("http://localhost/api/sort", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        raw: source,
+        threads: [],
+        localDate: "2026-09-24",
+        timeZone: "Asia/Bangkok",
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ kind: "action", due: "2026-09-25" });
   });
 
   it("derives a mixed filing and relates only the action that advances its thinking", async () => {
@@ -290,17 +849,26 @@ describe("the single-pass semantic sorter", () => {
     expect(oversizedRequest.status).toBe(400);
     expect(ai.generateObject).not.toHaveBeenCalled();
 
-    answer({
-      clean: "One.", title: "One",
-      thinking: Array.from({ length: 13 }, (_, index) => ({
-        text: index === 0 ? "One." : "x",
-        threadId: null,
-        threadName: `Thread ${index}`,
-      })),
-      actions: [], intention: null, shelfLife: "keep", due: null,
-    });
+    ai.generateObject.mockImplementation(async ({ schema }) => ({
+      object: schema.parse({
+        title: "One",
+        segments: Array.from({ length: 13 }, (_, index) => ({
+          role: "thinking",
+          source: index === 0 ? "One." : "x",
+          threadId: null,
+          threadName: `Thread ${index}`,
+          ownsImage: false,
+          action: null,
+          thinkingOrdinal: null,
+          intention: null,
+          actionOrdinals: null,
+          shelfLife: null,
+          due: null,
+        })),
+      }),
+    }));
     const oversizedProvider = await POST(request({ raw: "One.", threads: [] }));
-    expect(oversizedProvider.status).toBe(502);
+    expect(oversizedProvider.status).toBe(422);
   });
 
   it("keeps a distinct deliverable separate without a second routing pass", async () => {
@@ -327,6 +895,186 @@ describe("the single-pass semantic sorter", () => {
       threadName: "Capture launch article",
     });
     expect(ai.generateObject).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets Preview Jev reuse an obvious existing Thread without changing interpreted content", async () => {
+    const source = "Capture should keep related product thinking together.";
+    answer({
+      clean: source,
+      title: "Capture product direction",
+      thinking: [{ text: source, threadId: null, threadName: "Capture product" }],
+      actions: [], intention: null, shelfLife: "keep", due: null,
+    });
+    const fetcher = enablePreviewJev(0);
+
+    const response = await POST(request({
+      raw: source,
+      threads: [{ id: "product", name: "Capture product", about: "Semantic sorting and rough thoughts." }],
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      clean: source,
+      kind: "thread",
+      threadId: "product",
+      threadName: null,
+    });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(ai.generateObject).toHaveBeenCalledOnce();
+  });
+
+  it("lets Preview Jev reject an unrelated shared-word trap as a new Thread", async () => {
+    const source = "The rainwater capture barrel needs a leaf filter and a safer overflow path.";
+    answer({
+      clean: source,
+      title: "Rainwater capture system",
+      thinking: [{ text: source, threadId: "r0", threadName: "Rainwater capture system" }],
+      actions: [], intention: null, shelfLife: "keep", due: null,
+    });
+    enablePreviewJev("new");
+
+    const response = await POST(request({
+      raw: source,
+      threads: [{ id: "product", name: "Capture product", about: "The Capture app and semantic sorting." }],
+    }));
+
+    expect(await response.json()).toMatchObject({
+      clean: source,
+      threadId: null,
+      threadName: "Rainwater capture system",
+    });
+  });
+
+  it("lets Preview Jev keep a distinct authored deliverable as a new Thread", async () => {
+    const source = "I am developing a workshop about Capture and outlining its exercises.";
+    answer({
+      clean: source,
+      title: "Capture workshop",
+      thinking: [{ text: source, threadId: "r0", threadName: "Capture workshop" }],
+      actions: [], intention: null, shelfLife: "keep", due: null,
+    });
+    enablePreviewJev("new");
+
+    const response = await POST(request({
+      raw: source,
+      threads: [{ id: "product", name: "Capture product", about: "The app's product direction." }],
+    }));
+
+    expect(await response.json()).toMatchObject({
+      clean: source,
+      threadId: null,
+      threadName: "Capture workshop",
+    });
+  });
+
+  it("applies independent Preview Jev destinations for all shares from one request", async () => {
+    const first = "Capture should preserve rough product thinking.";
+    const second = "The workshop needs a hands-on recovery exercise.";
+    const third = "The shaded garden bed should use plants that tolerate wet soil.";
+    const source = `${first} ${second} ${third}`;
+    answer({
+      clean: source,
+      title: "Product workshop and garden",
+      thinking: [
+        { text: first, threadId: null, threadName: "Capture product" },
+        { text: second, threadId: "r0", threadName: "Capture workshop" },
+        { text: third, threadId: null, threadName: "Back garden" },
+      ],
+      actions: [], intention: null, shelfLife: "keep", due: null,
+    });
+    const fetcher = enablePreviewJev(0, "new", 1);
+
+    const response = await POST(request({
+      raw: source,
+      threads: [
+        { id: "product", name: "Capture product", about: "Product direction and semantic sorting." },
+        { id: "garden", name: "Back garden", about: "Planting layout and seasonal maintenance." },
+      ],
+    }));
+    const out = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(out.clean.replace(/\s+/gu, " ")).toBe(source);
+    expect(out).toMatchObject({
+      threadId: "product",
+      primaryText: first,
+      also: [
+        { text: second, threadId: null, threadName: "Capture workshop" },
+        { text: third, threadId: "garden", threadName: null },
+      ],
+    });
+  });
+
+  it("preserves the interpreter's exact routing when the Preview Decisions response is malformed", async () => {
+    const source = "Capture should preserve rough thoughts.";
+    answer({
+      clean: source,
+      title: "Capture rough thoughts",
+      thinking: [{ text: source, threadId: "r0", threadName: "Interpreter name" }],
+      actions: [], intention: null, shelfLife: "keep", due: null,
+    });
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("CAPTURE_JEV_THREAD_ROUTING_PREVIEW", "1");
+    vi.stubEnv("OPENROUTER_API_KEY", "synthetic-key");
+    const fetcher = vi.fn(async () => Response.json({
+      answers: {},
+      model: "typesafe/jev-1.13",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }));
+    vi.stubGlobal("fetch", fetcher);
+
+    const response = await POST(request({
+      raw: source,
+      threads: [{ id: "product", name: "Capture product", about: "Rough thoughts." }],
+    }));
+
+    expect(await response.json()).toMatchObject({ threadId: "product", threadName: null });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("falls back at the exact shared route deadline when Decisions ignores abort", async () => {
+    vi.useFakeTimers();
+    cloud.mode = "cloud";
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("CAPTURE_JEV_THREAD_ROUTING_PREVIEW", "1");
+    vi.stubEnv("OPENROUTER_API_KEY", "synthetic-key");
+    const source = "Capture should preserve rough thoughts.";
+    const interpreted = providerValue({
+      clean: source,
+      title: "Capture rough thoughts",
+      thinking: [{ text: source, threadId: "r0", threadName: "Capture rough thoughts" }],
+      actions: [], intention: null, shelfLife: "keep", due: null,
+    });
+    providers.fallback.mockImplementationOnce(() => new Promise((resolve) => {
+      setTimeout(() => resolve({
+        value: interpreted,
+        via: "gemini",
+        preferred: "gemini",
+        fallback: false,
+        fallbackReason: null,
+      }), 54_500);
+    }));
+    const fetcher = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetcher);
+
+    let settled = false;
+    const pending = POST(request({
+      raw: source,
+      threads: [{ id: "product", name: "Capture product", about: "Rough thoughts." }],
+    })).then((response) => {
+      settled = true;
+      return response;
+    });
+
+    await vi.advanceTimersByTimeAsync(54_999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const response = await pending;
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ threadId: "product", threadName: null });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(cloud.released).toHaveBeenCalledOnce();
   });
 
   it("uses complete clean thinking for an unsplit new thread and marks the Jev route as new", async () => {
@@ -386,19 +1134,28 @@ describe("the single-pass semantic sorter", () => {
     });
   });
 
-  it("rejects a schema-valid lossy decomposition so the client can keep it pending", async () => {
-    answer({
-      clean: "First subject. Second subject.",
-      title: "Two subjects",
-      thinking: [{ text: "First subject.", threadId: null, threadName: "First" }],
-      actions: [],
-      intention: null,
-      shelfLife: "keep",
-      due: null,
-    });
+  it("parks a capture when the provider returns context without a semantic item", async () => {
+    ai.generateObject.mockImplementation(async ({ schema }) => ({
+      object: schema.parse({
+        title: "Two subjects",
+        segments: [{
+          role: "context",
+          source: "First subject. Second subject.",
+          threadId: null,
+          threadName: null,
+          ownsImage: null,
+          action: null,
+          thinkingOrdinal: null,
+          intention: null,
+          actionOrdinals: null,
+          shelfLife: null,
+          due: null,
+        }],
+      }),
+    }));
     const response = await POST(request({ raw: "First subject. Second subject.", threads: [] }));
     expect(response.status).toBe(422);
-    expect(await response.json()).toEqual({ error: expect.stringMatching(/safely separate/i) });
+    expect(ai.generateObject).toHaveBeenCalledOnce();
     expect(jev.scheduleJevThreadRerankShadow).not.toHaveBeenCalled();
   });
 
@@ -426,9 +1183,62 @@ describe("the single-pass semantic sorter", () => {
     ["intention", "intention"],
   ] as const)("makes an explicit force=%s choice authoritative", async (force, kind) => {
     answer(mixed);
-    const response = await POST(request({ raw, threads: [], force }));
+    const response = await POST(request({
+      raw,
+      threads: [{ id: "pricing", name: "Annual pricing", about: thinking }],
+      force,
+    }));
     expect(response.status).toBe(200);
     expect((await response.json()).kind).toBe(kind);
+  });
+
+  it("returns a coordinated action list with explicit shared context and exact source provenance", async () => {
+    const source = "Before Friday, audit the onboarding flow, rewrite the empty-state copy, ask Nina to review the privacy wording, and schedule the release email.";
+    answer({
+      clean: source,
+      title: "Friday launch tasks",
+      thinking: [],
+      actions: [
+        { text: "Audit the onboarding flow", sourceText: "audit the onboarding flow", thinkingIndex: null, shelfLife: "days", due: "2026-09-27" },
+        { text: "Rewrite the empty-state copy", sourceText: "rewrite the empty-state copy", thinkingIndex: null, shelfLife: "days", due: "2026-09-27" },
+        { text: "Ask Nina to review the privacy wording", sourceText: "ask Nina to review the privacy wording", thinkingIndex: null, shelfLife: "days", due: "2026-09-27" },
+        { text: "Schedule the release email", sourceText: "schedule the release email", thinkingIndex: null, shelfLife: "days", due: "2026-09-27" },
+      ],
+      sourceSegments: [
+        { text: "Before Friday, ", role: "context", ownerIndex: null, actionOwnerIndexes: [0, 1, 2, 3] },
+        { text: "audit the onboarding flow", role: "action", ownerIndex: 0 },
+        { text: ", ", role: "context", ownerIndex: null },
+        { text: "rewrite the empty-state copy", role: "action", ownerIndex: 1 },
+        { text: ", ", role: "context", ownerIndex: null },
+        { text: "ask Nina to review the privacy wording", role: "action", ownerIndex: 2 },
+        { text: ", and ", role: "context", ownerIndex: null },
+        { text: "schedule the release email", role: "action", ownerIndex: 3 },
+        { text: ".", role: "context", ownerIndex: null },
+      ],
+      intention: null,
+      shelfLife: "days",
+      due: null,
+    });
+
+    const response = await POST(request({ raw: source, threads: [] }));
+    const out = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(out.clean.replace(/\s+/gu, " ")).toBe(source);
+    expect(out).toMatchObject({ kind: "action", threadId: null, threadName: null, due: null });
+    expect(out.actions).toEqual([
+      "Audit the onboarding flow",
+      "Rewrite the empty-state copy",
+      "Ask Nina to review the privacy wording",
+      "Schedule the release email",
+    ]);
+    expect(out.actionMeta.map((action: { source: string }) => action.source)).toEqual([
+      "audit the onboarding flow",
+      "rewrite the empty-state copy",
+      "ask Nina to review the privacy wording",
+      "schedule the release email",
+    ]);
+    expect(out.actionMeta.every((action: { due: string | null }) => action.due === "2026-09-25")).toBe(true);
   });
 
   it("clears a shared deadline when several actions were interpreted", async () => {
@@ -456,7 +1266,7 @@ describe("the single-pass semantic sorter", () => {
       expect(prompt).not.toContain("Reference examples");
       expect(prompt).not.toContain("one narrow routing question");
       return {
-        object: schema.parse({
+        object: schema.parse(providerValue({
           clean: "The long-form collection could connect health, work, and identity.",
           title: "Long-form collection",
           thinking: [{
@@ -465,10 +1275,17 @@ describe("the single-pass semantic sorter", () => {
             threadName: null,
           }],
           actions: [],
+          sourceSegments: [{
+            text: "The long-form collection could connect health, work, and identity.",
+            role: "thinking",
+            ownerIndex: 0,
+            actionOwnerIndexes: null,
+          }],
           intention: null,
+          imageThinkingIndex: null,
           shelfLife: "keep",
           due: null,
-        }),
+        })),
       };
     });
 

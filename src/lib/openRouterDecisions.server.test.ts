@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 vi.mock("server-only", () => ({}));
 
@@ -109,6 +114,60 @@ describe("OpenRouter Decisions transport", () => {
       answersSchema: Answers,
       fetcher,
     })).rejects.toMatchObject({ code: "invalid_response" });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("hard-bounds a response body reader that ignores abort", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const response = Response.json({ ok: true });
+    Object.defineProperty(response, "json", {
+      value: () => new Promise<never>(() => {}),
+    });
+    const pending = submitOpenRouterDecisions({
+      apiKey: "synthetic-key",
+      model: "typesafe/jev-1.13",
+      state: "synthetic",
+      questions: { relevant: { type: "noul", instructions: "Is this relevant?" } },
+      answersSchema: Answers,
+      fetcher: async () => response,
+      signal: controller.signal,
+    });
+    let settled = false;
+    void pending.catch(() => { settled = true; });
+
+    await vi.advanceTimersByTimeAsync(124);
+    expect(settled).toBe(false);
+    controller.abort(new DOMException("shared route deadline", "TimeoutError"));
+    await expect(pending).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
+  it("hard-bounds a provider that ignores abort at the caller's shared deadline", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    let requestSignal: AbortSignal | undefined;
+    const fetcher = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    });
+
+    const pending = submitOpenRouterDecisions({
+      apiKey: "synthetic-key",
+      model: "typesafe/jev-1.13",
+      state: "synthetic",
+      questions: { relevant: { type: "noul", instructions: "Is this relevant?" } },
+      answersSchema: Answers,
+      fetcher,
+      signal: controller.signal,
+    });
+    let settled = false;
+    void pending.catch(() => { settled = true; });
+
+    await vi.advanceTimersByTimeAsync(124);
+    expect(settled).toBe(false);
+    controller.abort(new DOMException("shared route deadline", "TimeoutError"));
+    await expect(pending).rejects.toMatchObject({ code: "request_failed" });
+    expect(requestSignal?.aborted).toBe(true);
     expect(fetcher).toHaveBeenCalledOnce();
   });
 });

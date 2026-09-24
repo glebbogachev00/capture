@@ -125,6 +125,19 @@ describe("cloud board boundary", () => {
     expect(isCloudEnabled({ CAPTURE_CLOUD: undefined })).toBe(false);
   });
 
+  it("allows an explicit local-only Preview without weakening Production", () => {
+    expect(isCloudEnabled({
+      CAPTURE_CLOUD: "1",
+      VERCEL_ENV: "preview",
+      CAPTURE_LOCAL_TEST_PREVIEW: "1",
+    })).toBe(false);
+    expect(isCloudEnabled({
+      CAPTURE_CLOUD: "1",
+      VERCEL_ENV: "production",
+      CAPTURE_LOCAL_TEST_PREVIEW: "1",
+    })).toBe(true);
+  });
+
   it("returns 401 without verified identity and does not read the repository", async () => {
     const repo = repository();
     const response = await handleCloudBoardGet(ownedRequest("https://capture.test/api/cloud/board"), deps(null, repo));

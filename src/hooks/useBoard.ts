@@ -100,6 +100,7 @@ import { expiryFor, parseDue } from "@/lib/due";
 import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
 import { createCaptureGate, PLAYGROUND, TRIAL_LIMIT, isTrialExhausted, playgroundError, trialState } from "@/lib/playground";
+import { LOCAL_TEST_PREVIEW } from "@/lib/localTestPreview";
 import { useCaptureLimit } from "@/hooks/useCaptureLimit";
 import { planTidy, keepProposals, type TidyRead } from "@/lib/tidyChanged";
 import {
@@ -583,6 +584,7 @@ export function useBoard(now: number) {
    * the next sync tries again, and a missing photo never blocks the text.
    */
   const reconcileImages = useCallback(async (board: Board) => {
+    if (LOCAL_TEST_PREVIEW) return;
     /* A few at a time, not one at a time. Each exchange is a serverless
        round-trip of a few hundred KB; strictly sequential, a board of
        twenty photos took minutes to refill — which a phone that had just
@@ -625,7 +627,7 @@ export function useBoard(now: number) {
   const pushNow = useCallback(async () => {
     /* Playground: no hub. See lib/playground.ts for why this is a hard stop.
        Serialization is the governor's job now, not a flag's. */
-    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    if (PLAYGROUND || LOCAL_TEST_PREVIEW || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
     if (backupGate.current.restoreActive) return;
     const generation = backupGate.current.generation;
     // Also gate debounced edits and Undo, not only manual sync.
@@ -677,7 +679,7 @@ export function useBoard(now: number) {
 
   /** Coalesce bursts of edits into one push a beat after the last one. */
   const schedulePush = useCallback(() => {
-    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    if (PLAYGROUND || LOCAL_TEST_PREVIEW || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
     if (backupGate.current.restoreActive) return;
     if (!pushGovernor.current)
       pushGovernor.current = createPushGovernor(pushNow);
@@ -690,7 +692,7 @@ export function useBoard(now: number) {
    * is recorded in `sync`, so an unchanged successful read still shows a live hub.
    */
   const pullNow = useCallback(async (): Promise<{ ok: false } | { ok: true; changed: boolean }> => {
-    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return { ok: false };
+    if (PLAYGROUND || LOCAL_TEST_PREVIEW || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return { ok: false };
     if (backupGate.current.restoreActive) return { ok: false };
     const generation = backupGate.current.generation;
     try {
@@ -761,7 +763,7 @@ export function useBoard(now: number) {
 
   /** Manual "sync now": bring the other device's changes in, then push ours up. */
   const syncNow = useCallback(async () => {
-    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    if (PLAYGROUND || LOCAL_TEST_PREVIEW || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
     if (backupGate.current.restoreActive) return;
     const pulled = await pullNow();
     if (!pulled.ok) return;
@@ -1173,7 +1175,7 @@ export function useBoard(now: number) {
      Offline is fine — the next commit just keeps everything local. */
   useEffect(() => {
     if (ownershipStatus === "offline") offlineChangesPending.current = true;
-    if (!loaded || PLAYGROUND || ownershipStatus !== "active" || (lifetime.cloud && lifetime.owner === null)) return;
+    if (!loaded || PLAYGROUND || LOCAL_TEST_PREVIEW || ownershipStatus !== "active" || (lifetime.cloud && lifetime.owner === null)) return;
     if (offlineChangesPending.current) {
       void syncNow();
     } else void pullNow();

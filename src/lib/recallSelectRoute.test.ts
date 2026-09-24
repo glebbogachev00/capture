@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Tier } from "./providers";
 
 const mocks = vi.hoisted(() => ({
   authorize: vi.fn(),
@@ -32,8 +33,8 @@ beforeEach(() => {
   mocks.authorize.mockResolvedValue({ mode: "non-cloud" });
   mocks.limiter.mockReturnValue({ allowed: true, retryAfterSec: 0 });
   mocks.generateText.mockResolvedValue({ output: { threadIds: ["capture"] } });
-  mocks.fallback.mockImplementation(async (attempt) => ({
-    value: await attempt({ model: "fixture", providerOptions: {}, name: "fixture" }),
+  mocks.fallback.mockImplementation(async (attempt: (tier: Tier) => Promise<unknown>) => ({
+    value: await attempt({ model: "fixture" as Tier["model"], modelId: "fixture-model", providerOptions: {}, name: "fixture" }),
     via: "fixture",
   }));
 });

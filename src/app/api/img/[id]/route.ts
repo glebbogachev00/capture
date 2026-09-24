@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { handleCloudImage } from "@/lib/cloudImage";
+import { isCloudEnabled, isLocalTestPreview } from "@/lib/cloudMode";
 import { clientIp } from "@/lib/clientIp";
 import { hubStore } from "@/lib/hubStore";
 import { isSafeImageId } from "@/lib/imgSync";
@@ -69,11 +70,12 @@ export async function HEAD(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (isLocalTestPreview()) return new Response(null, { status: 404 });
   const limit = gate(request);
   if (!limit.allowed) return tooMany(limit.retryAfterSec);
 
   const { id } = await params;
-  if (process.env.CAPTURE_CLOUD === "1") return handleCloudImage(request, id);
+  if (isCloudEnabled()) return handleCloudImage(request, id);
   if (!isSafeImageId(id)) return new Response(null, { status: 400 });
 
   const exists = await hubStore().exists(keyFor(id));
@@ -87,11 +89,14 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (isLocalTestPreview()) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   const limit = gate(request);
   if (!limit.allowed) return tooMany(limit.retryAfterSec);
 
   const { id } = await params;
-  if (process.env.CAPTURE_CLOUD === "1") return handleCloudImage(request, id);
+  if (isCloudEnabled()) return handleCloudImage(request, id);
   if (!isSafeImageId(id))
     return NextResponse.json({ error: "bad id" }, { status: 400 });
 
@@ -108,11 +113,14 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (isLocalTestPreview()) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   const limit = gate(request);
   if (!limit.allowed) return tooMany(limit.retryAfterSec);
 
   const { id } = await params;
-  if (process.env.CAPTURE_CLOUD === "1") return handleCloudImage(request, id);
+  if (isCloudEnabled()) return handleCloudImage(request, id);
   if (!isSafeImageId(id))
     return NextResponse.json({ error: "bad id" }, { status: 400 });
 

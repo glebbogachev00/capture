@@ -31,12 +31,23 @@ Failure logs never contain this text. Generative-provider failures log only the
 provider name, status code, error name, and a bounded message. Decisions
 failures log only a fixed error name/code and optional status.
 
-### Optional OpenRouter Decisions shadows (off by default)
+### Optional OpenRouter Decisions routing and shadows (off by default)
 
 Jev is not part of the chat-model fallback chain. It uses the separate
 OpenRouter Decisions endpoint only when its dedicated flag is exactly `1` and
 `OPENROUTER_API_KEY` is configured:
 
+- `CAPTURE_JEV_THREAD_ROUTING_PREVIEW=1` is additionally gated by
+  `VERCEL_ENV=preview`, so it remains inert in Production. After the
+  interpretation model finishes, one synchronous bounded request receives up
+  to 12 isolated thinking shares (2,000 characters each) and at most 40
+  candidate Thread names/descriptions (120/700-character caps). It asks one
+  typed Choice question per share. Jev owns only existing-versus-new Thread
+  destination; cleanup, decomposition, Actions, Intentions, dates, source
+  ownership, and new Thread names remain interpreter-owned. Exact Thread IDs
+  stay server-local. Any missing input/configuration, quota/transport failure,
+  timeout, malformed probability set, unknown/replayed label, or unsafe mapping
+  preserves every interpreter route exactly.
 - `CAPTURE_JEV_THREAD_RERANK_SHADOW=1` runs after a successful thread/both
   sort. A pure-thread sort sends bounded `primaryText` when available and
   otherwise bounded reconciled `clean` text. A mixed `both` sort runs only
@@ -57,8 +68,8 @@ OpenRouter Decisions endpoint only when its dedicated flag is exactly `1` and
   never writes answer prose or citations, changes source order, or skips the
   existing Recall model.
 
-All three adapters replace structured local IDs with opaque
-`thread_N`/`candidate_N`/`source_N` labels. The Recall adapter also omits the
+All four adapters replace structured local IDs with request-scoped opaque
+labels. The Recall adapter also omits the
 structured source title/name, kind, timestamp/date, lifecycle state, navigation
 target, target/fragment IDs, authoritative answer prose, and citations. Its
 request body has no dedicated account-ID, session-ID, trace-metadata, or API-key
@@ -83,17 +94,20 @@ no-retry request, and always injects this non-overridable provider policy:
 
 OpenRouter still retains request metadata, and its account-level Input &
 Output Logging setting can retain content independently of this request. An
-operator must exclude the key from that logging before enabling any shadow.
+operator must exclude the key from that logging before enabling any Jev flag.
 If privacy-eligible routing is unavailable, a request times out, or a response
-is missing/malformed, that shadow is discarded. Thread filing, judge output,
-and cited Recall behavior remain unchanged. There is no production Jev judge
+is missing/malformed, a shadow is discarded and the Preview routing stage
+preserves the interpreter's destinations. The stage does not reject the sort;
+cleanup, decomposition, Actions, Intentions, dates, and source ownership remain
+unchanged. There is no production Jev routing stage, judge
 prefilter, Recall source reorder, Recall model gate, or generative-call skip;
 the calibration blockers are recorded in
 `research/jev-judge-calibration.md` and
 `research/jev-recall-calibration.md`.
 
-Successful judge-shadow logs contain non-content aggregates only: candidate
-counts, token count, and probability histograms. Thread-shadow logs add only
+The Preview routing stage emits no success or failure log. Successful
+judge-shadow logs contain non-content aggregates only: candidate counts, token
+count, and probability histograms. Thread-shadow logs add only
 selection class/index, confidence, and sorter agreement. Recall-shadow logs
 contain only source/citation counts, opaque source ranks/indexes, intent class,
 probability buckets, authoritative status, token count, and comparison flags.

@@ -159,6 +159,35 @@ describe("operator provider preference", () => {
   });
 });
 
+describe("job-level provider qualification", () => {
+  it("filters unqualified tiers before attempts and retry accounting", async () => {
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    process.env.CEREBRAS_API_KEY = "cerebras";
+    process.env.MISTRAL_API_KEY = "mistral";
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = "gemini";
+    delete process.env.CAPTURE_MODEL_PROVIDER;
+    const { withFallback } = await import("./providers");
+    const seen: string[] = [];
+
+    const result = await withFallback(
+      async (tier) => {
+        seen.push(tier.name);
+        return "sorted";
+      },
+      "gemini",
+      undefined,
+      (tier) => tier.name === "gemini",
+    );
+
+    expect(result).toMatchObject({ value: "sorted", via: "gemini", fallback: false });
+    expect(seen).toEqual(["gemini"]);
+    delete process.env.CEREBRAS_API_KEY;
+    delete process.env.MISTRAL_API_KEY;
+    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  });
+});
+
 describe("fallback routing metadata", () => {
   it("reports an intentionally preferred OpenRouter answer as normal", async () => {
     vi.resetModules();
@@ -257,6 +286,31 @@ describe("fallback routing metadata", () => {
 });
 
 describe("a tier that is out for the day", () => {
+  it("does not wait on a mixed daily-limit and ordinary outage", async () => {
+    vi.useFakeTimers();
+    vi.resetModules();
+    process.env.GROQ_API_KEY = "one";
+    process.env.MISTRAL_API_KEY = "m";
+    const { withFallback, _resetDailyOut } = await import("./providers");
+    _resetDailyOut();
+    const daily = Object.assign(
+      new Error("tokens per day (TPD) exceeded. Please try again in 9m."),
+      { statusCode: 429 },
+    );
+    const seen: string[] = [];
+    const pending = withFallback(async (tier) => {
+      seen.push(tier.name);
+      if (tier.name === "groq") throw daily;
+      throw new Error("synthetic outage");
+    });
+    const rejection = expect(pending).rejects.toThrow("synthetic outage");
+
+    await vi.advanceTimersByTimeAsync(0);
+    await rejection;
+    expect(seen).toEqual(["groq", "mistral"]);
+    vi.useRealTimers();
+  });
+
   it("is skipped on the next request instead of probed again", async () => {
     vi.resetModules();
     process.env.GROQ_API_KEY = "one";

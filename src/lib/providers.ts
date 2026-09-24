@@ -20,6 +20,9 @@ import { opsEvent, type OpsReason } from "@/lib/opsEvent.server";
 
 export type Tier = {
   name: string;
+  /** Concrete provider model id. Capability gates must use this value rather
+      than trusting a provider label whose env override may point anywhere. */
+  modelId: string;
   model: LanguageModel;
   providerOptions?: ProviderOptions;
 };
@@ -36,7 +39,7 @@ export function chain(): Tier[] {
   // should be an explicit choice, not the default path.
   const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
   if (process.env.GROQ_API_KEY) {
-    tiers.push({ name: "groq", model: groq(groqModel) });
+    tiers.push({ name: "groq", modelId: groqModel, model: groq(groqModel) });
   }
 
   /* A second Groq account, when there is one.
@@ -52,14 +55,17 @@ export function chain(): Tier[] {
   if (process.env.GROQ_API_KEY_2) {
     tiers.push({
       name: "groq-2",
+      modelId: groqModel,
       model: createGroq({ apiKey: process.env.GROQ_API_KEY_2 })(groqModel),
     });
   }
 
   if (process.env.CEREBRAS_API_KEY) {
+    const modelId = process.env.CEREBRAS_MODEL || "gpt-oss-120b";
     tiers.push({
       name: "cerebras",
-      model: cerebras(process.env.CEREBRAS_MODEL || "gpt-oss-120b"),
+      modelId,
+      model: cerebras(modelId),
       providerOptions: {
         cerebras: { reasoningEffort: "low", reasoningFormat: "hidden" },
       },
@@ -67,9 +73,11 @@ export function chain(): Tier[] {
   }
 
   if (process.env.MISTRAL_API_KEY) {
+    const modelId = process.env.MISTRAL_MODEL || "mistral-small-latest";
     tiers.push({
       name: "mistral",
-      model: mistral(process.env.MISTRAL_MODEL || "mistral-small-latest"),
+      modelId,
+      model: mistral(modelId),
     });
   }
 
@@ -89,11 +97,11 @@ export function chain(): Tier[] {
     const openrouter = createOpenRouter({
       apiKey: process.env.OPENROUTER_API_KEY,
     });
+    const modelId = process.env.OPENROUTER_MODEL || "minimax/minimax-m3:free";
     tiers.push({
       name: "openrouter",
-      model: openrouter.chat(
-        process.env.OPENROUTER_MODEL || "minimax/minimax-m3:free"
-      ),
+      modelId,
+      model: openrouter.chat(modelId),
     });
   }
 
@@ -113,9 +121,11 @@ export function chain(): Tier[] {
 
 /** The Gemini tier, shared by the text chain and the vision chain. */
 function geminiTier(): Tier {
+  const modelId = process.env.GEMINI_MODEL || "gemini-3.6-flash";
   return {
     name: "gemini",
-    model: google(process.env.GEMINI_MODEL || "gemini-3.6-flash"),
+    modelId,
+    model: google(modelId),
     // Gemini 3 reasons at length by default; a two-way sort does not need it.
     providerOptions: {
       google: { thinkingConfig: { thinkingLevel: "low" } },
@@ -246,6 +256,7 @@ export async function withFallback<T>(
      refuses, the rest of the chain still answers. */
   prefer?: string,
   signal?: AbortSignal,
+  eligible: (tier: Tier) => boolean = () => true,
 ): Promise<{
   value: T;
   via: string;
@@ -253,7 +264,11 @@ export async function withFallback<T>(
   fallback: boolean;
   fallbackReason: "rate_limit" | "provider_failure" | null;
 }> {
-  const all = chain();
+  /* Some jobs have an output-level qualification bar that not every
+     configured provider has passed. Filter those tiers before retry and
+     rate-limit accounting so an intentionally rejected tier cannot hide the
+     real qualified provider error or create a pointless waiting period. */
+  const all = chain().filter(eligible);
   const operatorPreferred = process.env.CAPTURE_MODEL_PROVIDER;
   const hasConfiguredOperatorPreference = Boolean(
     operatorPreferred &&
@@ -298,10 +313,18 @@ export async function withFallback<T>(
       value: T;
       via: string;
       fallbackReason: "rate_limit" | "provider_failure" | null;
-    } | { ok: false; error: unknown; limited: boolean }
+    } | {
+      ok: false;
+      error: unknown;
+      limited: boolean;
+      retryableLimitError: unknown;
+      dailyLimitSeen: boolean;
+    }
   > => {
     let last: unknown;
     let limited = false;
+    let retryableLimitError: unknown;
+    let dailyLimitSeen = false;
     let preferredFailureReason: "rate_limit" | "provider_failure" | null = null;
     const isPreferredTier = (name: string) =>
       name === preferred || name.startsWith(preferred + "-");
@@ -316,6 +339,7 @@ export async function withFallback<T>(
          on an earlier request. Preserve that cause in routing metadata even
          though this round wisely avoids paying for the same known failure. */
       limited = true;
+      dailyLimitSeen = true;
       if (tiers.some((tier) => !live.includes(tier) && isPreferredTier(tier.name))) {
         preferredFailureReason = "rate_limit";
       }
@@ -338,11 +362,12 @@ export async function withFallback<T>(
           else preferredFailureReason ??= "provider_failure";
         }
         if (dailyLimited(error)) {
+          dailyLimitSeen = true;
           dailyOut.set(
             tier.name,
             Date.now() + Math.min(askedToWait(error) ?? DAILY_RECHECK_CAP_MS, DAILY_RECHECK_CAP_MS)
           );
-        }
+        } else if (tierLimited) retryableLimitError ??= error;
         opsEvent({
           event: "managed_ai_provider_attempt",
           outcome: "degraded",
@@ -358,7 +383,7 @@ export async function withFallback<T>(
         }
       }
     }
-    return { ok: false, error: last, limited };
+    return { ok: false, error: last, limited, retryableLimitError, dailyLimitSeen };
   };
 
   const first = await round();
@@ -368,9 +393,9 @@ export async function withFallback<T>(
      DAILY limit: eighteen seconds against a budget that refills over a day
      is pure waiting-room, so it fails now and the client parks the capture
      unsorted instead. */
-  if (!first.limited || dailyLimited(first.error)) throw first.error;
+  if (!first.limited || first.dailyLimitSeen || !first.retryableLimitError) throw first.error;
 
-  const wait = Math.min(askedToWait(first.error) ?? DEFAULT_WAIT_MS, MAX_WAIT_MS);
+  const wait = Math.min(askedToWait(first.retryableLimitError) ?? DEFAULT_WAIT_MS, MAX_WAIT_MS);
   opsEvent({
     event: "managed_ai_provider_attempt",
     outcome: "degraded",

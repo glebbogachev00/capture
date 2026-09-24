@@ -6,6 +6,7 @@ import { getSync, pushSync } from "@/lib/syncStore";
 import { usingBlob } from "@/lib/hubStore";
 import { type SyncState, type Tombstone } from "@/lib/sync";
 import { isCloudEnabled } from "@/lib/cloudBoard";
+import { isLocalTestPreview } from "@/lib/cloudMode";
 import { opsEvent } from "@/lib/opsEvent.server";
 import {
   GET as getCloudBoard,
@@ -49,6 +50,9 @@ function gate(request: Request) {
 }
 
 export async function GET(request: Request) {
+  if (isLocalTestPreview()) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   /* Cloud keeps the browser's long-standing sync contract, but changes the
      backing store and tenant boundary. Never let a Cloud deployment fall
      through to the single-user filesystem hub. */
@@ -87,6 +91,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (isLocalTestPreview()) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   if (isCloudEnabled()) return putCloudBoard(request);
 
   const gateResult = gate(request);

@@ -21,6 +21,13 @@ const KINDS = new Set(["action", "thread", "intention", "both"]);
 const SHELVES = new Set(["hours", "days", "weeks", "keep"]);
 
 describe("sortCases.json", () => {
+  it("keeps semantic context misuse in the real-provider harness", () => {
+    const adversarial = cases.find((testCase) => testCase.id === "context-misuse-omitted-action");
+    expect(adversarial?.why).toContain("deterministic structure checks cannot prove");
+    expect(adversarial?.expect.actionsBetween).toEqual([2, 2]);
+    expect(adversarial?.expect.actionsMention).toEqual(["milk", "doctor"]);
+  });
+
   it("sends flat client-local calendar context on every sort attempt", () => {
     expect(sortProbeSource).toContain("formatToParts(date)");
     expect(sortProbeSource).not.toMatch(/\bclientDate\s*:/u);
