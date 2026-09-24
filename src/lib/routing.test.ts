@@ -3,7 +3,7 @@ import { preferredFor, supportsSemanticSort } from "./routing";
 
 describe("semantic Sort provider qualification", () => {
   it("prefers the provider verified against the source-grounded semantic contract", () => {
-    expect(preferredFor("sort")).toBe("openrouter");
+    expect(preferredFor("sort")).toBe("cerebras");
   });
 
   it("admits only providers with output-level semantic verification", () => {
@@ -13,7 +13,7 @@ describe("semantic Sort provider qualification", () => {
     expect(supportsSemanticSort({ name: "openrouter", modelId: "openai/gpt-5-mini" })).toBe(true);
     expect(supportsSemanticSort({ name: "gemini", modelId: "gemini-3.5-flash" })).toBe(false);
     expect(supportsSemanticSort({ name: "groq", modelId: "custom-override" })).toBe(false);
-    expect(supportsSemanticSort({ name: "cerebras", modelId: "gpt-oss-120b" })).toBe(false);
+    expect(supportsSemanticSort({ name: "cerebras", modelId: "gpt-oss-120b" })).toBe(true);
     expect(supportsSemanticSort({ name: "mistral", modelId: "mistral-small-latest" })).toBe(false);
     expect(supportsSemanticSort({ name: "openrouter", modelId: "anything" })).toBe(false);
   });
@@ -43,7 +43,7 @@ describe("semantic Sort provider qualification", () => {
       expect(supportsSemanticSort({ name: "openrouter", modelId: "unknown/model" })).toBe(false);
       process.env.VERCEL_ENV = "production";
       expect(supportsSemanticSort({ name: "groq", modelId: "openai/gpt-oss-120b" })).toBe(false);
-      expect(supportsSemanticSort({ name: "cerebras", modelId: "gpt-oss-120b" })).toBe(false);
+      expect(supportsSemanticSort({ name: "cerebras", modelId: "gpt-oss-120b" })).toBe(true);
       expect(supportsSemanticSort({ name: "gemini", modelId: "gemini-3.8-flash" })).toBe(false);
       expect(supportsSemanticSort({ name: "openrouter", modelId: "google/gemini-3.8-flash" })).toBe(false);
     } finally {

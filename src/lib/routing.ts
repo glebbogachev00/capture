@@ -42,7 +42,7 @@ export const PREFERRED: Record<string, string | undefined> = {
      output-level probes showed that this model choice materially changes the
      result, so sorting uses the provider that passed the current semantic
      contract rather than the old routing-only speed assumption. */
-  sort: "openrouter",
+  sort: "cerebras",
 
   /* Nobody waits on a summary, and at ~2,300 tokens each they were the
      second-largest draw on the fast provider. Mistral is unmeasured here,
@@ -79,6 +79,7 @@ export const PREFERRED: Record<string, string | undefined> = {
 type SemanticSortTier = { name: string; modelId: string };
 
 const SEMANTIC_SORT_MODELS = new Set([
+  "cerebras:gpt-oss-120b",
   "openrouter:openai/gpt-5-mini",
 ]);
 
