@@ -1,5 +1,4 @@
 import "server-only";
-import { abortableCloudDependency } from "@/lib/cloudRequestGuard";
 
 export type CloudAccessRpcClient = {
   rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>;
@@ -13,16 +12,11 @@ function validOwnerId(userId: string): void {
 export async function hasCurrentCloudAccess(
   client: CloudAccessRpcClient,
   userId: string,
-  signal?: AbortSignal,
 ): Promise<boolean> {
   validOwnerId(userId);
-  const request = client.rpc("capture_cloud_access_current", {
+  const { data, error } = await client.rpc("capture_cloud_access_current", {
     p_user_id: userId,
-  }) as PromiseLike<{ data: unknown; error: unknown }> & {
-    abortSignal?: (signal: AbortSignal) => PromiseLike<{ data: unknown; error: unknown }>;
-  };
-  const operation = signal && typeof request.abortSignal === "function" ? request.abortSignal(signal) : request;
-  const { data, error } = await abortableCloudDependency(() => operation, signal);
+  });
   if (error || typeof data !== "boolean") throw new Error("Cloud access unavailable");
   return data;
 }

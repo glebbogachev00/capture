@@ -1,11 +1,5 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import cases from "./sortCases.json";
-
-const sortProbeSource = readFileSync(
-  new URL("../../scripts/probe-sort-cases.mjs", import.meta.url),
-  "utf8",
-);
 
 /**
  * Offline guard for the sort case suite.
@@ -21,24 +15,6 @@ const KINDS = new Set(["action", "thread", "intention", "both"]);
 const SHELVES = new Set(["hours", "days", "weeks", "keep"]);
 
 describe("sortCases.json", () => {
-  it("keeps semantic context misuse in the real-provider harness", () => {
-    const adversarial = cases.find((testCase) => testCase.id === "context-misuse-omitted-action");
-    expect(adversarial?.why).toContain("deterministic structure checks cannot prove");
-    expect(adversarial?.expect.actionsBetween).toEqual([2, 2]);
-    expect(adversarial?.expect.actionsMention).toEqual(["milk", "doctor"]);
-  });
-
-  it("sends flat client-local calendar context on every sort attempt", () => {
-    expect(sortProbeSource).toContain("formatToParts(date)");
-    expect(sortProbeSource).not.toMatch(/\bclientDate\s*:/u);
-    expect(sortProbeSource).toMatch(
-      /JSON\.stringify\(\{ raw, threads, \.\.\.clientLocalContext\(\) \}\)/u,
-    );
-    expect(
-      sortProbeSource.match(/body: sortRequestBody\(raw, threads\)/gu),
-    ).toHaveLength(3);
-  });
-
   it("ids are unique and every case says why it exists", () => {
     const ids = cases.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);

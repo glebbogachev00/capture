@@ -26,18 +26,6 @@ const Envelope = z.strictObject({
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-async function boundedBySignal<T>(work: () => Promise<T>, signal: AbortSignal): Promise<T> {
-  signal.throwIfAborted();
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(signal.reason ?? new DOMException("Decisions request cancelled", "AbortError"));
-    signal.addEventListener("abort", onAbort, { once: true });
-    void Promise.resolve()
-      .then(work)
-      .then(resolve, reject)
-      .finally(() => signal.removeEventListener("abort", onAbort));
-  });
-}
-
 type DecisionsQuestion = {
   type: "choice" | "noul" | "score";
   instructions: string;
@@ -90,7 +78,6 @@ export async function submitOpenRouterDecisions<Answers>({
   questions,
   answersSchema,
   fetcher = fetch,
-  signal,
 }: {
   apiKey: string;
   model: string;
@@ -98,14 +85,10 @@ export async function submitOpenRouterDecisions<Answers>({
   questions: Record<string, DecisionsQuestion>;
   answersSchema: z.ZodType<Answers>;
   fetcher?: Fetcher;
-  signal?: AbortSignal;
 }): Promise<OpenRouterDecisionsResult<Answers>> {
   let response: Response;
-  const requestSignal = signal
-    ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
-    : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   try {
-    response = await boundedBySignal(() => fetcher(OPENROUTER_DECISIONS_ENDPOINT, {
+    response = await fetcher(OPENROUTER_DECISIONS_ENDPOINT, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -117,8 +100,8 @@ export async function submitOpenRouterDecisions<Answers>({
         state,
         questions,
       }),
-      signal: requestSignal,
-    }), requestSignal);
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
   } catch {
     throw new OpenRouterDecisionsError("request_failed");
   }
@@ -128,9 +111,7 @@ export async function submitOpenRouterDecisions<Answers>({
   }
 
   try {
-    const envelope = Envelope.parse(
-      await boundedBySignal(() => response.json(), requestSignal),
-    );
+    const envelope = Envelope.parse(await response.json());
     const answers = answersSchema.parse(envelope.answers);
     return {
       answers,

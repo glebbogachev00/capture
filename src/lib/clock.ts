@@ -57,18 +57,6 @@ export const clockSnapshot = () => value;
  */
 export const stamp = () => Date.now();
 
-/** Client calendar context for relative due dates. */
-export function clientDateContext(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en", {
-    year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
-  return {
-    localDate: `${part("year")}-${part("month")}-${part("day")}`,
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-  };
-}
-
 /** Prerender has no meaningful clock; the client re-renders with the real one. */
 export const clockServerSnapshot = () => 0;
 

@@ -117,14 +117,4 @@ describe("resolving a capture's opening", () => {
     expect(plain.force).toBeUndefined();
     expect(plain.commandLesson).toBeNull();
   });
-
-  it("records the chosen kind and a bounded semantic subject", () => {
-    const subject = "x".repeat(700);
-    const command = resolveCapture(`/thread ${subject}`);
-    expect(command.commandCorrection).toEqual({
-      chosenKind: "thread",
-      subject: subject.slice(0, 500),
-    });
-    expect(resolveCapture(`/thread ${subject}`, "action").commandCorrection).toBeNull();
-  });
 });

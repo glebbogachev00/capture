@@ -7,7 +7,6 @@ import {
 } from "@/lib/cloudRequestGuard";
 import {
   MANAGED_AI_RELEASE_DEADLINE_MS,
-  MANAGED_AI_DEFERRED_ADMISSION_DEADLINE_MS,
   scheduleManagedAiDeferredWork,
   withManagedAiAdmission,
 } from "@/lib/cloudRequestGuard.server";
@@ -166,58 +165,6 @@ describe("shared Cloud request guard", () => {
     expect((result as Response).status).toBe(503);
     expect(await (result as Response).json()).toEqual({ error: "cloud authorization unavailable" });
   });
-  it.each([
-    ["identity", "verifyIdentity"],
-    ["lifecycle", "isAccountErasing"],
-    ["access", "hasEntitlement"],
-    ["quota", "consumeQuota"],
-    ["admission", "acquireExternalWork"],
-  ] as const)("cancels and bounds a stalled %s dependency", async (_stage, method) => {
-    const controller = new AbortController();
-    let received: AbortSignal | undefined;
-    const stalled = vi.fn((...args: unknown[]) => {
-      received = args.at(-1) as AbortSignal;
-      return new Promise<never>(() => {});
-    });
-    const deps = dependencies({ [method]: stalled } as Partial<CloudRequestGuardDependencies>);
-    const pending = authorizeCloudRequest(request(), "managed_ai", deps, { signal: controller.signal });
-    await vi.waitFor(() => expect(stalled).toHaveBeenCalledOnce());
-    controller.abort(new DOMException("route deadline", "TimeoutError"));
-
-    const response = await pending;
-    expect(response).toBeInstanceOf(Response);
-    expect((response as Response).status).toBe(503);
-    expect(received).toBe(controller.signal);
-  });
-
-  it("releases a late-created admission boundedly after route cancellation", async () => {
-    vi.useFakeTimers();
-    const controller = new AbortController();
-    let resolveAdmission!: (value: { admissionId: string }) => void;
-    let releaseSignal: AbortSignal | undefined;
-    const acquireExternalWork = vi.fn(() => new Promise<{ admissionId: string }>((resolve) => {
-      resolveAdmission = resolve;
-    }));
-    const releaseExternalWork = vi.fn((_owner: string, _admission: string, signal?: AbortSignal) => {
-      releaseSignal = signal;
-      return new Promise<void>(() => {});
-    });
-    const pending = authorizeCloudRequest(request(), "managed_ai", dependencies({
-      acquireExternalWork,
-      releaseExternalWork,
-    }), { signal: controller.signal });
-    await vi.advanceTimersByTimeAsync(0);
-    controller.abort(new DOMException("route deadline", "TimeoutError"));
-    expect((await pending as Response).status).toBe(503);
-
-    resolveAdmission({ admissionId: "late-admission" });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(releaseExternalWork).toHaveBeenCalledWith(
-      "owner-a", "late-admission", expect.any(AbortSignal),
-    );
-    await vi.advanceTimersByTimeAsync(MANAGED_AI_RELEASE_DEADLINE_MS);
-    expect(releaseSignal?.aborted).toBe(true);
-  });
 });
 
 describe("Cloud owner quota policy", () => {
@@ -370,28 +317,7 @@ describe("managed external-work release", () => {
     expect(JSON.stringify(info.mock.calls)).not.toMatch(/private late release detail|bounded provider failure/);
   });
 
-  it("uses only the remaining route budget for a stalled admission release", async () => {
-    vi.useFakeTimers();
-    let releaseSignal: AbortSignal | undefined;
-    const pending = withManagedAiAdmission({
-      mode: "cloud",
-      ownerId: "owner-a",
-      admissionId: "admission-a",
-      releaseExternalWork: vi.fn((signal?: AbortSignal) => {
-        releaseSignal = signal;
-        return new Promise<void>(() => {});
-      }),
-    }, async () => Response.json({ ok: true }), { deadlineAt: Date.now() + 125 });
-    let settled = false;
-    void pending.then(() => { settled = true; });
-    await vi.advanceTimersByTimeAsync(124);
-    expect(settled).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
-    expect((await pending).status).toBe(200);
-    expect(releaseSignal?.aborted).toBe(true);
-  });
-
-  it("schedules first and acquires the shadow admission only inside deferred work", async () => {
+  it("hands a second owner-bound admission to deferred work before releasing the primary", async () => {
     const events: string[] = [];
     let task: (() => void | Promise<void>) | undefined;
     const releaseDeferred = vi.fn(async () => { events.push("release deferred"); });
@@ -418,6 +344,7 @@ describe("managed external-work release", () => {
     });
 
     expect(events).toEqual([
+      "acquire deferred",
       "schedule",
       "primary complete",
       "release primary",
@@ -426,17 +353,17 @@ describe("managed external-work release", () => {
 
     await task?.();
     expect(events).toEqual([
+      "acquire deferred",
       "schedule",
       "primary complete",
       "release primary",
-      "acquire deferred",
       "run deferred",
       "release deferred",
     ]);
     expect(releaseDeferred).toHaveBeenCalledOnce();
   });
 
-  it("does not acquire a deferred admission when scheduling fails", async () => {
+  it("releases the deferred admission exactly once when scheduling fails", async () => {
     const release = vi.fn().mockResolvedValue(undefined);
     const onError = vi.fn();
     const authorization = {
@@ -455,8 +382,7 @@ describe("managed external-work release", () => {
       onError,
     })).resolves.toBe(false);
 
-    expect(release).not.toHaveBeenCalled();
-    expect(authorization.acquireDeferredManagedAiAdmission).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
     expect(onError).toHaveBeenCalledOnce();
   });
 
@@ -482,7 +408,7 @@ describe("managed external-work release", () => {
 
     await Promise.resolve();
     expect(work).not.toHaveBeenCalled();
-    expect(release).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
     expect(onError).toHaveBeenCalledOnce();
   });
 
@@ -508,38 +434,6 @@ describe("managed external-work release", () => {
     expect(acquire).not.toHaveBeenCalled();
     expect(schedule).not.toHaveBeenCalled();
     expect(work).not.toHaveBeenCalled();
-  });
-
-  it("bounds a never-settling deferred admission without delaying scheduling or running shadow work", async () => {
-    vi.useFakeTimers();
-    let task: (() => void | Promise<void>) | undefined;
-    let admissionSignal: AbortSignal | undefined;
-    const acquire = vi.fn((signal?: AbortSignal) => {
-      admissionSignal = signal;
-      return new Promise<never>(() => {});
-    });
-    const work = vi.fn();
-    const onError = vi.fn();
-    expect(await scheduleManagedAiDeferredWork({
-      authorization: {
-        mode: "cloud",
-        ownerId: "owner-a",
-        acquireDeferredManagedAiAdmission: acquire,
-      },
-      enabled: true,
-      schedule: (callback) => { task = callback; },
-      work,
-      onError,
-    })).toBe(true);
-    expect(acquire).not.toHaveBeenCalled();
-    const running = task?.();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(acquire).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(MANAGED_AI_DEFERRED_ADMISSION_DEADLINE_MS);
-    await running;
-    expect(admissionSignal?.aborted).toBe(true);
-    expect(work).not.toHaveBeenCalled();
-    expect(onError).toHaveBeenCalledOnce();
   });
 
   it("contains deferred work and release failures without releasing twice", async () => {

@@ -5,7 +5,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Board } from "@/lib/model";
 
 const at = Date.parse("2026-01-03T12:00:00.000Z");
-const ANSWER_EVIDENCE = "Orchard planting was completed in winter.";
 function fixture(): Board {
   return {
     actions: [{ id: "task-1", text: "Orchard seedlings ordered", at, done: true, shelf: "keep", expires: null, src: "PRIVATE ACTION PROVENANCE" }],
@@ -27,9 +26,7 @@ beforeEach(() => {
   vi.stubGlobal("React", React);
   vi.stubEnv("NEXT_PUBLIC_PLAYGROUND", "0");
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => String(input) === "/api/recall/select"
-    ? Response.json({ threadIds: [] })
-    : Response.json({ status: "insufficient", claims: [] })));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ status: "insufficient", claims: [] })));
 });
 afterEach(() => {
   for (const stop of stopWatches.splice(0)) stop();
@@ -64,8 +61,7 @@ function deferred<T>() {
 async function answered(board: Board, text: string) {
   const { recallSources } = await import("@/lib/recall");
   const source = recallSources(board, "orchard")[0];
-  void text;
-  return { status: "answered", claims: [{ text: source.text, citations: [{ sourceId: source.id, quote: source.text }] }] };
+  return { status: "answered", claims: [{ text, citations: [{ sourceId: source.id, quote: source.text }] }] };
 }
 
 it("automatically answers a stable question only after the debounce", async () => {
@@ -96,11 +92,11 @@ it("shows a quiet visible wait while answering, then replaces it with the answer
 
   const answer = screen.getByRole("region", { name: "Answer" });
   expect(screen.queryByTestId("answer-loading")).toBeNull();
-  expect(answer.textContent).toContain(ANSWER_EVIDENCE);
+  expect(answer.textContent).toContain("CURRENT ANSWER");
   expect(screen.getByRole("heading", { name: "Answer" })).toBeTruthy();
   expect(screen.getAllByRole("button", { name: "Open thread: Orchard plan" })).toHaveLength(1);
   expect(answer.textContent).not.toMatch(/matching subset|submitted evidence|configured AI|unchanged/i);
-  expect(screen.getByRole("list", { name: "Support for answer 1" }).textContent).toContain(ANSWER_EVIDENCE);
+  expect(answer.querySelector("blockquote, details, time")).toBeNull();
 });
 
 it("commits a quiet accessibility status before transmitting excerpts", async () => {
@@ -143,13 +139,13 @@ it("does not resend when board identity or unrelated board data changes", async 
   vi.mocked(fetch).mockResolvedValue(Response.json(await answered(board, "STABLE ANSWER")));
   const view = await setup(board);
   await startAnswer();
-  expect(screen.getByText(ANSWER_EVIDENCE, { selector: "p" })).toBeTruthy();
+  expect(screen.getByText("STABLE ANSWER")).toBeTruthy();
   const replacement = structuredClone(board);
   replacement.profile = { name: "Different presentation identity" };
   view.rerender(<view.QuestionAnswer {...view.props} board={replacement} />);
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(fetch).toHaveBeenCalledTimes(1);
-  expect(screen.getByText(ANSWER_EVIDENCE, { selector: "p" })).toBeTruthy();
+  expect(screen.getByText("STABLE ANSWER")).toBeTruthy();
 });
 
 it("retires a request only when its exact bounded source snapshot changes", async () => {
@@ -219,14 +215,14 @@ it("does not resend a completed fingerprint after the answer component fully unm
     session: createQuestionAnswerSession() };
   const first = render(<QuestionAnswer {...props} />);
   await startAnswer();
-  expect(screen.getByText(ANSWER_EVIDENCE, { selector: "p" })).toBeTruthy();
+  expect(screen.getByText("STABLE ANSWER")).toBeTruthy();
   expect(fetch).toHaveBeenCalledTimes(1);
 
   first.unmount();
   render(<QuestionAnswer {...props} />);
   await startAnswer();
   expect(fetch).toHaveBeenCalledTimes(1);
-  expect(screen.getByText(ANSWER_EVIDENCE, { selector: "p" })).toBeTruthy();
+  expect(screen.getByText("STABLE ANSWER")).toBeTruthy();
 });
 
 it("does not call recall for an ordinary search phrase", async () => {
@@ -250,10 +246,10 @@ it("aborts a changed question and ignores its late response", async () => {
   await startAnswer();
   expect(fetch).toHaveBeenCalledTimes(2);
   await act(async () => { second.resolve(Response.json(await answered(board, "CURRENT ANSWER"))); });
-  expect(screen.getByText(ANSWER_EVIDENCE, { selector: "p" })).toBeTruthy();
+  expect(screen.getByText("CURRENT ANSWER")).toBeTruthy();
   await act(async () => { first.resolve(Response.json(await answered(board, "STALE ANSWER"))); });
   expect(screen.queryByText("STALE ANSWER")).toBeNull();
-  expect(screen.getByText(ANSWER_EVIDENCE, { selector: "p" })).toBeTruthy();
+  expect(screen.getByText("CURRENT ANSWER")).toBeTruthy();
 });
 
 it("rechecks disclosure authority when a connected item is opened during silent revalidation", async () => {
@@ -265,7 +261,7 @@ it("rechecks disclosure authority when a connected item is opened during silent 
   vi.mocked(fetch).mockResolvedValueOnce(Response.json(await answered(board, "CITED ANSWER")));
   const view = await setup(board, "What about orchard?");
   await startAnswer();
-  screen.getByText(ANSWER_EVIDENCE, { selector: "p" });
+  screen.getByText("CITED ANSWER");
   act(() => { window.dispatchEvent(new Event("focus")); });
   expect(lifetime.snapshot()).toBe("active");
   fireEvent.click(screen.getAllByRole("button", { name: "Open thread: Orchard plan" })[0]);
@@ -351,7 +347,7 @@ it.each(["question", "board"])("clears completed sensitive output on %s change a
   vi.mocked(fetch).mockResolvedValueOnce(Response.json(await answered(board, "PREVIOUS ANSWER")));
   const view = await setup(board, "What about orchard?");
   await startAnswer();
-  screen.getByText(ANSWER_EVIDENCE, { selector: "p" });
+  screen.getByText("PREVIOUS ANSWER");
   const changedBoard = fixture();
   changedBoard.threads[0].frags[0].text = "Orchard planting moved to late spring.";
   view.rerender(<view.QuestionAnswer {...view.props} question={change === "question" ? "What about planting?" : view.props.question} board={change === "board" ? changedBoard : board} />);
@@ -397,7 +393,7 @@ it("answers without stealing search focus", async () => {
   expect(search.disabled).toBe(false);
   expect(document.activeElement).toBe(search);
   await act(async () => { response.resolve(Response.json(await answered(board, "CURRENT ANSWER"))); });
-  expect(screen.getByText(ANSWER_EVIDENCE, { selector: "p" })).toBeTruthy();
+  expect(screen.getByText("CURRENT ANSWER")).toBeTruthy();
   expect(document.activeElement).toBe(search);
   searchView.unmount();
 });
@@ -441,64 +437,12 @@ it.each(["", "ab", " ".repeat(10), "x".repeat(501)])("blocks invalid question le
   expect(fetch).not.toHaveBeenCalled();
 });
 
-it("semantically selects topics before disclosing only their original evidence", async () => {
-  const calls: { url: string; body: Record<string, unknown> }[] = [];
-  vi.mocked(fetch).mockImplementation(async (input, init) => {
-    const url = String(input);
-    const body = JSON.parse(String(init?.body));
-    calls.push({ url, body });
-    return url === "/api/recall/select"
-      ? Response.json({ threadIds: ["thread-1"] })
-      : Response.json({ status: "insufficient", claims: [] });
-  });
-  await setup(fixture(), "How should I grow food?");
+it("reports no matching evidence locally without sending an empty or unrelated board", async () => {
+  await setup(fixture(), "What about volcanoes?");
   await startAnswer();
-  expect(screen.getByRole("status").textContent).toMatch(/Not enough evidence/i);
-  expect(calls.map((call) => call.url)).toEqual(["/api/recall/select", "/api/recall"]);
-  expect(calls[0].body).toEqual(expect.objectContaining({
-    question: "How should I grow food?",
-    topics: expect.arrayContaining([expect.objectContaining({ id: "thread-1", name: "Orchard plan" })]),
-  }));
-  expect(calls[0].body).not.toHaveProperty("sources");
-  expect(calls[1].body).toEqual(expect.objectContaining({
-    sources: expect.arrayContaining([expect.objectContaining({ targetId: "thread-1" })]),
-  }));
-  expect(JSON.stringify(calls[1].body)).not.toMatch(/PRIVATE unrelated|PRIVATE ACTION|PRIVATE LEDGER|PRIVATE PROFILE/);
+  expect(screen.getByRole("status").textContent).toMatch(/No matching evidence.*Try more specific words/i);
+  expect(fetch).not.toHaveBeenCalled();
   expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
-});
-
-it("keys semantic answers by the exact selected originals rather than unchanged topic metadata", async () => {
-  const calls: { url: string; body: Record<string, unknown> }[] = [];
-  vi.mocked(fetch).mockImplementation(async (input, init) => {
-    const url = String(input);
-    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-    calls.push({ url, body });
-    if (url === "/api/recall/select") return Response.json({ threadIds: ["thread-1"] });
-    const source = (body.sources as { id: string; text: string }[])[0];
-    return Response.json({
-      status: "answered",
-      claims: [{ text: source.text, citations: [{ sourceId: source.id, quote: source.text }] }],
-    });
-  });
-  const board = fixture();
-  const view = await setup(board, "How should I grow food?");
-  await startAnswer();
-  expect(screen.getByRole("region", { name: "Answer" }).textContent).toContain(ANSWER_EVIDENCE);
-
-  const changed = structuredClone(board);
-  changed.threads[0].frags[1].text = "The orchard now follows a summer planting plan.";
-  view.rerender(<view.QuestionAnswer {...view.props} board={changed} />);
-  await startAnswer();
-
-  expect(calls.map((call) => call.url)).toEqual([
-    "/api/recall/select",
-    "/api/recall",
-    "/api/recall",
-  ]);
-  expect(JSON.stringify(calls[1].body)).toContain(ANSWER_EVIDENCE);
-  expect(JSON.stringify(calls[2].body)).toContain("summer planting plan");
-  expect(screen.getByRole("region", { name: "Answer" }).textContent)
-    .toContain("The orchard now follows a summer planting plan.");
 });
 
 it.each(["javascript:alert(1)", "__proto__", "quote-mismatch"])("rejects unverified server citations: %s", async kind => {
@@ -599,30 +543,26 @@ it("sends only matching original evidence for a stable question", async () => {
   expect(JSON.stringify(board)).toBe(before);
 });
 
-it("shows escaped extractive claims with visible support and one control per connected item", async () => {
+it("shows escaped cited claims with one minimal control per connected item", async () => {
   const board = fixture();
-  const text = '<img src=x onerror="alert(1)"> Orchard notes disagree.';
-  board.intentions[0].rawInput = text;
   const { recallSources } = await import("@/lib/recall");
   const sources = recallSources(board, "orchard");
-  const citations = sources.map(source => ({ sourceId: source.id, quote: source.text }));
-  const claimText = citations.map((citation) => citation.quote).join(" ");
-  vi.mocked(fetch).mockResolvedValue(Response.json({ status: "answered", claims: [{
-    text: claimText,
-    citations,
+  const text = '<img src=x onerror="alert(1)"> Orchard notes disagree.';
+  vi.mocked(fetch).mockResolvedValue(Response.json({ status: "answered", claims: [{ text,
+    citations: sources.map(source => ({ sourceId: source.id, quote: source.text })),
   }] }));
   const view = await setup(board, "What about orchard?");
   await startAnswer();
   expect(screen.getByRole("heading", { name: "Answer" })).toBeTruthy();
-  expect(screen.getByText((_, element) => element?.tagName === "P" && element.textContent?.includes(text) === true)).toBeTruthy();
-  expect(screen.getByRole("list", { name: "Support for answer 1" }).textContent).toContain(text);
+  expect(screen.getByText(text)).toBeTruthy();
   expect(view.container.querySelector("img, a, script")).toBeNull();
-  expect(view.container.textContent).not.toMatch(/matching subset|submitted evidence/i);
+  expect(view.container.querySelector("blockquote, details, time")).toBeNull();
+  expect(view.container.textContent).not.toMatch(/resolved|done|matching subset|submitted evidence/i);
   const threadButtons = screen.getAllByRole("button", { name: "Open thread: Orchard plan" });
   expect(threadButtons).toHaveLength(1);
   fireEvent.click(threadButtons[0]);
   expect(view.props.onOpenThread).toHaveBeenLastCalledWith("thread-1", "frag-2");
-  fireEvent.click(screen.getAllByRole("button", { name: `Open intention: ${text}` })[0]);
+  fireEvent.click(screen.getAllByRole("button", { name: "Open intention: I tend my orchard patiently." })[0]);
   expect(view.props.onOpenIntention).toHaveBeenCalledWith("intent-1");
-  expect(screen.queryByRole("button", { name: /Orchard seedlings ordered/ })).toBeNull();
+  expect(screen.queryByText("Orchard seedlings ordered")).toBeNull();
 });

@@ -133,22 +133,6 @@ describe("moving a note between threads", () => {
     expect(applyFragMove(b, "capture", "c1", "retake", T0)).toBeNull();
     expect(applyFragMove(board(), "retake", "r1", "retake", T0)).toBeNull(); // and never into itself
   });
-
-  it("moves only actions proven to come from the moved semantic fragment", () => {
-    const b = board();
-    b.actions = [
-      { id: "tied", text: "Ship Retake demo", done: false, at: T0, shelf: "keep", expires: null,
-        threadId: "capture", sourceFragId: "c1" },
-      { id: "same-thread", text: "Unrelated Capture task", done: false, at: T0, shelf: "keep", expires: null,
-        threadId: "capture", sourceFragId: "other" },
-      { id: "legacy", text: "Legacy task", done: false, at: T0, shelf: "keep", expires: null,
-        threadId: "capture" },
-    ];
-    const out = applyFragMove(b, "capture", "c1", "retake", T0 + 1)!;
-    expect(out.board.actions.find((action) => action.id === "tied")?.threadId).toBe("retake");
-    expect(out.board.actions.find((action) => action.id === "same-thread")?.threadId).toBe("capture");
-    expect(out.board.actions.find((action) => action.id === "legacy")?.threadId).toBe("capture");
-  });
 });
 
 describe("splitting a note into its own thread", () => {

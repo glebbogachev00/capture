@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsScreen } from "@/app/Intentions";
 import type { Principle } from "@/lib/model";
-import type { CaptureEntry } from "@/lib/ledger";
 
 const principle: Principle = {
   id: "p1",
@@ -15,7 +14,7 @@ const principle: Principle = {
 
 afterEach(cleanup);
 
-function renderSettings(ioBusy: string | null = null, ledger: CaptureEntry[] = []) {
+function renderSettings(ioBusy: string | null = null) {
   const onToggle = vi.fn();
   const onProfileChange = vi.fn();
   render(
@@ -38,7 +37,7 @@ function renderSettings(ioBusy: string | null = null, ledger: CaptureEntry[] = [
       sync={{ ok: true, at: 1_788_288_000_000 }}
       onSyncNow={() => {}}
       onOpenRecord={() => {}}
-      ledger={ledger}
+      ledgerCount={12}
       profile={undefined}
       onProfileChange={onProfileChange}
     />
@@ -47,21 +46,6 @@ function renderSettings(ioBusy: string | null = null, ledger: CaptureEntry[] = [
 }
 
 describe("SettingsScreen disclosures", () => {
-  it("counts a split capture once in the Settings Record signpost", () => {
-    const common = {
-      at: 1,
-      raw: "One capture",
-      clean: "One capture",
-      source: "typed" as const,
-      captureId: "capture-1",
-    };
-    renderSettings(null, [
-      { ...common, id: "primary", kind: "thread", targetId: "one", primary: true },
-      { ...common, id: "secondary", kind: "thread", targetId: "two", primary: false },
-    ]);
-    expect(screen.getByText("1 said")).toBeTruthy();
-  });
-
   it("starts as a compact list and opens only one section at a time", () => {
     renderSettings();
 

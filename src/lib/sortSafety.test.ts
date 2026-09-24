@@ -12,11 +12,11 @@ it.each([
   "Call mom this weekend", "Also, call mom this weekend.",
   "- Call mom this weekend\n- Fix the Stripe webhook retry bug",
   "Call mom this weekend. Fix the Stripe webhook retry bug.",
-])("never drops an unsafe share by comparing it to action wording: %s", text => {
+])("keeps action-only also material as tasks, not secondary thinking: %s", text => {
   const input = { ...base, actions: [...base.actions!, "Fix the Stripe webhook retry bug"], also: [{ text, threadName: "Errands" }] };
   const out = reconcileSorted(input);
-  expect(out.also).toHaveLength(1);
-  expect(out.also[0].text).toMatch(/call mom|Stripe/i);
+  expect(out.also).toEqual([]);
+  expect(applySorted(input, [], 1000, EMPTY).next.threads).toHaveLength(1);
   expect(reconcileSorted(out)).toEqual(out);
   expect(input.also[0].text).toBe(text);
 });
@@ -35,9 +35,10 @@ it.each([
 });
 
 it("preserves multiple independent new thinking subjects and clean paragraphs", () => {
-  const input = { ...base, clean: "Pricing thinking.\n\nThe garden is too shaded.\n\nI am debating the onboarding flow.\n\nCall mom this weekend.", also: [
+  const input = { ...base, clean: "Pricing thinking.\n\nCall mom this weekend.", also: [
     { text: "The garden is too shaded.", threadName: null },
     { text: "I am debating the onboarding flow.", threadName: "Onboarding" },
+    { text: "Call mom this weekend", threadName: null },
   ] };
   const out = reconcileSorted(input);
   const { next } = applySorted(out, [], 1000, EMPTY);
@@ -46,28 +47,6 @@ it("preserves multiple independent new thinking subjects and clean paragraphs", 
     "I am debating the onboarding flow.", "The garden is too shaded.", "Pricing thinking.",
   ]);
   expect(out.clean).toBe(input.clean);
-});
-
-it("applies due, shelf, and source ownership per action", () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-09-13T12:00:00Z"));
-  try {
-    const out: SortResult = {
-      kind: "action",
-      clean: "Call Maya Friday. Buy milk today.",
-      title: "Two actions",
-      actions: ["Call Maya Friday", "Buy milk today"],
-      actionMeta: [
-        { text: "Call Maya Friday", source: "Call Maya Friday.", shelfLife: "keep", due: "2026-09-19" },
-        { text: "Buy milk today", source: "Buy milk today.", shelfLife: "hours", due: "2026-09-13" },
-      ],
-    };
-    const actions = applySorted(out, [], Date.now(), EMPTY).next.actions;
-    expect(actions.map((action) => action.src)).toEqual(["Call Maya Friday.", "Buy milk today."]);
-    expect(actions.map((action) => action.shelf)).toEqual(["keep", "hours"]);
-    expect(actions.every((action) => action.due)).toBe(true);
-    expect(actions[0].due).not.toBe(actions[1].due);
-  } finally { vi.useRealTimers(); }
 });
 
 it.each(["action", "both"] as const)("keeps single-action dates but refuses ambiguous scalar dates on multiple %s tasks", kind => {

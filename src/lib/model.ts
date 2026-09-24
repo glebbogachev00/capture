@@ -67,9 +67,6 @@ export type Action = {
       step, an extraction. The seam between the two halves of one moment,
       kept so the thread can show what it gave rise to. */
   threadId?: string;
-  /** Exact semantic fragment this action advances. Same-thread co-occurrence
-      is not enough; moving this fragment moves only actions carrying its id. */
-  sourceFragId?: string;
   /** A picture arrived with this capture and lives on a thread fragment.
       Actions are made to be cleared away and threads are made to keep
       things, so the image is never owned by the row that will be ticked
@@ -310,7 +307,6 @@ function migrateLegacyPending(
       nextLedger[index] = {
         ...nextLedger[index],
         captureId,
-        primary: index === identityRow,
         kind: "pending",
         targetId: envelope.id,
         targetFragId: undefined,
@@ -321,7 +317,6 @@ function migrateLegacyPending(
     nextLedger.push({
       id: uniqueId(`legacy-pending-${envelope.id}`, usedLedgerIds),
       captureId,
-      primary: true,
       at: envelope.at,
       raw,
       clean: envelope.text || raw,

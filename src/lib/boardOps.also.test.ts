@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySorted, pinSortedThreadDestination, type SortResult } from "./boardOps";
+import { applySorted, type SortResult } from "./boardOps";
 import type { Board } from "./model";
 
 /**
@@ -65,13 +65,16 @@ describe("a capture that is about two subjects", () => {
     expect(next.threads).toHaveLength(3);
   });
 
-  it("refuses a secondary destination that has since gone so the caller can park the capture", () => {
+  it("keeps the words when the named thread has since gone", () => {
     const out: SortResult = {
       ...base,
       primaryText: "Retake takes a while to render on this machine.",
       also: [{ text: "orphaned words", threadId: "t-deleted" }],
     };
-    expect(() => applySorted(out, [], 1, board())).toThrow(/stale destination/i);
+    const { next } = applySorted(out, [], 1, board());
+    expect(
+      next.threads.some((t) => t.frags.some((f) => f.text === "orphaned words"))
+    ).toBe(true);
   });
 
   it("does not arbitrarily attach an action to the primary thread in a multi-subject capture", () => {
@@ -90,85 +93,6 @@ describe("a capture that is about two subjects", () => {
 
     expect(next.actions).toHaveLength(1);
     expect(next.actions[0].threadId).toBeUndefined();
-  });
-
-  it("attaches an explicitly related action to its secondary thinking thread", () => {
-    const out: SortResult = {
-      ...base,
-      kind: "both",
-      actions: ["Test Retake playback on mobile", "Call mom"],
-      primaryText: "Capture pricing should remain simple.",
-      threadId: "t-capture",
-      also: [{
-        text: "Retake demos need a better rhythm.",
-        threadId: "t-retake",
-        actions: ["Test Retake playback on mobile"],
-      }],
-    };
-
-    const { next } = applySorted(out, [], 1, board());
-
-    expect(next.actions.find((action) => action.text === "Test Retake playback on mobile")?.threadId)
-      .toBe("t-retake");
-    expect(next.actions.find((action) => action.text === "Call mom")?.threadId)
-      .toBeUndefined();
-  });
-
-  it("keeps duplicate action wording tied to its own semantic share by provenance, not text", () => {
-    const out: SortResult = {
-      ...base,
-      kind: "both",
-      actions: ["Review the draft", "Review the draft"],
-      actionMeta: [
-        { text: "Review the draft", source: "Review the Capture draft.", shelfLife: "days", due: null, thinkingIndex: 0 },
-        { text: "Review the draft", source: "Review the Retake draft.", shelfLife: "days", due: null, thinkingIndex: 1 },
-      ],
-      primaryActions: ["Review the draft"],
-      primaryText: "Capture draft thinking.",
-      threadId: "t-capture",
-      also: [{ text: "Retake draft thinking.", threadId: "t-retake", actions: ["Review the draft"] }],
-    };
-    const { next } = applySorted(out, [], 1, board());
-    const captureAction = next.actions.find((action) => action.src?.includes("Capture"))!;
-    const retakeAction = next.actions.find((action) => action.src?.includes("Retake"))!;
-    expect(captureAction.threadId).toBe("t-capture");
-    expect(retakeAction.threadId).toBe("t-retake");
-    expect(captureAction.sourceFragId).not.toBe(retakeAction.sourceFragId);
-  });
-
-  it("routes image bytes only to the thinking share that owns them", () => {
-    const out: SortResult = {
-      ...base,
-      primaryText: "Capture thought.",
-      primaryOwnsImages: false,
-      threadId: "t-capture",
-      also: [{ text: "Retake screenshot.", threadId: "t-retake", ownsImages: true }],
-    };
-    const { next } = applySorted(out, ["img"], 1, board());
-    expect(next.threads.find((thread) => thread.id === "t-capture")?.frags[0].imgs).toEqual([]);
-    expect(next.threads.find((thread) => thread.id === "t-retake")?.frags[0].imgs).toEqual(["img"]);
-  });
-
-  it("refuses a stale model destination instead of minting a replacement", () => {
-    expect(() => applySorted({
-      ...base,
-      threadId: "deleted",
-      threadName: "Deleted destination",
-    }, [], 1, board())).toThrow(/stale destination/i);
-  });
-
-  it("keeps full source in the fragment while a fallback title stays bounded", () => {
-    const source = "Full source ".repeat(80).trim();
-    const title = source.slice(0, 80);
-    const { next } = applySorted({
-      clean: source,
-      kind: "thread",
-      title,
-      threadId: null,
-      threadName: title,
-    }, [], 1, board());
-    expect(next.threads[0].name.length).toBeLessThanOrEqual(80);
-    expect(next.threads[0].frags[0].text).toBe(source);
   });
 
   it("changes nothing at all for the ordinary one-subject capture", () => {
@@ -233,29 +157,5 @@ describe("what the caller must record", () => {
     expect(alsoLanded![0].text).toBe("I want a daily journal.");
     expect(alsoLanded![0].threadId).toBeTruthy();
     expect(alsoLanded![0].fragId).toBeTruthy();
-  });
-});
-
-describe("an explicit user-selected destination", () => {
-  it("collapses every thinking share into the chosen current thread", () => {
-    const selected = pinSortedThreadDestination({
-      ...base,
-      kind: "both",
-      actions: ["Test Capture", "Test Retake"],
-      primaryActions: ["Test Capture"],
-      primaryText: "Capture thought.",
-      also: [{ text: "Retake thought.", threadId: "t-retake", actions: ["Test Retake"], ownsImages: true }],
-    }, "t-capture", board());
-    expect(selected).toMatchObject({
-      threadId: "t-capture",
-      primaryText: "Capture thought.\n\nRetake thought.",
-      primaryActions: ["Test Capture", "Test Retake"],
-      primaryOwnsImages: true,
-      also: null,
-    });
-  });
-
-  it("rejects a user-selected destination deleted before apply", () => {
-    expect(pinSortedThreadDestination(base, "gone", board())).toBeNull();
   });
 });

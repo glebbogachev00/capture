@@ -10,19 +10,15 @@ import { DISTILL_KEY, EMPTY_DISTILL } from "@/lib/distill";
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 const question = "What did I decide about Capture pricing?";
 const text = `${question} I decided to keep thinking features free. Cloud pays for hosting.`;
-const definition = "Capture is a personal thinking system that organizes rough thoughts into Actions, Threads, and Intentions.";
 const requests: { question: string; sources: { id: string; text: string; targetId: string; fragId?: string }[] }[] = [];
-const selections: { question: string; topics: { id: string; name: string }[] }[] = [];
 beforeEach(async () => {
   requests.length = 0;
-  selections.length = 0;
   vi.stubGlobal("matchMedia", vi.fn((media: string) => ({ media, matches: false, onchange: null,
     addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
   })));
   await set(KEY, JSON.stringify({ ...EMPTY, principles: [], threads: [
     { id: "pricing", name: "Capture pricing", summary: "Pricing decision", frags: [
       { id: "decision", text, at: Date.now() - 1000 },
-      { id: "definition", text: definition, at: Date.now() - 2000 },
     ] },
     { id: "other", name: "Kitchen", summary: "Unrelated private material", frags: [
       { id: "other-note", text: "Buy rosemary for the kitchen.", at: Date.now() - 1000, imgs: ["private-image-reference"] },
@@ -31,24 +27,12 @@ beforeEach(async () => {
   await set(DISTILL_KEY, JSON.stringify(EMPTY_DISTILL));
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
-    if (path === "/api/recall/select") {
-      const body = JSON.parse(String(init?.body));
-      selections.push(body);
-      return Response.json({ threadIds: ["pricing"] });
-    }
     if (path === "/api/recall") {
       const body = JSON.parse(String(init?.body));
       requests.push(body);
-      if (body.question === "What is Capture?") {
-        const source = body.sources.find((candidate: { text: string }) => candidate.text === definition);
-        return Response.json({ status: "answered", claims: [{
-          text: source.text,
-          citations: [{ sourceId: source.id, quote: source.text }],
-        }] });
-      }
       return Response.json({ status: "answered", claims: [{
-        text: "I decided to keep thinking features free. Cloud pays for hosting.",
-        citations: [{ sourceId: body.sources[0].id, quote: "I decided to keep thinking features free. Cloud pays for hosting." }],
+        text: "You decided to keep thinking features free and charge for Cloud hosting.",
+        citations: [{ sourceId: body.sources[0].id, quote: body.sources[0].text }],
       }] });
     }
     return new Response(null, { status: 503 });
@@ -96,12 +80,10 @@ it("automatically renders a cited answer above local results and opens its nativ
   const input = screen.getByRole("searchbox", { name: "Search or ask a question" });
   fireEvent.change(input, { target: { value: question } });
   const localResults = await screen.findByText("Threads · 1");
-  const answer = await screen.findByText("I decided to keep thinking features free. Cloud pays for hosting.", { selector: "p" });
+  const answer = await screen.findByText("You decided to keep thinking features free and charge for Cloud hosting.");
   expect(requests).toHaveLength(1);
   expect(requests[0].question).toBe(question);
-  expect(requests[0].sources).toEqual(expect.arrayContaining([
-    expect.objectContaining({ text, targetId: "pricing", fragId: "decision" }),
-  ]));
+  expect(requests[0].sources).toEqual([expect.objectContaining({ text, targetId: "pricing", fragId: "decision" })]);
   expect(JSON.stringify(requests[0])).not.toMatch(/rosemary|private-image-reference|Unrelated private material/);
   expect(answer.compareDocumentPosition(localResults) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(await get(KEY)).toBe(baseline);
@@ -113,29 +95,7 @@ it("automatically renders a cited answer above local results and opens its nativ
   expect((screen.getByRole("searchbox", { name: "Search or ask a question" }) as HTMLInputElement).value).toBe(question);
   await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
   expect(requests).toHaveLength(1);
-  expect(screen.getByText("I decided to keep thinking features free. Cloud pays for hosting.", { selector: "p" })).toBeTruthy();
+  expect(screen.getByText("You decided to keep thinking features free and charge for Cloud hosting.")).toBeTruthy();
   vi.useRealTimers();
-  expect(await get(KEY)).toBe(baseline);
-});
-
-it("answers a generic product question through semantic topic selection without disclosing unrelated notes", async () => {
-  render(<Capture />);
-  await screen.findByText("No open loops.");
-  const baseline = await get(KEY);
-  fireEvent.change(screen.getByRole("searchbox", { name: "Search or ask a question" }), {
-    target: { value: "What is Capture?" },
-  });
-  expect(await screen.findByText(definition, { selector: "p" })).toBeTruthy();
-  expect(selections).toHaveLength(1);
-  expect(selections[0]).toEqual(expect.objectContaining({
-    question: "What is Capture?",
-    topics: expect.arrayContaining([expect.objectContaining({ id: "pricing", name: "Capture pricing" })]),
-  }));
-  expect(JSON.stringify(selections[0])).not.toMatch(/Buy rosemary|private-image-reference/);
-  expect(requests).toHaveLength(1);
-  expect(requests[0].sources).toEqual(expect.arrayContaining([
-    expect.objectContaining({ text: definition, targetId: "pricing", fragId: "definition" }),
-  ]));
-  expect(JSON.stringify(requests[0])).not.toMatch(/rosemary|private-image-reference|Unrelated private material/);
   expect(await get(KEY)).toBe(baseline);
 });

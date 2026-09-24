@@ -127,15 +127,10 @@ export function undoRule(
 export function answeredKindCorrection(
   raw: string, wrong: SortKind, right: SortKind
 ): Omit<CorrectionEntry, "id" | "at"> | null {
-  if (wrong === right || !raw.trim()) return null;
   const rule = undoRule(raw, wrong, right);
-  return {
-    proposalKind: "undone",
-    accepted: true,
-    context: raw.trim().slice(0, 500),
-    chosenKind: right,
-    ...(rule ? { rule } : {}),
-  };
+  return rule ? {
+    proposalKind: "undone", accepted: true, context: raw.slice(0, 160), rule,
+  } : null;
 }
 
 /**

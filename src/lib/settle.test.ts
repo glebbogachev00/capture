@@ -146,19 +146,6 @@ describe("recording a successful capture", () => {
     expect(other.clean).toBe("Capture keeps mis-sorting.");
     /* One utterance, one captureId, however many destinations. */
     expect(primary.captureId).toBe(other.captureId);
-    expect(primary.primary).toBe(true);
-    expect(other.primary).toBe(false);
-  });
-
-  it("records image references only on the semantic share whose fragment owns them", () => {
-    n = 0;
-    const { board } = recordSortedCapture({ ...EMPTY }, facts({
-      imgIds: ["img"],
-      primaryOwnsImages: false,
-      also: [{ text: "Capture keeps mis-sorting.", threadId: "t-capture", fragId: "f2", ownsImages: true }],
-    }), mkId);
-    expect(board.ledger.find((entry) => entry.primary)?.imgs).toBeUndefined();
-    expect(board.ledger.find((entry) => entry.primary === false)?.imgs).toEqual(["img"]);
   });
 
   it("no split: the primary entry keeps the whole cleaned text", () => {

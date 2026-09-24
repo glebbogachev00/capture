@@ -17,7 +17,7 @@ import { logoutAndNavigate, ownedFetch as fetch } from "@/lib/ownership";
  * reactive state React renders and the ref the handlers read.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { clientDateContext, stamp } from "@/lib/clock";
+import { stamp } from "@/lib/clock";
 import { del, get, keys, set, setMany } from "@/lib/storage";
 import {
   type Action,
@@ -91,16 +91,19 @@ import {
   byRecency,
   applySorted,
   computeSuggestion,
-  pinSortedThreadDestination,
   type Suggestion,
 } from "@/lib/boardOps";
 import { resolveCapture } from "@/lib/command";
-import { refileRule, answeredKindCorrection, type SortKind } from "@/lib/refiled";
+import {
+  refileRule,
+  undoRule,
+  answeredKindCorrection,
+  type SortKind,
+} from "@/lib/refiled";
 import { expiryFor, parseDue } from "@/lib/due";
 import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
 import { createCaptureGate, PLAYGROUND, TRIAL_LIMIT, isTrialExhausted, playgroundError, trialState } from "@/lib/playground";
-import { LOCAL_TEST_PREVIEW } from "@/lib/localTestPreview";
 import { useCaptureLimit } from "@/hooks/useCaptureLimit";
 import { planTidy, keepProposals, type TidyRead } from "@/lib/tidyChanged";
 import {
@@ -133,12 +136,12 @@ import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
 import { applySaveDraft, type CaptureOrigin } from "@/lib/intentionOps";
-import { editUnsortedCapture, removeUnsortedCapture } from "@/lib/unsortedOps";
+import { editUnsortedCapture, removeUnsortedCapture, settledLedgerEntries } from "@/lib/unsortedOps";
 import { matchingPendingAction, pendingDraftAction, pendingEntry, pinResortDestination,
   recordResortedCapture, requestIntentionExpansion, resortIntentionOrigin } from "@/lib/resortOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
 import { assemblePanel } from "@/lib/tidyPanel";
-import { restoreCapture, undoPrimaryEntry } from "@/lib/undoOps";
+import { restoreCapture } from "@/lib/undoOps";
 import { ensureHubImage, referencedImageIds } from "@/lib/imgSync";
 import {
   TOMBSTONE_KEY,
@@ -159,14 +162,7 @@ import {
   withLedger,
   type CorrectionEntry,
 } from "@/lib/ledger";
-import { type RulePreference } from "@/lib/rules";
-import {
-  canonicalForgottenCorrectionKeys,
-  correctionExamples,
-  correctionPreferences,
-  setCorrectionEnabled,
-} from "@/lib/sortCorrections";
-import { sortHistoryContext } from "@/lib/sortHistory";
+import { deriveRules, setRuleEnabled, type RulePreference } from "@/lib/rules";
 import {
   scanStale,
   type OrganizeProposal,
@@ -177,7 +173,8 @@ import {
   type RawAiProposal,
 } from "@/lib/organizeAi";
 import { playgroundUsage } from "@/lib/playgroundUsageClient";
-import { SortError } from "@/lib/sortError";
+/* Carries the server's explanation so the board can show it verbatim. */
+class SortError extends Error {}
 /* Which learned rules this device has cleared, by normalised key. */
 const FORGOTTEN_RULES_KEY = "capture:forgotten-rules";
 
@@ -583,7 +580,6 @@ export function useBoard(now: number) {
    * the next sync tries again, and a missing photo never blocks the text.
    */
   const reconcileImages = useCallback(async (board: Board) => {
-    if (LOCAL_TEST_PREVIEW) return;
     /* A few at a time, not one at a time. Each exchange is a serverless
        round-trip of a few hundred KB; strictly sequential, a board of
        twenty photos took minutes to refill — which a phone that had just
@@ -626,7 +622,7 @@ export function useBoard(now: number) {
   const pushNow = useCallback(async () => {
     /* Playground: no hub. See lib/playground.ts for why this is a hard stop.
        Serialization is the governor's job now, not a flag's. */
-    if (PLAYGROUND || LOCAL_TEST_PREVIEW || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
     if (backupGate.current.restoreActive) return;
     const generation = backupGate.current.generation;
     // Also gate debounced edits and Undo, not only manual sync.
@@ -678,7 +674,7 @@ export function useBoard(now: number) {
 
   /** Coalesce bursts of edits into one push a beat after the last one. */
   const schedulePush = useCallback(() => {
-    if (PLAYGROUND || LOCAL_TEST_PREVIEW || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
     if (backupGate.current.restoreActive) return;
     if (!pushGovernor.current)
       pushGovernor.current = createPushGovernor(pushNow);
@@ -691,7 +687,7 @@ export function useBoard(now: number) {
    * is recorded in `sync`, so an unchanged successful read still shows a live hub.
    */
   const pullNow = useCallback(async (): Promise<{ ok: false } | { ok: true; changed: boolean }> => {
-    if (PLAYGROUND || LOCAL_TEST_PREVIEW || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return { ok: false };
+    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return { ok: false };
     if (backupGate.current.restoreActive) return { ok: false };
     const generation = backupGate.current.generation;
     try {
@@ -762,7 +758,7 @@ export function useBoard(now: number) {
 
   /** Manual "sync now": bring the other device's changes in, then push ours up. */
   const syncNow = useCallback(async () => {
-    if (PLAYGROUND || LOCAL_TEST_PREVIEW || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
     if (backupGate.current.restoreActive) return;
     const pulled = await pullNow();
     if (!pulled.ok) return;
@@ -810,7 +806,15 @@ export function useBoard(now: number) {
     const board: Board = restoreCapture(latest.current, snap, now);
 
     const added = stampChanges(latest.current, board, now).tombstones;
-    const undoneEntry = undoPrimaryEntry(latest.current, snap);
+
+    /* The capture being undone: the one ledger entry the snapshot does not
+       have. It carries both halves of the question — what was said, and
+       what the sorter decided it was. */
+    const undoneEntry = snap.ledgerIds?.length
+      ? latest.current.ledger.find((e) => e.id === snap.ledgerIds![0])
+      : latest.current.ledger.find(
+          (e) => !snap.board.ledger.some((x) => x.id === e.id)
+        );
     /* "both" is not a kind anyone can pick, so there is nothing to ask. */
     const wrongKind: SortKind | null =
       undoneEntry && undoneEntry.kind !== "both" && undoneEntry.kind !== "pending"
@@ -910,24 +914,29 @@ export function useBoard(now: number) {
     /* The box may have been edited since Undo put the words back; what is
        re-sorted and what the lesson cites is the draft as it stands. */
     const words = text.trim() || m?.text || "";
-    const correction = m ? answeredKindCorrection(words, m.wrong, right) : null;
-    if (correction) {
-      const learned = withCorrection(latest.current, {
-        id: uid(),
-        at: stamp(),
-        ...correction,
-      });
-      latest.current = learned;
-      setData(learned);
-      try {
-        await set(KEY, JSON.stringify(learned));
-      } catch {
-        /* disk hiccup; the next commit writes it */
+    if (m) {
+      const rule = undoRule(words, m.wrong, right);
+      if (rule) {
+        const learned = withCorrection(latest.current, {
+          id: uid(),
+          at: stamp(),
+          proposalKind: "undone",
+          accepted: true,
+          context: words.slice(0, 160),
+          rule,
+        });
+        latest.current = learned;
+        setData(learned);
+        try {
+          await set(KEY, JSON.stringify(learned));
+        } catch {
+          /* disk hiccup; the next commit writes it */
+        }
       }
       /* The box holds the restored words, but a re-sort must not depend on
          that: if anything cleared them, the capture being corrected is
          still right here. */
-      if (!text.trim() && m) setText(m.text);
+      if (!text.trim()) setText(m.text);
     }
     await submit(false, right, words || undefined, undefined, m?.captureId);
     /* After the capture lands, not before — the banner says where it went,
@@ -966,25 +975,24 @@ export function useBoard(now: number) {
         home.name,
         [home.name, home.summary, ...home.frags.map((f) => f.text)].join(" ")
       );
-      /* The full corrected example is the learning signal. The optional
-         rule remains only for the visible learned-rules control. */
-      const learned = withCorrection(latest.current, {
-        id: uid(),
-        at: stamp(),
-        proposalKind: "undone",
-        accepted: true,
-        context: words.trim().slice(0, 500),
-        chosenKind: "thread",
-        chosenThreadId: home.id,
-        chosenThreadName: home.name,
-        ...(rule ? { rule } : {}),
-      });
-      latest.current = learned;
-      setData(learned);
-      try {
-        await set(KEY, JSON.stringify(learned));
-      } catch {
-        /* disk hiccup; the next commit writes it */
+      if (rule) {
+        /* Answered strength: they were asked outright and picked a thread,
+           which is the same kind of evidence as answering the kind. */
+        const learned = withCorrection(latest.current, {
+          id: uid(),
+          at: stamp(),
+          proposalKind: "undone",
+          accepted: true,
+          context: words.slice(0, 160),
+          rule,
+        });
+        latest.current = learned;
+        setData(learned);
+        try {
+          await set(KEY, JSON.stringify(learned));
+        } catch {
+          /* disk hiccup; the next commit writes it */
+        }
       }
       if (!text.trim()) setText(m.text);
     }
@@ -1142,17 +1150,7 @@ export function useBoard(now: number) {
       // Cleared learning rules survive a reload too.
       try {
         const frRaw = await get(FORGOTTEN_RULES_KEY);
-        if (frRaw) {
-          const parsed = JSON.parse(frRaw);
-          const legacy = Array.isArray(parsed)
-            ? parsed.filter((value): value is string => typeof value === "string")
-            : [];
-          const migrated = canonicalForgottenCorrectionKeys(next.corrections ?? [], legacy);
-          setForgottenRules(migrated);
-          if (JSON.stringify(migrated) !== JSON.stringify(legacy)) {
-            await set(FORGOTTEN_RULES_KEY, JSON.stringify(migrated));
-          }
-        }
+        if (frRaw) setForgottenRules(JSON.parse(frRaw));
       } catch {
         /* first run */
       }
@@ -1174,7 +1172,7 @@ export function useBoard(now: number) {
      Offline is fine — the next commit just keeps everything local. */
   useEffect(() => {
     if (ownershipStatus === "offline") offlineChangesPending.current = true;
-    if (!loaded || PLAYGROUND || LOCAL_TEST_PREVIEW || ownershipStatus !== "active" || (lifetime.cloud && lifetime.owner === null)) return;
+    if (!loaded || PLAYGROUND || ownershipStatus !== "active" || (lifetime.cloud && lifetime.owner === null)) return;
     if (offlineChangesPending.current) {
       void syncNow();
     } else void pullNow();
@@ -1289,26 +1287,42 @@ export function useBoard(now: number) {
     // person files and routes into the thread they'd choose. Kept small on
     // purpose — every capture pays for this context, so it stays recent and
     // compact rather than the whole 500-entry ledger.
-    const history = sortHistoryContext(latest.current);
+    const threadName = (id: string) =>
+      latest.current.threads.find((t) => t.id === id)?.name || "";
+    const settledHistory = settledLedgerEntries(latest.current).filter((entry) => !entry.undone);
     /* The capture just before this one, if it went to a thread — the only
        thing a series can continue. */
-    const prev = history.previousThread;
+    const prev = settledHistory.find(
+      (e) =>
+        (e.kind === "thread" || e.kind === "both") &&
+        e.targetId &&
+        latest.current.threads.some((t) => t.id === e.targetId)
+    );
     const series = prev
       ? seriesFor(raw, {
           raw: prev.raw,
           at: prev.at,
           threadId: prev.targetId,
-          threadName: latest.current.threads.find((thread) => thread.id === prev.targetId)?.name ?? "",
+          threadName: threadName(prev.targetId),
         })
       : null;
-    const recent = history.recent;
-    // Corrections are semantic examples for the same reasoning pass, not
-    // phrase rules that can override it after the fact.
-    const corrections = correctionExamples(
+    const recent = settledHistory
+      .slice(0, 30)
+      .map((e) => ({
+        raw: e.raw.length > 120 ? e.raw.slice(0, 120) : e.raw,
+        kind: e.kind,
+        at: e.at,
+        target:
+          e.kind === "thread" || e.kind === "both" ? threadName(e.targetId) : "",
+      }));
+    // The bounded personal model, advisory: top learned rules as plain
+    // sentences. Empty until the user has accepted or dismissed enough
+    // suggestions for a rule to form — a fresh board sorts exactly as before.
+    const rules = deriveRules(
       latest.current.corrections ?? [],
-      latest.current.threads.map(({ id, name }) => ({ id, name })),
       forgottenRules,
-    );
+      stamp()
+    ).map((r) => r.text);
     const res = await fetch("/api/sort", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1318,14 +1332,13 @@ export function useBoard(now: number) {
         recent,
         series: series ?? undefined,
         force,
-        corrections,
+        rules,
         imgs: imgSrc ? [imgSrc] : undefined,
-        ...clientDateContext(),
       }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new SortError(body.error, body.code === "unsafe_interpretation");
+      throw new SortError(body.error);
     }
     /* Every answer reports the tier that produced it. Sorting is the most
        frequent call by far, so it is the honest sample of what the app is
@@ -1525,7 +1538,7 @@ export function useBoard(now: number) {
     setNoticeUndoable(false);
     setCanUndo(true);
     await commit(next);
-    if (reason) setErr(reason + " Saved as it is, so nothing is lost — sort it later.");
+    setErr(reason + " Saved as it is, so nothing is lost — sort it later.");
   };
 
   const resort = async (a: Action, pinned?: SortKind) => {
@@ -1544,8 +1557,7 @@ export function useBoard(now: number) {
       const sorted = await requestSort(a.src || a.text, pinned, imgSrc);
       const current = matchingPendingAction(latest.current, a);
       if (!current) { setBusy(null); return; }
-      const out = pinResortDestination(sorted, current, latest.current);
-      if (!out) throw new SortError("That thread changed before the capture could land.");
+      const out = pinResortDestination(sorted, current);
       const pending = pendingEntry(latest.current, current.id);
       if (out.kind === "intention") {
         const origin = resortIntentionOrigin(current, pending, out.via);
@@ -1577,9 +1589,7 @@ export function useBoard(now: number) {
       if (targetId) await regenerate(recorded, targetId);
       for (const id of summaryTargets) if (id !== targetId) scheduleSummary(id);
     } catch (error) {
-      setErr(error instanceof SortError && error.quiet
-        ? ""
-        : reasonOf(error) + " It is still here, untouched.");
+      setErr(reasonOf(error) + " It is still here, untouched.");
     }
     setBusy(null);
   };
@@ -1603,13 +1613,12 @@ export function useBoard(now: number) {
       The forced-intention branch hands off to the intention engine and
       never reaches the capture's commit, so its lesson is recorded here or
       nowhere. Same shape as the one folded into a filed capture. */
-  const noteCommand = async (correction: { chosenKind: SortKind; subject: string }, rule: string | null) => {
+  const noteCommand = async (rule: string, context: string) => {
     const learned = noteCorrection(latest.current, {
       proposalKind: "commanded",
       accepted: true,
-      context: correction.subject,
-      chosenKind: correction.chosenKind,
-      ...(rule ? { rule } : {}),
+      context: context.slice(0, 160),
+      rule,
     });
     latest.current = learned;
     setData(learned);
@@ -1640,7 +1649,7 @@ export function useBoard(now: number) {
     const raw = (override ?? text).trim();
     /* What the capture's opening decides — command prefix, undo-answer
        precedence, and whether it teaches — lives in lib/command. */
-    const { payload, force, commandLesson, commandCorrection } = resolveCapture(raw, pinned);
+    const { payload, force, commandLesson } = resolveCapture(raw, pinned);
     if (!payload && !pics.length) return;
     if (!captureGate.current.enter()) return;
     if (!existingCaptureId && trialExhaustedNow()) {
@@ -1690,7 +1699,7 @@ export function useBoard(now: number) {
         setTranscript("");
         /* This branch never reaches the commit below, so the lesson is
            written here or not at all. */
-        if (commandCorrection) await noteCommand(commandCorrection, commandLesson);
+        if (commandLesson) await noteCommand(commandLesson, payload);
         await expandIntention(payload, {
           raw: payload,
           source: sourceOf(payload, dictated, imgIds.length > 0),
@@ -1709,9 +1718,8 @@ export function useBoard(now: number) {
         pics[0]?.src
       );
       const out = pinnedThread
-        ? pinSortedThreadDestination(sorted, pinnedThread, latest.current)
+        ? { ...sorted, threadId: pinnedThread, threadName: null }
         : sorted;
-      if (!out) throw new SortError("That thread changed before the capture could land.");
 
       // An intention is declared rather than filed, so it takes a second
       // pass through its own engine and stops at a review step instead of
@@ -1762,7 +1770,6 @@ export function useBoard(now: number) {
           kind: out.kind,
           clean: out.clean,
           primaryText: out.primaryText,
-          primaryOwnsImages: out.kind === "action" || out.primaryOwnsImages,
           via: out.via,
           primary: {
             targetId:
@@ -1776,19 +1783,17 @@ export function useBoard(now: number) {
             text: p.text,
             threadId: p.threadId,
             fragId: p.fragId,
-            ownsImages: p.ownsImages,
           })),
         },
         uid
       );
       const withAll = preserveDraftOrigin(latest.current, sortedBoard, origin);
-      const recorded = commandCorrection
+      const recorded = commandLesson
         ? noteCorrection(withAll, {
             proposalKind: "commanded",
             accepted: true,
-            context: commandCorrection.subject,
-            chosenKind: commandCorrection.chosenKind,
-            ...(commandLesson ? { rule: commandLesson } : {}),
+            context: payload.slice(0, 160),
+            rule: commandLesson,
           })
         : withAll;
       showReceipt(landed);
@@ -1831,11 +1836,9 @@ export function useBoard(now: number) {
          stale description. */
       for (const id of summaryTargets) scheduleSummary(id);
     } catch (error) {
-      const quiet = error instanceof SortError && error.quiet;
-      const reason = quiet ? "" : reasonOf(error);
+      const reason = reasonOf(error);
       await saveUnsorted(raw, imgIds, at, reason, dictated, captureId, transcript || undefined, origin);
-      if (quiet) setErr("");
-      playgroundUsage.captureFailed(reason || "semantic validation");
+      playgroundUsage.captureFailed(reason);
     }
     } finally {
       setBusy(null);
@@ -2836,15 +2839,12 @@ export function useBoard(now: number) {
     const out = applyActionFold(latest.current, actionId, threadId, stamp(), uid);
     if (!out) return;
     await commit(
-      out.corrected
+      out.lesson
         ? noteCorrection(out.board, {
             proposalKind: "refiled",
             accepted: true,
-            context: out.foldedText.slice(0, 500),
-            chosenKind: "thread",
-            chosenThreadId: threadId,
-            chosenThreadName: out.threadName,
-            ...(out.lesson ? { rule: out.lesson } : {}),
+            context: out.foldedText.slice(0, 160),
+            rule: out.lesson,
           })
         : out.board
     );
@@ -3050,15 +3050,12 @@ export function useBoard(now: number) {
        was wrong, with the right home attached) all live in fragOps. */
     const out = applyFragMove(latest.current, fromId, fragId, toId, stamp());
     if (!out) return;
-    const next = out.corrected
+    const next = out.lesson
       ? noteCorrection(out.board, {
           proposalKind: "refiled",
           accepted: true,
-          context: out.movedText.slice(0, 500),
-          chosenKind: "thread",
-          chosenThreadId: toId,
-          chosenThreadName: out.toName,
-          ...(out.lesson ? { rule: out.lesson } : {}),
+          context: out.movedText.slice(0, 160),
+          rule: out.lesson,
         })
       : out.board;
     await commit(next);
@@ -4173,14 +4170,17 @@ export function useBoard(now: number) {
      back on. Only enabled rules reach the sort prompt above. */
   const learnedRules: RulePreference[] = useMemo(
     () =>
-      correctionPreferences(data.corrections ?? [], forgottenRules),
-    [data.corrections, forgottenRules]
+      deriveRules(data.corrections ?? [], [], now).map((rule) => ({
+        ...rule,
+        enabled: !forgottenRules.includes(rule.key),
+      })),
+    [data.corrections, forgottenRules, now]
   );
 
   /** Enable or disable one advisory sorting preference. The correction
       history stays intact, and this device remembers only the switch state. */
   const toggleLearnedRule = async (key: string, enabled: boolean) => {
-    const next = setCorrectionEnabled(data.corrections ?? [], forgottenRules, key, enabled);
+    const next = setRuleEnabled(forgottenRules, key, enabled);
     setForgottenRules(next);
     try {
       await set(FORGOTTEN_RULES_KEY, JSON.stringify(next));

@@ -327,11 +327,10 @@ describe("Jev Recall shadow gate and containment", () => {
       schedule: (callback) => { task = callback; },
       fetcher,
     })).toBe(true);
-    expect(acquire).not.toHaveBeenCalled();
+    expect(acquire).toHaveBeenCalledOnce();
     expect(release).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
     await expect(Promise.resolve(task?.())).resolves.toBeUndefined();
-    expect(acquire).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledOnce();
     expect(fetcher).toHaveBeenCalledOnce();
 
@@ -402,7 +401,7 @@ describe("Jev Recall shadow gate and containment", () => {
       },
       schedule: () => { throw new Error("scheduler unavailable"); },
     })).toBe(false);
-    expect(release).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
     expect(info).toHaveBeenCalledWith("[capture-ops]", {
       version: 1,
       event: "managed_ai_provider_attempt",

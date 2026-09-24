@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Tier } from "./providers";
 
 const mocks = vi.hoisted(() => ({
   generateObject: vi.fn(),
@@ -36,8 +35,8 @@ const candidates = [
 ];
 
 beforeEach(() => {
-  mocks.withFallback.mockImplementation(async (attempt: (tier: Tier) => Promise<unknown>) => ({
-    value: await attempt({ name: "groq", modelId: "synthetic-model", model: "synthetic-model" as Tier["model"] }),
+  mocks.withFallback.mockImplementation(async (attempt: (tier: object) => Promise<unknown>) => ({
+    value: await attempt({ model: "synthetic-model" }),
     via: "groq",
   }));
   mocks.generateObject.mockImplementation(async ({ schema, prompt }) => {

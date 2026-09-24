@@ -30,7 +30,6 @@ const managedRoutes: Record<string, string[]> = {
   judge: ["POST"],
   organize: ["POST"],
   recall: ["POST"],
-  "recall/select": ["POST"],
   summarize: ["POST"],
   untangle: ["POST"],
   wrap: ["POST"],
@@ -74,7 +73,7 @@ describe("managed AI route authorization coverage", () => {
       it(`${method} /api/${route} calls the shared guard before body, limiter, or provider work`, () => {
         expect(source).toContain('from "@/lib/cloudRequestGuard.server"');
         const body = handlerBody(source, method);
-        const guard = body.indexOf("authorizeManagedAiRequest(request");
+        const guard = body.indexOf("await authorizeManagedAiRequest(request)");
         const admission = body.search(/withManagedAiAdmission\(\w+/);
         expect(guard).toBeGreaterThan(0);
         expect(admission).toBeGreaterThan(guard);

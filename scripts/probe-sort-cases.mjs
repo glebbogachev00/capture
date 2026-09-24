@@ -36,32 +36,6 @@ const CASES_JSON = fileURLToPath(
   new URL("../src/lib/sortCases.json", import.meta.url)
 );
 const BASE = process.argv[2] || "http://localhost:3000";
-const baseUrl = new URL(BASE);
-if (!["localhost", "127.0.0.1", "[::1]"].includes(baseUrl.hostname)) {
-  throw new Error("Sort probes are local-only; start the candidate on localhost.");
-}
-function clientLocalContext(date = new Date()) {
-  const formatter = new Intl.DateTimeFormat("en", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const parts = formatter.formatToParts(date);
-  const part = (type) => parts.find((item) => item.type === type)?.value;
-  const year = part("year");
-  const month = part("month");
-  const day = part("day");
-  if (!year || !month || !day) {
-    throw new Error("Could not resolve the client-local calendar date.");
-  }
-  return {
-    localDate: `${year}-${month}-${day}`,
-    timeZone: formatter.resolvedOptions().timeZone || "UTC",
-  };
-}
-
-const sortRequestBody = (raw, threads) =>
-  JSON.stringify({ raw, threads, ...clientLocalContext() });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const CASES = JSON.parse(fs.readFileSync(CASES_JSON, "utf8"));
@@ -127,7 +101,7 @@ async function sortOnce(raw, threads) {
   let res = await fetch(`${BASE}/api/sort`, {
     method: "POST",
     headers,
-    body: sortRequestBody(raw, threads),
+    body: JSON.stringify({ raw, threads }),
   });
   if (res.status === 401 && cookie) {
     /* A cached cookie from the other mode (dev and prod use different
@@ -140,7 +114,7 @@ async function sortOnce(raw, threads) {
     res = await fetch(`${BASE}/api/sort`, {
       method: "POST",
       headers,
-      body: sortRequestBody(raw, threads),
+      body: JSON.stringify({ raw, threads }),
     });
   }
   if (res.status === 429) {
@@ -150,7 +124,7 @@ async function sortOnce(raw, threads) {
     res = await fetch(`${BASE}/api/sort`, {
       method: "POST",
       headers,
-      body: sortRequestBody(raw, threads),
+      body: JSON.stringify({ raw, threads }),
     });
   }
   if (!res.ok) {
@@ -164,14 +138,6 @@ function judge(tc, out) {
   const e = tc.expect;
   const problems = [];
   const acts = out.actions || [];
-  const meta = out.actionMeta || [];
-  if (meta.length !== acts.length)
-    problems.push(`actionMeta has ${meta.length} rows for ${acts.length} actions`);
-  for (const row of meta) {
-    if (!row || !row.source?.trim()) problems.push("an action has no source ownership");
-    if (!["hours", "days", "weeks", "keep"].includes(row?.shelfLife))
-      problems.push("an action has no valid shelf ownership");
-  }
   if (!e.kindOneOf.includes(out.kind))
     problems.push(`kind "${out.kind}" not in [${e.kindOneOf}]`);
   if (e.noActions && acts.length)

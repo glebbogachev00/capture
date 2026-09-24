@@ -17,8 +17,6 @@
     "probe:tidy": "node scripts/probe-tidy.mjs",
     "probe:tidy:cases": "node scripts/probe-tidy-cases.mjs",
     "probe:sort:cases": "node scripts/probe-sort-cases.mjs",
-    "gate:semantic-core": "node scripts/semantic-core-gate.mjs",
-    "test:semantic-core-gate": "node --test scripts/semantic-core-gate.test.mjs",
     "probe:settle:cases": "node scripts/probe-settle-cases.mjs",
     "setup": "node scripts/setup.mjs",
     "setup:cerebras": "node scripts/setup-cerebras.mjs",

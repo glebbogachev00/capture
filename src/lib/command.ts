@@ -63,7 +63,6 @@ export type ResolvedCapture = {
   force: ForceKind | undefined;
   /** The lesson the typed command teaches, or null. */
   commandLesson: string | null;
-  commandCorrection: { chosenKind: ForceKind; subject: string } | null;
 };
 
 export function resolveCapture(
@@ -75,8 +74,5 @@ export function resolveCapture(
     payload,
     force: pinned ?? typed,
     commandLesson: !pinned && typed ? commandRule(payload, typed) : null,
-    commandCorrection: !pinned && typed
-      ? { chosenKind: typed, subject: payload.trim().slice(0, 500) }
-      : null,
   };
 }

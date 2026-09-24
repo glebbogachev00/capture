@@ -92,9 +92,6 @@ export type ActionFold = {
   already: boolean;
   /** The refile lesson to record, when the fold corrects a fresh sort. */
   lesson: string | null;
-  /** Whether this was close enough to filing to be an explicit correction,
-      even when no safe lexical rule can be distilled from the words. */
-  corrected: boolean;
   /** The words that moved, for the correction record. */
   foldedText: string;
   threadName: string;
@@ -113,8 +110,7 @@ export function applyActionFold(
 
   const note = a.src || a.text;
   const already = threadHoldsNote(t.frags, note, a.text);
-  const corrected = isRefile(a.at, now);
-  const lesson = corrected
+  const lesson = isRefile(a.at, now)
     ? refileRule(
         note,
         t.name,
@@ -142,7 +138,6 @@ export function applyActionFold(
     },
     already,
     lesson,
-    corrected,
     foldedText: note,
     threadName: t.name,
   };

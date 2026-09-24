@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY, type Board } from "./model";
-import { restoreCapture, undoPrimaryEntry } from "./undoOps";
+import { restoreCapture } from "./undoOps";
 
 /**
  * Every rule here is a shipped incident, replayed as an assertion. The
@@ -23,13 +23,6 @@ const base = (): Board => ({
 });
 
 describe("restoring after an undo", () => {
-  it("uses the explicit primary ledger row for a split regardless of prepend order", () => {
-    const snap = { board: base(), ledgerIds: ["secondary", "primary"] };
-    const primary = { id: "primary", captureId: "capture", primary: true, at: 2, raw: "whole", clean: "main", kind: "both", source: "typed", targetId: "main" } as const;
-    const secondary = { id: "secondary", captureId: "capture", primary: false, at: 2, raw: "whole", clean: "other", kind: "thread", source: "typed", targetId: "other" } as const;
-    expect(undoPrimaryEntry({ ...base(), ledger: [secondary, primary] }, snap)?.id).toBe("primary");
-  });
-
   it("keeps import reconciliation receipts and unknown recovered fields across Undo", () => {
     const snap = { board: { ...base(), historyImports: { batch: "pending" as const } } };
     const live = { ...base(), historyImports: { batch: "accepted" as const }, futureField: { original: true } };

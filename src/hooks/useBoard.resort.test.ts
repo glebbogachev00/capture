@@ -15,7 +15,6 @@ const image = "data:image/png;base64,c3ludGhldGlj";
 const home = { id: "home", name: "Existing home", summary: "", frags: [] };
 let outcome: SortResult;
 let failSort = false;
-let unsafeSort = false;
 
 function deferredResponse() {
   let resolve!: (response: Response) => void;
@@ -39,7 +38,6 @@ async function seed(): Promise<void> {
 
 beforeEach(async () => {
   failSort = false;
-  unsafeSort = false;
   outcome = {
     kind: "thread",
     title: "Suggested elsewhere",
@@ -52,12 +50,6 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === "/api/sort") {
-      if (unsafeSort) {
-        return Response.json(
-          { error: "Capture could not organize that reliably.", code: "unsafe_interpretation" },
-          { status: 422 },
-        );
-      }
       return failSort
         ? Response.json({ error: "provider unavailable" }, { status: 503 })
         : Response.json(outcome);
@@ -124,19 +116,6 @@ describe("retrying a waiting-to-sort capture", () => {
     expect(await get(IMG("pic"))).toBe(image);
   });
 
-  it("keeps an internally rejected capture without exposing validator language", async () => {
-    unsafeSort = true;
-    const hook = await mount();
-
-    await act(async () => { await hook.result.current.resort(hook.waiting); });
-
-    expect(hook.result.current.data.actions.find((action) => action.id === "waiting"))
-      .toEqual(hook.waiting);
-    expect(hook.result.current.unsorted.map((action) => action.id)).toContain("waiting");
-    expect(hook.result.current.err).toBe("");
-    expect(await get(IMG("pic"))).toBe(image);
-  });
-
   it("honors the explicitly open thread and moves the picture there", async () => {
     const hook = await mount();
 
@@ -173,7 +152,7 @@ describe("retrying a waiting-to-sort capture", () => {
     expect(hook.result.current.data.actions.every((action) => !action.unsorted)).toBe(true);
     expect(hook.result.current.data.threads[0].frags.at(-1)?.imgs).toEqual(["pic"]);
     expect(hook.result.current.data.ledger.some((entry) =>
-      entry.kind === "both" && entry.imgs?.includes("pic")
+      entry.kind === "action" && entry.imgs?.includes("pic")
     )).toBe(true);
     expect(await get(IMG("pic"))).toBe(image);
   });

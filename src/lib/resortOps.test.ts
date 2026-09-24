@@ -47,94 +47,20 @@ describe("resort operations", () => {
     expect(matchingPendingAction({ ...board, actions: [] }, waiting)).toBeUndefined();
   });
 
-  it("collapses secondary destinations, relinks their actions, and moves the image owner to the retained thread", () => {
+  it("pins every retry kind to the explicitly selected thread", () => {
     const sorted: SortResult = {
-      kind: "both",
-      title: "Several subjects",
-      clean: "Primary thought. Secondary thought. Do both. Call mom.",
-      actions: ["Do primary", "Do secondary", "Call mom"],
-      actionMeta: [
-        { text: "Do primary", source: "Do primary", shelfLife: "days", due: null, thinkingIndex: 0 },
-        { text: "Do secondary", source: "Do secondary", shelfLife: "days", due: null, thinkingIndex: 1 },
-        { text: "Call mom", source: "Call mom.", shelfLife: "days", due: null, thinkingIndex: null },
-      ],
-      primaryActions: ["Do primary"],
-      primaryText: "Primary thought.",
-      primaryOwnsImages: false,
+      kind: "action",
+      title: "Tasks",
+      clean: waiting.text,
+      actions: ["One task"],
       shelfLife: "keep",
       threadId: "model-thread",
       threadName: "Model thread",
-      also: [{
-        text: "Secondary thought.",
-        threadId: "other",
-        threadName: null,
-        actions: ["Do secondary"],
-        ownsImages: true,
-      }],
     };
-    const latest: Board = {
-      ...board,
-      threads: [
-        ...board.threads,
-        { id: "other", name: "Other", summary: "", frags: [] },
-      ],
-    };
-    const pinned = pinResortDestination(sorted, waiting, latest)!;
-    expect(pinned).toMatchObject({
+    expect(pinResortDestination(sorted, waiting)).toMatchObject({
       threadId: "home",
       threadName: null,
-      primaryText: "Primary thought.\n\nSecondary thought.",
-      primaryActions: ["Do primary", "Do secondary"],
-      primaryOwnsImages: true,
-      also: null,
     });
-    expect(pinned.actionMeta?.map((action) => action.thinkingIndex)).toEqual([0, 0, null]);
-
-    const applied = applySorted(pinned, ["image"], waiting.at, {
-      ...latest,
-      actions: [],
-    });
-    const owner = applied.next.threads.find((thread) => thread.id === "home")!.frags[0];
-    expect(owner.imgs).toEqual(["image"]);
-    expect(applied.next.threads.find((thread) => thread.id === "other")!.frags).toEqual([]);
-    expect(applied.next.actions.find((action) => action.text === "Do primary"))
-      .toMatchObject({ threadId: "home", sourceFragId: owner.id });
-    expect(applied.next.actions.find((action) => action.text === "Do secondary"))
-      .toMatchObject({ threadId: "home", sourceFragId: owner.id });
-    expect(applied.next.actions.find((action) => action.text === "Call mom")?.threadId).toBeUndefined();
-  });
-
-  it("relinks an action-only retry and its shot to the retained destination", () => {
-    const sorted: SortResult = {
-      kind: "action",
-      title: "Save receipt",
-      clean: "Save the receipt.",
-      actions: ["Save the receipt"],
-      actionMeta: [{
-        text: "Save the receipt",
-        source: "Save the receipt.",
-        shelfLife: "days",
-        due: null,
-        thinkingIndex: null,
-      }],
-      primaryOwnsImages: true,
-    };
-    const pinned = pinResortDestination(sorted, { ...waiting, imgs: ["image"] }, board)!;
-    const applied = applySorted(pinned, ["image"], waiting.at, { ...board, actions: [] });
-    const action = applied.next.actions[0];
-    const owner = applied.next.threads.find((thread) => thread.id === "home")!.frags[0];
-    expect(pinned).toMatchObject({ kind: "both", threadId: "home", primaryOwnsImages: true });
-    expect(action).toMatchObject({ threadId: "home", sourceFragId: owner.id });
-    expect(owner.imgs).toEqual(["image"]);
-  });
-
-  it("rejects a retained destination deleted from the latest board", () => {
-    expect(pinResortDestination({
-      kind: "thread",
-      title: "Words",
-      clean: waiting.text,
-      threadId: null,
-    }, waiting, { ...board, threads: [] })).toBeNull();
   });
 
   it("preserves the selected thread on text-only actions and returns every summary target", () => {

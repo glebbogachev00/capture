@@ -5,7 +5,6 @@ import {
 } from "@/lib/cloudBoard";
 import { createCloudGuardServerContext } from "@/lib/cloudRequestGuard.server";
 import { CloudBoardRepository, type SupabaseQueryClient } from "@/lib/supabase/repository";
-import { isCloudEnabled } from "@/lib/cloudMode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +27,7 @@ async function dependencies(): Promise<CloudBoardDependencies> {
     };
   } catch {
     return {
-      isEnabled: () => isCloudEnabled(),
+      isEnabled: () => process.env.CAPTURE_CLOUD === "1",
       isConfigured: () => false,
       verifyIdentity: async () => null,
       repository: {} as never,

@@ -3,11 +3,10 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 
 import {
-  abortableCloudDependency,
   authorizeCloudRequest,
   cloudAuthorizationUnavailable,
   consumeQuotaWithRpc,
-  type CloudAuthorization as GuardResult,
+  type CloudAuthorization,
   type CloudRequestGuardDependencies,
 } from "@/lib/cloudRequestGuard";
 import { isSubscriptionRequired } from "@/lib/cloudSubscription";
@@ -16,7 +15,6 @@ import { getCloudConfig } from "@/lib/supabase/config";
 import { identityFromClaims } from "@/lib/supabase/identity";
 import { createCloudServerClient } from "@/lib/supabase/server";
 import { hasCurrentCloudAccess } from "@/lib/cloudAccess.server";
-import { isCloudEnabled } from "@/lib/cloudMode";
 
 export type CloudServerClient = Awaited<ReturnType<typeof createCloudServerClient>>;
 
@@ -27,22 +25,8 @@ export type CloudGuardServerContext = {
 
 export const MANAGED_AI_RELEASE_DEADLINE_MS = 1_000;
 
-async function rpcWithSignal(
-  client: CloudServerClient,
-  name: string,
-  args: Record<string, unknown>,
-  signal?: AbortSignal,
-): Promise<{ data: unknown; error: unknown }> {
-  const request = client.rpc(name, args) as unknown as PromiseLike<{ data: unknown; error: unknown }> & {
-    abortSignal?: (signal: AbortSignal) => PromiseLike<{ data: unknown; error: unknown }>;
-  };
-  const operation = signal && typeof request.abortSignal === "function" ? request.abortSignal(signal) : request;
-  return abortableCloudDependency(() => operation, signal);
-}
-
 async function releaseManagedAiAdmission(
   release: (signal?: AbortSignal) => Promise<void>,
-  deadlineMs = MANAGED_AI_RELEASE_DEADLINE_MS,
 ): Promise<boolean> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -56,7 +40,7 @@ async function releaseManagedAiAdmission(
       timer = setTimeout(() => {
         controller.abort();
         resolve(true);
-      }, deadlineMs);
+      }, MANAGED_AI_RELEASE_DEADLINE_MS);
     }),
   ]);
   if (timer) clearTimeout(timer);
@@ -75,13 +59,13 @@ function recordManagedAiReleaseFailure(): void {
 
 /** Build once per request so identity, entitlement, quota, and board storage
     all use the same cookie-bound Supabase client. */
-export async function createCloudGuardServerContext(signal?: AbortSignal): Promise<CloudGuardServerContext> {
+export async function createCloudGuardServerContext(): Promise<CloudGuardServerContext> {
   const config = getCloudConfig();
   if (!config || config.status !== "ready") {
     return {
       client: null,
       guard: {
-        isCloudHost: () => isCloudEnabled(),
+        isCloudHost: () => process.env.CAPTURE_CLOUD === "1",
         isConfigured: () => false,
         requiresEntitlement: () => isSubscriptionRequired(),
         verifyIdentity: async () => null,
@@ -94,36 +78,27 @@ export async function createCloudGuardServerContext(signal?: AbortSignal): Promi
     };
   }
 
-  const client = await abortableCloudDependency(() => createCloudServerClient(config), signal);
+  const client = await createCloudServerClient(config);
   return {
     client,
     guard: {
-      isCloudHost: () => isCloudEnabled(),
+      isCloudHost: () => process.env.CAPTURE_CLOUD === "1",
       isConfigured: () => true,
       requiresEntitlement: () => isSubscriptionRequired(),
-      verifyIdentity: async (_request, dependencySignal) => dependencySignal
-        ? identityFromClaims(client, dependencySignal)
-        : identityFromClaims(client),
-      isAccountErasing: async ({ userId }, dependencySignal) => {
-        const { data, error } = await rpcWithSignal(
-          client, "capture_account_deleting", { p_user_id: userId }, dependencySignal,
-        );
+      verifyIdentity: async () => identityFromClaims(client),
+      isAccountErasing: async ({ userId }) => {
+        const { data, error } = await client.rpc("capture_account_deleting", { p_user_id: userId });
         if (error || typeof data !== "boolean") throw new Error("Cloud account lifecycle unavailable");
         return data;
       },
-      hasEntitlement: async ({ userId }, dependencySignal) => {
-        return dependencySignal
-          ? hasCurrentCloudAccess(client, userId, dependencySignal)
-          : hasCurrentCloudAccess(client, userId);
+      hasEntitlement: async ({ userId }) => {
+        return hasCurrentCloudAccess(client, userId);
       },
-      consumeQuota: (ownerId, policy, dependencySignal) =>
-        dependencySignal
-          ? consumeQuotaWithRpc(client, ownerId, policy, dependencySignal)
-          : consumeQuotaWithRpc(client, ownerId, policy),
-      acquireExternalWork: async (ownerId, kind, dependencySignal) => {
+      consumeQuota: (ownerId, policy) => consumeQuotaWithRpc(client, ownerId, policy),
+      acquireExternalWork: async (ownerId, kind) => {
         const admissionId = randomUUID();
         const now = new Date();
-        const { data, error } = await rpcWithSignal(client, "acquire_capture_external_work", {
+        const { data, error } = await client.rpc("acquire_capture_external_work", {
           p_admission_id: admissionId,
           p_owner_id: ownerId,
           p_kind: kind,
@@ -131,15 +106,15 @@ export async function createCloudGuardServerContext(signal?: AbortSignal): Promi
           p_lease_expires_at: new Date(now.getTime() + 10 * 60_000).toISOString(),
           p_capability_id: null,
           p_capability_expires_at: null,
-        }, dependencySignal);
+        });
         if (error || data !== true) return null;
         return { admissionId };
       },
-      releaseExternalWork: async (ownerId, admissionId, dependencySignal) => {
-        const { data, error } = await rpcWithSignal(client, "release_capture_external_work", {
+      releaseExternalWork: async (ownerId, admissionId) => {
+        const { data, error } = await client.rpc("release_capture_external_work", {
           p_owner_id: ownerId,
           p_admission_id: admissionId,
-        }, dependencySignal);
+        });
         if (error || data !== true) throw new Error("Cloud external-work release unavailable");
       },
     },
@@ -148,25 +123,20 @@ export async function createCloudGuardServerContext(signal?: AbortSignal): Promi
 
 export async function authorizeManagedAiRequest(
   request: Request,
-  options: { signal?: AbortSignal } = {},
-): Promise<GuardResult | Response> {
+): Promise<CloudAuthorization | Response> {
   // Avoid initializing Cloud adapters on self-hosted/playground deployments.
-  if (!isCloudEnabled()) return { mode: "non-cloud" };
+  if (process.env.CAPTURE_CLOUD !== "1") return { mode: "non-cloud" };
   try {
-    const { guard } = await abortableCloudDependency(
-      () => createCloudGuardServerContext(options.signal),
-      options.signal,
-    );
-    return authorizeCloudRequest(request, "managed_ai", guard, options);
+    const { guard } = await createCloudGuardServerContext();
+    return authorizeCloudRequest(request, "managed_ai", guard);
   } catch {
     return cloudAuthorizationUnavailable();
   }
 }
 
 export async function withManagedAiAdmission<T>(
-  authorization: GuardResult,
+  authorization: CloudAuthorization,
   work: () => Promise<T>,
-  options: { deadlineAt?: number } = {},
 ): Promise<T> {
   if (authorization.mode === "non-cloud") return work();
   if (!authorization.admissionId || !authorization.releaseExternalWork) {
@@ -177,61 +147,22 @@ export async function withManagedAiAdmission<T>(
   } finally {
     // The durable lease expires without an acknowledgement. Bound cleanup so
     // a stuck RPC cannot suppress an already-computed route result/error.
-    const remaining = options.deadlineAt === undefined
-      ? MANAGED_AI_RELEASE_DEADLINE_MS
-      : Math.min(MANAGED_AI_RELEASE_DEADLINE_MS, Math.max(0, options.deadlineAt - Date.now()));
-    if (remaining === 0) {
-      void releaseManagedAiAdmission(authorization.releaseExternalWork);
-    } else if (await releaseManagedAiAdmission(authorization.releaseExternalWork, remaining)) {
+    if (await releaseManagedAiAdmission(authorization.releaseExternalWork)) {
       recordManagedAiReleaseFailure();
     }
   }
 }
 
 type DeferredScheduler = (callback: () => void | Promise<void>) => void;
-type DeferredLease = { release: (signal?: AbortSignal) => Promise<void> };
-export const MANAGED_AI_DEFERRED_ADMISSION_DEADLINE_MS = 1_000;
-
-async function acquireDeferredLease(
-  authorization: GuardResult,
-  releaseLate: (lease: DeferredLease) => void,
-): Promise<DeferredLease | null> {
-  if (authorization.mode === "non-cloud") return { release: async () => {} };
-  const acquire = authorization.acquireDeferredManagedAiAdmission;
-  if (!acquire) return null;
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let timedOut = false;
-  const pending = Promise.resolve().then(() => acquire(controller.signal));
-  void pending.catch(() => undefined);
-  try {
-    return await Promise.race([
-      pending,
-      new Promise<null>((resolve) => {
-        timer = setTimeout(() => {
-          timedOut = true;
-          resolve(null);
-          controller.abort(new DOMException("Deferred admission deadline exceeded", "TimeoutError"));
-        }, MANAGED_AI_DEFERRED_ADMISSION_DEADLINE_MS);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-    if (timedOut) {
-      void pending.then((lease) => {
-        if (lease) releaseLate(lease);
-      }, () => undefined);
-    }
-  }
-}
 
 /**
- * Register the task synchronously and acquire its durable admission inside the
- * post-response callback. A stuck admission or provider can never delay the
- * authoritative route response; late admissions are released without work.
+ * Transfer managed-AI ownership from a request admission to durable deferred
+ * work. The secondary lease is acquired while the request's primary lease is
+ * still held, then released once by the scheduled task (or here if handoff
+ * fails). Disabled shadows do not acquire a lease or schedule any work.
  */
 export async function scheduleManagedAiDeferredWork(input: {
-  authorization: GuardResult;
+  authorization: CloudAuthorization;
   enabled: boolean;
   schedule: DeferredScheduler;
   work: () => void | Promise<void>;
@@ -239,27 +170,46 @@ export async function scheduleManagedAiDeferredWork(input: {
 }): Promise<boolean> {
   if (!input.enabled) return false;
 
-  let handedOff = false;
-  const report = (error: unknown) => { try { input.onError(error); } catch {} };
-  const release = async (lease: DeferredLease) => {
-    if (await releaseManagedAiAdmission(lease.release)) {
-      report(new Error("Cloud deferred admission release unavailable"));
+  let lease: { release: () => Promise<void> };
+  try {
+    if (input.authorization.mode === "non-cloud") {
+      lease = { release: async () => {} };
+    } else {
+      const acquire = input.authorization.acquireDeferredManagedAiAdmission;
+      if (!acquire) throw new Error("Cloud deferred admission unavailable");
+      const acquired = await acquire();
+      if (!acquired) throw new Error("Cloud deferred admission unavailable");
+      lease = acquired;
+    }
+  } catch (error) {
+    try { input.onError(error); } catch {}
+    return false;
+  }
+
+  let releaseStarted = false;
+  const releaseOnce = async () => {
+    if (releaseStarted) return;
+    releaseStarted = true;
+    try {
+      if (await releaseManagedAiAdmission(lease.release)) {
+        try { input.onError(new Error("Cloud deferred admission release unavailable")); } catch {}
+      }
+    } catch (error) {
+      try { input.onError(error); } catch {}
     }
   };
+  let handedOff = false;
   const task = async () => {
+    // A scheduler may invoke the callback before returning. Defer one turn so
+    // work starts only after registration has completed without throwing.
     await Promise.resolve();
     if (!handedOff) return;
-    const lease = await acquireDeferredLease(input.authorization, (late) => { void release(late); });
-    if (!lease) {
-      report(new Error("Cloud deferred admission unavailable"));
-      return;
-    }
     try {
       await input.work();
     } catch (error) {
-      report(error);
+      try { input.onError(error); } catch {}
     } finally {
-      await release(lease);
+      await releaseOnce();
     }
   };
 
@@ -268,7 +218,8 @@ export async function scheduleManagedAiDeferredWork(input: {
     handedOff = true;
     return true;
   } catch (error) {
-    report(error);
+    await releaseOnce();
+    try { input.onError(error); } catch {}
     return false;
   }
 }

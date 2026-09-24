@@ -6,17 +6,17 @@ Search keeps its existing keyword results and updates them immediately. After a 
 Capture automatically prepares one answer from matching saved notes. There is no answer button or Enter requirement.
 The feature does not add a chat history, modify a capture, or save the generated answer.
 
-Retrieval runs locally after the debounce. Exact lexical retrieval selects at most 12 excerpts, each limited to 1,500 characters.
-On a lexical miss, a selector sees at most 64 metadata-only thread topics (name, summary, and belongs; never unrelated raw fragments). Only originals from selected threads may then reach the answer route. Generated summaries route retrieval but never provide evidence.
+Retrieval runs locally after the debounce. It selects at most 12 excerpts, each limited to 1,500 characters.
+Thread names help locate notes. Generated summaries do not provide evidence.
 The request excludes images, profile data, principles, and the full Record ledger.
 
-The network task starts only while online ownership checks remain valid. While the answer is prepared, Search shows the
-owner-approved centered larger-dot treatment with “Capture is answering your question…”. It does not add a provider
-explanation or evidence inspector.
+The network task starts only while online ownership checks remain valid. Search stays visually quiet while the answer is
+prepared; it does not insert a loading card, provider explanation, or evidence inspector.
 The model receives the question and those excerpts through the existing provider chain.
-Each claim is deterministically extractive: its text must equal its verified quote, or verified quotes joined in citation order.
-The interface retains and displays that verbatim support plus one compact control for each connected Thread or Intention. Thread
-controls open the cited fragment; Intention controls open the cited intention. Support remains source-bound and verifiable.
+Each claim must include a source ID and a verbatim supporting quote.
+The interface renders only the verified answer and one compact control for each connected Thread or Intention. Thread
+controls open the cited fragment; Intention controls open the cited intention. Submitted quotes remain a validation
+boundary rather than additional UI.
 
 ## Boundaries
 
@@ -27,7 +27,7 @@ controls open the cited fragment; Intention controls open the cited intention. S
   Returning from a connected Thread or Intention restores the document-session cached verified answer without retransmission.
 - A transmitted failure gets no automatic retry in the same query visit. Deliberately changing the query away and back, or
   changing the bounded source snapshot, permits one new attempt. No retry button is added.
-- Both Recall request routes limit the complete streamed request body to 64 KiB; the answer operation is limited to 45 seconds.
+- The server limits the complete request to 96 KiB and the operation to 45 seconds.
 - Individual provider attempts have a 10-second limit and no SDK retries.
 - Cloud requests require verified identity and the matching owner precondition.
 - Anonymous Cloud sessions cannot use this feature. The local playground product retains the same cited-answer functionality
@@ -44,7 +44,8 @@ The submitted excerpts are a matching subset, not the complete board or its hist
 The feature does not search removed captures or completion receipts that exist only in the Record.
 Long notes can lose relevant context outside the selected excerpt.
 
-Quote validation checks source identity and exact wording, and rejects non-extractive claim/quote pairs. The prompt requires uncertainty and both sides of a disagreement. Newer speculation must not replace an older decision without evidence.
+Quote validation checks source identity and exact wording. It does not prove that a model's interpretation follows from the quote.
+The prompt requires uncertainty and both sides of a disagreement. Newer speculation must not replace an older decision without evidence.
 Real-provider compliance with those instructions remains unverified.
 
 ## Verification status
@@ -64,8 +65,7 @@ Real-provider compliance with those instructions remains unverified.
 - `git diff --check` passed. No live request, deployment, service mutation, environment-file read, commit, merge, or push was performed.
 
 A fresh Retake desktop acceptance run passed all 11 steps and its artifact check at 960×720, 24 fps, and 7.0 seconds.
-The later rendered/manual owner review approved the centered larger dots and “Capture is answering your question…” loading
-treatment. Rendered inspection also confirmed that ordinary Search has no answer surface; a completed stable question adds only the Answer label,
+Rendered inspection confirmed that ordinary Search has no answer surface; a stable question adds only the Answer label,
 verified answer text, and one connected Thread control above unchanged local results; and that control opens the native
 cited Thread without clipping, overlap, or squeeze. The answer request and response were deterministic synthetic fixtures,
 not a live provider or deployed-preview test.

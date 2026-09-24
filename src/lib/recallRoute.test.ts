@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Tier } from "./providers";
 
 // Mock external boundaries only; recall schemas, quote validator, owner
 // precondition, and verified-claims identity extraction remain real.
@@ -10,8 +9,6 @@ const mocks = vi.hoisted(() => ({
   config: vi.fn(),
   server: vi.fn(),
   claims: vi.fn(),
-  managedAuthorize: vi.fn(),
-  managedAdmission: vi.fn(async (_authorization, work: () => Promise<Response>) => work()),
   scheduleJevRecallShadow: vi.fn(),
 }));
 vi.mock("ai", async (original) => ({ ...await original<typeof import("ai")>(), generateText: mocks.generateText }));
@@ -20,36 +17,26 @@ vi.mock("@/lib/jevRecallShadow", () => ({ scheduleJevRecallShadow: mocks.schedul
 vi.mock("@/lib/limiter", () => ({ modelRateLimit: mocks.limiter }));
 vi.mock("@/lib/supabase/config", () => ({ getCloudConfig: mocks.config }));
 vi.mock("@/lib/supabase/server", () => ({ createCloudServerClient: mocks.server }));
-vi.mock("@/lib/cloudRequestGuard.server", () => ({
-  authorizeManagedAiRequest: mocks.managedAuthorize,
-  withManagedAiAdmission: mocks.managedAdmission,
-}));
 
 const source = {
   id: "source-1", kind: "thread", title: "Launch", text: "We decided to launch in October.",
   at: 1_700_000_000_000, targetId: "thread-1", fragId: "frag-1", state: "active", truncated: false,
 };
-const answer = { status: "answered", claims: [{ text: source.text, citations: [{ sourceId: source.id, quote: source.text }] }] };
+const answer = { status: "answered", claims: [{ text: "The launch decision was October.", citations: [{ sourceId: source.id, quote: source.text }] }] };
 const body = () => ({ question: "  When is launch?  ", sources: [source] });
 const request = (value: unknown = body(), headers?: HeadersInit) => new Request("http://localhost/api/recall", {
   method: "POST", headers, body: JSON.stringify(value),
 });
 const post = async (req = request()) => (await import("@/app/api/recall/route")).POST(req);
-const tier = (name: string): Tier => ({
-  name,
-  modelId: `${name}-model`,
-  model: `${name}-model` as Tier["model"],
-});
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.config.mockReturnValue(null);
-  mocks.managedAuthorize.mockResolvedValue({ mode: "non-cloud" });
   mocks.limiter.mockReturnValue({ allowed: true, retryAfterSec: 0 });
   mocks.server.mockResolvedValue({ auth: { getClaims: mocks.claims } });
   mocks.claims.mockResolvedValue({ data: { claims: { sub: "owner", exp: Date.now() / 1000 + 3600 } }, error: null });
   mocks.generateText.mockResolvedValue({ output: answer });
-  mocks.fallback.mockImplementation(async (attempt: (value: Tier) => Promise<unknown>) => ({ value: await attempt({ ...tier("fixture"), providerOptions: { fixture: { mode: "fast" } } }), via: "fixture" }));
+  mocks.fallback.mockImplementation(async (attempt) => ({ value: await attempt({ name: "fixture", model: "fixture-model", providerOptions: { fixture: { mode: "fast" } } }), via: "fixture" }));
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
@@ -89,8 +76,8 @@ describe("POST /api/recall", () => {
   });
 
   it("counts actual UTF-8 body bytes before JSON parsing, not character or declared lengths", async () => {
-    // Valid bounded fields but a JSON whitespace prefix pushes the body over 64 KiB.
-    const payload = " ".repeat(64 * 1024) + JSON.stringify(body());
+    // Valid bounded fields but a JSON whitespace prefix pushes the body over 96 KiB.
+    const payload = " ".repeat(96 * 1024) + JSON.stringify(body());
     const response = await post(new Request("http://localhost/api/recall", { method: "POST", headers: { "content-length": "1" }, body: payload }));
     expect(response.status).toBe(413);
     expect(mocks.generateText).not.toHaveBeenCalled();
@@ -112,7 +99,7 @@ describe("POST /api/recall", () => {
 
   it("accepts valid chunked JSON at exactly the byte cap", async () => {
     const json = JSON.stringify(body());
-    const bytes = new TextEncoder().encode(" ".repeat(64 * 1024 - new TextEncoder().encode(json).length) + json);
+    const bytes = new TextEncoder().encode(" ".repeat(96 * 1024 - new TextEncoder().encode(json).length) + json);
     const stream = new ReadableStream<Uint8Array>({ start(controller) {
       controller.enqueue(bytes.slice(0, 1000)); controller.enqueue(bytes.slice(1000)); controller.close();
     } });
@@ -209,7 +196,7 @@ describe("POST /api/recall", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.fallback.mockImplementation(async (attempt) => {
-      try { return { value: await attempt(tier("fixture")) }; }
+      try { return { value: await attempt({ name: "fixture", model: "fixture" }) }; }
       catch (failure) { console.warn(failure); throw failure; }
     });
     const response = await post();
@@ -239,31 +226,12 @@ describe("POST /api/recall", () => {
   });
 
   describe("bounded lifetime", () => {
-    it("starts the one route deadline before a stalled managed Cloud guard", async () => {
-      vi.useFakeTimers();
-      let guardSignal: AbortSignal | undefined;
-      mocks.managedAuthorize.mockImplementation((_request, options) => {
-        guardSignal = options?.signal;
-        return new Promise(() => {});
-      });
-      let response: Response | undefined;
-      void post().then((value) => { response = value; });
-
-      await vi.advanceTimersByTimeAsync(44_999);
-      expect(response).toBeUndefined();
-      await vi.advanceTimersByTimeAsync(1);
-
-      expect(response?.status).toBe(504);
-      expect(guardSignal?.aborted).toBe(true);
-      expect(mocks.generateText).not.toHaveBeenCalled();
-    });
-
     it("caps a stalled provider attempt at 10 seconds and can use the next configured tier", async () => {
       vi.useFakeTimers();
       mocks.generateText.mockImplementationOnce(() => new Promise(() => {})).mockResolvedValue({ output: answer });
       mocks.fallback.mockImplementation(async (attempt) => {
-        try { return { value: await attempt(tier("first")) }; }
-        catch { return { value: await attempt(tier("second")) }; }
+        try { return { value: await attempt({ name: "first", model: "first" }) }; }
+        catch { return { value: await attempt({ name: "second", model: "second" }) }; }
       });
       let response: Response | undefined;
       void post().then((value) => { response = value; });
@@ -295,8 +263,8 @@ describe("POST /api/recall", () => {
       } });
       mocks.generateText.mockRejectedValue(Object.assign(new Error("limited"), { statusCode: 429 }));
       mocks.fallback.mockImplementation(async (attempt) => {
-        try { return { value: await attempt(tier("fixture")) }; }
-        catch { await new Promise((resolve) => setTimeout(resolve, 18_000)); return { value: await attempt(tier("retry")) }; }
+        try { return { value: await attempt({ name: "fixture", model: "fixture" }) }; }
+        catch { await new Promise((resolve) => setTimeout(resolve, 18_000)); return { value: await attempt({ name: "retry", model: "retry" }) }; }
       });
       let response: Response | undefined;
       void post(new Request("http://localhost/api/recall", { method: "POST", body: stream, duplex: "half" } as RequestInit)).then((value) => { response = value; });
@@ -337,8 +305,8 @@ describe("POST /api/recall", () => {
       const abort = new AbortController();
       mocks.generateText.mockRejectedValue(Object.assign(new Error("limited"), { statusCode: 429 }));
       mocks.fallback.mockImplementation(async (attempt) => {
-        try { return { value: await attempt(tier("fixture")) }; }
-        catch { await new Promise((resolve) => setTimeout(resolve, 18_000)); return { value: await attempt(tier("retry")) }; }
+        try { return { value: await attempt({ name: "fixture", model: "fixture" }) }; }
+        catch { await new Promise((resolve) => setTimeout(resolve, 18_000)); return { value: await attempt({ name: "retry", model: "retry" }) }; }
       });
       let response: Response | undefined;
       void post(new Request("http://localhost/api/recall", { method: "POST", body: JSON.stringify(body()), signal: abort.signal })).then((value) => { response = value; });
@@ -356,7 +324,7 @@ describe("POST /api/recall", () => {
       mocks.generateText.mockImplementation(() => new Promise(() => {}));
       mocks.fallback.mockImplementation(async (attempt) => {
         for (let i = 0; i < 8; i++) {
-          try { return { value: await attempt(tier(`fixture-${i}`)) }; }
+          try { return { value: await attempt({ name: `fixture-${i}`, model: "fixture" }) }; }
           catch { /* a configured fallback tier is available */ }
         }
         throw new Error("all failed");
