@@ -133,7 +133,10 @@ export function semanticSegmentsToInterpretation(
   if (!thinkingSegments.length && !actionSegments.length && !intentionSegments.length) {
     throw new UnsafeSortInterpretationError("The interpretation has no semantic item.");
   }
-  if (intentionSegments.length && (intentionSegments.length !== 1 || segments.length !== 1)) {
+  if (
+    intentionSegments.length &&
+    (intentionSegments.length !== 1 || thinkingSegments.length > 0 || actionSegments.length > 0)
+  ) {
     throw new UnsafeSortInterpretationError("An intention cannot coexist with other segments.");
   }
 

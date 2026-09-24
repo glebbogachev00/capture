@@ -1040,21 +1040,24 @@ describe("the semantic sorter route", () => {
     vi.stubEnv("CAPTURE_JEV_THREAD_ROUTING_PREVIEW", "1");
     vi.stubEnv("OPENROUTER_API_KEY", "synthetic-key");
     const source = "Capture should preserve rough thoughts.";
-    const interpreted = providerValue({
+    answer({
       clean: source,
       title: "Capture rough thoughts",
       thinking: [{ text: source, threadId: "r0", threadName: "Capture rough thoughts" }],
       actions: [], intention: null, shelfLife: "keep", due: null,
     });
-    providers.fallback.mockImplementationOnce(() => new Promise((resolve) => {
-      setTimeout(() => resolve({
-        value: interpreted,
-        via: "gemini",
-        preferred: "gemini",
-        fallback: false,
-        fallbackReason: null,
-      }), 54_500);
-    }));
+    providers.fallback.mockImplementationOnce(async (call: (tier: object) => Promise<unknown>) => {
+      const value = await call({ name: "gemini", modelId: "gemini-3.6-flash", model: "mock-text-provider" });
+      return new Promise((resolve) => {
+        setTimeout(() => resolve({
+          value,
+          via: "gemini",
+          preferred: "gemini",
+          fallback: false,
+          fallbackReason: null,
+        }), 54_500);
+      });
+    });
     const fetcher = vi.fn(() => new Promise<Response>(() => {}));
     vi.stubGlobal("fetch", fetcher);
 
@@ -1134,7 +1137,41 @@ describe("the semantic sorter route", () => {
     });
   });
 
-  it("parks a capture when the provider returns context without a semantic item", async () => {
+  it("retries schema-valid output rejected by semantic validation, then sorts", async () => {
+    const source = "First subject. Second subject.";
+    const valid = providerValue(actionInterpretation(source));
+    ai.generateObject
+      .mockImplementationOnce(async ({ schema }) => ({
+        object: schema.parse({
+          title: "Two subjects",
+          segments: [{
+            role: "context",
+            source,
+            threadId: null,
+            threadName: null,
+            ownsImage: null,
+            action: null,
+            thinkingOrdinal: null,
+            intention: null,
+            actionOrdinals: null,
+            shelfLife: null,
+            due: null,
+          }],
+        }),
+      }))
+      .mockImplementationOnce(async ({ schema, prompt }) => {
+        expect(prompt).toContain("VALIDATION RETRY");
+        expect(prompt).toContain("The interpretation has no semantic item.");
+        return { object: schema.parse(valid) };
+      });
+
+    const response = await POST(request({ raw: source, threads: [] }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ kind: "action" });
+    expect(ai.generateObject).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns a quiet internal code after two semantically unsafe answers", async () => {
     ai.generateObject.mockImplementation(async ({ schema }) => ({
       object: schema.parse({
         title: "Two subjects",
@@ -1155,7 +1192,8 @@ describe("the semantic sorter route", () => {
     }));
     const response = await POST(request({ raw: "First subject. Second subject.", threads: [] }));
     expect(response.status).toBe(422);
-    expect(ai.generateObject).toHaveBeenCalledOnce();
+    expect(await response.json()).toMatchObject({ code: "unsafe_interpretation" });
+    expect(ai.generateObject).toHaveBeenCalledTimes(2);
     expect(jev.scheduleJevThreadRerankShadow).not.toHaveBeenCalled();
   });
 

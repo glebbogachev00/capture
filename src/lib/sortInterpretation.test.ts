@@ -144,6 +144,25 @@ describe("semantic sort interpretation", () => {
     })).toThrow(UnsafeSortInterpretationError);
   });
 
+  it("accepts an exclusive intention with punctuation owned as context", () => {
+    const value = semanticSegmentsToInterpretation({
+      title: "Calm mornings",
+      segments: [
+        {
+          role: "intention",
+          source: "I begin each day calmly",
+          intention: "I begin each day calmly",
+        },
+        { role: "context", source: "." },
+      ],
+    });
+
+    expect(value.clean).toBe("I begin each day calmly.");
+    expect(value.thinking).toEqual([]);
+    expect(value.actions).toEqual([]);
+    expect(value.intention).toBe("I begin each day calmly");
+  });
+
   it("preserves every source character in the original split-share case", () => {
     const paragraph = "I want to refine my Askde posting strategy so the posts sound like something I would actually say. The current drafts are too polished and keep turning ordinary observations into dramatic lessons. I want to keep the actual experience and uncertainty without inventing dialogue, outcomes, or a motivational ending.";
     expectLosslessThinkingSplit(

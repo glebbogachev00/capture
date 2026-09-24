@@ -177,8 +177,7 @@ import {
   type RawAiProposal,
 } from "@/lib/organizeAi";
 import { playgroundUsage } from "@/lib/playgroundUsageClient";
-/* Carries the server's explanation so the board can show it verbatim. */
-class SortError extends Error {}
+import { SortError } from "@/lib/sortError";
 /* Which learned rules this device has cleared, by normalised key. */
 const FORGOTTEN_RULES_KEY = "capture:forgotten-rules";
 
@@ -1326,7 +1325,7 @@ export function useBoard(now: number) {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new SortError(body.error);
+      throw new SortError(body.error, body.code === "unsafe_interpretation");
     }
     /* Every answer reports the tier that produced it. Sorting is the most
        frequent call by far, so it is the honest sample of what the app is
@@ -1526,7 +1525,7 @@ export function useBoard(now: number) {
     setNoticeUndoable(false);
     setCanUndo(true);
     await commit(next);
-    setErr(reason + " Saved as it is, so nothing is lost — sort it later.");
+    if (reason) setErr(reason + " Saved as it is, so nothing is lost — sort it later.");
   };
 
   const resort = async (a: Action, pinned?: SortKind) => {
@@ -1578,7 +1577,9 @@ export function useBoard(now: number) {
       if (targetId) await regenerate(recorded, targetId);
       for (const id of summaryTargets) if (id !== targetId) scheduleSummary(id);
     } catch (error) {
-      setErr(reasonOf(error) + " It is still here, untouched.");
+      setErr(error instanceof SortError && error.quiet
+        ? ""
+        : reasonOf(error) + " It is still here, untouched.");
     }
     setBusy(null);
   };
@@ -1830,9 +1831,11 @@ export function useBoard(now: number) {
          stale description. */
       for (const id of summaryTargets) scheduleSummary(id);
     } catch (error) {
-      const reason = reasonOf(error);
+      const quiet = error instanceof SortError && error.quiet;
+      const reason = quiet ? "" : reasonOf(error);
       await saveUnsorted(raw, imgIds, at, reason, dictated, captureId, transcript || undefined, origin);
-      playgroundUsage.captureFailed(reason);
+      if (quiet) setErr("");
+      playgroundUsage.captureFailed(reason || "semantic validation");
     }
     } finally {
       setBusy(null);

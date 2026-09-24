@@ -233,7 +233,12 @@ function seriesContext(series: z.infer<typeof Body>["series"]) {
   return JSON.stringify(series);
 }
 
-function prompt(raw: string, body: z.infer<typeof Body>, candidateInventory: ReturnType<typeof promptThreadInventory>) {
+function prompt(
+  raw: string,
+  body: z.infer<typeof Body>,
+  candidateInventory: ReturnType<typeof promptThreadInventory>,
+  validationRetry?: string,
+) {
   const routeById = new Map(body.threads.map((thread, index) => [
     thread.id,
     candidateInventory.routes[index][0],
@@ -321,7 +326,80 @@ CORRECTION EXAMPLES
 ${correctionContext(modelCorrections)}
 
 RAW CAPTURE
-"""${raw || "(image only)"}"""`;
+"""${raw || "(image only)"}"""
+
+${validationRetry
+    ? `VALIDATION RETRY
+Your previous structured answer could not be accepted: ${validationRetry}
+Return a fresh complete answer. Preserve every semantic part exactly once and satisfy the output contract; do not summarize, omit, or duplicate content.`
+    : ""}`;
+}
+
+function prepareInterpretation(
+  value: z.infer<typeof Interpretation>,
+  body: z.infer<typeof Body>,
+  raw: string,
+) {
+  const forcedRole = body.force === "thread" ? "thinking" : body.force;
+  const forcedSource = value.segments.map((segment) => segment.source).join("");
+  let selectedSegments = value.segments;
+  if (forcedRole === "intention") {
+    selectedSegments = value.segments.filter((segment) => segment.role === "intention");
+    if (!selectedSegments.length) {
+      selectedSegments = [{
+        role: "intention",
+        source: forcedSource,
+        intention: value.title,
+        threadId: null,
+        threadName: null,
+        ownsImage: null,
+        action: null,
+        thinkingOrdinal: null,
+        actionOrdinals: null,
+        shelfLife: null,
+        due: null,
+      }];
+    }
+  } else if (forcedRole) {
+    selectedSegments = value.segments
+      .filter((segment) => segment.role === forcedRole || segment.role === "context")
+      .map((segment) => {
+        if (segment.role === "action") return { ...segment, thinkingOrdinal: null };
+        if (segment.role === "context" && forcedRole === "thinking") {
+          return { ...segment, actionOrdinals: null, shelfLife: null, due: null };
+        }
+        return segment;
+      });
+  }
+  const interpreted = semanticSegmentsToInterpretation({
+    ...value,
+    segments: selectedSegments,
+  });
+  const routed = {
+    ...interpreted,
+    thinking: body.force === "action" || body.force === "intention"
+      ? []
+      : interpreted.thinking.map((share) => {
+        if (share.threadId === null) return share;
+        const threadId = resolvePromptThreadId(share.threadId, body.threads);
+        if (!threadId) {
+          throw new UnsafeSortInterpretationError("The thread route is invalid.");
+        }
+        return { ...share, threadId };
+      }),
+  };
+
+  /* Validate while the provider attempt is still active. Schema-valid model
+     output can still violate exact source ownership. That should trigger a
+     bounded model retry/fallback, not immediately become a user-facing error. */
+  interpretationToSortResult(routed, {
+    force: body.force,
+    validThreadIds: body.threads.map((thread) => thread.id),
+    fallbackText: raw,
+    hasImage: !!body.imgs?.length,
+    requireCompleteSource: true,
+  });
+  return routed;
 }
 
 export async function POST(request: Request) {
@@ -375,7 +453,7 @@ export async function POST(request: Request) {
               statusCode: 422,
             });
           }
-          const interpret = async () => {
+          const interpret = async (validationRetry?: string) => {
             routeSignal.throwIfAborted();
             const attemptSignal = AbortSignal.any([
               routeSignal,
@@ -384,14 +462,15 @@ export async function POST(request: Request) {
               // budget while leaving time for validation and admission cleanup.
               AbortSignal.timeout(tier.name === "openrouter" ? 50_000 : SORT_ATTEMPT_MS),
             ]);
-            const interpretationPrompt = prompt(raw, body, candidateInventory);
+            const interpretationPrompt = prompt(raw, body, candidateInventory, validationRetry);
             if (tier.name === "openrouter") {
-              return bounded(() => generateOpenRouterStructured({
+              const object = await bounded(() => generateOpenRouterStructured({
                 modelId: tier.modelId,
                 prompt: interpretationPrompt,
                 schema: Interpretation,
                 signal: attemptSignal,
               }), attemptSignal);
+              return prepareInterpretation(object, body, raw);
             }
             const { object } = await bounded(() => generateObject({
               model: tier.model,
@@ -402,14 +481,21 @@ export async function POST(request: Request) {
               providerOptions: tier.providerOptions,
               abortSignal: attemptSignal,
             }), attemptSignal);
-            return object;
+            return prepareInterpretation(object, body, raw);
           };
           try {
             return await interpret();
           } catch (error) {
-            if (!malformedStructuredOutput(error)) throw error;
+            if (
+              !malformedStructuredOutput(error) &&
+              !(error instanceof UnsafeSortInterpretationError)
+            ) throw error;
             routeSignal.throwIfAborted();
-            return interpret();
+            return interpret(
+              error instanceof UnsafeSortInterpretationError
+                ? error.message
+                : "The answer did not match the required structured format.",
+            );
           }
         },
         preferredFor("sort"),
@@ -417,57 +503,7 @@ export async function POST(request: Request) {
         supportsSemanticSort,
       );
 
-      const forcedRole = body.force === "thread" ? "thinking" : body.force;
-      const forcedSource = value.segments.map((segment) => segment.source).join("");
-      let selectedSegments = value.segments;
-      if (forcedRole === "intention") {
-        selectedSegments = value.segments.filter((segment) => segment.role === "intention");
-        if (!selectedSegments.length) {
-          selectedSegments = [{
-            role: "intention",
-            source: forcedSource,
-            intention: value.title,
-            threadId: null,
-            threadName: null,
-            ownsImage: null,
-            action: null,
-            thinkingOrdinal: null,
-            actionOrdinals: null,
-            shelfLife: null,
-            due: null,
-          }];
-        }
-      } else if (forcedRole) {
-        selectedSegments = value.segments
-          .filter((segment) => segment.role === forcedRole || segment.role === "context")
-          .map((segment) => {
-            if (segment.role === "action") return { ...segment, thinkingOrdinal: null };
-            if (segment.role === "context" && forcedRole === "thinking") {
-              return { ...segment, actionOrdinals: null, shelfLife: null, due: null };
-            }
-            return segment;
-          });
-      }
-      const interpreted = semanticSegmentsToInterpretation({
-        ...value,
-        segments: selectedSegments,
-      });
-      const routed = {
-        ...interpreted,
-        /* A user-forced action or intention cannot consume a thread route.
-           Ignore hallucinated, irrelevant thinking before capability
-           resolution so it cannot veto the authoritative correction. */
-        thinking: body.force === "action" || body.force === "intention"
-          ? []
-          : interpreted.thinking.map((share) => {
-          if (share.threadId === null) return share;
-          const threadId = resolvePromptThreadId(share.threadId, body.threads);
-          if (!threadId) {
-            throw new UnsafeSortInterpretationError("The thread route is invalid.");
-          }
-          return { ...share, threadId };
-          }),
-      };
+      const routed = value;
       const destinationThinking = await routeThinkingWithJevPreview({
         thinking: routed.thinking,
         candidates: body.threads,
@@ -515,7 +551,10 @@ export async function POST(request: Request) {
     } catch (error) {
       if (error instanceof UnsafeSortInterpretationError) {
         return Response.json(
-          { error: "Could not safely separate every part of that capture." },
+          {
+            error: "Capture could not organize that reliably.",
+            code: "unsafe_interpretation",
+          },
           { status: 422 },
         );
       }
