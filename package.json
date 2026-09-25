@@ -17,6 +17,8 @@
     "probe:tidy": "node scripts/probe-tidy.mjs",
     "probe:tidy:cases": "node scripts/probe-tidy-cases.mjs",
     "probe:sort:cases": "node scripts/probe-sort-cases.mjs",
+    "baseline:routing": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/routing-baseline.mjs",
+    "test:routing-baseline": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/routing-baseline.test.mjs",
     "probe:settle:cases": "node scripts/probe-settle-cases.mjs",
     "setup": "node scripts/setup.mjs",
     "setup:cerebras": "node scripts/setup-cerebras.mjs",
