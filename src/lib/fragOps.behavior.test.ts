@@ -110,21 +110,17 @@ describe("moving a note between threads", () => {
     expect(out.board.threads.some((t) => t.id === "capture")).toBe(false);
   });
 
-  it("a move within minutes of landing teaches the sorter; an old note is just housekeeping", () => {
-    /* The real scenario: the sorter filed a Retake note into Capture, and
-       the person drags it home while the mistake is still warm. The note
-       shares its subject with the destination, so there is a rule worth
-       writing. */
+  it("a fresh manual move is a semantic correction even without shared words", () => {
     const b = board();
     b.threads.find((t) => t.id === "capture")!.frags.push({
       id: "mis1",
       at: T0,
-      text: "Retake demos need release notes on every major update.",
+      text: "Tue — mark-done draft",
     });
     const fresh = applyFragMove(b, "capture", "mis1", "retake", T0 + REFILE_WINDOW_MS)!;
-    expect(fresh.lesson).toMatch(/belong in "Retake"/);
+    expect(fresh.corrected).toBe(true);
     const old = applyFragMove(b, "capture", "mis1", "retake", T0 + REFILE_WINDOW_MS + 1)!;
-    expect(old.lesson).toBeNull();
+    expect(old.corrected).toBe(false);
   });
 
   it("a destination merged away on another device makes the move a no-op", () => {

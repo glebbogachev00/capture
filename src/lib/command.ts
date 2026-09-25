@@ -1,5 +1,3 @@
-import { commandRule } from "./refiled";
-
 /**
  * Destination commands on the front of a capture.
  *
@@ -61,8 +59,9 @@ export function parseCommandPrefix(raw: string): {
 export type ResolvedCapture = {
   payload: string;
   force: ForceKind | undefined;
-  /** The lesson the typed command teaches, or null. */
-  commandLesson: string | null;
+  /** A typed command may become bounded semantic context for the model.
+      It never becomes an executable phrase rule. */
+  commandCorrection: { kind: ForceKind } | null;
 };
 
 export function resolveCapture(
@@ -73,6 +72,6 @@ export function resolveCapture(
   return {
     payload,
     force: pinned ?? typed,
-    commandLesson: !pinned && typed ? commandRule(payload, typed) : null,
+    commandCorrection: !pinned && typed && payload.trim() ? { kind: typed } : null,
   };
 }

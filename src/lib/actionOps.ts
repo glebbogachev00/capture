@@ -1,6 +1,6 @@
 import type { Action, Board, Thread } from "./model";
 import { threadHoldsNote } from "./organize";
-import { isRefile, refileRule } from "./refiled";
+import { isRefile } from "./refiled";
 
 /**
  * What ticking, removing, and re-homing an action does to the board —
@@ -90,8 +90,8 @@ export type ActionFold = {
   board: Board;
   /** The thread already held the note — task retired, nothing appended. */
   already: boolean;
-  /** The refile lesson to record, when the fold corrects a fresh sort. */
-  lesson: string | null;
+  /** Whether the fold corrects a fresh sort rather than reorganising later. */
+  corrected: boolean;
   /** The words that moved, for the correction record. */
   foldedText: string;
   threadName: string;
@@ -110,13 +110,7 @@ export function applyActionFold(
 
   const note = a.src || a.text;
   const already = threadHoldsNote(t.frags, note, a.text);
-  const lesson = isRefile(a.at, now)
-    ? refileRule(
-        note,
-        t.name,
-        [t.name, t.summary, ...t.frags.map((f) => f.text)].join(" ")
-      )
-    : null;
+  const corrected = isRefile(a.at, now);
 
   return {
     board: {
@@ -137,7 +131,7 @@ export function applyActionFold(
           ),
     },
     already,
-    lesson,
+    corrected,
     foldedText: note,
     threadName: t.name,
   };

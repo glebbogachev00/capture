@@ -107,11 +107,11 @@ describe("folding an action into a thread", () => {
     expect(out.board.actions.some((a) => a.id === "a1")).toBe(false); // but the task still retires
   });
 
-  it("a fold moments after the sort teaches the sorter; an old one is housekeeping", () => {
+  it("a fold moments after the sort becomes a semantic correction; an old one is housekeeping", () => {
     const fresh = applyActionFold(board(), "a1", "retake", T0 + REFILE_WINDOW_MS, () => "f")!;
-    expect(fresh.lesson).toMatch(/belong in "Retake"/);
+    expect(fresh.corrected).toBe(true);
     const old = applyActionFold(board(), "a1", "retake", T0 + REFILE_WINDOW_MS + 1, () => "f")!;
-    expect(old.lesson).toBeNull();
+    expect(old.corrected).toBe(false);
   });
 
   it("a thread merged away on the other device makes the fold a no-op", () => {

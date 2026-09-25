@@ -1,6 +1,5 @@
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
-import { applyRules } from "@/lib/ruleMatch";
 import { preferredFor } from "@/lib/routing";
 import { explain } from "@/lib/aiError";
 import { captionPrompt, mergeCaption, tidyCaption } from "@/lib/caption";
@@ -114,6 +113,13 @@ const Recent = z.object({
   at: z.number().optional(),
 });
 
+const CorrectionExample = z.object({
+  capture: z.string().min(1).max(160),
+  kind: z.enum(["action", "thread", "intention"]),
+  threadId: z.string().max(100).optional(),
+  threadName: z.string().max(100).optional(),
+});
+
 /** "3 min ago", "2 h ago", "4 d ago" — or nothing, for old history. */
 function ago(at: number | undefined, now: number): string {
   if (!at) return "";
@@ -136,9 +142,9 @@ const Body = z.object({
   series: z
     .object({ threadId: z.string(), threadName: z.string(), minutesAgo: z.number() })
     .optional(),
-  /** Learned filing preferences (bounded, clearable, advisory). The client
-      sends the rule sentences it derived from the correction ledger. */
-  rules: z.array(z.string()).max(5).optional(),
+  /** Explicit user corrections, bounded and advisory. They are examples for
+      the model to generalize from, never executable phrase rules. */
+  correctionExamples: z.array(CorrectionExample).max(5).optional(),
   /** The destination is already decided; only the wording is in question. */
   force: z.enum(["action", "thread", "intention"]).optional(),
   /** One attached photo (data URL), captioned by a vision tier before the
@@ -216,15 +222,24 @@ function recentContext(recent: z.infer<typeof Recent>[] | undefined) {
   );
 }
 
-/** Learned preferences, injected as tendencies — never orders. Empty when
-    the model has learned nothing yet. */
-function rulesContext(rules: z.infer<typeof Body>["rules"]) {
-  if (!rules?.length) return "";
-  const lines = rules.map((r) => "- " + r).join("\n");
+/** Bounded corrections, injected as examples for the model to interpret. */
+function correctionContext(examples: z.infer<typeof Body>["correctionExamples"]) {
+  if (!examples?.length) return "";
+  const lines = examples
+    .map((example) => {
+      const destination =
+        example.kind === "thread" && example.threadId
+          ? `threadId "${example.threadId}"${
+              example.threadName ? ` ("${example.threadName}")` : ""
+            }`
+          : `kind "${example.kind}"`;
+      return `- "${example.capture}" was corrected to ${destination}.`;
+    })
+    .join("\n");
   return (
-    "\nFiling preferences this person has shown over time — treat these as " +
-    "tendencies, not orders, and only follow one when the capture clearly " +
-    "fits it:\n" +
+    "\nThe person corrected these earlier captures. Treat them as bounded " +
+    "semantic examples, not phrase rules: generalize only when the present " +
+    "capture means the same kind of thing. Shared words alone are not evidence:\n" +
     lines +
     "\n"
   );
@@ -266,7 +281,7 @@ function prompt(
   threads: z.infer<typeof Body>["threads"],
   force?: "action" | "thread" | "intention",
   recent?: z.infer<typeof Recent>[],
-  rules?: z.infer<typeof Body>["rules"]
+  correctionExamples?: z.infer<typeof Body>["correctionExamples"]
 ,
   series?: z.infer<typeof Body>["series"]) {
   if (force === "action") {
@@ -328,7 +343,7 @@ function prompt(
     "\n" +
     ROUTING_RULE +
     recentContext(recent) +
-    rulesContext(rules) +
+    correctionContext(correctionExamples) +
     seriesContext(series) +
     '\nRaw capture:\n"""' +
     (raw || "(image only)") +
@@ -407,7 +422,14 @@ export async function POST(request: Request) {
         maxRetries: 0,
         schema: Sorted,
         temperature: 0,
-        prompt: prompt(raw, body.threads, body.force, body.recent, body.rules, body.series),
+        prompt: prompt(
+          raw,
+          body.threads,
+          body.force,
+          body.recent,
+          body.correctionExamples,
+          body.series
+        ),
         providerOptions: tier.providerOptions,
       });
       return object;
@@ -417,31 +439,6 @@ export async function POST(request: Request) {
        model still picks the best existing thread; only the kind and the
        actions are pinned. */
     let { kind, actions, threadId, threadName } = value;
-    /* A learned rule is applied here, not left to the model's mood. The
-       prompt offered the rules as tendencies and the fallback tier ignored
-       them; a rule the board wrote has a known shape, so when the capture
-       carries every word of its subject the rule sets the kind (and the
-       home, if it names one), and only the remaining choices are the
-       model's. A typed command still outranks a rule. */
-    const ruled = body.force ? null : applyRules(raw, body.rules, body.threads);
-    if (ruled && ruled.kind !== kind) {
-      kind = ruled.kind;
-      if (ruled.kind === "action") {
-        threadId = null;
-        threadName = null;
-        if (!actions?.length) actions = [value.title || raw];
-      } else if (ruled.kind === "intention") {
-        threadId = null;
-        threadName = null;
-        actions = [];
-      } else {
-        actions = [];
-      }
-    }
-    if (ruled?.threadId) {
-      threadId = ruled.threadId;
-      threadName = null;
-    }
     if (body.force === "thread") {
       kind = "thread";
       actions = [];
@@ -475,17 +472,17 @@ export async function POST(request: Request) {
     // Collapse a self-contradicting "both" (no task, or no thinking) to the
     // single kind its fields actually support.
     const standing =
-      !body.force && !ruled
+      !body.force
         ? enforceStandingDecision(raw, { kind, actions, threadId, threadName })
         : { kind, actions, threadId, threadName };
     /* A model can understand an explicit lasting decision yet still choose a
        Thread because the prompt's uncertainty rule is deliberately
        conservative. Clear durable commitments get one deterministic final
-       check; learned filing rules and typed commands still outrank it. */
+       check; typed commands still outrank it. */
     const reconciled = reconcileSorted({
       ...value,
       ...standing,
-      // A rule/series override can change the thinking destination. The
+      // A series override can change the thinking destination. The
       // model's action selection vouched for its original home, not this one.
       primaryActions: standing.threadId === value.threadId && standing.threadName === value.threadName
         ? value.primaryActions : [],
