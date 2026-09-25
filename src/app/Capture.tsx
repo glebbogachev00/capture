@@ -61,6 +61,7 @@ import { PLAYGROUND } from "@/lib/playground";
 import { groupActions } from "@/lib/group";
 import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
 import { isLikelyRecallQuestion } from "@/lib/recall";
+import { hasAlternativeThread } from "@/lib/threadCorrection";
 /** Where the grouped-view toggle is remembered, in the same kv store as the
     board — a view preference that survives reloads on this device. */
 const GROUP_VIEW_KEY = "capture:groupView:v1";
@@ -763,10 +764,9 @@ export function Capture() {
                             : "An intention"}
                       </button>
                     ))}
-                  {/* Right kind, wrong home. Only offered when it landed in
-                      a thread and there is another one to move it to —
-                      otherwise the answer is one of the kinds above. */}
-                  {!!misfiled.thread && data.threads.length > 1 && (
+                  {/* Undo can remove a newly created wrong Thread, so count
+                      actual alternatives rather than remaining Threads. */}
+                  {!!misfiled.thread && hasAlternativeThread(data.threads, misfiled.thread.id) && (
                     <button
                       className="misfiled-btn"
                       onClick={() => setPickingThread(true)}

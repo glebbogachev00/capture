@@ -108,6 +108,14 @@ export type CorrectionEntry = {
   context: string;
   /** What the user actually wrote instead, when they corrected the proposal. */
   correctionText?: string;
+  /** The explicit corrected outcome for routing. The capture itself remains in
+      `context`; together they form a semantic example for the model, never a
+      phrase matcher or deterministic route. */
+  routing?: {
+    kind: "action" | "thread" | "intention";
+    threadId?: string;
+    threadName?: string;
+  };
   /** A distilled rule the correction implies ("threads get renamed to…"). */
   rule?: string;
 };

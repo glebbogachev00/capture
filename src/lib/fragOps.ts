@@ -1,7 +1,7 @@
 import type { Board, Thread } from "./model";
 import { applyActionDone } from "./actionOps";
 import { threadHoldsNote } from "./organize";
-import { isRefile, refileRule } from "./refiled";
+import { isRefile } from "./refiled";
 
 /**
  * What editing, deleting, moving, and splitting a single note does to the
@@ -101,9 +101,8 @@ export type FragMove = {
   board: Board;
   /** The source thread was emptied and removed. */
   emptied: boolean;
-  /** The refile lesson to record, when the move is the sorter being told
-      it was wrong — null for an old note simply being reorganised. */
-  lesson: string | null;
+  /** Whether the move corrects a fresh sort rather than reorganising later. */
+  corrected: boolean;
   /** The words that moved, for the correction record. */
   movedText: string;
   toName: string;
@@ -134,18 +133,12 @@ export function applyFragMove(
     ? threads.filter((t) => t.id !== fromId)
     : threads.map((t) => (t.id === fromId ? { ...t, frags: remaining } : t));
 
-  const lesson = isRefile(frag.at, now)
-    ? refileRule(
-        frag.text,
-        to.name,
-        [to.name, to.summary, ...to.frags.map((f) => f.text)].join(" ")
-      )
-    : null;
+  const corrected = isRefile(frag.at, now);
 
   return {
     board: { ...board, threads },
     emptied,
-    lesson,
+    corrected,
     movedText: frag.text,
     toName: to.name,
     fromName: from.name,

@@ -1,0 +1,870 @@
+{
+  "revision": "r1-owner-accepted-recovery-v2",
+  "initialBoard": {
+    "threads": [
+      {
+        "id": "thread-techtutor",
+        "name": "TechTutor lessons",
+        "summary": "Designing clear, playful technology lessons for students.",
+        "belongs": "Lesson structure, student exercises, and teaching explanations for TechTutor; not video editing or unrelated software work.",
+        "frags": [
+          {
+            "id": "seed-techtutor-1",
+            "at": 1760000000001,
+            "text": "Use a short worked example before the student challenge."
+          }
+        ]
+      },
+      {
+        "id": "thread-retake",
+        "name": "Retake editing workflow",
+        "summary": "Improving a fictional video review and editing workflow called Retake.",
+        "belongs": "Retake playback, review, edit, and export workflow; not lesson design or Capture filing.",
+        "frags": [
+          {
+            "id": "seed-retake-1",
+            "at": 1760000000002,
+            "text": "Playback should remain responsive while review markers load."
+          }
+        ]
+      },
+      {
+        "id": "thread-capture",
+        "name": "Capture filing",
+        "summary": "Improving how the Capture app files and retrieves thoughts.",
+        "belongs": "Capture input, filing, Threads, and retrieval behavior; not classical reading notes or recovery routines.",
+        "frags": [
+          {
+            "id": "seed-capture-1",
+            "at": 1760000000003,
+            "text": "The filing result should stay understandable after the original session."
+          }
+        ]
+      },
+      {
+        "id": "thread-ovid",
+        "name": "Ovid reading notes",
+        "summary": "Notes and questions from reading Ovid's Metamorphoses.",
+        "belongs": "Interpretation, imagery, and reading notes about Ovid; not software or daily recovery.",
+        "frags": [
+          {
+            "id": "seed-ovid-1",
+            "at": 1760000000004,
+            "text": "Transformation changes identity without erasing the earlier form."
+          }
+        ]
+      },
+      {
+        "id": "thread-rest-day",
+        "name": "Rest day practice",
+        "summary": "Learning what makes a deliberate rest day restorative.",
+        "belongs": "Recovery, rest-day boundaries, and restorative routines; not productivity software or literature.",
+        "frags": [
+          {
+            "id": "seed-rest-1",
+            "at": 1760000000005,
+            "text": "A rest day works better when it is not treated as a backlog day."
+          }
+        ]
+      },
+      {
+        "id": "thread-atlas-deployment",
+        "name": "Atlas deployment",
+        "summary": "Release planning for a fictional service named Atlas.",
+        "belongs": "Software deployment and release operations for Atlas; not animals or training routines.",
+        "frags": [
+          {
+            "id": "seed-atlas-1",
+            "at": 1760000000006,
+            "text": "The Atlas staging release needs a reversible rollout."
+          }
+        ]
+      },
+      {
+        "id": "thread-synthetic-bread",
+        "name": "Synthetic bread notebook",
+        "summary": "Clearly synthetic notes about sourdough timing and crust experiments.",
+        "belongs": "Only synthetic bread-baking experiments.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-stargazing",
+        "name": "Synthetic stargazing log",
+        "summary": "Clearly synthetic notes about constellations and telescope practice.",
+        "belongs": "Only synthetic amateur astronomy observations.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-ceramics",
+        "name": "Synthetic ceramics study",
+        "summary": "Clearly synthetic notes about glaze tests and wheel-throwing practice.",
+        "belongs": "Only synthetic ceramics practice.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-jazz",
+        "name": "Synthetic jazz practice",
+        "summary": "Clearly synthetic notes about harmony and improvisation exercises.",
+        "belongs": "Only synthetic jazz study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-maps",
+        "name": "Synthetic map collection",
+        "summary": "Clearly synthetic notes about historical map symbols and printing.",
+        "belongs": "Only synthetic cartography study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-kites",
+        "name": "Synthetic kite workshop",
+        "summary": "Clearly synthetic notes about kite frame and sail experiments.",
+        "belongs": "Only synthetic kite building.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-tea",
+        "name": "Synthetic tea tasting",
+        "summary": "Clearly synthetic notes about steeping and flavor comparison.",
+        "belongs": "Only synthetic tea tasting.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-origami",
+        "name": "Synthetic origami practice",
+        "summary": "Clearly synthetic notes about paper-folding diagrams and practice.",
+        "belongs": "Only synthetic origami study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-lighthouses",
+        "name": "Synthetic lighthouse history",
+        "summary": "Clearly synthetic notes about lighthouse lenses and signals.",
+        "belongs": "Only synthetic lighthouse history.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-cycling",
+        "name": "Synthetic cycling routes",
+        "summary": "Clearly synthetic notes about route-planning and bicycle fit.",
+        "belongs": "Only synthetic recreational cycling.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-calligraphy",
+        "name": "Synthetic calligraphy drills",
+        "summary": "Clearly synthetic notes about pen-angle and lettering practice.",
+        "belongs": "Only synthetic calligraphy practice.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-geology",
+        "name": "Synthetic geology cabinet",
+        "summary": "Clearly synthetic notes about mineral identification and rock classification.",
+        "belongs": "Only synthetic geology study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-chess",
+        "name": "Synthetic chess studies",
+        "summary": "Clearly synthetic notes about endgame positions and calculation exercises.",
+        "belongs": "Only synthetic chess study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-perfume",
+        "name": "Synthetic perfume notes",
+        "summary": "Clearly synthetic notes about fragrance accords and scent comparisons.",
+        "belongs": "Only synthetic fragrance study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-architecture",
+        "name": "Synthetic architecture sketches",
+        "summary": "Clearly synthetic notes about arches, courtyards, and facades.",
+        "belongs": "Only synthetic architecture study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-weather",
+        "name": "Synthetic weather journal",
+        "summary": "Clearly synthetic notes about cloud and rainfall observations.",
+        "belongs": "Only synthetic weather observation.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-weaving",
+        "name": "Synthetic weaving samples",
+        "summary": "Clearly synthetic notes about loom setup and textile patterns.",
+        "belongs": "Only synthetic weaving practice.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-fossils",
+        "name": "Synthetic fossil catalogue",
+        "summary": "Clearly synthetic notes about fossil classification and museum notes.",
+        "belongs": "Only synthetic paleontology study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-choir",
+        "name": "Synthetic choir rehearsal",
+        "summary": "Clearly synthetic notes about breathing, blend, and rehearsal.",
+        "belongs": "Only synthetic choir practice.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-canoe",
+        "name": "Synthetic canoe design",
+        "summary": "Clearly synthetic notes about hull-shape and paddling observations.",
+        "belongs": "Only synthetic canoe design.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-clocks",
+        "name": "Synthetic clock repair",
+        "summary": "Clearly synthetic notes about mechanical clock restoration.",
+        "belongs": "Only synthetic clock repair.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-languages",
+        "name": "Synthetic language sounds",
+        "summary": "Clearly synthetic notes about phonetics and pronunciation comparisons.",
+        "belongs": "Only synthetic language-sound study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-mosaics",
+        "name": "Synthetic mosaic designs",
+        "summary": "Clearly synthetic notes about tile color and geometric patterns.",
+        "belongs": "Only synthetic mosaic design.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-trains",
+        "name": "Synthetic railway history",
+        "summary": "Clearly synthetic notes about railway timetables and locomotive design.",
+        "belongs": "Only synthetic railway history.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-dance",
+        "name": "Synthetic dance notation",
+        "summary": "Clearly synthetic notes about movement notation and choreography.",
+        "belongs": "Only synthetic dance notation.",
+        "frags": []
+      }
+    ],
+    "actions": [
+      {
+        "id": "seed-action-1",
+        "text": "Review the synthetic lesson outline",
+        "at": 1760000000010
+      }
+    ],
+    "intentions": [
+      {
+        "id": "seed-intention-1",
+        "rawInput": "I protect room for careful thinking.",
+        "at": 1760000000011
+      }
+    ],
+    "ledger": [
+      {
+        "id": "seed-ledger-capture",
+        "at": 1760000000020,
+        "raw": "The filing result should stay understandable after the original session.",
+        "kind": "thread",
+        "target": "Capture filing"
+      },
+      {
+        "id": "seed-ledger-retake",
+        "at": 1760000000021,
+        "raw": "Playback should remain responsive while review markers load.",
+        "kind": "thread",
+        "target": "Retake editing workflow"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "single-existing-techtutor",
+      "covers": [
+        "single-existing-reuse"
+      ],
+      "raw": "The TechTutor lesson should let students compare two prompts, explain why one is clearer, and then revise the weaker prompt themselves.",
+      "expected": {
+        "destinations": [
+          "thread-techtutor"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "destinationExpectations": {
+        "thread-techtutor": {
+          "shareIncludesAll": [
+            [
+              "techtutor"
+            ],
+            [
+              "lesson"
+            ],
+            [
+              "prompt"
+            ]
+          ],
+          "shareExcludes": [
+            "retake",
+            "playback",
+            "ovid",
+            "rest day"
+          ]
+        }
+      }
+    },
+    {
+      "id": "two-existing-techtutor-retake",
+      "covers": [
+        "two-existing"
+      ],
+      "raw": "For TechTutor, the lesson needs a small mystery that students solve by improving a prompt. Separately, Retake playback still pauses when a reviewer jumps between distant markers, and that editing flow needs more thought.",
+      "expected": {
+        "destinations": [
+          "thread-techtutor",
+          "thread-retake"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "destinationExpectations": {
+        "thread-techtutor": {
+          "shareIncludesAll": [
+            [
+              "techtutor"
+            ],
+            [
+              "lesson",
+              "mystery",
+              "prompt"
+            ]
+          ],
+          "shareExcludes": [
+            "retake",
+            "playback",
+            "reviewer",
+            "marker"
+          ]
+        },
+        "thread-retake": {
+          "shareIncludesAll": [
+            [
+              "retake"
+            ],
+            [
+              "playback",
+              "reviewer",
+              "marker",
+              "editing"
+            ]
+          ],
+          "shareExcludes": [
+            "techtutor",
+            "lesson",
+            "mystery",
+            "prompt"
+          ]
+        }
+      }
+    },
+    {
+      "id": "three-existing-capture-ovid-rest",
+      "covers": [
+        "three-existing"
+      ],
+      "raw": "Capture should show why a thought joined an existing Thread without turning the explanation into another setting. In my Ovid notes, transformation feels less like replacement and more like an earlier identity remaining visible inside the new form. For a rest day, I am noticing that recovery disappears when I use the day to quietly catch up on work.",
+      "expected": {
+        "destinations": [
+          "thread-capture",
+          "thread-ovid",
+          "thread-rest-day"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "destinationExpectations": {
+        "thread-capture": {
+          "shareIncludesAll": [
+            [
+              "capture"
+            ],
+            [
+              "thought",
+              "thread",
+              "explanation"
+            ]
+          ],
+          "shareExcludes": [
+            "ovid",
+            "rest day",
+            "recovery"
+          ]
+        },
+        "thread-ovid": {
+          "shareIncludesAll": [
+            [
+              "ovid"
+            ],
+            [
+              "transformation",
+              "identity",
+              "form"
+            ]
+          ],
+          "shareExcludes": [
+            "capture",
+            "rest day",
+            "recovery"
+          ]
+        },
+        "thread-rest-day": {
+          "shareIncludesAll": [
+            [
+              "rest day",
+              "recovery"
+            ],
+            [
+              "catch up",
+              "work"
+            ]
+          ],
+          "shareExcludes": [
+            "capture",
+            "ovid",
+            "transformation"
+          ]
+        }
+      }
+    },
+    {
+      "id": "existing-capture-plus-new-garden",
+      "covers": [
+        "existing-plus-new"
+      ],
+      "raw": "Capture search should keep local matches visible while it finds a supported answer. A separate idea I want to develop is a small rooftop pollinator garden, starting with wind-tolerant herbs and native flowers in lightweight planters.",
+      "expected": {
+        "destinations": [
+          "thread-capture",
+          "created:garden"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "createdDestinations": {
+        "created:garden": "thread-rooftop-garden"
+      },
+      "destinationExpectations": {
+        "thread-capture": {
+          "shareIncludesAll": [
+            [
+              "capture"
+            ],
+            [
+              "search",
+              "local matches",
+              "supported answer"
+            ]
+          ],
+          "shareExcludes": [
+            "garden",
+            "pollinator",
+            "flower",
+            "planter"
+          ]
+        },
+        "created:garden": {
+          "nameIncludesAny": [
+            "garden",
+            "pollinator",
+            "rooftop",
+            "planter"
+          ],
+          "shareIncludesAll": [
+            [
+              "garden",
+              "pollinator",
+              "flower",
+              "planter"
+            ],
+            [
+              "roof",
+              "rooftop"
+            ]
+          ],
+          "shareExcludes": [
+            "capture search",
+            "local matches",
+            "supported answer",
+            "atlas",
+            "puppy"
+          ]
+        }
+      }
+    },
+    {
+      "id": "unrelated-atlas-name-trap",
+      "covers": [
+        "unrelated-name-trap"
+      ],
+      "raw": "Atlas the rescue puppy settles faster when training sessions end after one calm success. I want to keep notes on which quiet games help Atlas build confidence around unfamiliar sounds.",
+      "expected": {
+        "destinations": [
+          "created:atlas-puppy"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "createdDestinations": {
+        "created:atlas-puppy": "thread-atlas-puppy"
+      },
+      "destinationExpectations": {
+        "created:atlas-puppy": {
+          "nameIncludesAny": [
+            "atlas",
+            "puppy",
+            "dog",
+            "training"
+          ],
+          "shareIncludesAll": [
+            [
+              "atlas"
+            ],
+            [
+              "puppy",
+              "dog",
+              "rescue"
+            ],
+            [
+              "training",
+              "quiet game",
+              "confidence",
+              "unfamiliar sound"
+            ]
+          ],
+          "shareExcludes": [
+            "deployment",
+            "release",
+            "staging",
+            "rollout",
+            "garden",
+            "pollinator"
+          ]
+        }
+      }
+    },
+    {
+      "id": "garden-paraphrase-reuse",
+      "covers": [
+        "repeated-paraphrases"
+      ],
+      "raw": "For the roof planters, perhaps stagger flowering times so the pollinators have something available across the season, while keeping the containers light enough to move.",
+      "expected": {
+        "destinations": [
+          "thread-rooftop-garden"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "destinationExpectations": {
+        "thread-rooftop-garden": {
+          "shareIncludesAll": [
+            [
+              "roof",
+              "planter"
+            ],
+            [
+              "pollinator",
+              "pollinators",
+              "flower",
+              "flowers",
+              "flowering"
+            ],
+            [
+              "container",
+              "light",
+              "move"
+            ]
+          ],
+          "shareExcludes": [
+            "capture",
+            "atlas",
+            "retake"
+          ]
+        }
+      }
+    },
+    {
+      "id": "short-retake-reuse",
+      "covers": [
+        "short-capture"
+      ],
+      "raw": "Retake scrubbing still stutters.",
+      "expected": {
+        "destinations": [
+          "thread-retake"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "destinationExpectations": {
+        "thread-retake": {
+          "shareIncludesAll": [
+            [
+              "retake"
+            ],
+            [
+              "scrubbing",
+              "stutter"
+            ]
+          ],
+          "shareExcludes": [
+            "techtutor",
+            "capture",
+            "ovid"
+          ]
+        }
+      }
+    },
+    {
+      "id": "long-multi-topic-existing",
+      "covers": [
+        "long-multi-topic"
+      ],
+      "raw": "I have been thinking through three unrelated areas and want each to remain where I would look for it later. The TechTutor exercise works best if students first predict what an assistant will misunderstand, then compare the prediction with the result, because the surprise gives the explanation a purpose. In the Ovid reading, the recurring movement between human and nonhuman forms makes memory feel like the continuity that survives visible change, which may be why several episodes remain moving rather than merely strange. My rest-day experiment also needs a clearer boundary: gentle cooking and walking feel restorative, but opening project dashboards turns the day into disguised work even when I tell myself I am only checking one thing.",
+      "expected": {
+        "destinations": [
+          "thread-techtutor",
+          "thread-ovid",
+          "thread-rest-day"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "destinationExpectations": {
+        "thread-techtutor": {
+          "shareIncludesAll": [
+            [
+              "techtutor"
+            ],
+            [
+              "student",
+              "students"
+            ],
+            [
+              "assistant",
+              "prediction",
+              "result",
+              "surprise",
+              "explanation"
+            ]
+          ],
+          "shareExcludes": [
+            "ovid",
+            "rest day",
+            "cooking",
+            "walking"
+          ]
+        },
+        "thread-ovid": {
+          "shareIncludesAll": [
+            [
+              "ovid"
+            ],
+            [
+              "human",
+              "nonhuman",
+              "form",
+              "forms"
+            ],
+            [
+              "memory",
+              "change"
+            ]
+          ],
+          "shareExcludes": [
+            "techtutor",
+            "rest day",
+            "cooking",
+            "dashboard"
+          ]
+        },
+        "thread-rest-day": {
+          "shareIncludesAll": [
+            [
+              "rest day"
+            ],
+            [
+              "cooking",
+              "walking",
+              "restorative"
+            ],
+            [
+              "dashboard",
+              "dashboards",
+              "work"
+            ]
+          ],
+          "shareExcludes": [
+            "techtutor",
+            "ovid",
+            "prompt"
+          ]
+        }
+      }
+    },
+    {
+      "id": "capture-thinking-with-actions",
+      "covers": [
+        "actions-mixed-with-thinking"
+      ],
+      "raw": "Capture's filing explanation should stay quiet and specific so it builds trust without slowing the capture flow. Draft two alternative explanation labels for review tomorrow, and schedule a synthetic usability session for Friday.",
+      "expected": {
+        "destinations": [
+          "thread-capture"
+        ],
+        "kinds": [
+          "both"
+        ],
+        "actions": {
+          "min": 2,
+          "max": 2
+        }
+      },
+      "destinationExpectations": {
+        "thread-capture": {
+          "shareIncludesAll": [
+            [
+              "capture"
+            ],
+            [
+              "filing",
+              "explanation"
+            ],
+            [
+              "trust",
+              "flow"
+            ]
+          ],
+          "shareExcludes": [
+            "retake",
+            "ovid",
+            "rest day"
+          ]
+        }
+      }
+    },
+    {
+      "id": "clear-intention",
+      "covers": [
+        "intention"
+      ],
+      "raw": "I make room for deliberate rest without needing to earn it first.",
+      "expected": {
+        "destinations": [],
+        "kinds": [
+          "intention"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "destinationExpectations": {}
+    },
+    {
+      "id": "garden-duplicate-resistance",
+      "covers": [
+        "duplicate-destination-resistance",
+        "repeated-paraphrases"
+      ],
+      "raw": "The rooftop garden notes keep returning to the same idea: light movable planters, native flowers, and staggered blooms. Those are all parts of the one roof-garden experiment, not separate projects.",
+      "expected": {
+        "destinations": [
+          "thread-rooftop-garden"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        }
+      },
+      "destinationExpectations": {
+        "thread-rooftop-garden": {
+          "shareIncludesAll": [
+            [
+              "rooftop garden",
+              "roof garden"
+            ],
+            [
+              "planter",
+              "planters"
+            ],
+            [
+              "flower",
+              "flowers",
+              "bloom",
+              "blooms"
+            ]
+          ],
+          "shareExcludes": [
+            "capture",
+            "atlas",
+            "retake"
+          ]
+        }
+      }
+    }
+  ]
+}

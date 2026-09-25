@@ -95,8 +95,6 @@ import {
 } from "@/lib/boardOps";
 import { resolveCapture } from "@/lib/command";
 import {
-  refileRule,
-  undoRule,
   answeredKindCorrection,
   type SortKind,
 } from "@/lib/refiled";
@@ -162,7 +160,8 @@ import {
   withLedger,
   type CorrectionEntry,
 } from "@/lib/ledger";
-import { deriveRules, setRuleEnabled, type RulePreference } from "@/lib/rules";
+import { setRuleEnabled, type RulePreference } from "@/lib/rules";
+import { deriveCorrectionExamples } from "@/lib/correctionExamples";
 import {
   scanStale,
   type OrganizeProposal,
@@ -915,15 +914,14 @@ export function useBoard(now: number) {
        re-sorted and what the lesson cites is the draft as it stands. */
     const words = text.trim() || m?.text || "";
     if (m) {
-      const rule = undoRule(words, m.wrong, right);
-      if (rule) {
+      if (m.wrong !== right && words.trim()) {
         const learned = withCorrection(latest.current, {
           id: uid(),
           at: stamp(),
           proposalKind: "undone",
           accepted: true,
           context: words.slice(0, 160),
-          rule,
+          routing: { kind: right },
         });
         latest.current = learned;
         setData(learned);
@@ -968,23 +966,15 @@ export function useBoard(now: number) {
     setMisfiled(null);
     const home = latest.current.threads.find((t) => t.id === threadId);
     const words = text.trim() || m?.text || "";
-    let rule: ReturnType<typeof refileRule> = null;
     if (m && home) {
-      rule = refileRule(
-        words,
-        home.name,
-        [home.name, home.summary, ...home.frags.map((f) => f.text)].join(" ")
-      );
-      if (rule) {
-        /* Answered strength: they were asked outright and picked a thread,
-           which is the same kind of evidence as answering the kind. */
+      if (words.trim()) {
         const learned = withCorrection(latest.current, {
           id: uid(),
           at: stamp(),
           proposalKind: "undone",
           accepted: true,
           context: words.slice(0, 160),
-          rule,
+          routing: { kind: "thread", threadId: home.id, threadName: home.name },
         });
         latest.current = learned;
         setData(learned);
@@ -998,11 +988,7 @@ export function useBoard(now: number) {
     }
     await submit(false, "thread", words || undefined, threadId, m?.captureId);
     if (home) {
-      /* "It will remember" only when a rule was actually written: with no
-         shared subject there is nothing to remember by. */
-      setNotice(
-        rule ? `Filed in ${home.name}. It will remember.` : `Filed in ${home.name}.`
-      );
+      setNotice(`Filed in ${home.name}. It will remember.`);
       clearNoticeIn(6000);
     }
   };
@@ -1315,14 +1301,18 @@ export function useBoard(now: number) {
         target:
           e.kind === "thread" || e.kind === "both" ? threadName(e.targetId) : "",
       }));
-    // The bounded personal model, advisory: top learned rules as plain
-    // sentences. Empty until the user has accepted or dismissed enough
-    // suggestions for a rule to form — a fresh board sorts exactly as before.
-    const rules = deriveRules(
+    // Explicit routing corrections, bounded and advisory. The entire corrected
+    // capture and outcome travel together; no words are extracted or matched.
+    const correctionExamples = deriveCorrectionExamples(
       latest.current.corrections ?? [],
-      forgottenRules,
-      stamp()
-    ).map((r) => r.text);
+      latest.current.threads,
+      forgottenRules
+    ).map(({ capture, kind, threadId, threadName }) => ({
+      capture,
+      kind,
+      threadId,
+      threadName,
+    }));
     const res = await fetch("/api/sort", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1332,7 +1322,7 @@ export function useBoard(now: number) {
         recent,
         series: series ?? undefined,
         force,
-        rules,
+        correctionExamples,
         imgs: imgSrc ? [imgSrc] : undefined,
       }),
     });
@@ -1609,16 +1599,16 @@ export function useBoard(now: number) {
     intention: "An intention, then — a state, not a task.",
   };
 
-  /** Write a command's lesson on its own.
+  /** Write a command's semantic example on its own.
       The forced-intention branch hands off to the intention engine and
-      never reaches the capture's commit, so its lesson is recorded here or
+      never reaches the capture's commit, so its example is recorded here or
       nowhere. Same shape as the one folded into a filed capture. */
-  const noteCommand = async (rule: string, context: string) => {
+  const noteCommand = async (kind: SortKind, context: string) => {
     const learned = noteCorrection(latest.current, {
       proposalKind: "commanded",
       accepted: true,
       context: context.slice(0, 160),
-      rule,
+      routing: { kind },
     });
     latest.current = learned;
     setData(learned);
@@ -1649,7 +1639,7 @@ export function useBoard(now: number) {
     const raw = (override ?? text).trim();
     /* What the capture's opening decides — command prefix, undo-answer
        precedence, and whether it teaches — lives in lib/command. */
-    const { payload, force, commandLesson } = resolveCapture(raw, pinned);
+    const { payload, force, commandCorrection } = resolveCapture(raw, pinned);
     if (!payload && !pics.length) return;
     if (!captureGate.current.enter()) return;
     if (!existingCaptureId && trialExhaustedNow()) {
@@ -1699,7 +1689,7 @@ export function useBoard(now: number) {
         setTranscript("");
         /* This branch never reaches the commit below, so the lesson is
            written here or not at all. */
-        if (commandLesson) await noteCommand(commandLesson, payload);
+        if (commandCorrection) await noteCommand(commandCorrection.kind, payload);
         await expandIntention(payload, {
           raw: payload,
           source: sourceOf(payload, dictated, imgIds.length > 0),
@@ -1788,12 +1778,12 @@ export function useBoard(now: number) {
         uid
       );
       const withAll = preserveDraftOrigin(latest.current, sortedBoard, origin);
-      const recorded = commandLesson
+      const recorded = commandCorrection
         ? noteCorrection(withAll, {
             proposalKind: "commanded",
             accepted: true,
             context: payload.slice(0, 160),
-            rule: commandLesson,
+            routing: { kind: commandCorrection.kind },
           })
         : withAll;
       showReceipt(landed);
@@ -2839,12 +2829,12 @@ export function useBoard(now: number) {
     const out = applyActionFold(latest.current, actionId, threadId, stamp(), uid);
     if (!out) return;
     await commit(
-      out.lesson
+      out.corrected
         ? noteCorrection(out.board, {
             proposalKind: "refiled",
             accepted: true,
             context: out.foldedText.slice(0, 160),
-            rule: out.lesson,
+            routing: { kind: "thread", threadId, threadName: out.threadName },
           })
         : out.board
     );
@@ -3050,19 +3040,19 @@ export function useBoard(now: number) {
        was wrong, with the right home attached) all live in fragOps. */
     const out = applyFragMove(latest.current, fromId, fragId, toId, stamp());
     if (!out) return;
-    const next = out.lesson
+    const next = out.corrected
       ? noteCorrection(out.board, {
           proposalKind: "refiled",
           accepted: true,
           context: out.movedText.slice(0, 160),
-          rule: out.lesson,
+          routing: { kind: "thread", threadId: toId, threadName: out.toName },
         })
       : out.board;
     await commit(next);
     setNotice(
       out.emptied
         ? `Moved to ${out.toName}. ${out.fromName} was left empty and removed.`
-        : out.lesson
+        : out.corrected
           ? `Moved to ${out.toName} — noted for next time.`
           : `Moved to ${out.toName}.`
     );
@@ -4166,15 +4156,20 @@ export function useBoard(now: number) {
   const intention = data.intentions.find((i) => i.id === openIntention);
   const hits = useMemo(() => search(data, debouncedQuery), [data, debouncedQuery]);
   const searching = debouncedQuery.trim().length > 0;
-  /* All learned preferences remain visible so an off switch can be turned
-     back on. Only enabled rules reach the sort prompt above. */
+  /* All correction examples remain visible so an off switch can be turned
+     back on. Only enabled examples reach the sort prompt above. */
   const learnedRules: RulePreference[] = useMemo(
     () =>
-      deriveRules(data.corrections ?? [], [], now).map((rule) => ({
-        ...rule,
-        enabled: !forgottenRules.includes(rule.key),
+      deriveCorrectionExamples(data.corrections ?? [], data.threads).map((example) => ({
+        key: example.key,
+        text: example.text,
+        accepts: 1,
+        dismisses: 0,
+        confidence: 1,
+        lastAt: example.lastAt,
+        enabled: !forgottenRules.includes(example.key),
       })),
-    [data.corrections, forgottenRules, now]
+    [data.corrections, data.threads, forgottenRules]
   );
 
   /** Enable or disable one advisory sorting preference. The correction

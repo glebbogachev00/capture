@@ -5,8 +5,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { get, set } from "@/lib/storage";
 import { EMPTY, KEY } from "@/lib/model";
 import { useBoard } from "@/hooks/useBoard";
-import { undoRule } from "@/lib/refiled";
-import { deriveRules } from "@/lib/rules";
+
 
 const ai = vi.hoisted(() => ({ generateObject: vi.fn(), generateText: vi.fn() }));
 vi.mock("ai", () => ai);
@@ -19,7 +18,7 @@ vi.mock("@/lib/providers", () => ({
 import { POST } from "@/app/api/sort/route";
 
 const raw = "From now on I will run twice every week for thirty minutes and track the training schedule.";
-const calls: { rules: string[]; force?: string }[] = [];
+const calls: { correctionExamples?: { capture: string; kind: string; threadId?: string }[]; force?: string }[] = [];
 const responseKinds: string[] = [];
 let hook: ReturnType<typeof renderHook<ReturnType<typeof useBoard>, unknown>>;
 const providerResult = { clean: raw, kind: "thread", title: "Training schedule", actions: [], primaryActions: [], primaryText: null, threadId: "training", threadName: null, also: [], shelfLife: "keep", due: null };
@@ -41,7 +40,7 @@ beforeEach(async () => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 async function submit() { await act(async () => { await hook.result.current.submit(false, undefined, raw); }); }
-it("an intention draft corrected to thread teaches the next capture after reload", async () => {
+it("persists and sends a bounded semantic correction after reload", async () => {
   hook = renderHook(() => useBoard(Date.now()));
   await waitFor(() => expect(hook.result.current.loaded).toBe(true));
   await submit();
@@ -52,22 +51,29 @@ it("an intention draft corrected to thread teaches the next capture after reload
   expect(hook.result.current.canUndo).toBe(true);
   const saved = JSON.parse((await get(KEY))!);
   expect(saved.corrections).toHaveLength(1);
-  expect(saved.corrections[0].rule).toBe(undoRule(raw, "intention", "thread"));
+  expect(saved.corrections[0]).toMatchObject({
+    context: raw,
+    routing: { kind: "thread" },
+  });
+  expect(saved.corrections[0].rule).toBeUndefined();
   expect(saved.ledger.at(-1).raw).toBe(raw);
   hook.unmount();
   hook = renderHook(() => useBoard(Date.now()));
   await waitFor(() => expect(hook.result.current.loaded).toBe(true));
   await submit();
-  expect(calls.at(-1)?.rules).toContain(undoRule(raw, "intention", "thread"));
-  expect(hook.result.current.draft).toBeNull();
-  expect(responseKinds).toEqual(["intention", "thread", "thread"]);
+  expect(calls.at(-1)?.correctionExamples).toContainEqual(expect.objectContaining({
+    capture: raw,
+    kind: "thread",
+  }));
+  expect(hook.result.current.draft?.rawInput).toBe(raw);
+  expect(responseKinds).toEqual(["intention", "thread", "intention"]);
 });
-it("one existing answered-kind lesson prevents the route override (control)", async () => {
-  const rules = deriveRules([{ id: "c", at: Date.now(), proposalKind: "undone", accepted: true, context: raw, rule: undoRule(raw, "intention", "thread")! }]).map(r => r.text);
-  const response = await POST(new Request("http://localhost/api/sort", { method: "POST", body: JSON.stringify({ raw, rules, threads: [{ id: "training", name: "Training schedule", about: "training schedule" }] }) }));
+it("a legacy phrase lesson cannot override the model response", async () => {
+  ai.generateObject.mockImplementationOnce(async ({ schema }) => ({ object: schema.parse({ ...providerResult, kind: "intention", threadId: null }) }));
+  const response = await POST(new Request("http://localhost/api/sort", { method: "POST", body: JSON.stringify({ raw, rules: ['Captures about "twice thirty" are a thread, not an intention'], threads: [{ id: "training", name: "Training schedule", about: "training schedule" }] }) }));
   expect(response.status).toBe(200);
   const out = await response.json();
-  expect(out.kind).toBe("thread"); expect(out.threadId).toBe("training");
+  expect(out.kind).toBe("intention"); expect(out.threadId).toBeNull();
 });
 it("Undo restores the words after correcting an intention draft", async () => {
   hook = renderHook(() => useBoard(Date.now()));
@@ -78,5 +84,7 @@ it("Undo restores the words after correcting an intention draft", async () => {
   expect(hook.result.current.text).toBe(raw);
   expect(hook.result.current.data.threads.find(t => t.id === "training")?.frags).toHaveLength(1);
   expect(hook.result.current.data.ledger?.some(entry => entry.raw === raw)).toBe(true);
-  expect(hook.result.current.data.corrections?.some(entry => entry.rule === undoRule(raw, "intention", "thread"))).toBe(true);
+  expect(hook.result.current.data.corrections?.some(entry =>
+    entry.context === raw && entry.routing?.kind === "thread" && !entry.rule
+  )).toBe(true);
 });

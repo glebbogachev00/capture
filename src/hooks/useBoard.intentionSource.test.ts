@@ -5,7 +5,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { get, set } from "@/lib/storage";
 import { EMPTY, KEY } from "@/lib/model";
 import * as model from "@/lib/model";
-import { undoRule } from "@/lib/refiled";
+
 import { useBoard } from "./useBoard";
 
 beforeEach(async () => {
@@ -48,8 +48,12 @@ it.each([undefined, "intention"] as const)("correcting an edited dictated draft 
   expect(hook.result.current.data.threads[0].frags[0].text).toBe(reviewed);
   const evidence = { raw: original, clean: reviewed, source: "dictated", transcript: recognizer, captureId };
   expect(hook.result.current.data.ledger.at(-1)).toMatchObject(evidence);
-  const lesson = undoRule(reviewed, "intention", "thread");
-  expect(hook.result.current.data.corrections).toEqual(expect.arrayContaining([expect.objectContaining({ rule: lesson })]));
+  expect(hook.result.current.data.corrections).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      context: reviewed,
+      routing: { kind: "thread" },
+    }),
+  ]));
   expect(JSON.parse((await get(KEY))!).ledger.at(-1)).toMatchObject(evidence);
   const sortCalls = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/sort");
   expect(JSON.parse(sortCalls.at(-1)![1]!.body as string)).toMatchObject({ raw: reviewed, force: "thread" });
@@ -64,7 +68,9 @@ it.each([undefined, "intention"] as const)("correcting an edited dictated draft 
   expect(hook.result.current.text).toBe(reviewed);
   expect(hook.result.current.data.threads).toHaveLength(0);
   expect(hook.result.current.data.ledger.at(-1)).toMatchObject({ ...evidence, undone: true });
-  expect(hook.result.current.data.corrections).toEqual(expect.arrayContaining([expect.objectContaining({ rule: lesson })]));
+  expect(hook.result.current.data.corrections).toEqual(expect.arrayContaining([
+    expect.objectContaining({ context: reviewed, routing: { kind: "thread" } }),
+  ]));
 });
 
 it("a failed thread correction parks edited words as an action without losing the draft's evidence", async () => {

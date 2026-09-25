@@ -52,6 +52,13 @@ it("offline baseline: model-free capture, edit, find, manual move, downloaded ph
   expect(hook.result.current.unsorted.find(a => a.id === action.id)?.text).toBe("Edited offline baseline");
   await act(async () => { await hook.result.current.moveFrag("one", "frag", "two"); });
   expect(hook.result.current.data.threads.find(t => t.id === "two")?.frags[0].text).toBe("photo note");
+  expect(hook.result.current.data.corrections).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      context: "photo note",
+      routing: { kind: "thread", threadId: "two", threadName: "Second" },
+    }),
+  ]));
+  expect(hook.result.current.data.corrections.some(correction => correction.rule)).toBe(false);
   expect(await get(IMG("pic"))).toBe("downloaded bytes");
   expect(hook.result.current.sync?.ok).toBe(false);
   expect(network).not.toHaveBeenCalled();

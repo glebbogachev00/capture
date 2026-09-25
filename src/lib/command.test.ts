@@ -106,15 +106,15 @@ describe("resolving a capture's opening", () => {
     /* The re-sort has already written its own, stronger lesson. Recording
        the typed prefix too counted one correction twice. */
     const r = resolveCapture("/action send the retake demo", "action");
-    expect(r.commandLesson).toBeNull();
+    expect(r.commandCorrection).toBeNull();
   });
 
-  it("a typed command teaches; plain speech does not", () => {
+  it("a typed command records a semantic example; plain speech does not", () => {
     const typed = resolveCapture("/action send the retake demo");
     expect(typed.force).toBe("action");
-    expect(typed.commandLesson).toMatch(/are put in Actions|action/i);
+    expect(typed.commandCorrection).toEqual({ kind: "action" });
     const plain = resolveCapture("send the retake demo");
     expect(plain.force).toBeUndefined();
-    expect(plain.commandLesson).toBeNull();
+    expect(plain.commandCorrection).toBeNull();
   });
 });
