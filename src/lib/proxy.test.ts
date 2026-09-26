@@ -32,7 +32,7 @@ describe("legacy proxy and Cloud boundary", () => {
       httpOnly: true,
     });
     mockedGetCloudConfig.mockReturnValue(config);
-    mockedRefreshCloudSession.mockResolvedValue(refreshed);
+    mockedRefreshCloudSession.mockResolvedValue({ response: refreshed, authenticated: true });
 
     const request = new NextRequest("https://capture.test/api/cloud/board");
     const response = await proxy(request);
@@ -80,13 +80,50 @@ describe("legacy proxy and Cloud boundary", () => {
       httpOnly: true,
     });
     mockedGetCloudConfig.mockReturnValue(config);
-    mockedRefreshCloudSession.mockResolvedValue(refreshed);
+    mockedRefreshCloudSession.mockResolvedValue({ response: refreshed, authenticated: false });
     vi.stubEnv("APP_PASSWORD", "configured");
 
     try {
       const response = await proxy(new NextRequest(`https://capture.test${path}`));
       expect(response.status).toBe(expectedStatus);
       expect(response.headers.get("set-cookie")).toContain("sb-capture-auth-token=refreshed");
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("redirects an anonymous Cloud app request to email-code login before the board mounts", async () => {
+    const config = {
+      status: "ready" as const,
+      url: "https://capture.supabase.co",
+      publishableKey: "sb_publishable_test",
+    };
+    const refreshed = NextResponse.next();
+    refreshed.cookies.set("sb-capture-auth-token", "refreshed", { path: "/", httpOnly: true });
+    mockedGetCloudConfig.mockReturnValue(config);
+    mockedRefreshCloudSession.mockResolvedValue({ response: refreshed, authenticated: false });
+    vi.stubEnv("CAPTURE_CLOUD", "1");
+
+    try {
+      const response = await proxy(new NextRequest("https://capture.test/app"));
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe("https://capture.test/login?next=%2Fapp");
+      expect(response.headers.get("set-cookie")).toContain("sb-capture-auth-token=refreshed");
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("allows a verified Cloud app request through", async () => {
+    const config = {
+      status: "ready" as const,
+      url: "https://capture.supabase.co",
+      publishableKey: "sb_publishable_test",
+    };
+    mockedGetCloudConfig.mockReturnValue(config);
+    mockedRefreshCloudSession.mockResolvedValue({ response: NextResponse.next(), authenticated: true });
+    vi.stubEnv("CAPTURE_CLOUD", "1");
+
+    try {
+      const response = await proxy(new NextRequest("https://capture.test/app"));
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-middleware-next")).toBe("1");
     } finally { vi.unstubAllEnvs(); }
   });
 });

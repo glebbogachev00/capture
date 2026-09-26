@@ -76,9 +76,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.json({ error: "cloud sync is not enabled" }, { status: 404 });
   }
   const cloudConfig = getCloudConfig();
-  const passThrough = cloudConfig?.status === "ready"
+  const cloudSession = cloudConfig?.status === "ready"
     ? await refreshCloudSession(request, cloudConfig)
-    : NextResponse.next();
+    : { response: NextResponse.next(), authenticated: false };
+  const passThrough = cloudSession.response;
 
   // Cloud has its own Supabase identity boundary, never the deployment password.
   // Polar signs its webhook request, so it must also bypass the browser gate.
@@ -89,6 +90,12 @@ export async function proxy(request: NextRequest) {
     pathname === "/api/webhooks/polar"
   ) {
     return passThrough;
+  }
+  if (!PLAYGROUND && cloudEnabled && pathname === "/app" && !cloudSession.authenticated) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", pathname);
+    return preserveCloudCookies(NextResponse.redirect(url), passThrough);
   }
   if (isPublicHome(pathname, PUBLIC_SITE) || isPublic(pathname, request.method) ||
     (PUBLIC_SITE && (pathname === "/app" || pathname === "/writing" || pathname.startsWith("/writing/")))) {

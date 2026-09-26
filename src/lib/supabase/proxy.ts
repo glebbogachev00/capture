@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { CloudConfig } from "./config";
+import { identityFromClaims } from "./identity";
 
 type CookieValue = {
   name: string;
@@ -10,8 +11,13 @@ type CookieValue = {
 
 type ProxyClient = {
   auth: {
-    getClaims(): Promise<unknown>;
+    getClaims(): Promise<{ data: { claims?: { sub?: unknown } } | null; error: unknown }>;
   };
+};
+
+export type RefreshedCloudSession = {
+  response: NextResponse;
+  authenticated: boolean;
 };
 
 export type ProxyClientFactory = (
@@ -39,7 +45,7 @@ export async function refreshCloudSession(
   request: NextRequest,
   config: CloudConfig,
   factory: ProxyClientFactory = createClient,
-): Promise<NextResponse> {
+): Promise<RefreshedCloudSession> {
   let response = NextResponse.next({ request });
   const client = factory(config.url, config.publishableKey, {
     cookies: {
@@ -56,6 +62,6 @@ export async function refreshCloudSession(
     },
   });
 
-  await client.auth.getClaims();
-  return response;
+  const identity = await identityFromClaims(client);
+  return { response, authenticated: identity !== null };
 }
