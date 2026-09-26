@@ -24,6 +24,14 @@ export function cloudCheckoutHandoff(
   plan: PolarPlan,
   configuredCloudUrl: string | undefined = process.env.NEXT_PUBLIC_CLOUD_URL,
 ): string | null {
+  const cloud = safeCloudOrigin(configuredCloudUrl);
+  if (!cloud) return null;
+  cloud.pathname = "/login";
+  cloud.searchParams.set("next", `/pricing?checkout=${plan}`);
+  return cloud.toString();
+}
+
+function safeCloudOrigin(configuredCloudUrl: string | undefined): URL | null {
   if (!configuredCloudUrl) return null;
   try {
     const cloud = new URL(configuredCloudUrl);
@@ -35,12 +43,20 @@ export function cloudCheckoutHandoff(
       || cloud.search
       || cloud.hash
     ) return null;
-    cloud.pathname = "/login";
-    cloud.searchParams.set("next", `/pricing?checkout=${plan}`);
-    return cloud.toString();
+    return cloud;
   } catch {
     return null;
   }
+}
+
+export function cloudLoginHandoff(
+  configuredCloudUrl: string | undefined = process.env.NEXT_PUBLIC_CLOUD_URL,
+): string | null {
+  const cloud = safeCloudOrigin(configuredCloudUrl);
+  if (!cloud) return null;
+  cloud.pathname = "/login";
+  cloud.searchParams.set("next", "/app");
+  return cloud.toString();
 }
 
 async function responseBody(response: Response): Promise<Record<string, unknown>> {

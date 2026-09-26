@@ -1620,7 +1620,7 @@ body {
   font-size: 12.5px;
   color: #8a2f2f;
 }
-/* The playground's one line. Quiet, dismissible, above everything. */
+/* The playground's persistent paths to Cloud and self-hosting. */
 .playground-note {
   display: flex;
   align-items: flex-start;
@@ -1648,23 +1648,6 @@ body {
   white-space: nowrap;
 }
 .playground-note a:hover {
-  color: var(--ink);
-}
-.playground-note button {
-  flex: none;
-  width: 28px;
-  height: 28px;
-  margin: -4px -6px 0 0;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-.playground-note button:hover {
-  background: var(--paper);
   color: var(--ink);
 }
 

@@ -3,6 +3,7 @@ import {
   checkoutPlanFromNext,
   cloudCheckoutDestinationAfterLogin,
   cloudCheckoutHandoff,
+  cloudLoginHandoff,
 } from "@/lib/cloudCheckoutClient";
 
 describe("Cloud checkout continuation", () => {
@@ -21,6 +22,13 @@ describe("Cloud checkout continuation", () => {
     expect(cloudCheckoutHandoff("yearly", "https://preview.vercel.app/")).toBe(
       "https://preview.vercel.app/login?next=%2Fpricing%3Fcheckout%3Dyearly",
     );
+  });
+
+  it("builds a safe playground-to-Cloud app handoff", () => {
+    expect(cloudLoginHandoff("https://cloud.trycapture.app")).toBe(
+      "https://cloud.trycapture.app/login?next=%2Fapp",
+    );
+    expect(cloudLoginHandoff("http://cloud.trycapture.app")).toBeNull();
   });
 
   it("rejects an unsafe or non-origin Cloud handoff configuration", () => {
