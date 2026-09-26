@@ -20,6 +20,29 @@ export function checkoutPlanFromNext(nextPath: string | null | undefined): Polar
   return plan === "monthly" || plan === "yearly" ? plan : null;
 }
 
+export function cloudCheckoutHandoff(
+  plan: PolarPlan,
+  configuredCloudUrl: string | undefined = process.env.NEXT_PUBLIC_CLOUD_URL,
+): string | null {
+  if (!configuredCloudUrl) return null;
+  try {
+    const cloud = new URL(configuredCloudUrl);
+    if (
+      cloud.protocol !== "https:"
+      || cloud.username
+      || cloud.password
+      || cloud.pathname !== "/"
+      || cloud.search
+      || cloud.hash
+    ) return null;
+    cloud.pathname = "/login";
+    cloud.searchParams.set("next", `/pricing?checkout=${plan}`);
+    return cloud.toString();
+  } catch {
+    return null;
+  }
+}
+
 async function responseBody(response: Response): Promise<Record<string, unknown>> {
   try {
     const value = await response.json();

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PolarPlan } from "@/lib/polar";
 import type { PublicCloudSubscription } from "@/lib/cloudSubscription";
-import { safePolarDestination } from "@/lib/cloudCheckoutClient";
+import { cloudCheckoutHandoff, safePolarDestination } from "@/lib/cloudCheckoutClient";
 import { hasCheckoutReturnState } from "@/lib/urlPrivacy";
 
 export { safePolarDestination } from "@/lib/cloudCheckoutClient";
@@ -52,6 +52,7 @@ export function CloudCheckoutButton({
   const [note, setNote] = useState<string | null>(null);
   const busyRef = useRef(false);
   const startedRef = useRef(false);
+  const cloudHandoff = cloudCheckoutHandoff(plan);
 
   const begin = useCallback(async () => {
     if (busyRef.current) return;
@@ -90,10 +91,20 @@ export function CloudCheckoutButton({
   }, [plan, router]);
 
   useEffect(() => {
-    if (!autoStart || startedRef.current) return;
+    if (!autoStart || cloudHandoff || startedRef.current) return;
     startedRef.current = true;
     void begin();
-  }, [autoStart, begin]);
+  }, [autoStart, begin, cloudHandoff]);
+
+  if (cloudHandoff) {
+    return (
+      <div className="cloud-action">
+        <a className="capture-btn cloud-checkout-btn" href={cloudHandoff}>
+          {children}
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div className="cloud-action">

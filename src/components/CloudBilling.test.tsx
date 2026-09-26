@@ -29,6 +29,7 @@ afterEach(() => {
   navigation.push.mockReset();
   navigation.params = new URLSearchParams();
   globalThis.fetch = realFetch;
+  vi.unstubAllEnvs();
 });
 
 describe("Capture Cloud billing client", () => {
@@ -108,6 +109,18 @@ describe("Capture Cloud billing client", () => {
     await waitFor(() => expect(navigation.push).toHaveBeenCalledWith(
       "/login?next=%2Fpricing%3Fcheckout%3Dmonthly",
     ));
+  });
+
+  it("hands playground buyers to the dedicated Cloud login without calling playground billing", () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_URL", "https://cloud.trycapture.app");
+    globalThis.fetch = vi.fn();
+    render(<CloudCheckoutButton plan="yearly">Choose yearly</CloudCheckoutButton>);
+
+    const link = screen.getByRole("link", { name: "Choose yearly" });
+    expect(link.getAttribute("href")).toBe(
+      "https://cloud.trycapture.app/login?next=%2Fpricing%3Fcheckout%3Dyearly",
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it("resumes the selected checkout automatically after login", async () => {

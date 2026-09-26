@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/supabase/proxy", () => ({ refreshCloudSession: vi.fn(async () => NextResponse.next()) }));
+vi.mock("@/lib/supabase/proxy", () => ({
+  refreshCloudSession: vi.fn(async () => ({ response: NextResponse.next(), authenticated: false })),
+}));
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
 
 async function proxyFor(playground: string, publicSite: string, cloud: string, password = "") {
@@ -86,11 +88,14 @@ describe.each(deployments)("%s landing assets with a legacy password", (_label, 
 });
 
 describe("public-site proxy safety", () => {
-  it("keeps public Cloud landing, writing, and local app anonymous with the legacy password set", async () => {
+  it("keeps public Cloud landing and writing anonymous but sends its app to Cloud login", async () => {
     const proxy = await proxyFor("0", "1", "1", "private-password");
-    for (const path of ["/", "/app", "/writing", "/writing/example", "/api/cloud/subscription", "/api/cloud/board", "/api/sync"]) {
+    for (const path of ["/", "/writing", "/writing/example", "/api/cloud/subscription", "/api/cloud/board", "/api/sync"]) {
       expect((await proxy(request(path))).status, path).toBe(200);
     }
+    const app = await proxy(request("/app"));
+    expect(app.status).toBe(307);
+    expect(app.headers.get("location")).toBe("https://capture.test/login?next=%2Fapp");
   });
 
   it.each([["public Cloud", "1", "1"], ["private Cloud", "0", "1"], ["public without Cloud", "1", "0"]])(
@@ -125,6 +130,10 @@ describe("public-site proxy safety", () => {
     for (const path of ["/api/cloud/board", "/api/cloud/subscription", "/api/sync", "/api/img/x", "/api/tts", "/api/transcribe", "/api/report"]) {
       expect((await proxy(request(path))).status, path).toBe(404);
     }
+    const app = await proxy(request("/app"));
+    expect(app.status).toBe(200);
+    expect(app.headers.get("x-middleware-next")).toBe("1");
+    expect(app.headers.get("location")).toBeNull();
   });
 
   it("self-hosted default retains private services and its password boundary", async () => {

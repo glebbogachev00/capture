@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   checkoutPlanFromNext,
   cloudCheckoutDestinationAfterLogin,
+  cloudCheckoutHandoff,
 } from "@/lib/cloudCheckoutClient";
 
 describe("Cloud checkout continuation", () => {
@@ -11,6 +12,22 @@ describe("Cloud checkout continuation", () => {
     expect(checkoutPlanFromNext("/pricing?checkout=enterprise")).toBeNull();
     expect(checkoutPlanFromNext("https://evil.test/pricing?checkout=yearly")).toBeNull();
     expect(checkoutPlanFromNext("//evil.test/pricing?checkout=yearly")).toBeNull();
+  });
+
+  it("builds a safe playground-to-Cloud login handoff", () => {
+    expect(cloudCheckoutHandoff("monthly", "https://cloud.trycapture.app")).toBe(
+      "https://cloud.trycapture.app/login?next=%2Fpricing%3Fcheckout%3Dmonthly",
+    );
+    expect(cloudCheckoutHandoff("yearly", "https://preview.vercel.app/")).toBe(
+      "https://preview.vercel.app/login?next=%2Fpricing%3Fcheckout%3Dyearly",
+    );
+  });
+
+  it("rejects an unsafe or non-origin Cloud handoff configuration", () => {
+    expect(cloudCheckoutHandoff("monthly", "http://cloud.trycapture.app")).toBeNull();
+    expect(cloudCheckoutHandoff("monthly", "https://user:pass@cloud.trycapture.app")).toBeNull();
+    expect(cloudCheckoutHandoff("monthly", "https://cloud.trycapture.app/app")).toBeNull();
+    expect(cloudCheckoutHandoff("monthly", "https://cloud.trycapture.app/?next=evil")).toBeNull();
   });
 
   it("continues directly to Polar after OTP instead of returning to pricing", async () => {
