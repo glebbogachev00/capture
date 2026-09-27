@@ -627,7 +627,7 @@ export function Capture() {
               ))}
             </div>
           )}
-          {trial && <TrialMeter trial={trial} />}
+          {trial && <TrialMeter trial={trial} showCloudUpgrade={!PLAYGROUND} />}
           <div className="cap-bar">
             <button
               className="icon-btn"

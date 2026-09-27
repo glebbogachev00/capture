@@ -14,7 +14,7 @@ describe("PlaygroundNotice trial boundary", () => {
     expect(screen.getByText("Choose where to keep your board")).toBeTruthy();
     expect(screen.getByText(/This playground stays in this browser/i)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Use Capture Cloud" }).getAttribute("href"))
-      .toBe("https://cloud.trycapture.app/login?next=%2Fapp");
+      .toBe("https://cloud.trycapture.app/pricing");
     expect(screen.getByRole("link", { name: "Install Capture" }).getAttribute("href"))
       .toBe("/install");
     expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();

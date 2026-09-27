@@ -4,6 +4,7 @@ import {
   cloudCheckoutDestinationAfterLogin,
   cloudCheckoutHandoff,
   cloudLoginHandoff,
+  cloudPricingHandoff,
 } from "@/lib/cloudCheckoutClient";
 
 describe("Cloud checkout continuation", () => {
@@ -37,6 +38,14 @@ describe("Cloud checkout continuation", () => {
     );
     expect(cloudLoginHandoff("http://cloud.trycapture.app")).toBeNull();
     expect(cloudLoginHandoff("https://cloud.trycapture.app/app")).toBeNull();
+  });
+
+  it("sends undecided playground visitors to Cloud pricing before login", () => {
+    expect(cloudPricingHandoff("https://cloud.trycapture.app")).toBe(
+      "https://cloud.trycapture.app/pricing",
+    );
+    expect(cloudPricingHandoff("http://cloud.trycapture.app")).toBeNull();
+    expect(cloudPricingHandoff("https://cloud.trycapture.app/app")).toBeNull();
   });
 
   it("continues directly to Polar after OTP instead of returning to pricing", async () => {
