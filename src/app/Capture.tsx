@@ -34,6 +34,7 @@ import { appendDictationTranscript } from "@/lib/voiceSource";
 import { get, set } from "@/lib/storage";
 import { shrinkFile } from "@/lib/shrink";
 import { type Action, fmt, uid } from "@/lib/model";
+import { CaptureReceipt } from "@/components/CaptureReceipt";
 import {
   IntentionCard,
   IntentionDetail,
@@ -146,6 +147,7 @@ export function Capture() {
     busy,
     err,
     landed,
+    landedLines,
     landedIds,
     summarising,
     suggestion,
@@ -706,18 +708,12 @@ export function Capture() {
         )}
         {err && <div className="err">{err}</div>}
         {landed && (
-          <div className="landed">
-            {/* Wrapped in a span so the flex row keeps the sentence whole
-                and only the button sits on its own. */}
-            <span>
-              Landed in <em>{landed}</em>.
-            </span>
-            {canUndo && (
-              <button className="undo-btn" onClick={() => void undo()}>
-                Undo
-              </button>
-            )}
-          </div>
+          <CaptureReceipt
+            receipt={landed}
+            lines={landedLines}
+            canUndo={canUndo}
+            onUndo={() => void undo()}
+          />
         )}
         {/* The undo asked a question. One tap answers it: the capture is
             sorted again with that destination pinned, and the pair — wrong

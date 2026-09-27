@@ -82,7 +82,7 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
         const destination = await cloudCheckoutDestinationAfterLogin(nextPath);
         window.location.href = destination;
       } catch {
-        setError("You’re signed in, but checkout could not open. Try again.");
+        setError("You’re signed in. Open Capture and try again.");
       }
     } catch {
       setError("We couldn't verify that code. Request a new one.");

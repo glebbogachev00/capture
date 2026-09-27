@@ -2,7 +2,8 @@ import Link from "next/link";
 import { utilityMetadata } from "@/lib/seo";
 import { CloudCheckoutButton } from "@/components/CloudBilling";
 import { SiteNav } from "@/components/SiteNav";
-import { CLOUD_PRICING_SECTION_ID } from "@/lib/cloudCheckoutClient";
+import { CLOUD_PRICING_SECTION_ID, cloudAccountHandoff } from "@/lib/cloudCheckoutClient";
+import { PLAYGROUND } from "@/lib/playground";
 import { PUBLIC_SITE } from "@/lib/publicSite";
 import { siteHome } from "@/lib/seo";
 
@@ -75,6 +76,11 @@ export default async function PricingPage({
   const params = searchParams ? await searchParams : undefined;
   const checkout = params?.checkout;
   const resumePlan = checkout === "monthly" || checkout === "yearly" ? checkout : null;
+  const cloudLoginHref = process.env.CAPTURE_CLOUD === "1"
+    ? "/app"
+    : PLAYGROUND
+      ? cloudAccountHandoff()
+      : null;
 
   return (
     <main className="capture-root site-page funding-page">
@@ -94,6 +100,11 @@ export default async function PricingPage({
             system stays free and open source. Cloud exists for people who want
             the managed path.
           </p>
+          {cloudLoginHref && (
+            <p className="funding-login">
+              <Link href={cloudLoginHref}>Log in to Capture Cloud</Link>
+            </p>
+          )}
         </section>
 
         <section className="funding-card funding-rule-card">

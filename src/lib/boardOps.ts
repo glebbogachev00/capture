@@ -63,6 +63,9 @@ export type Applied = {
   next: Board;
   targetId: string | null;
   landed: string;
+  /** Structured receipt copy. Unlike `landed`, names containing the visual
+      separator remain one destination. */
+  landedLines: string[];
   source: LandedSource | null;
   /** Ids of everything this capture just created — the rows and cards the
       UI washes with the landed glow, so you see WHERE it went and not only
@@ -129,6 +132,7 @@ function foldAlso(
   const alsoLanded: Applied["alsoLanded"] = [];
   const landedIds = [...applied.landedIds];
   const names: string[] = [];
+  const destinationLines: string[] = [];
 
   for (const piece of pieces) {
     const frag: Frag = { id: uid(), at, text: piece.text.trim(), imgs: [] };
@@ -138,6 +142,7 @@ function foldAlso(
       : undefined;
     if (home) {
       names.push(home.name);
+      destinationLines.push(`Added to thread: ${home.name}`);
       alsoLanded.push({ threadId: home.id, fragId: frag.id, text: frag.text });
       board = {
         ...board,
@@ -156,6 +161,7 @@ function foldAlso(
       frags: [frag],
     };
     names.push(fresh.name);
+    destinationLines.push(`New thread: ${fresh.name}`);
     landedIds.push(fresh.id);
     alsoLanded.push({ threadId: fresh.id, fragId: frag.id, text: frag.text });
     board = { ...board, threads: [fresh, ...board.threads] };
@@ -170,6 +176,7 @@ function foldAlso(
     /* The banner names every place it went, because "landed somewhere" is
        exactly the doubt a split creates. */
     landed: applied.landed + names.map((n) => " · " + n).join(""),
+    landedLines: [...applied.landedLines, ...destinationLines],
   };
 }
 
@@ -244,6 +251,10 @@ function applyPrimary(
       " action" +
       (items.length > 1 ? "s" : "") +
       (span ? " · fades in " + left(span) : " · kept");
+    const plainLines = [
+      count(items.length, "action"),
+      ...(span ? [`Available for ${left(span)}`] : []),
+    ];
     return {
       next: { ...board, actions: [...items, ...board.actions], threads },
       targetId: shotThreadId,
@@ -262,6 +273,9 @@ function applyPrimary(
           " · picture kept in " +
           (shotHome ? shotHome.name : threads[0].name)
         : plain,
+      landedLines: shotFrag
+        ? [...plainLines, `Picture saved in: ${shotHome ? shotHome.name : threads[0].name}`]
+        : plainLines,
     };
   }
 
@@ -323,6 +337,10 @@ function applyPrimary(
       landed:
         count(items.length, "action") +
         (home ? " · a layer on " + homeName : " · a new thread — " + homeName),
+      landedLines: [
+        count(items.length, "action"),
+        home ? `Added to thread: ${homeName}` : `New thread: ${homeName}`,
+      ],
     };
   }
 
@@ -340,6 +358,7 @@ function applyPrimary(
       source: { kind: "thread", id: existing.id, fragId: frag.id },
       landedIds: [existing.id],
       landed: existing.name + " · a new layer",
+      landedLines: [`Added to thread: ${existing.name}`],
     };
   }
   const fresh: Thread = {
@@ -354,6 +373,7 @@ function applyPrimary(
     source: { kind: "thread", id: fresh.id, fragId: frag.id },
     landedIds: [fresh.id],
     landed: fresh.name + " · a new thread",
+    landedLines: [`New thread: ${fresh.name}`],
   };
 }
 

@@ -52,6 +52,21 @@ describe("a capture that is about two subjects", () => {
     expect(landed).toContain("Capture.");
   });
 
+  it("keeps a Thread name containing the display separator as one receipt destination", () => {
+    const before = board();
+    before.threads[1] = { ...before.threads[1], name: "Capture · launch" };
+    const out: SortResult = {
+      ...base,
+      primaryText: "Retake takes a while to render on this machine.",
+      also: [{ text: "Capture launch needs a checklist.", threadId: "t-capture" }],
+    };
+
+    expect(applySorted(out, [], 1, before).landedLines).toEqual([
+      "Added to thread: Retake",
+      "Added to thread: Capture · launch",
+    ]);
+  });
+
   it("opens a thread when the second subject has no home yet", () => {
     const out: SortResult = {
       ...base,
