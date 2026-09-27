@@ -42,7 +42,7 @@ describe("Cloud checkout continuation", () => {
 
   it("sends undecided playground visitors to Cloud pricing before login", () => {
     expect(cloudPricingHandoff("https://cloud.trycapture.app")).toBe(
-      "https://cloud.trycapture.app/pricing",
+      "https://cloud.trycapture.app/pricing#plans",
     );
     expect(cloudPricingHandoff("http://cloud.trycapture.app")).toBeNull();
     expect(cloudPricingHandoff("https://cloud.trycapture.app/app")).toBeNull();
