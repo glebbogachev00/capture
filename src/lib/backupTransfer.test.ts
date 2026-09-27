@@ -233,6 +233,31 @@ describe("backup v3 restore", () => {
     expect(events.indexOf("local")).toBeGreaterThan(events.indexOf("put"));
   });
 
+  it("does not turn confirmed Cloud and local success into a false restore failure", async () => {
+    const backup = { ...v3(), scope: { kind: "local" as const } };
+    let cloud: SyncState = { board: EMPTY, tombstones: [] };
+    let localCommitted = false;
+    let assertionsAfterCommit = 0;
+    const authority = cloudAuthority();
+    authority.assertCurrent = vi.fn(() => {
+      if (localCommitted && ++assertionsAfterCommit > 1) {
+        throw new Error("owner changed after the completed local commit");
+      }
+    });
+
+    const result = await restoreBackupV3(backup, {
+      authority,
+      currentState: { board: EMPTY, tombstones: [] },
+      readCloudState: async () => cloud,
+      uploadCloudImage: async () => {},
+      putCloudState: async (state) => { cloud = state; },
+      commitLocal: async () => { localCommitted = true; },
+    });
+
+    expect(result.state.board.actions.map((item) => item.id)).toContain("action");
+    expect(assertionsAfterCommit).toBe(1);
+  });
+
   it.each([
     [100, 500],
     [500, 100],

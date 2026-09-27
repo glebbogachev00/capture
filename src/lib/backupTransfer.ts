@@ -301,7 +301,6 @@ export async function restoreBackupV3(parsed: unknown, options: RestoreBackupV3O
     }
     throw error;
   }
-  options.authority.assertCurrent();
   emit(options.onProgress, "ready", imageEntries.length, imageEntries.length);
   return {
     state: current,
