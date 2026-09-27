@@ -21,7 +21,7 @@ it("keeps the real Settings screen open when Back is pressed during restore", as
   const view = render(<Capture />);
   await screen.findByText("No open loops.");
   fireEvent.click(screen.getByRole("button", { name: "Settings and backup" }));
-  fireEvent.click(screen.getByRole("button", { name: "Show Restore" }));
+  fireEvent.click(screen.getByRole("button", { name: "Show Your data" }));
 
   let finish!: (text: string) => void;
   const file = new File([""], "held-backup.json", { type: "application/json" });
@@ -30,14 +30,16 @@ it("keeps the real Settings screen open when Back is pressed during restore", as
   });
   const input = view.container.querySelector<HTMLInputElement>('input[accept="application/json,.json"]')!;
   fireEvent.change(input, { target: { files: [file] } });
-  await screen.findByText("Opening backup…");
+  expect(await screen.findAllByText("Opening backup…")).toHaveLength(2);
 
   fireEvent.click(screen.getByRole("button", { name: "← back" }));
   expect(screen.getByText("Settings")).toBeTruthy();
   expect(screen.getByText(/Restore is still finishing/)).toBeTruthy();
 
   finish("not json");
-  await screen.findByText(/isn't readable as JSON/);
+  await screen.findByText("Backup not restored");
+  expect(screen.getByText("This file is not a complete, readable Capture backup.")).toBeTruthy();
+  expect(screen.queryByText(/isn't readable as JSON/)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "← back" }));
   await waitFor(() => expect(screen.queryByText("Settings")).toBeNull());
 });

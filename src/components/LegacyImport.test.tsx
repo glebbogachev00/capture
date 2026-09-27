@@ -17,6 +17,15 @@ beforeEach(async () => {
   await createStorage(new OwnershipLifetime()).set(KEY, JSON.stringify({ ...EMPTY, actions: [{ id: "secret", text: "DO NOT PREVIEW", at: 1 }] }));
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+it("hides the one-time earlier-board control when this browser has nothing to migrate", async () => {
+  const owner = life();
+  vi.spyOn(ownership, "getDocumentLifetime").mockReturnValue(owner);
+  const databases = vi.spyOn(indexedDB, "databases").mockResolvedValue([]);
+  render(<LegacyImportSettings />);
+  await waitFor(() => expect(databases).toHaveBeenCalled());
+  expect(screen.queryByText("Earlier device board")).toBeNull();
+  expect(screen.queryByRole("link", { name: "Import earlier local board" })).toBeNull();
+});
 it("Settings retains the import entry after deferral and exposes a downloadable original snapshot after import", async () => {
   const owner = life();
   vi.spyOn(ownership, "getDocumentLifetime").mockReturnValue(owner);

@@ -140,9 +140,11 @@ try:
     """)
     sql((root / "supabase/migrations/20260922200000_image_storage_admissions.sql").read_text())
     sql((root / "supabase/migrations/20260922400000_complimentary_cloud_access.sql").read_text())
+    sql((root / "supabase/migrations/20260926230000_account_erasure_readonly_fence.sql").read_text())
     # The additive migration must be safe to replay during controlled hosted
     # recovery and must leave one stable policy/function contract.
     sql((root / "supabase/migrations/20260922400000_complimentary_cloud_access.sql").read_text())
+    sql((root / "supabase/migrations/20260926230000_account_erasure_readonly_fence.sql").read_text())
 
     sql(f"""
       insert into auth.users values('{owner}'),('{other}'),('{third}'),('{race_owner}');
@@ -900,6 +902,11 @@ set role service_role;
     # authenticated SELECTs exercise the same RLS semantics exposed by direct
     # PostgREST table reads, not only the application route.
     assert sql(f"set role authenticated; set request.jwt.claim.sub='{owner}'; select rev from public.capture_boards where user_id='{owner}';").splitlines()[-1] == "1"
+    assert sql(
+        f"begin read only; set role authenticated; set request.jwt.claim.role='authenticated'; "
+        f"set request.jwt.claim.sub='{owner}'; select rev from public.capture_boards "
+        f"where user_id='{owner}'; commit;"
+    ) == "BEGIN\nSET\nSET\nSET\n1\nCOMMIT"
     assert sql(f"set role authenticated; set request.jwt.claim.sub='{owner}'; select count(*) from public.capture_cloud_subscriptions where user_id='{owner}';").splitlines()[-1] == "1"
     assert sql(f"set role authenticated; set request.jwt.claim.sub='{owner}'; select count(*) from public.capture_image_publications where user_id='{owner}' and image_id='photo';").splitlines()[-1] == "1"
     assert sql(f"set role authenticated; set request.jwt.claim.sub='{owner}'; select name from storage.objects where name='{owner}/photo';").splitlines()[-1] == f"{owner}/photo"
@@ -976,6 +983,11 @@ set role service_role;
         assert output.splitlines()[-1] == "0"
       else:
         assert output == "SET\nSET"
+    assert sql(
+        f"begin read only; set role authenticated; set request.jwt.claim.role='authenticated'; "
+        f"set request.jwt.claim.sub='{owner}'; select rev from public.capture_boards "
+        f"where user_id='{owner}'; commit;"
+    ) == "BEGIN\nSET\nSET\nSET\nCOMMIT"
     assert "owner unavailable" in sql(f"set role authenticated; set request.jwt.claim.sub='{owner}'; select public.consume_capture_cloud_quota('board_write');", ok=False)
     assert sql(f"set role authenticated; set request.jwt.claim.sub='{other}'; update public.capture_boards set rev=99 where user_id='{owner}';") == "SET\nSET\nUPDATE 0"
 

@@ -30,7 +30,7 @@ The shell contains no account board, images, or verified identity. `OwnershipBou
 
 ## Explicit earlier-board import
 
-After online sign-in, the entry gate checks database names for the legacy `capture` database. It does not open or preview that board to show the invitation. The invitation names the destination account ID. A checkbox confirms access before **Import my local board** is enabled. **Not now** persists in the account namespace. Settings → Restore retains an explicit import link.
+After online sign-in, the entry gate checks database names for the legacy `capture` database. It does not open or preview that board to show the invitation. The invitation names the destination account ID. A checkbox confirms access before **Import my local board** is enabled. **Not now** persists in the account namespace. Settings → Your data retains an explicit import link when an earlier board is detected.
 
 The importer performs no HTTP requests and does not require a paid plan. The gate runs before board hydration and sync in the importing document.
 

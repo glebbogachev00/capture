@@ -426,7 +426,7 @@ it("reports a legacy restore transaction failure and reloads the unchanged durab
   await act(async () => { await a.result.current.restoreFromFile(file); });
 
   expect(a.result.current.ioNote).toMatchObject({ ok: false });
-  expect(a.result.current.ioNote?.text).toMatch(/disk full|save|transaction/i);
+  expect(a.result.current.ioNote?.text).toMatch(/storage|save/i);
   expect(JSON.stringify(a.result.current.data)).not.toContain("legacy-restored");
   expect(await a.storage.get(KEY)).toBe(prior);
   expect(await a.storage.get(IMG("legacy-photo"))).toBeNull();

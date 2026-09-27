@@ -152,6 +152,8 @@ import {
 } from "@/lib/sync";
 import type { SyncStore } from "@/lib/syncStore";
 import type { Draft, IoNote } from "@/app/Intentions";
+import { backupRestoreCloudSavedNotice, backupRestoreCloudUnconfirmedNotice, backupRestoreFailureNotice, backupRestoreSuccessNotice } from "@/lib/backupRestoreNotice";
+import { CloudRestoreLocalCacheError, CloudRestoreOutcomeUnknownError } from "@/lib/backupTransfer";
 import {
   mergeCorrections,
   mergeLedgers,
@@ -3635,12 +3637,11 @@ export function useBoard(now: number) {
           restored.intentions + restored.principles;
         const historyAdded = restored.ledger + restored.corrections + restored.wraps + restored.completions;
         const added = contentAdded + historyAdded + restored.profile;
-        setIoNote({
-          text: added
-            ? `Restored ${count(restored.actions, "action")}, ${count(restored.threads, "thread")}, ${count(restored.fragments, "fragment")}, ${count(restored.intentions, "intention")}, ${count(restored.principles, "principle")} and ${count(historyAdded, "history record")}. Verified ${count(Object.keys(restored.images).length, "image")}.`
-            : `That complete backup is already restored. Verified ${count(Object.keys(restored.images).length, "image")}.`,
-          ok: true,
-        });
+        setIoNote(backupRestoreSuccessNotice({
+          actions: restored.actions, threads: restored.threads, fragments: restored.fragments,
+          intentions: restored.intentions, principles: restored.principles,
+          history: historyAdded, images: Object.keys(restored.images).length, added,
+        }, lifetime.cloud ? "cloud" : "local"));
         pushAfterRestore = !lifetime.cloud;
         return;
       }
@@ -3666,7 +3667,11 @@ export function useBoard(now: number) {
         ok: true,
       });
     } catch (error) {
-      setIoNote({ text: error instanceof Error ? error.message : "Could not read that file.", ok: false });
+      setIoNote(error instanceof CloudRestoreLocalCacheError
+        ? backupRestoreCloudSavedNotice()
+        : error instanceof CloudRestoreOutcomeUnknownError
+          ? backupRestoreCloudUnconfirmedNotice()
+          : backupRestoreFailureNotice(error));
     } finally {
       backupGate.current.finish(operation);
       setIoBusy(null);

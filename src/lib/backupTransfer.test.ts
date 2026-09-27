@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { BACKUP_APP, type CaptureBackupV3 } from "./backup";
 import {
+  CloudRestoreLocalCacheError,
+  CloudRestoreOutcomeUnknownError,
   exportBackupV3,
   restoreBackupV3,
   type BackupAuthority,
@@ -173,8 +175,8 @@ describe("backup v3 export", () => {
 });
 
 describe("backup v3 restore", () => {
-  it("restores a complete backup into a clean exact-owner Cloud account, uploads all media before PUT, verifies readback, then commits locally", async () => {
-    const backup = v3();
+  it("imports a complete local backup into the verified Cloud owner, uploads all media before PUT, verifies readback, then commits locally", async () => {
+    const backup = { ...v3(), scope: { kind: "local" as const } };
     const events: string[] = [];
     let cloud: SyncState = { board: EMPTY, tombstones: [] };
     const commitLocal = vi.fn(async (state: SyncState, images: Record<string, string>) => {
@@ -209,6 +211,51 @@ describe("backup v3 restore", () => {
     expect(events.indexOf("put")).toBeGreaterThan(events.findLastIndex((event) => event.startsWith("image:")));
     expect(events.at(-1)).toBe("local");
     expect(events.filter((event) => event === "get")).toHaveLength(2);
+  });
+
+  it("reports verified Cloud success separately when the local cache commit fails", async () => {
+    const backup = { ...v3(), scope: { kind: "local" as const } };
+    const events: string[] = [];
+    let cloud: SyncState = { board: EMPTY, tombstones: [] };
+
+    await expect(restoreBackupV3(backup, {
+      authority: cloudAuthority(),
+      currentState: { board: EMPTY, tombstones: [] },
+      readCloudState: async () => { events.push("get"); return cloud; },
+      uploadCloudImage: async () => { events.push("image"); },
+      putCloudState: async (state) => { events.push("put"); cloud = state; },
+      commitLocal: async () => { events.push("local"); throw new DOMException("Disk full", "QuotaExceededError"); },
+    })).rejects.toBeInstanceOf(CloudRestoreLocalCacheError);
+
+    expect(cloud.board.actions.map((item) => item.id)).toContain("action");
+    expect(events).toEqual(expect.arrayContaining(["image", "put", "local"]));
+    expect(events.filter((event) => event === "get")).toHaveLength(2);
+    expect(events.indexOf("local")).toBeGreaterThan(events.indexOf("put"));
+  });
+
+  it("does not turn confirmed Cloud and local success into a false restore failure", async () => {
+    const backup = { ...v3(), scope: { kind: "local" as const } };
+    let cloud: SyncState = { board: EMPTY, tombstones: [] };
+    let localCommitted = false;
+    let assertionsAfterCommit = 0;
+    const authority = cloudAuthority();
+    authority.assertCurrent = vi.fn(() => {
+      if (localCommitted && ++assertionsAfterCommit > 1) {
+        throw new Error("owner changed after the completed local commit");
+      }
+    });
+
+    const result = await restoreBackupV3(backup, {
+      authority,
+      currentState: { board: EMPTY, tombstones: [] },
+      readCloudState: async () => cloud,
+      uploadCloudImage: async () => {},
+      putCloudState: async (state) => { cloud = state; },
+      commitLocal: async () => { localCommitted = true; },
+    });
+
+    expect(result.state.board.actions.map((item) => item.id)).toContain("action");
+    expect(assertionsAfterCommit).toBe(1);
   });
 
   it.each([
@@ -448,7 +495,29 @@ describe("backup v3 restore", () => {
       uploadCloudImage: async () => {},
       putCloudState: async (state: SyncState) => { written = state; },
       commitLocal,
-    })).rejects.toThrow(/could not be verified/i);
+    })).rejects.toBeInstanceOf(CloudRestoreOutcomeUnknownError);
+    expect(commitLocal).not.toHaveBeenCalled();
+  });
+
+  it("reports an unknown outcome when Cloud commits but the required readback fails", async () => {
+    const backup = { ...v3(), scope: { kind: "local" as const } };
+    let reads = 0;
+    let cloud: SyncState = { board: EMPTY, tombstones: [] };
+    const commitLocal = vi.fn();
+
+    await expect(restoreBackupV3(backup, {
+      authority: cloudAuthority(),
+      currentState: { board: EMPTY, tombstones: [] },
+      readCloudState: async () => {
+        if (reads++ === 0) return cloud;
+        throw new Error("response lost after Cloud committed");
+      },
+      uploadCloudImage: async () => {},
+      putCloudState: async (state) => { cloud = state; },
+      commitLocal,
+    })).rejects.toBeInstanceOf(CloudRestoreOutcomeUnknownError);
+
+    expect(cloud.board.actions.map((item) => item.id)).toContain("action");
     expect(commitLocal).not.toHaveBeenCalled();
   });
 

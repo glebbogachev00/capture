@@ -181,7 +181,10 @@ export function createBackupClient(lifetime: OwnershipLifetime) {
       // must not retire healthy tabs or touch an account namespace.
       parseBackupV3(parsed);
       const owner = authority();
-      if (owner.kind === "cloud") lifetime.beginImport();
+      if (owner.kind === "cloud") {
+        await lifetime.waitUntilOnline();
+        lifetime.beginImport();
+      }
       try {
         return await restoreBackupV3(parsed, {
           authority: owner,
