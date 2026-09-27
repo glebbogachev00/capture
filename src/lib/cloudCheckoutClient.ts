@@ -59,6 +59,15 @@ export function cloudLoginHandoff(
   return cloud.toString();
 }
 
+export function cloudPricingHandoff(
+  configuredCloudUrl: string | undefined = process.env.NEXT_PUBLIC_CLOUD_URL,
+): string | null {
+  const cloud = safeCloudOrigin(configuredCloudUrl);
+  if (!cloud) return null;
+  cloud.pathname = "/pricing";
+  return cloud.toString();
+}
+
 async function responseBody(response: Response): Promise<Record<string, unknown>> {
   try {
     const value = await response.json();

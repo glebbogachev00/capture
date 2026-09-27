@@ -21,6 +21,13 @@ describe("daily trial meter", () => {
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("14");
     expect(container.querySelectorAll(".trial-meter-step")).toHaveLength(15);
     expect(container.querySelectorAll(".trial-meter-step.is-used")).toHaveLength(14);
+    expect(screen.queryByRole("link", { name: "See Capture Cloud" })).toBeNull();
+  });
+
+  it("gives a signed-in free Cloud board a direct path to pricing", () => {
+    render(<TrialMeter trial={trial(15)} showCloudUpgrade />);
+    expect(screen.getByRole("link", { name: "See Capture Cloud" }).getAttribute("href"))
+      .toBe("/pricing");
   });
 
   it("shows the reset and self-install path after the fifteenth capture", () => {
@@ -32,5 +39,11 @@ describe("daily trial meter", () => {
     expect(screen.getByText(/resets tomorrow/i)).toBeTruthy();
     expect(screen.getByRole("link", { name: /install your own/i }).getAttribute("href"))
       .toBe("/install");
+  });
+
+  it("keeps the Cloud pricing path visible when the signed-in trial is exhausted", () => {
+    render(<TrialMeter trial={trial(0)} showCloudUpgrade />);
+    expect(screen.getByRole("link", { name: "See Capture Cloud" }).getAttribute("href"))
+      .toBe("/pricing");
   });
 });

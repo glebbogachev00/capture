@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { TRIAL_LIMIT, type TrialState } from "@/lib/playground";
 
-export function TrialMeter({ trial }: { trial: TrialState }) {
+export function TrialMeter({
+  trial,
+  showCloudUpgrade = false,
+}: {
+  trial: TrialState;
+  showCloudUpgrade?: boolean;
+}) {
   const used = TRIAL_LIMIT - trial.remaining;
   return (
     <div
@@ -35,6 +41,11 @@ export function TrialMeter({ trial }: { trial: TrialState }) {
         ))}
       </span>
       <strong className="trial-meter-count">{used} / {TRIAL_LIMIT} used</strong>
+      {showCloudUpgrade && (
+        <span className="trial-meter-next">
+          <Link href="/pricing">See Capture Cloud</Link>
+        </span>
+      )}
       {trial.exhausted && (
         <span className="trial-meter-next">
           Resets tomorrow · <Link href="/install">Install your own</Link>
