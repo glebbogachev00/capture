@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   backupRestoreCloudSavedNotice,
+  backupRestoreCloudUnconfirmedNotice,
   backupRestoreFailureNotice,
   backupRestoreSuccessNotice,
 } from "./backupRestoreNotice";
@@ -43,6 +44,16 @@ describe("backup restore notices", () => {
       text: "This device could not refresh its local copy. Reload Capture to open the restored board.",
       ok: true,
     });
+  });
+
+  it("does not claim the board is unchanged when the Cloud outcome is unknown", () => {
+    const notice = backupRestoreCloudUnconfirmedNotice();
+    expect(notice).toEqual({
+      title: "Check Capture Cloud before retrying",
+      text: "Capture could not confirm whether the restore finished. Reload Capture and check your board before trying this backup again.",
+      ok: false,
+    });
+    expect(JSON.stringify(notice)).not.toMatch(/not restored|was not changed/i);
   });
 
   it("never exposes internal account-verification errors", () => {

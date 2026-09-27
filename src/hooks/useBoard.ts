@@ -152,8 +152,8 @@ import {
 } from "@/lib/sync";
 import type { SyncStore } from "@/lib/syncStore";
 import type { Draft, IoNote } from "@/app/Intentions";
-import { backupRestoreCloudSavedNotice, backupRestoreFailureNotice, backupRestoreSuccessNotice } from "@/lib/backupRestoreNotice";
-import { CloudRestoreLocalCacheError } from "@/lib/backupTransfer";
+import { backupRestoreCloudSavedNotice, backupRestoreCloudUnconfirmedNotice, backupRestoreFailureNotice, backupRestoreSuccessNotice } from "@/lib/backupRestoreNotice";
+import { CloudRestoreLocalCacheError, CloudRestoreOutcomeUnknownError } from "@/lib/backupTransfer";
 import {
   mergeCorrections,
   mergeLedgers,
@@ -3669,7 +3669,9 @@ export function useBoard(now: number) {
     } catch (error) {
       setIoNote(error instanceof CloudRestoreLocalCacheError
         ? backupRestoreCloudSavedNotice()
-        : backupRestoreFailureNotice(error));
+        : error instanceof CloudRestoreOutcomeUnknownError
+          ? backupRestoreCloudUnconfirmedNotice()
+          : backupRestoreFailureNotice(error));
     } finally {
       backupGate.current.finish(operation);
       setIoBusy(null);

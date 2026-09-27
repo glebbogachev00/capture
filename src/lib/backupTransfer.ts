@@ -66,6 +66,16 @@ export class CloudRestoreLocalCacheError extends Error {
   }
 }
 
+/** A Cloud board PUT began, but the client could not prove its final result.
+ * The restore may already be present, so callers must tell the user to inspect
+ * the reloaded Cloud board before retrying. */
+export class CloudRestoreOutcomeUnknownError extends Error {
+  constructor() {
+    super("Capture could not confirm the final Capture Cloud restore state.");
+    this.name = "CloudRestoreOutcomeUnknownError";
+  }
+}
+
 async function guarded<T>(authority: BackupAuthority, operation: () => Promise<T>): Promise<T> {
   authority.assertCurrent();
   const result = await operation();
@@ -260,13 +270,24 @@ export async function restoreBackupV3(parsed: unknown, options: RestoreBackupV3O
       await guarded(options.authority, () => options.uploadCloudImage!(id, src));
       emit(options.onProgress, "uploading", ++completed, imageEntries.length);
     }
+    // Once this PUT starts, a rejected response cannot prove that Cloud stayed
+    // unchanged: the server may have committed before the response was lost.
+    // Treat every later failure as an unknown outcome until readback confirms
+    // the planned state.
     options.authority.assertCurrent();
-    await guarded(options.authority, () => options.putCloudState!(planned));
-    const readback = await guarded(options.authority, options.readCloudState!);
-    if (!containsState(readback, planned)) {
-      throw new Error("Cloud restore could not be verified. Your prior local board is unchanged.");
+    try {
+      await options.putCloudState!(planned);
+      options.authority.assertCurrent();
+      const readback = await options.readCloudState!();
+      options.authority.assertCurrent();
+      if (!containsState(readback, planned)) {
+        throw new CloudRestoreOutcomeUnknownError();
+      }
+      current = readback;
+    } catch (error) {
+      if (error instanceof CloudRestoreOutcomeUnknownError) throw error;
+      throw new CloudRestoreOutcomeUnknownError();
     }
-    current = readback;
   } else {
     current = planned;
   }

@@ -65,6 +65,14 @@ export function backupRestoreCloudSavedNotice(): BackupRestoreNotice {
   };
 }
 
+export function backupRestoreCloudUnconfirmedNotice(): BackupRestoreNotice {
+  return {
+    title: "Check Capture Cloud before retrying",
+    text: "Capture could not confirm whether the restore finished. Reload Capture and check your board before trying this backup again.",
+    ok: false,
+  };
+}
+
 export function backupRestoreFailureNotice(error: unknown): BackupRestoreNotice {
   const message = error instanceof Error ? error.message : "";
   const name = error instanceof Error ? error.name : "";

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BACKUP_APP, type CaptureBackupV3 } from "./backup";
 import {
   CloudRestoreLocalCacheError,
+  CloudRestoreOutcomeUnknownError,
   exportBackupV3,
   restoreBackupV3,
   type BackupAuthority,
@@ -469,7 +470,29 @@ describe("backup v3 restore", () => {
       uploadCloudImage: async () => {},
       putCloudState: async (state: SyncState) => { written = state; },
       commitLocal,
-    })).rejects.toThrow(/could not be verified/i);
+    })).rejects.toBeInstanceOf(CloudRestoreOutcomeUnknownError);
+    expect(commitLocal).not.toHaveBeenCalled();
+  });
+
+  it("reports an unknown outcome when Cloud commits but the required readback fails", async () => {
+    const backup = { ...v3(), scope: { kind: "local" as const } };
+    let reads = 0;
+    let cloud: SyncState = { board: EMPTY, tombstones: [] };
+    const commitLocal = vi.fn();
+
+    await expect(restoreBackupV3(backup, {
+      authority: cloudAuthority(),
+      currentState: { board: EMPTY, tombstones: [] },
+      readCloudState: async () => {
+        if (reads++ === 0) return cloud;
+        throw new Error("response lost after Cloud committed");
+      },
+      uploadCloudImage: async () => {},
+      putCloudState: async (state) => { cloud = state; },
+      commitLocal,
+    })).rejects.toBeInstanceOf(CloudRestoreOutcomeUnknownError);
+
+    expect(cloud.board.actions.map((item) => item.id)).toContain("action");
     expect(commitLocal).not.toHaveBeenCalled();
   });
 
