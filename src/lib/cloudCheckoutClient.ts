@@ -1,6 +1,8 @@
 import type { PolarPlan } from "@/lib/polar";
 import { safeNext } from "@/lib/safeNext";
 
+export const CLOUD_PRICING_SECTION_ID = "plans";
+
 export function safePolarDestination(value: unknown): string | null {
   if (typeof value !== "string") return null;
   try {
@@ -65,6 +67,7 @@ export function cloudPricingHandoff(
   const cloud = safeCloudOrigin(configuredCloudUrl);
   if (!cloud) return null;
   cloud.pathname = "/pricing";
+  cloud.hash = CLOUD_PRICING_SECTION_ID;
   return cloud.toString();
 }
 

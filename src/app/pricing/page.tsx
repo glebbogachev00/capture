@@ -2,6 +2,7 @@ import Link from "next/link";
 import { utilityMetadata } from "@/lib/seo";
 import { CloudCheckoutButton } from "@/components/CloudBilling";
 import { SiteNav } from "@/components/SiteNav";
+import { CLOUD_PRICING_SECTION_ID } from "@/lib/cloudCheckoutClient";
 import { PUBLIC_SITE } from "@/lib/publicSite";
 import { siteHome } from "@/lib/seo";
 
@@ -138,7 +139,7 @@ export default async function PricingPage({
           </div>
         </section>
 
-        <section className="funding-card">
+        <section className="funding-card" id={CLOUD_PRICING_SECTION_ID}>
           <p className="funding-card-label">Pricing</p>
           <div className="pricing-row">
             {plans.map((plan) => (
