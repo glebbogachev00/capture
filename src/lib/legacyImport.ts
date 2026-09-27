@@ -134,6 +134,7 @@ export async function readLegacyBackup(lifetime: OwnershipLifetime) {
 
 export async function importLegacyBoard(lifetime: OwnershipLifetime, accessConfirmed: boolean): Promise<ImportReceipt> {
   if (!accessConfirmed) throw new Error("Confirm that you have permission to access the earlier board");
+  await lifetime.waitUntilOnline();
   assertDestination(lifetime);
   const store = createStorage(lifetime);
   const completed = await store.get(LEGACY_RECEIPT);

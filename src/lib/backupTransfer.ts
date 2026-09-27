@@ -57,6 +57,15 @@ export type RestoreBackupV3Options = CommonOptions & {
   commitLocal: (state: SyncState, images: Record<string, string>) => Promise<void>;
 };
 
+/** The owner-bound Cloud restore was verified, but this browser could not cache
+ * the result. Callers must not describe this as a failed or unchanged restore. */
+export class CloudRestoreLocalCacheError extends Error {
+  constructor() {
+    super("Capture Cloud was restored, but this device could not update its local copy.");
+    this.name = "CloudRestoreLocalCacheError";
+  }
+}
+
 async function guarded<T>(authority: BackupAuthority, operation: () => Promise<T>): Promise<T> {
   authority.assertCurrent();
   const result = await operation();
@@ -125,7 +134,10 @@ export async function exportBackupV3(options: ExportBackupV3Options): Promise<Ca
 
 function assertBackupScope(backup: CaptureBackupV3, authority: BackupAuthority) {
   if (authority.kind === "cloud") {
-    if (backup.scope.kind !== "cloud" || backup.scope.ownerId !== authority.ownerId) {
+    // A local archive has no Cloud owner yet. Import it into the freshly
+    // verified current owner, while keeping Cloud archives strictly bound to
+    // the owner that exported them.
+    if (backup.scope.kind === "cloud" && backup.scope.ownerId !== authority.ownerId) {
       throw new Error("This backup belongs to a different account owner.");
     }
   } else if (backup.scope.kind !== "local") {
@@ -260,7 +272,14 @@ export async function restoreBackupV3(parsed: unknown, options: RestoreBackupV3O
   }
 
   emit(options.onProgress, "saving", imageEntries.length, imageEntries.length);
-  await guarded(options.authority, () => options.commitLocal(current, backup.images));
+  try {
+    await guarded(options.authority, () => options.commitLocal(current, backup.images));
+  } catch (error) {
+    if (options.authority.kind === "cloud") {
+      throw new CloudRestoreLocalCacheError();
+    }
+    throw error;
+  }
   options.authority.assertCurrent();
   emit(options.onProgress, "ready", imageEntries.length, imageEntries.length);
   return {

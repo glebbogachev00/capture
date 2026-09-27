@@ -160,6 +160,40 @@ it("routine polls hold requests and readback and deny disclosure without hiding 
   } finally { stop(); vi.useRealTimers(); }
 });
 
+it("waits for an already-running same-owner verification before starting user work", async () => {
+  const lease = new OwnershipLifetime({ owner: "A", expiresAt: Date.now() + 60000 });
+  let finish!: (value: { owner: string; expiresAt: number }) => void;
+  const stop = lease.watch(() => new Promise(resolve => { finish = resolve; }));
+  try {
+    window.dispatchEvent(new Event("focus"));
+    let ready = false;
+    const waiting = lease.waitUntilOnline().then(() => { ready = true; });
+    await Promise.resolve();
+    expect(ready).toBe(false);
+    finish({ owner: "A", expiresAt: Date.now() + 60000 });
+    await waiting;
+    expect(ready).toBe(true);
+    expect(() => lease.assertOnline()).not.toThrow();
+  } finally { stop(); }
+});
+
+it("does not start routine account polls halfway through an active import", async () => {
+  localStorage.clear();
+  const lease = new OwnershipLifetime({ owner: "A", expiresAt: Date.now() + 60000 });
+  const verify = vi.fn(async () => ({ owner: "A", expiresAt: Date.now() + 60000 }));
+  lease.beginImport();
+  const stop = lease.watch(verify);
+  try {
+    window.dispatchEvent(new Event("focus"));
+    await Promise.resolve();
+    expect(verify).not.toHaveBeenCalled();
+    lease.finishImport();
+    window.dispatchEvent(new Event("focus"));
+    await Promise.resolve();
+    expect(verify).toHaveBeenCalledTimes(1);
+  } finally { stop(); }
+});
+
 it("expires synchronously even before a throttled expiry timer runs", () => {
   const lease = new OwnershipLifetime({ owner: "A", expiresAt: Date.now() - 1 });
   expect(() => lease.assert()).toThrow();

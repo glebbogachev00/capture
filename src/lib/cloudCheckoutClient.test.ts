@@ -3,6 +3,7 @@ import {
   checkoutPlanFromNext,
   cloudCheckoutDestinationAfterLogin,
   cloudCheckoutHandoff,
+  cloudLoginHandoff,
 } from "@/lib/cloudCheckoutClient";
 
 describe("Cloud checkout continuation", () => {
@@ -28,6 +29,14 @@ describe("Cloud checkout continuation", () => {
     expect(cloudCheckoutHandoff("monthly", "https://user:pass@cloud.trycapture.app")).toBeNull();
     expect(cloudCheckoutHandoff("monthly", "https://cloud.trycapture.app/app")).toBeNull();
     expect(cloudCheckoutHandoff("monthly", "https://cloud.trycapture.app/?next=evil")).toBeNull();
+  });
+
+  it("builds the normal playground-to-Cloud app handoff with the same origin checks", () => {
+    expect(cloudLoginHandoff("https://cloud.trycapture.app")).toBe(
+      "https://cloud.trycapture.app/login?next=%2Fapp",
+    );
+    expect(cloudLoginHandoff("http://cloud.trycapture.app")).toBeNull();
+    expect(cloudLoginHandoff("https://cloud.trycapture.app/app")).toBeNull();
   });
 
   it("continues directly to Polar after OTP instead of returning to pricing", async () => {

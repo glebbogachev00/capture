@@ -59,7 +59,7 @@ export function LegacyImportGate({ lifetime, children }: { lifetime: OwnershipLi
           });
         }}>Not now</button>
       </div>
-      <p>You can import later from Settings → Restore.</p>
+      <p>You can import later from Settings → Your data.</p>
       {error && <p role="alert">{error}</p>}
     </>}
   </main>;
@@ -67,6 +67,8 @@ export function LegacyImportGate({ lifetime, children }: { lifetime: OwnershipLi
 
 export function LegacyImportSettings() {
   const [lifetime] = useState(getDocumentLifetime);
+  const [available, setAvailable] = useState(false);
+  const [checked, setChecked] = useState(false);
   const [snapshot, setSnapshot] = useState(false);
   const [receipt, setReceipt] = useState<ImportReceipt | null>(null);
   const [error, setError] = useState("");
@@ -77,12 +79,18 @@ export function LegacyImportSettings() {
       const store = createStorage(lifetime);
       const saved = (await store.keys()).includes(LEGACY_SNAPSHOT);
       const completed = await store.get(LEGACY_RECEIPT);
+      const earlier = saved || !!completed || await hasLegacyDatabase();
       lifetime.assertDisclosure();
-      if (!cancelled) { setSnapshot(saved); setReceipt(completed ? JSON.parse(completed) : null); }
-    })().catch(() => {});
+      if (!cancelled) {
+        setAvailable(earlier);
+        setSnapshot(saved);
+        setReceipt(completed ? JSON.parse(completed) : null);
+        setChecked(true);
+      }
+    })().catch(() => { if (!cancelled) setChecked(true); });
     return () => { cancelled = true; };
   }, [lifetime]);
-  if (!lifetime.cloud || !lifetime.owner) return null;
+  if (!lifetime.cloud || !lifetime.owner || !checked || !available) return null;
   return <div className="settings-group">
     <h4 className="settings-group-title">Earlier device board</h4>
     <p className="settings-copy">Check for an earlier local board. You must confirm access before Capture reads or copies it.</p>

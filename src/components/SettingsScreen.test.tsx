@@ -46,39 +46,45 @@ function renderSettings(ioBusy: string | null = null) {
 }
 
 describe("SettingsScreen disclosures", () => {
-  it("starts as a compact list and opens only one section at a time", () => {
+  it("groups related controls into a short, plain-language list", () => {
     renderSettings();
 
     expect(screen.getByRole("button", { name: "Open The Record" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show Signature" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Show Capture Cloud" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show Data and sync" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show Restore" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show Agent handoff" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show Principles" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show Support and session" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show Your data" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show Personalize" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show Help and account" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show Data and sync" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show Restore" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show Agent handoff" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show Signature" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show Principles" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Download backup" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Show Data and sync" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Your data" }));
     expect(screen.getByRole("button", { name: "Download backup" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Show Restore" }));
-    expect(screen.queryByRole("button", { name: "Download backup" })).toBeNull();
     expect(screen.getByRole("button", { name: "Upload a Capture backup" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy the whole board" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show Personalize" }));
+    expect(screen.queryByRole("button", { name: "Download backup" })).toBeNull();
+    expect(screen.getByRole("switch", { name: "Show signature on intentions and threads" })).toBeTruthy();
+    expect(screen.getByRole("switch", { name: principle.name })).toBeTruthy();
   });
 
   it("shows backup progress and prevents a second download while work is in flight", () => {
     renderSettings("Fetching 2 of 6 pictures…");
-    fireEvent.click(screen.getByRole("button", { name: "Show Data and sync" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Your data" }));
 
-    const download = screen.getByRole("button", { name: "Fetching 2 of 6 pictures…" });
-    expect(download.hasAttribute("disabled")).toBe(true);
+    const blockedTransfers = screen.getAllByRole("button", { name: "Fetching 2 of 6 pictures…" });
+    expect(blockedTransfers).toHaveLength(2);
+    expect(blockedTransfers.every((button) => button.hasAttribute("disabled"))).toBe(true);
   });
 
   it("offers the approved support contact without removing bug reporting or logout", () => {
     renderSettings();
     expect(screen.queryByRole("link", { name: "Contact support" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Show Support and session" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Help and account" }));
 
     expect(screen.getByRole("link", { name: "Contact support" }).getAttribute("href"))
       .toBe("mailto:gleb@trycapture.app");
@@ -89,7 +95,7 @@ describe("SettingsScreen disclosures", () => {
 
   it("uses a reversible switch for each principle", () => {
     const { onToggle } = renderSettings();
-    fireEvent.click(screen.getByRole("button", { name: "Show Principles" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Personalize" }));
 
     const toggle = screen.getByRole("switch", { name: principle.name });
     expect(toggle.getAttribute("aria-checked")).toBe("true");
@@ -107,7 +113,7 @@ describe("SettingsScreen disclosures", () => {
         name: "Show signature on intentions and threads",
       })
     ).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Show Signature" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Personalize" }));
     expect(screen.getByText(description)).toBeTruthy();
     const toggle = screen.getByRole("switch", {
       name: "Show signature on intentions and threads",

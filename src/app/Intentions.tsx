@@ -477,12 +477,23 @@ function FileButton({
   );
 }
 
-function Note({ note }: { note: { text: string; ok: boolean } | null }) {
+function Note({ note }: { note: IoNote }) {
   if (!note) return null;
-  return <p className={"io-note" + (note.ok ? " ok" : " bad")}>{note.text}</p>;
+  return (
+    <div className={"io-note" + (note.ok ? " ok" : " bad")} role={note.ok ? "status" : "alert"}>
+      {note.title && <strong className="io-note-title">{note.title}</strong>}
+      <p>{note.text}</p>
+      {!!note.details?.length && <ul>{note.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>}
+    </div>
+  );
 }
 
-export type IoNote = { text: string; ok: boolean } | null;
+export type IoNote = {
+  title?: string;
+  text: string;
+  details?: string[];
+  ok: boolean;
+} | null;
 
 /**
  * Settings: getting data in and out, and the principles engine.
@@ -917,10 +928,9 @@ export function SettingsScreen({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [openSection, setOpenSection] = useState<
-    "signature" | "cloud" | "data" | "restore" | "agent" | "principles" | "support" | null
+    "cloud" | "data" | "personalize" | "support" | null
   >(null);
   const [reporting, setReporting] = useState(false);
-  const activePrinciples = principles.filter((p) => p.enabled).length;
   const itemCount = counts.actions + counts.threads + counts.intentions;
   const toggleSection = (section: NonNullable<typeof openSection>) =>
     setOpenSection((current) => (current === section ? null : section));
@@ -949,38 +959,6 @@ export function SettingsScreen({
         </div>
 
         <SettingsDisclosure
-          title="Signature"
-          meta={profile?.showSignature ? "on" : "off"}
-          open={openSection === "signature"}
-          onToggle={() => toggleSection("signature")}
-        >
-          <ul className="settings-principles">
-            <li className={profile?.showSignature ? "" : "off"}>
-              <span className="settings-principle-copy">
-                <span className="settings-principle-name">Show signature</span>
-                <span className="settings-principle-description">
-                  Shows your profile photo or initials and name at the bottom of Intention and Thread cards.
-                </span>
-              </span>
-              <button
-                className={"rule-switch" + (profile?.showSignature ? " on" : "")}
-                role="switch"
-                aria-checked={!!profile?.showSignature}
-                aria-label="Show signature on intentions and threads"
-                onClick={() =>
-                  void onProfileChange((current) => ({
-                    ...current,
-                    showSignature: !current.showSignature,
-                  }))
-                }
-              >
-                <span />
-              </button>
-            </li>
-          </ul>
-        </SettingsDisclosure>
-
-        <SettingsDisclosure
           title="Capture Cloud"
           meta="plan · billing"
           open={openSection === "cloud"}
@@ -991,7 +969,7 @@ export function SettingsScreen({
         </SettingsDisclosure>
 
         <SettingsDisclosure
-          title="Data and sync"
+          title="Your data"
           meta={
             PLAYGROUND
               ? `${itemCount} item${itemCount === 1 ? "" : "s"}`
@@ -1040,21 +1018,6 @@ export function SettingsScreen({
               </button>
             </div>
           )}
-          <Note note={ioNote} />
-        </SettingsDisclosure>
-
-        <SettingsDisclosure
-          title="Restore"
-          meta={
-            snapshotDaysList.length
-              ? `${snapshotDaysList.length} daily ${
-                  snapshotDaysList.length === 1 ? "copy" : "copies"
-                }`
-              : "backup · import"
-          }
-          open={openSection === "restore"}
-          onToggle={() => toggleSection("restore")}
-        >
           <LegacyImportSettings />
           {snapshotDaysList.length > 0 && (
             <div className="settings-group">
@@ -1078,7 +1041,7 @@ export function SettingsScreen({
           )}
 
           <div className="settings-group">
-            <h4 className="settings-group-title">Capture backup</h4>
+            <h4 className="settings-group-title">Restore a Capture backup</h4>
             <p className="settings-copy">
               Adds missing data and pictures. Uploading the same backup twice
               changes nothing the second time.
@@ -1091,23 +1054,15 @@ export function SettingsScreen({
           </div>
 
           <div className="settings-group">
-            <h4 className="settings-group-title">Intentions</h4>
+            <h4 className="settings-group-title">Import from Intentions</h4>
             <p className="settings-copy">
               Imports intentions from the old Intent app without duplicating
               existing ones.
             </p>
             <FileButton label="Upload an Intent backup" onFile={onImportIntent} />
           </div>
-          <Note note={ioNote} />
-        </SettingsDisclosure>
-
-        <SettingsDisclosure
-          title="Agent handoff"
-          meta="full context"
-          open={openSection === "agent"}
-          onToggle={() => toggleSection("agent")}
-        >
           <div className="settings-group">
+            <h4 className="settings-group-title">Copy for your AI</h4>
             <p className="settings-copy">
               Copies every thread, where it stands, and its related actions.
               Use this when an agent has no Capture context yet.
@@ -1120,15 +1075,41 @@ export function SettingsScreen({
         </SettingsDisclosure>
 
         <SettingsDisclosure
-          title="Principles"
-          meta={
-            activePrinciples === principles.length
-              ? `all ${principles.length} on`
-              : `${activePrinciples} of ${principles.length} on`
-          }
-          open={openSection === "principles"}
-          onToggle={() => toggleSection("principles")}
+          title="Personalize"
+          meta="cards · intentions"
+          open={openSection === "personalize"}
+          onToggle={() => toggleSection("personalize")}
         >
+          <div className="settings-group">
+            <h4 className="settings-group-title">Card signature</h4>
+            <ul className="settings-principles">
+              <li className={profile?.showSignature ? "" : "off"}>
+                <span className="settings-principle-copy">
+                  <span className="settings-principle-name">Show signature</span>
+                  <span className="settings-principle-description">
+                    Shows your profile photo or initials and name at the bottom of Intention and Thread cards.
+                  </span>
+                </span>
+                <button
+                  className={"rule-switch" + (profile?.showSignature ? " on" : "")}
+                  role="switch"
+                  aria-checked={!!profile?.showSignature}
+                  aria-label="Show signature on intentions and threads"
+                  onClick={() =>
+                    void onProfileChange((current) => ({
+                      ...current,
+                      showSignature: !current.showSignature,
+                    }))
+                  }
+                >
+                  <span />
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <div className="settings-group">
+            <h4 className="settings-group-title">Intention wording</h4>
           <p className="settings-copy">
             These shape intention wording only. Nothing else in Capture uses
             them.
@@ -1164,6 +1145,7 @@ export function SettingsScreen({
               </li>
             ))}
           </ul>
+          </div>
 
           <div className="settings-group settings-add-principle">
             <h4 className="settings-group-title">Add a principle</h4>
@@ -1196,7 +1178,7 @@ export function SettingsScreen({
         </SettingsDisclosure>
 
         <SettingsDisclosure
-          title="Support and session"
+          title="Help and account"
           meta="help · logout"
           open={openSection === "support"}
           onToggle={() => toggleSection("support")}

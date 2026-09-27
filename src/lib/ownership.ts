@@ -104,6 +104,13 @@ export class OwnershipLifetime {
     if (this.cloud && (this.verificationPending || this.state !== "active" || Date.now() >= this.expiresAt || (typeof navigator !== "undefined" && !navigator.onLine)))
       throw new DOMException("Verify your account online before using Cloud or AI", "AbortError");
   };
+  /** User-started Cloud work may wait for an already-running same-owner check.
+   * It must never turn that harmless race into a visible account error. */
+  async waitUntilOnline(): Promise<void> {
+    this.assert();
+    if (this.verificationPending) await this.ready();
+    this.assertOnline();
+  }
   revoke = () => {
     if (this.state === "revoked") return;
     clearOfflinePermission(this.owner);
@@ -193,6 +200,9 @@ export class OwnershipLifetime {
     };
     const check = async () => {
       if (stopped || this.state === "revoked") return;
+      // A verified import already checks the owner at every network boundary.
+      // Do not start a routine poll halfway through a large atomic restore.
+      if (this.imports > 0) return;
       // A still-visible, verified lease keeps local input/edit/focus uninterrupted.
       // Pending verification independently holds requests and denies disclosures.
       // Never reopen a hidden/resuming or offline view on an ordinary signal.

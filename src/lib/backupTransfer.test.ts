@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { BACKUP_APP, type CaptureBackupV3 } from "./backup";
 import {
+  CloudRestoreLocalCacheError,
   exportBackupV3,
   restoreBackupV3,
   type BackupAuthority,
@@ -173,8 +174,8 @@ describe("backup v3 export", () => {
 });
 
 describe("backup v3 restore", () => {
-  it("restores a complete backup into a clean exact-owner Cloud account, uploads all media before PUT, verifies readback, then commits locally", async () => {
-    const backup = v3();
+  it("imports a complete local backup into the verified Cloud owner, uploads all media before PUT, verifies readback, then commits locally", async () => {
+    const backup = { ...v3(), scope: { kind: "local" as const } };
     const events: string[] = [];
     let cloud: SyncState = { board: EMPTY, tombstones: [] };
     const commitLocal = vi.fn(async (state: SyncState, images: Record<string, string>) => {
@@ -209,6 +210,26 @@ describe("backup v3 restore", () => {
     expect(events.indexOf("put")).toBeGreaterThan(events.findLastIndex((event) => event.startsWith("image:")));
     expect(events.at(-1)).toBe("local");
     expect(events.filter((event) => event === "get")).toHaveLength(2);
+  });
+
+  it("reports verified Cloud success separately when the local cache commit fails", async () => {
+    const backup = { ...v3(), scope: { kind: "local" as const } };
+    const events: string[] = [];
+    let cloud: SyncState = { board: EMPTY, tombstones: [] };
+
+    await expect(restoreBackupV3(backup, {
+      authority: cloudAuthority(),
+      currentState: { board: EMPTY, tombstones: [] },
+      readCloudState: async () => { events.push("get"); return cloud; },
+      uploadCloudImage: async () => { events.push("image"); },
+      putCloudState: async (state) => { events.push("put"); cloud = state; },
+      commitLocal: async () => { events.push("local"); throw new DOMException("Disk full", "QuotaExceededError"); },
+    })).rejects.toBeInstanceOf(CloudRestoreLocalCacheError);
+
+    expect(cloud.board.actions.map((item) => item.id)).toContain("action");
+    expect(events).toEqual(expect.arrayContaining(["image", "put", "local"]));
+    expect(events.filter((event) => event === "get")).toHaveLength(2);
+    expect(events.indexOf("local")).toBeGreaterThan(events.indexOf("put"));
   });
 
   it.each([

@@ -1,7 +1,7 @@
 # Capture backup v3
 
-Backup v3 is the complete, owner-bound archive format used by **Settings →
-Data and sync → Download backup**. Export and restore are client-orchestrated so
+Backup v3 is the complete archive format used by **Settings → Your data →
+Download backup**. Export and restore are client-orchestrated so
 no route must hold the whole archive or run for the duration of a large board.
 
 ## Envelope
@@ -34,7 +34,8 @@ Search, Record/statistics, readable shares/exports, Wrap/Tidy, and AI/model rout
 continue to omit pending content until classification.
 
 Cloud archives include the exact authenticated owner ID. A v3 Cloud archive is
-not portable to another account. Local/self-hosted archives use `kind: "local"`.
+not portable to another account. Local/self-hosted archives use `kind: "local"`
+and may be imported into the currently verified Capture Cloud account.
 
 ## Export
 
@@ -64,7 +65,8 @@ silently omit bytes that are absent from local storage.
 ### v3 Cloud
 
 1. Parse and validate the complete envelope locally.
-2. Require `scope.ownerId` to equal the freshly verified current owner.
+2. Accept a local archive into the freshly verified current owner. For a Cloud
+   archive, require `scope.ownerId` to equal that owner exactly.
 3. Read the current owner-bound Cloud state and perform an explicit additive
    restore merge. Current records win conflicts; archived ledger, corrections,
    wraps, and completions are imported across either history-epoch ordering.
@@ -77,8 +79,9 @@ silently omit bytes that are absent from local storage.
 5. `PUT /api/cloud/board` with the merged Board and tombstones.
 6. GET the owner-bound board again and verify it contains the planned state.
 7. In one IndexedDB transaction, write Board, tombstones, and all image bytes
-   into `capture-cloud-v1-account-<owner>`; only after it commits does React
-   adopt the restored board and show success.
+   into `capture-cloud-v1-account-<owner>`. If that local cache write fails after
+   the Cloud readback succeeds, report the verified Cloud restore truthfully and
+   ask the user to reload; never describe the Cloud board as unchanged.
 
 An account transition revokes the lifetime and aborts queued storage/network
 work. A synchronous document mutex rejects duplicate same-turn starts and holds
@@ -86,7 +89,7 @@ commits, sync pulls/pushes, and navigation while restore is active; generation
 checks discard replies that began before the restore. Every exit releases only
 its own token. A failed IndexedDB transaction rolls back every local key. Images
 written before a later failure are harmless unreferenced immutable objects; the
-prior visible board is retained and retrying the same restore is idempotent.
+prior local view is retained and retrying the same restore is idempotent.
 
 ### v3 local/self-hosted
 

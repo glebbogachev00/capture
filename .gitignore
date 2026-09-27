@@ -60,3 +60,6 @@ next-env.d.ts
 
 # Generated screenshots and run artefacts.
 outputs/
+
+# Supabase CLI link/cache state is machine-local.
+supabase/.temp/
