@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   checkoutPlanFromNext,
+  cloudAccountHandoff,
   cloudCheckoutDestinationAfterLogin,
   cloudCheckoutHandoff,
   cloudLoginHandoff,
@@ -40,6 +41,14 @@ describe("Cloud checkout continuation", () => {
     expect(cloudLoginHandoff("https://cloud.trycapture.app/app")).toBeNull();
   });
 
+  it("builds a direct existing-account path that lets Cloud decide whether login is needed", () => {
+    expect(cloudAccountHandoff("https://cloud.trycapture.app")).toBe(
+      "https://cloud.trycapture.app/app",
+    );
+    expect(cloudAccountHandoff("http://cloud.trycapture.app")).toBeNull();
+    expect(cloudAccountHandoff("https://cloud.trycapture.app/app")).toBeNull();
+  });
+
   it("sends undecided playground visitors to Cloud pricing before login", () => {
     expect(cloudPricingHandoff("https://cloud.trycapture.app")).toBe(
       "https://cloud.trycapture.app/pricing#plans",
@@ -48,39 +57,19 @@ describe("Cloud checkout continuation", () => {
     expect(cloudPricingHandoff("https://cloud.trycapture.app/app")).toBeNull();
   });
 
-  it("continues directly to Polar after OTP instead of returning to pricing", async () => {
-    const fetcher = vi.fn().mockResolvedValue(Response.json({
-      url: "https://sandbox.polar.sh/checkout/resumed",
-    }));
-
+  it("returns to the selected pricing plan after OTP so checkout has a clean authenticated page", async () => {
     await expect(cloudCheckoutDestinationAfterLogin(
       "/pricing?checkout=yearly",
-      fetcher,
-    )).resolves.toBe("https://sandbox.polar.sh/checkout/resumed");
-
-    expect(fetcher).toHaveBeenCalledWith(
-      "/api/cloud/checkout",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "same-origin",
-        body: JSON.stringify({ plan: "yearly" }),
-      }),
-    );
+    )).resolves.toBe("/pricing?checkout=yearly");
   });
 
   it("returns a normal safe next path without opening checkout", async () => {
-    const fetcher = vi.fn();
-    await expect(cloudCheckoutDestinationAfterLogin("/app", fetcher)).resolves.toBe("/app");
-    expect(fetcher).not.toHaveBeenCalled();
+    await expect(cloudCheckoutDestinationAfterLogin("/app")).resolves.toBe("/app");
   });
 
-  it("rejects an invalid checkout destination", async () => {
-    const fetcher = vi.fn().mockResolvedValue(Response.json({
-      url: "https://polar.sh.evil.test/checkout",
-    }));
+  it("falls back to the app for an unsafe post-login destination", async () => {
     await expect(cloudCheckoutDestinationAfterLogin(
-      "/pricing?checkout=monthly",
-      fetcher,
-    )).rejects.toThrow("invalid destination");
+      "https://evil.test/pricing?checkout=monthly",
+    )).resolves.toBe("/app");
   });
 });

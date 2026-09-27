@@ -15,6 +15,8 @@ describe("PlaygroundNotice trial boundary", () => {
     expect(screen.getByText(/This playground stays in this browser/i)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Use Capture Cloud" }).getAttribute("href"))
       .toBe("https://cloud.trycapture.app/pricing#plans");
+    expect(screen.getByRole("link", { name: "Log in to Capture Cloud" }).getAttribute("href"))
+      .toBe("https://cloud.trycapture.app/app");
     expect(screen.getByRole("link", { name: "Install Capture" }).getAttribute("href"))
       .toBe("/install");
     expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
@@ -24,6 +26,7 @@ describe("PlaygroundNotice trial boundary", () => {
     vi.stubEnv("NEXT_PUBLIC_CLOUD_URL", "");
     render(<PlaygroundNotice />);
     expect(screen.queryByRole("link", { name: "Use Capture Cloud" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Log in to Capture Cloud" })).toBeNull();
     expect(screen.getByRole("link", { name: "Install Capture" })).toBeTruthy();
   });
 });

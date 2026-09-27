@@ -3,10 +3,13 @@
 import Link from "next/link";
 import { useId, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
+import { cloudAccountHandoff } from "@/lib/cloudCheckoutClient";
+import { PLAYGROUND } from "@/lib/playground";
 
 type SiteSection = "about" | "writing" | "install" | "pricing";
+type SiteLink = { id: SiteSection | "login"; label: string; href: string };
 
-const sections: Array<{ id: SiteSection; label: string; href: string }> = [
+const sections: SiteLink[] = [
   { id: "about", label: "About", href: "/" },
   { id: "writing", label: "Writing", href: "/writing" },
   { id: "install", label: "Install", href: "/install" },
@@ -16,9 +19,11 @@ const sections: Array<{ id: SiteSection; label: string; href: string }> = [
 export function SiteNav({
   current,
   homeHref = "/",
+  loginHref = PLAYGROUND ? cloudAccountHandoff() : null,
 }: {
   current: SiteSection;
   homeHref?: string;
+  loginHref?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -40,7 +45,7 @@ export function SiteNav({
         {open ? <X size={24} aria-hidden="true" /> : <Menu size={24} aria-hidden="true" />}
       </button>
       <div className="site-nav-links" id={id}>
-      {sections.map((section) => {
+      {[...sections, ...(loginHref ? [{ id: "login" as const, label: "Log in", href: loginHref }] : [])].map((section) => {
         const href = section.id === "about" ? homeHref : section.href;
         const isCurrent = section.id === current;
 

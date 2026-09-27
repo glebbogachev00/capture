@@ -1037,6 +1037,25 @@ body {
   align-items: center;
   gap: 12px;
 }
+.landed-copy {
+  flex: 1;
+  min-width: 0;
+}
+.landed-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.78;
+}
+.landed-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.4;
+}
+.landed-list li + li {
+  margin-top: 2px;
+}
 .landed em {
   font-style: normal;
   font-weight: 600;
@@ -1624,9 +1643,9 @@ body {
    two durable ways to use Capture. */
 .playground-note {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 14px;
   margin: 18px 0 22px;
   padding: 16px 18px;
   background: var(--card);
@@ -1636,7 +1655,7 @@ body {
 .playground-note-copy {
   display: grid;
   gap: 3px;
-  flex: 1;
+  max-width: 660px;
 }
 .playground-note-copy strong {
   color: var(--ink);
@@ -1653,7 +1672,6 @@ body {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  flex: none;
 }
 .playground-note-actions a {
   width: auto;
@@ -1663,10 +1681,6 @@ body {
   white-space: nowrap;
 }
 @media (max-width: 640px) {
-  .playground-note {
-    align-items: stretch;
-    flex-direction: column;
-  }
   .playground-note-actions a {
     flex: 1;
     text-align: center;
@@ -3239,6 +3253,15 @@ body {
   color: var(--muted);
   font-size: 19px;
   line-height: 1.45;
+}
+.funding-login {
+  margin: 18px auto 0;
+  font-size: 14px;
+}
+.funding-login a {
+  color: var(--accent);
+  font-weight: 650;
+  text-underline-offset: 3px;
 }
 .funding-card {
   background: var(--card);

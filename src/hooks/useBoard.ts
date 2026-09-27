@@ -114,6 +114,7 @@ import { imgLoad, imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
 import { createPushGovernor, type PushGovernor } from "@/lib/pushGovernor";
 import { createReceiptWindow, type ReceiptWindow } from "@/lib/receiptWindow";
+import { receiptLines } from "@/lib/receiptCopy";
 import { createHeldImages, type HeldImages } from "@/lib/heldImages";
 import { organizeCorrection } from "@/lib/organizeOps";
 import {
@@ -196,9 +197,7 @@ const TANGLE_DISMISSED_KEY = "capture:tangle-dismissed";
    that had not changed. Once a day is more often than the question is. */
 const TANGLE_ASKED_KEY = "capture:tangle-asked-at";
 /** When the record last went out to an agent. Per device, never synced. */
-
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
-
 const reasonOf = (error: unknown) => {
   /* The server names its own failures precisely — rate limit, spent quota,
      billing, a rejected key — and those come back as a SortError carrying
@@ -305,19 +304,19 @@ export function useBoard(now: number) {
      at thirty-five seconds. */
   const [summarising, setSummarising] = useState<string | null>(null);
   const [err, setErr] = useState("");
-  const [landed, setLanded] = useState<string | null>(null);
+  const [landed, setLanded] = useState<string | null>(null); const [landedLines, setLandedLines] = useState<string[]>([]);
   /* How long a receipt stays, and why a second one is never blanked by the
      first one's clock — lib/receiptWindow owns the timing. Everything that
      leaves with the banner leaves through its one close channel. */
   const receiptWindow = useRef<ReceiptWindow | null>(null);
   if (!receiptWindow.current)
     receiptWindow.current = createReceiptWindow(() => {
-      setLanded(null);
+      setLanded(null); setLandedLines([]);
       setLandedIds([]);
       setSuggestion(null);
     });
-  const showReceipt = useCallback((text: string) => {
-    setLanded(text);
+  const showReceipt = useCallback((text: string, lines = receiptLines(text)) => {
+    setLanded(text); setLandedLines(lines);
     receiptWindow.current!.open();
   }, []);
   /* What the last capture created, so the board can wash those rows once —
@@ -1562,9 +1561,9 @@ export function useBoard(now: number) {
         actions: latest.current.actions.filter((x) => x.id !== current.id),
       };
       const applied = applySorted(out, current.imgs || [], current.at, board);
-      const { targetId, landed, source, landedIds: fresh } = applied;
+      const { targetId, landed, landedLines, source, landedIds: fresh } = applied;
       const { board: recorded, summaryTargets } = recordResortedCapture(applied, out, current, pending, uid);
-      showReceipt(landed); setLandedIds(fresh);
+      showReceipt(landed, landedLines); setLandedIds(fresh);
       setTab(out.kind === "action" ? "actions" : "threads");
       captureSnapshot.current = {
         board: latest.current,
@@ -1741,6 +1740,7 @@ export function useBoard(now: number) {
         next,
         targetId,
         landed,
+        landedLines,
         source,
         landedIds: fresh,
         alsoLanded,
@@ -1788,7 +1788,7 @@ export function useBoard(now: number) {
             routing: { kind: commandCorrection.kind },
           })
         : withAll;
-      showReceipt(landed);
+      showReceipt(landed, landedLines);
       setLandedIds(fresh);
       setTab(out.kind === "action" ? "actions" : "threads");
       setText("");
@@ -4220,7 +4220,7 @@ export function useBoard(now: number) {
     captureDictated: !!transcript,
     busy,
     err,
-    landed,
+    landed, landedLines,
     landedIds,
     summarising,
     suggestion,

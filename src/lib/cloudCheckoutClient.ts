@@ -61,6 +61,15 @@ export function cloudLoginHandoff(
   return cloud.toString();
 }
 
+export function cloudAccountHandoff(
+  configuredCloudUrl: string | undefined = process.env.NEXT_PUBLIC_CLOUD_URL,
+): string | null {
+  const cloud = safeCloudOrigin(configuredCloudUrl);
+  if (!cloud) return null;
+  cloud.pathname = "/app";
+  return cloud.toString();
+}
+
 export function cloudPricingHandoff(
   configuredCloudUrl: string | undefined = process.env.NEXT_PUBLIC_CLOUD_URL,
 ): string | null {
@@ -105,10 +114,8 @@ export async function requestCloudCheckout(
 
 export async function cloudCheckoutDestinationAfterLogin(
   nextPath: string | null | undefined,
-  fetcher: typeof fetch = fetch,
 ): Promise<string> {
-  const safePath = safeNext(nextPath || "/app");
-  const plan = checkoutPlanFromNext(safePath);
-  if (!plan) return safePath;
-  return requestCloudCheckout(plan, fetcher);
+  const requested = nextPath || "/app";
+  const safePath = safeNext(requested);
+  return safePath === "/" && requested !== "/" ? "/app" : safePath;
 }

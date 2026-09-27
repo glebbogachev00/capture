@@ -26,4 +26,16 @@ describe("SiteNav", () => {
     expect(screen.getByRole("link", { name: "Writing" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "About" }).getAttribute("aria-current")).toBeNull();
   });
+
+  it("offers existing Cloud customers a direct login route when configured", () => {
+    render(
+      <SiteNav
+        current="about"
+        loginHref="https://cloud.trycapture.app/app"
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Log in" }).getAttribute("href"))
+      .toBe("https://cloud.trycapture.app/app");
+  });
 });
