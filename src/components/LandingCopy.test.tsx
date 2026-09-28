@@ -37,7 +37,7 @@ describe("Landing copy within the existing page", () => {
     for (const cls of ["site-hero-split", "hero-clip", "demo-reel", "site-day", "site-problem", "site-kind-grid", "site-quiet", "site-note", "site-writing", "site-voice", "site-proof"]) {
       expect(document.querySelector(`.${cls}`)).not.toBeNull();
     }
-    expect(screen.getByRole("button", { name: "Watch the 25-second demo" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Watch the 57-second demo" })).toBeTruthy();
     expect(document.querySelector(".landing-benefits")).toBeNull();
     expect(screen.getByRole("link", { name: "Pricing" }).getAttribute("href")).toBe("/pricing");
   });

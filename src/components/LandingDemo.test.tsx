@@ -9,13 +9,12 @@ describe("LandingDemo", () => {
   it("shows a clean result poster before revealing native video controls", () => {
     render(<LandingDemo />);
 
-    const play = screen.getByRole("button", { name: "Watch the 25-second demo" });
+    const play = screen.getByRole("button", { name: "Watch the 57-second demo" });
     expect(play).toBeTruthy();
     expect(screen.queryByLabelText("Capture product demo")).toBeNull();
 
     const poster = play.querySelector("picture");
     expect(poster).toBeTruthy();
-    expect(poster?.querySelector('source[type="image/avif"]')).toBeTruthy();
     expect(poster?.querySelector('source[type="image/webp"]')).toBeTruthy();
     expect(poster?.querySelector("img")?.getAttribute("fetchpriority")).toBe("high");
 
@@ -25,8 +24,7 @@ describe("LandingDemo", () => {
     expect(video).toBeTruthy();
     expect(video.hasAttribute("controls")).toBe(true);
     expect(video.hasAttribute("autoplay")).toBe(true);
-    expect(video.querySelector('source[media="(max-width: 600px)"]')?.getAttribute("src")).toBe(
-      "/demos/two-places-mobile.mp4"
-    );
+    expect(video.hasAttribute("muted")).toBe(false);
+    expect(video.querySelector("source")?.getAttribute("src")).toBe("/demos/capture-overview.mp4");
   });
 });
