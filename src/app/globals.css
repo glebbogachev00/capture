@@ -1639,13 +1639,12 @@ body {
   font-size: 12.5px;
   color: #8a2f2f;
 }
-/* A permanent, structured choice between the browser-only playground and the
-   two durable ways to use Capture. */
+/* A permanent, structured choice between the browser-only playground and Capture Cloud. */
 .playground-note {
   display: flex;
   align-items: stretch;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   margin: 18px 0 22px;
   padding: 16px 18px;
   background: var(--card);
@@ -1668,23 +1667,53 @@ body {
   line-height: 1.5;
 }
 .playground-note-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  width: 372px;
+  max-width: 100%;
 }
-.playground-note-actions a {
-  width: auto;
-  min-height: 38px;
-  padding: 9px 12px;
+.playground-note-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 10px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
   text-decoration: none;
   white-space: nowrap;
+  touch-action: manipulation;
+  transition: 0.15s;
 }
-@media (max-width: 640px) {
-  .playground-note-actions a {
-    flex: 1;
-    text-align: center;
-  }
+.playground-note-action.is-primary {
+  border-color: #2f5d3f;
+  background: #2f5d3f;
+  color: #fff;
+  font-weight: 600;
+}
+.playground-note-action.is-primary:hover {
+  filter: brightness(1.08);
+}
+.playground-note-action.is-secondary {
+  border-color: rgba(47, 93, 63, 0.48);
+  color: #2f5d3f;
+}
+.playground-note-action.is-secondary:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.playground-note-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* The maker's real setup turns "self-hosted" into a concrete example,
