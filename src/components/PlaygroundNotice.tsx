@@ -1,7 +1,6 @@
 "use client";
 
 import { cloudAccountHandoff, cloudPricingHandoff } from "@/lib/cloudCheckoutClient";
-import { QUICKSTART_URL } from "@/lib/playground";
 
 /** Persistent, plain-language paths out of the browser-only playground. */
 export function PlaygroundNotice() {
@@ -12,14 +11,20 @@ export function PlaygroundNotice() {
       <div className="playground-note-copy">
         <strong id="playground-note-title">Choose where to keep your board</strong>
         <span>
-          This playground stays in this browser. Use Cloud to sync across devices,
-          or install Capture to run it yourself.
+          This playground stays in this browser. Use Cloud to sync across devices.
         </span>
       </div>
       <div className="playground-note-actions">
-        {cloudPricing && <a className="capture-btn" href={cloudPricing}>Use Capture Cloud</a>}
-        {cloudAccount && <a className="ghost" href={cloudAccount}>Log in to Capture Cloud</a>}
-        <a className="ghost" href={QUICKSTART_URL}>Install Capture</a>
+        {cloudPricing && (
+          <a className="playground-note-action is-primary" href={cloudPricing}>
+            Use Capture Cloud
+          </a>
+        )}
+        {cloudAccount && (
+          <a className="playground-note-action is-secondary" href={cloudAccount}>
+            Log in to Capture Cloud
+          </a>
+        )}
       </div>
     </aside>
   );
