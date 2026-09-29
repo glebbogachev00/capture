@@ -1,11 +1,11 @@
 "use client";
 
-import { cloudAccountHandoff, cloudPricingHandoff } from "@/lib/cloudCheckoutClient";
+import { cloudPricingHandoff } from "@/lib/cloudCheckoutClient";
+import { QUICKSTART_URL } from "@/lib/playground";
 
 /** Persistent, plain-language paths out of the browser-only playground. */
 export function PlaygroundNotice() {
   const cloudPricing = cloudPricingHandoff();
-  const cloudAccount = cloudAccountHandoff();
   return (
     <aside className="playground-note" aria-labelledby="playground-note-title">
       <div className="playground-note-copy">
@@ -20,11 +20,9 @@ export function PlaygroundNotice() {
             Start with Capture Cloud
           </a>
         )}
-        {cloudAccount && (
-          <a className="playground-note-action is-secondary" href={cloudAccount}>
-            Try Capture Locally
-          </a>
-        )}
+        <a className="playground-note-action is-secondary" href={QUICKSTART_URL}>
+          Try Capture Locally
+        </a>
       </div>
     </aside>
   );

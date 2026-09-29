@@ -18,25 +18,26 @@ describe("PlaygroundNotice trial boundary", () => {
     expect(screen.queryByText(/install Capture/i)).toBeNull();
 
     const cloudLink = screen.getByRole("link", { name: "Start with Capture Cloud" });
-    const loginLink = screen.getByRole("link", { name: "Try Capture Locally" });
+    const localLink = screen.getByRole("link", { name: "Try Capture Locally" });
     const actions = cloudLink.parentElement;
     expect(cloudLink.getAttribute("href")).toBe("https://cloud.trycapture.app/pricing#plans");
-    expect(loginLink.getAttribute("href")).toBe("https://cloud.trycapture.app/app");
+    expect(localLink.getAttribute("href")).toBe("/install");
     expect(actions?.querySelectorAll("a")).toHaveLength(2);
     expect(cloudLink.classList.contains("playground-note-action")).toBe(true);
-    expect(loginLink.classList.contains("playground-note-action")).toBe(true);
+    expect(localLink.classList.contains("playground-note-action")).toBe(true);
     expect(cloudLink.classList.contains("is-primary")).toBe(true);
-    expect(loginLink.classList.contains("is-secondary")).toBe(true);
-    expect(loginLink.parentElement).toBe(actions);
+    expect(localLink.classList.contains("is-secondary")).toBe(true);
+    expect(localLink.parentElement).toBe(actions);
     expect(screen.queryByRole("link", { name: "Install Capture" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
   });
 
-  it("shows no unavailable actions when Cloud is not configured", () => {
+  it("keeps the local path when Cloud is not configured", () => {
     vi.stubEnv("NEXT_PUBLIC_CLOUD_URL", "");
     render(<PlaygroundNotice />);
-    expect(screen.queryByRole("link", { name: "Use Capture Cloud" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Log in to Capture Cloud" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Start with Capture Cloud" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Try Capture Locally" }).getAttribute("href"))
+      .toBe("/install");
     expect(screen.queryByRole("link", { name: "Install Capture" })).toBeNull();
   });
 });
