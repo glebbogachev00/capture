@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dayKey, dayStats, wrapDue, mergeCompletions, mergeWraps, pendingWrap, type DayWrap } from "./wrap";
+import { dayKey, dayStats, wrapDue, wrapRequest, mergeCompletions, mergeWraps, pendingWrap, type DayWrap } from "./wrap";
 import type { Board, Completion } from "./model";
 import type { CaptureEntry } from "./ledger";
 
@@ -58,6 +58,44 @@ describe("dayStats", () => {
       entry({ at: at("2026-08-26", 13), undone: true }),
     ]);
     expect(dayStats(b, "2026-08-26")!.said).toBe(3);
+  });
+
+  it("excludes every capture tied to a temporary Thread until it is renamed", () => {
+    const day = "2026-08-26";
+    const temporaryId = "temporary-private-id";
+    const tempCaptureId = "temporary-capture";
+    const tempEntries = [10, 11, 12].map((hour, index) => entry({
+      id: `temp-${index}`,
+      captureId: `${tempCaptureId}-${index}`,
+      at: at(day, hour),
+      raw: `Private provisional content ${index}`,
+      clean: `Private provisional content ${index}`,
+      targetId: temporaryId,
+      targetFragId: `temporary-frag-${index}`,
+    }));
+    const temporaryThread = {
+      id: temporaryId,
+      name: "Temporary — private display label",
+      temporaryName: true,
+      summary: "Private temporary summary",
+      frags: tempEntries.map((item, index) => ({
+        id: item.targetFragId!, at: item.at, text: `Private provisional content ${index}`,
+      })),
+    } as Board["threads"][number];
+    const hidden = board(tempEntries, [temporaryThread]);
+
+    expect(dayStats(hidden, day)).toBeNull();
+    expect(wrapDue(hidden, [], at("2026-08-27", 9))).toBeNull();
+    expect(JSON.stringify(wrapRequest(hidden, day, []))).not.toContain("temporary");
+    expect(JSON.stringify(wrapRequest(hidden, day, []))).not.toContain("Private provisional");
+
+    const renamed = {
+      ...hidden,
+      threads: [{ ...temporaryThread, name: "Release planning", temporaryName: undefined }],
+    };
+    expect(dayStats(renamed, day)?.said).toBe(3);
+    expect(JSON.stringify(wrapRequest(renamed, day, []))).toContain("Release planning");
+    expect(JSON.stringify(wrapRequest(renamed, day, []))).toContain("Private provisional content");
   });
 
   it("reports returns only when the day actually came back", () => {

@@ -1,11 +1,28 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SiteNav } from "./SiteNav";
 
-afterEach(cleanup);
+vi.mock("@/lib/playground", () => ({ PLAYGROUND: false }));
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 describe("SiteNav", () => {
+  it("shows the configured Cloud login on Cloud pages without playground mode", () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_URL", "https://cloud.trycapture.app/");
+    render(<SiteNav current="about" />);
+    expect(screen.getByRole("link", { name: "Log in" }).getAttribute("href"))
+      .toBe("https://cloud.trycapture.app/app");
+  });
+
+  it("does not add a Cloud login to an unconfigured personal instance", () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_URL", "");
+    render(<SiteNav current="about" />);
+    expect(screen.queryByRole("link", { name: "Log in" })).toBeNull();
+  });
   it("toggles the mobile disclosure and closes with Escape", () => {
     render(<SiteNav current="pricing" />);
     const toggle = screen.getByRole("button", { name: "Open navigation" });

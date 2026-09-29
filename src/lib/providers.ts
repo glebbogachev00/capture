@@ -57,11 +57,15 @@ export function chain(): Tier[] {
   }
 
   if (process.env.CEREBRAS_API_KEY) {
+    const modelId = process.env.CEREBRAS_MODEL || "gpt-oss-120b";
     tiers.push({
       name: "cerebras",
-      model: cerebras(process.env.CEREBRAS_MODEL || "gpt-oss-120b"),
+      model: cerebras(modelId),
       providerOptions: {
-        cerebras: { reasoningEffort: "low", reasoningFormat: "hidden" },
+        cerebras: {
+          reasoningEffort: "low",
+          ...(modelId === "gpt-oss-120b" ? { reasoningFormat: "hidden" } : {}),
+        },
       },
     });
   }
@@ -244,7 +248,8 @@ export async function withFallback<T>(
  
      It is a preference, not a pin: if the named provider is missing or
      refuses, the rest of the chain still answers. */
-  prefer?: string
+  prefer?: string,
+  options: { abortSignal?: AbortSignal } = {},
 ): Promise<{
   value: T;
   via: string;
@@ -253,6 +258,13 @@ export async function withFallback<T>(
   fallbackReason: "rate_limit" | "provider_failure" | null;
 }> {
   const all = chain();
+  const throwIfAborted = () => {
+    if (!options.abortSignal?.aborted) return;
+    throw options.abortSignal.reason instanceof Error
+      ? options.abortSignal.reason
+      : new DOMException("The operation was aborted", "AbortError");
+  };
+  throwIfAborted();
   const operatorPreferred = process.env.CAPTURE_MODEL_PROVIDER;
   const hasConfiguredOperatorPreference = Boolean(
     operatorPreferred &&
@@ -320,6 +332,7 @@ export async function withFallback<T>(
       }
     }
     for (const tier of live) {
+      throwIfAborted();
       try {
         return {
           ok: true,
@@ -328,6 +341,7 @@ export async function withFallback<T>(
           fallbackReason: preferredFailureReason,
         };
       } catch (error) {
+        throwIfAborted();
         last = error;
         const tierLimited = rateLimited(error);
         if (tierLimited) limited = true;
@@ -375,7 +389,21 @@ export async function withFallback<T>(
     reason: "rate_limited",
     count: "not_measured",
   });
-  await new Promise((r) => setTimeout(r, wait));
+  await new Promise<void>((resolve, reject) => {
+    const signal = options.abortSignal;
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason instanceof Error
+        ? signal.reason
+        : new DOMException("The operation was aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, wait);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+  throwIfAborted();
 
   const second = await round();
   if (second.ok) return routed(second.value, second.via, second.fallbackReason);

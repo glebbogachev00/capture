@@ -91,6 +91,20 @@ describe("recallSources", () => {
     expect(JSON.stringify(sources)).not.toContain("private offline pricing draft");
     expect(JSON.stringify(sources)).not.toContain("private fragment pricing draft");
   });
+
+  it("keeps a temporary Thread out of Recall evidence until rename", () => {
+    const temporary = thread("temporary", "Temporary evidence about zephyrs", {
+      name: "Temporary — private display label",
+      temporaryName: true,
+    });
+    expect(recallSources(board({ threads: [temporary] }), "What did I note about zephyrs?"))
+      .toEqual([]);
+    expect(recallSources(board({
+      threads: [{ ...temporary, name: "Wind notes", temporaryName: undefined }],
+    }), "What did I note about zephyrs?")).toEqual([
+      expect.objectContaining({ targetId: "temporary", title: "Wind notes" }),
+    ]);
+  });
 });
 
 describe("validateRecallAnswer", () => {

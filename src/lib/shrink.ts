@@ -16,6 +16,8 @@
 
 export const SHRINK_MAX_DIM = 1600;
 export const SHRINK_QUALITY = 0.82;
+export { MAX_SYNC_IMAGE_SOURCE_LENGTH } from "./imageLimits";
+import { MAX_SYNC_IMAGE_SOURCE_LENGTH } from "./imageLimits";
 
 export type ShrinkOpts = {
   maxDim?: number;
@@ -46,6 +48,15 @@ export function pickImageType(
   return supported.includes("image/webp") ? "image/webp" : "image/jpeg";
 }
 
+export function shouldReencodeImage(
+  dataUrl: string,
+  width: number,
+  height: number,
+  maxDim = SHRINK_MAX_DIM,
+): boolean {
+  return dataUrl.length > MAX_SYNC_IMAGE_SOURCE_LENGTH || width > maxDim || height > maxDim;
+}
+
 function load(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -61,6 +72,17 @@ function encode(
   quality: number
 ): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+function dataUrlOf(blob: Blob): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string"
+      ? resolve(reader.result)
+      : reject(new Error("Image conversion produced no data URL."));
+    reader.onerror = () => reject(reader.error ?? new Error("Image conversion failed."));
+    reader.readAsDataURL(blob);
+  });
 }
 
 /**
@@ -86,37 +108,67 @@ export async function shrinkDataUrl(
     img.naturalHeight,
     maxDim
   );
-  if (width >= img.naturalWidth && height >= img.naturalHeight) return dataUrl;
+  if (!shouldReencodeImage(dataUrl, img.naturalWidth, img.naturalHeight, maxDim)) {
+    return dataUrl;
+  }
 
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return dataUrl;
-  ctx.drawImage(img, 0, 0, width, height);
-
-  const type = pickImageType(["image/webp", "image/jpeg"]);
-  let blob = await encode(canvas, type, quality);
-  /* A browser that silently refuses WebP (returns null or a PNG) falls back
-     to JPEG before giving up. */
-  if (!blob) blob = await encode(canvas, "image/jpeg", quality);
-  if (!blob) return dataUrl;
-
-  return await new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(blob);
-  });
+  try {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl;
+    const type = pickImageType(["image/webp", "image/jpeg"]);
+    let box = { width, height };
+    const qualities = [...new Set([quality, 0.7, 0.55, 0.4])];
+    for (let scaleAttempt = 0; scaleAttempt < 5; scaleAttempt += 1) {
+      canvas.width = box.width;
+      canvas.height = box.height;
+      ctx.drawImage(img, 0, 0, box.width, box.height);
+      for (const candidateQuality of qualities) {
+        let blob = await encode(canvas, type, candidateQuality);
+        /* A browser that silently refuses WebP (returns null or another type)
+           falls back to JPEG before giving up. */
+        if (!blob || (type === "image/webp" && blob.type !== "image/webp")) {
+          blob = await encode(canvas, "image/jpeg", candidateQuality);
+        }
+        if (!blob) continue;
+        const candidate = await dataUrlOf(blob);
+        if (candidate.length <= MAX_SYNC_IMAGE_SOURCE_LENGTH) return candidate;
+      }
+      box = {
+        width: Math.max(1, Math.round(box.width * 0.8)),
+        height: Math.max(1, Math.round(box.height * 0.8)),
+      };
+    }
+  } catch {
+    /* The original data URL is already authoritative local bytes. Encoder,
+       canvas, and conversion failures may make Cloud sync pending, but may
+       never turn a selected image into an omitted attachment. */
+    return dataUrl;
+  }
+  /* Never discard or replace the local image with an unverified truncation.
+     Sync will report this original as pending if the browser cannot compress it. */
+  return dataUrl;
 }
 
-/** Read a picked file as a data URL, then shrink it. */
+/** Read a picked file as a data URL, then shrink it. FileReader is the broadest
+ * browser path; if it fails after selection, recover the same bytes through
+ * Blob.arrayBuffer rather than silently omitting the attachment. */
 export async function shrinkFile(file: File): Promise<string> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
+  let dataUrl: string;
+  try {
+    dataUrl = await dataUrlOf(file);
+  } catch {
+    const bytes = new Uint8Array(
+      typeof file.arrayBuffer === "function"
+        ? await file.arrayBuffer()
+        : await new Response(file).arrayBuffer()
+    );
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    }
+    dataUrl = `data:${file.type || "application/octet-stream"};base64,${btoa(binary)}`;
+  }
   return shrinkDataUrl(dataUrl);
 }

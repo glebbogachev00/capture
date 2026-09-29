@@ -75,6 +75,21 @@ describe("compactBoard", () => {
     expect(s.threads[0].frags.map((item) => item.id)).toEqual(["ready-frag"]);
   });
 
+  it("keeps a temporary Thread out of Tidy until rename", () => {
+    const temporary = {
+      ...thread("temporary", "Temporary — private display label", [
+        frag("temporary-frag", "Private provisional context"),
+      ]),
+      temporaryName: true,
+    };
+    expect(compactBoard(board({ threads: [temporary] })).threads).toEqual([]);
+    expect(compactBoard(board({
+      threads: [{ ...temporary, name: "Named normally", temporaryName: undefined }],
+    })).threads).toEqual([
+      expect.objectContaining({ id: "temporary", name: "Named normally" }),
+    ]);
+  });
+
   it("caps a huge board so one prompt stays small", () => {
     const actions = Array.from({ length: SNAPSHOT_CAPS.actions + 5 }, (_, i) =>
       act("a" + i, "task number " + i)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Thread } from "./model";
-import { brief, briefLength, threadBriefs } from "./threadBrief";
+import { brief, briefLength, semanticSiblingNames, threadBriefs } from "./threadBrief";
 
 describe("what the sorter is told about each thread", () => {
   it("spends the budget across the board, within bounds", () => {
@@ -14,6 +14,32 @@ describe("what the sorter is told about each thread", () => {
     expect(brief(s, 40)).toBe("Seats are simpler to explain.");
     /* No sentence end early enough — fall back to an honest ellipsis. */
     expect(brief("a".repeat(80) + ". tail", 40)).toMatch(/…$/);
+  });
+
+  it("excludes a mechanical temporary Thread from semantic routing candidates until rename", () => {
+    const temporary: Thread = {
+      id: "temporary",
+      name: "Temporary — Plan the Capture release without",
+      temporaryName: true,
+      summary: "",
+      frags: [{ id: "first", at: 1, text: "Plan the Capture release without asking a model" }],
+    };
+    expect(threadBriefs([temporary])).toEqual([]);
+    expect(threadBriefs([{ ...temporary, name: "Release planning", temporaryName: undefined }]))
+      .toEqual([{ id: "temporary", name: "Release planning", about: "" }]);
+  });
+
+  it("excludes temporary and target Threads from summary sibling context until rename", () => {
+    const target: Thread = { id: "target", name: "Target", summary: "", frags: [] };
+    const temporary: Thread = {
+      id: "temporary", name: "Temporary — private display label", temporaryName: true,
+      summary: "", frags: [],
+    };
+    expect(semanticSiblingNames([target, temporary], "target")).toEqual([]);
+    expect(semanticSiblingNames([
+      target,
+      { ...temporary, name: "Named normally", temporaryName: undefined },
+    ], "target")).toEqual(["Named normally"]);
   });
 
   it("carries far more than the old sentence and a half", () => {

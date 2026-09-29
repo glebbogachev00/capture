@@ -7,17 +7,16 @@ import { createCloudServiceClient } from "@/lib/supabase/service";
 import { identityFromClaims } from "@/lib/supabase/identity";
 import { consumeQuotaWithRpc } from "@/lib/cloudRequestGuard";
 import { hasCurrentCloudAccess } from "@/lib/cloudAccess.server";
+import {
+  MAX_IMAGE_BYTES,
+  MAX_SYNC_IMAGE_REQUEST_BYTES,
+  MAX_SYNC_IMAGE_SOURCE_LENGTH,
+} from "./imageLimits";
 
-const SUPPORTED_IMAGE_MIMES = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
-export const MAX_IMAGE_BYTES = 2_250_000;
-const MAX_ENCODED_IMAGE_BYTES = 4 * Math.ceil(MAX_IMAGE_BYTES / 3);
-const MAX_DATA_URL_PREFIX_BYTES = Math.max(...SUPPORTED_IMAGE_MIMES.map(
-  mime => Buffer.byteLength(`data:${mime};base64,`),
-));
-export const MAX_SOURCE_BYTES = MAX_DATA_URL_PREFIX_BYTES + MAX_ENCODED_IMAGE_BYTES;
-// JSON.stringify({ src }) adds exactly {"src":""} around canonical base64.
-// Keep the route envelope exact rather than granting arbitrary extra body space.
-export const MAX_REQUEST_BYTES = MAX_SOURCE_BYTES + Buffer.byteLength(JSON.stringify({ src: "" }));
+export { MAX_IMAGE_BYTES } from "./imageLimits";
+
+export const MAX_SOURCE_BYTES = MAX_SYNC_IMAGE_SOURCE_LENGTH;
+export const MAX_REQUEST_BYTES = MAX_SYNC_IMAGE_REQUEST_BYTES;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 class ImageInputError extends Error {

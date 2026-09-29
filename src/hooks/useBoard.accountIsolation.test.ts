@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { del, get, keys, set } from "@/lib/storage";
-import { EMPTY, IMG, KEY, type Board } from "@/lib/model";
+import { EMPTY, IMG, KEY, hydrate, type Board } from "@/lib/model";
 import { imgSave } from "@/lib/imgCache";
 import * as React from "react";
 import { createStorage } from "@/lib/storage";
@@ -434,7 +434,8 @@ it("reports a legacy restore transaction failure and reloads the unchanged durab
   a.unmount();
   const reloaded = await mount();
   expect(JSON.stringify(reloaded.result.current.data)).not.toContain("legacy-restored");
-  expect(await reloaded.storage.get(KEY)).toBe(prior);
+  expect(hydrate(JSON.parse((await reloaded.storage.get(KEY))!)))
+    .toEqual(hydrate(JSON.parse(prior!)));
 });
 
 it("drops an in-flight same-document sync reply when restore takes exclusivity", async () => {

@@ -34,7 +34,7 @@ async function mount() {
 it("rename clears obsolete metadata and regenerates against the explicit new title", async () => {
   const { result } = await mount();
   await act(async () => { result.current.renameThread("t", "Askde posting strategy"); });
-  expect(result.current.data.threads[0].summary).toBe("");
+  await waitFor(() => expect(result.current.data.threads[0].summary).toBe(""));
   expect(result.current.data.threads[0].belongs).toBeUndefined();
   expect(result.current.data.threads[0].next).toBeNull();
   await waitFor(() => expect(requests).toHaveLength(1));

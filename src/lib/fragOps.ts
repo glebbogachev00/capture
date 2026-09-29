@@ -74,6 +74,9 @@ export function applyFragDelete(
   const target = board.threads.find((t) => t.id === threadId);
   const frag = target?.frags.find((f) => f.id === fragId);
   if (!target || !frag) return null;
+  if (board.actions.some((action) => !action.done && action.shot?.fragId === fragId)) {
+    return null;
+  }
   const remaining = target.frags.filter((f) => f.id !== fragId);
   if (!remaining.length) {
     return {
@@ -136,7 +139,15 @@ export function applyFragMove(
   const corrected = isRefile(frag.at, now);
 
   return {
-    board: { ...board, threads },
+    board: {
+      ...board,
+      actions: board.actions.map((action) =>
+        action.shot?.threadId === fromId && action.shot.fragId === fragId
+          ? { ...action, shot: { threadId: toId, fragId } }
+          : action
+      ),
+      threads,
+    },
     emptied,
     corrected,
     movedText: frag.text,
@@ -178,7 +189,75 @@ export function applyFragSplit(
           t.id === fromId ? { ...t, frags: remaining } : t
         )),
   ];
-  return { board: { ...board, threads }, freshId: fresh.id, emptied };
+  return {
+    board: {
+      ...board,
+      actions: board.actions.map((action) =>
+        action.shot?.threadId === fromId && action.shot.fragId === fragId
+          ? { ...action, shot: { threadId: fresh.id, fragId } }
+          : action
+      ),
+      threads,
+    },
+    freshId: fresh.id,
+    emptied,
+  };
+}
+
+export type ThreadDelete = {
+  board: Board;
+  /** Candidate bytes; the caller may remove only ids unreferenced by the
+   * committed Board and its immutable history. */
+  imgs: string[];
+};
+
+export function applyThreadDelete(board: Board, threadId: string): ThreadDelete | null {
+  const target = board.threads.find((thread) => thread.id === threadId);
+  if (!target) return null;
+  const ownedFragIds = new Set(target.frags.map((frag) => frag.id));
+  if (board.actions.some((action) =>
+    !action.done && !!action.shot && ownedFragIds.has(action.shot.fragId)
+  )) return null;
+  return {
+    board: {
+      ...board,
+      threads: board.threads.filter((thread) => thread.id !== threadId),
+    },
+    imgs: target.frags.flatMap((frag) => frag.imgs ?? []),
+  };
+}
+
+export type ThreadMerge = {
+  board: Board;
+  intoName: string;
+  fromName: string;
+};
+
+export function applyThreadMerge(
+  board: Board,
+  intoId: string,
+  fromId: string,
+): ThreadMerge | null {
+  if (intoId === fromId) return null;
+  const into = board.threads.find((thread) => thread.id === intoId);
+  const from = board.threads.find((thread) => thread.id === fromId);
+  if (!into || !from) return null;
+  const frags = [...into.frags, ...from.frags].sort((left, right) => left.at - right.at);
+  return {
+    board: {
+      ...board,
+      actions: board.actions.map((action) =>
+        action.shot?.threadId === fromId
+          ? { ...action, shot: { ...action.shot, threadId: intoId } }
+          : action
+      ),
+      threads: board.threads
+        .filter((thread) => thread.id !== fromId)
+        .map((thread) => thread.id === intoId ? { ...thread, frags } : thread),
+    },
+    intoName: into.name,
+    fromName: from.name,
+  };
 }
 
 export type FragResolve = {

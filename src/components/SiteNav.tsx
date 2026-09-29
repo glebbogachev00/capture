@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useId, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { cloudAccountHandoff } from "@/lib/cloudCheckoutClient";
-import { PLAYGROUND } from "@/lib/playground";
+
 
 type SiteSection = "about" | "writing" | "install" | "pricing";
 type SiteLink = { id: SiteSection | "login"; label: string; href: string };
@@ -19,7 +19,7 @@ const sections: SiteLink[] = [
 export function SiteNav({
   current,
   homeHref = "/",
-  loginHref = PLAYGROUND ? cloudAccountHandoff() : null,
+  loginHref = cloudAccountHandoff(),
 }: {
   current: SiteSection;
   homeHref?: string;

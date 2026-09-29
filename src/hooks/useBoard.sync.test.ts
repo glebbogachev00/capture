@@ -5,7 +5,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { set } from "@/lib/storage";
 import { EMPTY, KEY, type Board } from "@/lib/model";
 import { useBoard } from "./useBoard";
-import { imgLoad } from "@/lib/imgCache";
+import { TOMBSTONE_KEY } from "@/lib/sync";
+import { imgLoad, imgSave } from "@/lib/imgCache";
 
 /**
  * The hook itself, running — not a grep of its source.
@@ -104,6 +105,7 @@ describe("the real hook, pushing to the real seam", () => {
   beforeEach(async () => {
     sync = mockSync();
     await set(KEY, JSON.stringify(seedBoard()));
+    await set(TOMBSTONE_KEY, "[]");
   });
   afterEach(() => sync.restore());
 
@@ -305,5 +307,121 @@ describe("the real hook, pushing to the real seam", () => {
     await new Promise((resolve) => setTimeout(resolve, 1700));
     expect(sync.posts).toHaveLength(1);
     unmount();
+  });
+
+  it("does not report full sync for an over-envelope original and confirms only a remotely present copy", async () => {
+    sync.restore();
+    const oversized = "data:image/png;base64," + "A".repeat(3_100_000);
+    const withImage = {
+      ...seedBoard(),
+      actions: [{ ...seedBoard().actions[0], imgs: ["oversized-photo"] }],
+    };
+    await set(KEY, JSON.stringify(withImage));
+    await imgSave("oversized-photo", oversized);
+    let uploaded = false;
+    let puts = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/img/oversized-photo" && init?.method === "HEAD") {
+        return new Response(null, { status: uploaded ? 204 : 404 });
+      }
+      if (url === "/api/img/oversized-photo" && init?.method === "PUT") {
+        puts++;
+        return new Response(null, { status: 200 });
+      }
+      if (url.startsWith("/api/sync") && init?.method === "POST") {
+        return Response.json({ board: withImage, tombstones: [], rev: 1 });
+      }
+      if (url.startsWith("/api/sync")) {
+        return Response.json({ board: withImage, tombstones: [], rev: 1 });
+      }
+      return new Response(null, { status: 503 });
+    }) as typeof fetch;
+
+    const first = renderHook(() => useBoard(T0 + 60_000));
+    await waitFor(() => expect(first.result.current.sync).toMatchObject({
+      ok: false,
+      imageSync: "failed",
+      note: "An image is too large to sync — kept locally",
+    }));
+    expect(puts).toBe(0);
+    expect(await imgLoad("oversized-photo")).toBe(oversized);
+
+    await act(async () => { await first.result.current.syncNow(); });
+    expect(first.result.current.sync).toMatchObject({ ok: false, imageSync: "failed" });
+    expect(puts).toBe(0);
+
+    uploaded = true;
+    await act(async () => { await first.result.current.syncNow(); });
+    await waitFor(() => expect(first.result.current.sync?.ok).toBe(true));
+    expect(puts).toBe(0);
+    first.unmount();
+
+    const reloaded = renderHook(() => useBoard(T0 + 60_000));
+    await waitFor(() => expect(reloaded.result.current.sync?.ok).toBe(true));
+    expect(puts).toBe(0);
+    expect(await imgLoad("oversized-photo")).toBe(oversized);
+    reloaded.unmount();
+  });
+
+  it("keeps mixed image reconciliation incomplete and retries only the failed upload", async () => {
+    sync.restore();
+    const withImages = {
+      ...seedBoard(),
+      actions: [{ ...seedBoard().actions[0], imgs: ["good-photo", "failed-photo"] }],
+    };
+    await set(KEY, JSON.stringify(withImages));
+    await imgSave("good-photo", "data:image/jpeg;base64,GOOD");
+    await imgSave("failed-photo", "data:image/png;base64,TOO-LARGE");
+    const puts = new Map<string, number>();
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/sync")) {
+        return Response.json({ board: withImages, tombstones: [], rev: 1 });
+      }
+      if (url.startsWith("/api/img/") && init?.method === "HEAD") {
+        return new Response(null, { status: 404 });
+      }
+      if (url.startsWith("/api/img/") && init?.method === "PUT") {
+        const id = url.split("/").at(-1)!;
+        puts.set(id, (puts.get(id) ?? 0) + 1);
+        return new Response(null, { status: id === "good-photo" ? 200 : 413 });
+      }
+      return new Response(null, { status: 503 });
+    }) as typeof fetch;
+
+    const hook = renderHook(() => useBoard(T0 + 60_000));
+    await waitFor(() => expect(puts.get("failed-photo")).toBe(1));
+    await waitFor(() => expect(hook.result.current.sync).toMatchObject({
+      ok: false,
+      imageSync: "failed",
+    }));
+    act(() => window.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(puts.get("failed-photo")).toBe(2));
+    expect(puts.get("good-photo")).toBe(1);
+    hook.unmount();
+  });
+
+  it("does not report sync until a remotely referenced missing image is fetched and stored", async () => {
+    sync.restore();
+    const remote = {
+      ...seedBoard(),
+      actions: [{ ...seedBoard().actions[0], imgs: ["remote-photo"], updatedAt: T0 + 10_000 }],
+    };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/sync")) {
+        return Response.json({ board: remote, tombstones: [], rev: 1 });
+      }
+      if (url === "/api/img/remote-photo") {
+        return Response.json({ src: "data:image/jpeg;base64,REMOTE" });
+      }
+      return new Response(null, { status: 503 });
+    }) as typeof fetch;
+
+    const hook = renderHook(() => useBoard(T0 + 60_000));
+    await waitFor(() => expect(hook.result.current.sync?.ok).toBe(true));
+    expect(await imgLoad("remote-photo")).toBe("data:image/jpeg;base64,REMOTE");
+    hook.unmount();
   });
 });

@@ -6,6 +6,7 @@ import { Capture } from "@/app/Capture";
 import { EMPTY, KEY, hydrate } from "@/lib/model";
 import { get, set } from "@/lib/storage";
 import { explicitTasks, explicitTasksRaw, releaseIdea } from "@/lib/explicitTasks.fixture";
+import type { PlannedRoutingPlan } from "@/lib/plannedRouting";
 
 // Supply the App Router boundary without a checkout or Cloud account.
 vi.mock("next/navigation", () => ({
@@ -33,11 +34,54 @@ describe("explicit tasks survive the visible board and reload", () => {
     const sortRequests: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/sort") {
-        sortRequests.push(JSON.parse(String(init?.body)).raw);
-        return Response.json({ clean: raw, kind, title: "App launch tasks", actions,
+        const request = JSON.parse(String(init?.body));
+        sortRequests.push(request.raw);
+        const thoughtStart = hasThread && actions.length ? raw.indexOf(releaseIdea) : 0;
+        const actionSource = hasThread ? raw.slice(0, thoughtStart) : raw;
+        const cuts = Array.from({ length: actions.length + 1 }, (_, index) =>
+          Math.floor(actionSource.length * index / Math.max(1, actions.length)));
+        const pieces = actions.map((_, index) => actionSource.slice(cuts[index], cuts[index + 1]));
+        const routingPlan: PlannedRoutingPlan = {
+          items: [
+            ...actions.map((action, index) => ({
+              id: `action-${index}`,
+              source: pieces[index],
+              kind: "action" as const,
+              action,
+              due: null,
+              ownerId: null,
+              destinations: [],
+              duplicateActionId: null,
+              unresolved: false,
+              ambiguity: null,
+            })),
+            ...(hasThread ? [{
+              id: "thinking",
+              source: raw.slice(thoughtStart),
+              kind: "developing_thought" as const,
+              action: null,
+              due: null,
+              ownerId: null,
+              destinations: [{ type: "new" as const, newThreadKey: "release" }],
+              duplicateActionId: null,
+              unresolved: false,
+              ambiguity: null,
+            }] : []),
+          ],
+          newThreads: hasThread ? [{
+            key: "release",
+            name: "Release assistant idea",
+            closestExistingThreadId: null,
+            whyNew: "Synthetic provider fixture declares the separate thought destination.",
+          }] : [],
+        };
+        const recovery = { clean: raw, kind, title: "App launch tasks", actions,
+          primaryActions: [],
           shelfLife: "keep", due: null, threadId: null,
           threadName: hasThread ? "Release assistant idea" : null, primaryText: null, also: null,
-          via: "mock-provider" });
+          via: "mock-provider" };
+        return Response.json({ ...recovery, planned: true, captureId: request.captureId,
+          routingPlan, recovery });
       }
       // All ancillary calls fail closed; never touch a real hub or provider.
       return Response.json({ error: "test isolation" }, { status: 503 });
@@ -56,7 +100,7 @@ describe("explicit tasks survive the visible board and reload", () => {
     });
     expect(sortRequests).toEqual([raw]);
     if (hasThread) {
-      expect(screen.getByText("Release assistant idea")).toBeTruthy();
+      expect(screen.getAllByText("Release assistant idea").length).toBeGreaterThan(0);
       const saved = hydrate(JSON.parse((await get(KEY))!));
       expect(saved.threads[0].frags[0].text).toContain(releaseIdea);
       expect(saved.actions.some((a) => /release assistant/i.test(a.text))).toBe(false);

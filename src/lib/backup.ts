@@ -368,6 +368,31 @@ export function restoreBackup(
     board.corrections ?? [],
     incoming.corrections ?? []
   );
+  const settlementKey = (record: NonNullable<Board["routingSettlements"]>[number]) =>
+    JSON.stringify([
+      record.id,
+      record.captureId,
+      record.pendingId,
+      record.revision,
+      record.settledBy,
+      record.artifacts.map((artifact) => [artifact.kind, artifact.id]),
+    ]);
+  merged.routingSettlements = [...new Map([
+    ...(board.routingSettlements ?? []),
+    ...(incoming.routingSettlements ?? []),
+  ].map((record) => [settlementKey(record), record])).values()];
+  const retirementSlot = (record: NonNullable<Board["routingRetirements"]>[number]) =>
+    JSON.stringify([record.captureId, record.pendingId, record.revision]);
+  const retirements = new Map<string, NonNullable<Board["routingRetirements"]>[number]>();
+  for (const record of [
+    ...(board.routingRetirements ?? []),
+    ...(incoming.routingRetirements ?? []),
+  ]) {
+    const slot = retirementSlot(record);
+    const current = retirements.get(slot);
+    if (!current || record.retiredAt > current.retiredAt) retirements.set(slot, record);
+  }
+  merged.routingRetirements = [...retirements.values()];
   /* The rest of the history travels the same way. This is the third place
      that has to name every Board field by hand — hydrate and the sync merge
      are the others — and the one most easily forgotten, because a restore is

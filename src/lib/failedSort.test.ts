@@ -21,13 +21,16 @@ const source = fs.readFileSync(
 );
 
 describe("when the sorter does not answer", () => {
-  it("the fallback goes through the settlement", () => {
+  it("durably stages the pending settlement before launching planned sorting", () => {
     const block = source.slice(
-      source.indexOf("const saveUnsorted"),
-      source.indexOf("captureSnapshot.current", source.indexOf("const saveUnsorted"))
+      source.indexOf("let durable: DurableMutationResult"),
+      source.indexOf("/* ----------------------- capture suggestion")
     );
-    expect(block).toMatch(/settleUnsortedCapture\(/);
-    /* No inline board construction may return. */
+    expect(source).toMatch(/stagePlannedRoutingIntake/);
+    expect(block).toMatch(/await transactDurable\(/);
+    expect(block.indexOf("await transactDurable(")).toBeLessThan(
+      block.indexOf("void runPlannedSort")
+    );
     expect(block).not.toMatch(/actions: \[action/);
     expect(block).not.toMatch(/tab ===/);
   });

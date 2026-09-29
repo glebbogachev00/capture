@@ -68,9 +68,19 @@ export function applySaveDraft(
     intentions: [intention, ...board.intentions],
   };
   if (origin.pendingSource) {
+    const pending = board.actions.find((action) =>
+      action.id === origin.pendingSource && action.unsorted
+    );
     next = {
       ...next,
       actions: board.actions.filter((a) => a.id !== origin.pendingSource),
+      ...(pending ? {
+        ledger: board.ledger.map((entry) =>
+          entry.kind === "pending" && entry.targetId === pending.id
+            ? { ...entry, undone: true, imgs: undefined }
+            : entry
+        ),
+      } : {}),
     };
   }
   if (origin.capture) {

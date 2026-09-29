@@ -1,0 +1,201 @@
+[
+  {
+    "id": "three-existing-tea-origami-kites",
+    "covers": [
+      "three-existing"
+    ],
+    "raw": "For the synthetic tea notes, compare a shorter steep with cooler water. In the synthetic origami practice, the reverse fold diagram still needs a clearer reading. The synthetic kite workshop also needs notes on how a shorter bridle changes stability in gusts.",
+    "expected": {
+      "destinations": [
+        "thread-synthetic-tea",
+        "thread-synthetic-origami",
+        "thread-synthetic-kites"
+      ],
+      "kinds": [
+        "thread"
+      ],
+      "actions": {
+        "min": 0,
+        "max": 0
+      },
+      "requiredThreadIds": [
+        "thread-synthetic-tea",
+        "thread-synthetic-origami",
+        "thread-synthetic-kites"
+      ],
+      "forbiddenThreadIds": [
+        "thread-capture",
+        "thread-ovid",
+        "thread-rest-day"
+      ],
+      "newThreads": [],
+      "expectedActions": [],
+      "structuredDeadlines": [],
+      "forbiddenDuplicates": []
+    },
+    "destinationExpectations": {
+      "thread-synthetic-tea": {
+        "shareIncludesAll": [
+          [
+            "tea"
+          ],
+          [
+            "steep",
+            "water"
+          ]
+        ],
+        "shareExcludes": [
+          "origami",
+          "kite"
+        ]
+      },
+      "thread-synthetic-origami": {
+        "shareIncludesAll": [
+          [
+            "origami"
+          ],
+          [
+            "fold",
+            "diagram"
+          ]
+        ],
+        "shareExcludes": [
+          "tea",
+          "kite"
+        ]
+      },
+      "thread-synthetic-kites": {
+        "shareIncludesAll": [
+          [
+            "kite"
+          ],
+          [
+            "bridle",
+            "stability",
+            "gust"
+          ]
+        ],
+        "shareExcludes": [
+          "tea",
+          "origami"
+        ]
+      }
+    }
+  },
+  {
+    "id": "garden-paraphrase-reuse",
+    "covers": [
+      "paraphrased-duplicate-thread"
+    ],
+    "raw": "For the roof containers, stagger bloom times so pollinators have food across the season while the lightweight pots remain easy to move.",
+    "expected": {
+      "destinations": [
+        "thread-rooftop-garden"
+      ],
+      "kinds": [
+        "thread"
+      ],
+      "actions": {
+        "min": 0,
+        "max": 0
+      },
+      "requiredThreadIds": [
+        "thread-rooftop-garden"
+      ],
+      "forbiddenThreadIds": [
+        "thread-synthetic-weather"
+      ],
+      "newThreads": [],
+      "expectedActions": [],
+      "structuredDeadlines": [],
+      "forbiddenDuplicates": [
+        {
+          "kind": "thread",
+          "existingId": "thread-rooftop-garden"
+        }
+      ]
+    },
+    "destinationExpectations": {
+      "thread-rooftop-garden": {
+        "shareIncludesAll": [
+          [
+            "roof"
+          ],
+          [
+            "bloom",
+            "pollinator"
+          ],
+          [
+            "container",
+            "pot",
+            "light",
+            "move"
+          ]
+        ],
+        "shareExcludes": [
+          "capture",
+          "tea"
+        ]
+      }
+    }
+  },
+  {
+    "id": "correction-semantic-paraphrase",
+    "covers": [
+      "correction-paraphrase"
+    ],
+    "raw": "The final release passage should make the ownership transfer obvious without adding another control.",
+    "expected": {
+      "destinations": [
+        "thread-capture"
+      ],
+      "kinds": [
+        "thread"
+      ],
+      "actions": {
+        "min": 0,
+        "max": 0
+      },
+      "requiredThreadIds": [
+        "thread-capture"
+      ],
+      "forbiddenThreadIds": [
+        "thread-retake",
+        "thread-atlas-deployment"
+      ],
+      "newThreads": [],
+      "expectedActions": [],
+      "structuredDeadlines": [],
+      "forbiddenDuplicates": []
+    },
+    "destinationExpectations": {
+      "thread-capture": {
+        "shareIncludesAll": [
+          [
+            "release"
+          ],
+          [
+            "ownership",
+            "transfer",
+            "handoff"
+          ],
+          [
+            "control"
+          ]
+        ],
+        "shareExcludes": [
+          "retake",
+          "atlas"
+        ]
+      }
+    },
+    "correctionExamples": [
+      {
+        "capture": "The ship handoff needs a clearer owner before Capture goes out.",
+        "kind": "thread",
+        "threadId": "thread-capture",
+        "threadName": "Capture filing"
+      }
+    ]
+  }
+]

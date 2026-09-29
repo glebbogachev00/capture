@@ -1,4 +1,5 @@
 import { ownedFetch } from "./ownership";
+import { MAX_SYNC_IMAGE_SOURCE_LENGTH } from "./imageLimits";
 import type { Board } from "./model";
 
 /**
@@ -42,6 +43,16 @@ export function referencedImageIds(board: Board): string[] {
   );
 }
 
+/** Only bytes with no current or immutable-history reference may be retired. */
+export function unreferencedImageIds(
+  board: Board,
+  candidates: string[] | undefined,
+): string[] {
+  if (!candidates?.length) return [];
+  const referenced = new Set(referencedImageIds(board));
+  return [...new Set(candidates)].filter((id) => !referenced.has(id));
+}
+
 /** An id safe to use as a file name on the hub: the app's own uid alphabet,
     nothing that could climb out of the directory. */
 export function isSafeImageId(id: string): boolean {
@@ -62,15 +73,40 @@ export async function ensureHubImage(
   src: string,
   request: ImageRequest = ownedFetch
 ): Promise<boolean> {
-  if (!isSafeImageId(id)) return false;
+  return (await syncHubImage(id, src, request)).ok;
+}
+
+export type HubImageSyncResult =
+  | { ok: true; source: "head" | "upload" }
+  | { ok: false; reason: "unsafe" | "remote" | "too_large"; status: number };
+
+/** Same exchange as ensureHubImage, with enough failure detail for aggregate
+ * sync status. The source bytes are passed through unchanged and remain local
+ * after every failure. */
+export async function syncHubImage(
+  id: string,
+  src: string,
+  request: ImageRequest = ownedFetch,
+): Promise<HubImageSyncResult> {
+  if (!isSafeImageId(id)) return { ok: false, reason: "unsafe", status: 0 };
   const existing = await request(`/api/img/${id}`, { method: "HEAD" });
-  if (existing.ok) return true;
-  if (existing.status !== 404) return false;
+  if (existing.ok) return { ok: true, source: "head" };
+  if (existing.status !== 404) {
+    return { ok: false, reason: "remote", status: existing.status };
+  }
+  if (src.length > MAX_SYNC_IMAGE_SOURCE_LENGTH) {
+    return { ok: false, reason: "too_large", status: 413 };
+  }
 
   const uploaded = await request(`/api/img/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ src }),
   });
-  return uploaded.ok;
+  if (uploaded.ok) return { ok: true, source: "upload" };
+  return {
+    ok: false,
+    reason: uploaded.status === 413 ? "too_large" : "remote",
+    status: uploaded.status,
+  };
 }

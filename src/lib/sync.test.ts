@@ -5,6 +5,7 @@ import {
   mergeBoards,
   mergeSync,
   mergeTombstones,
+  reconcileActionShotHomes,
   stampChanges,
   TOMBSTONE_TTL,
   type Tombstone,
@@ -122,6 +123,98 @@ describe("mergeBoards", () => {
     expect(t1?.frags).toHaveLength(0);
     expect(t2?.frags.map((f) => f.id)).toEqual(["f1"]);
   });
+
+  describe.each([
+    ["fragment move", "destination", [
+      thread("source", [frag("other")], { updatedAt: 5000 }),
+      thread("destination", [frag("owner", { imgs: ["photo"], updatedAt: 5000 })], { updatedAt: 5000 }),
+    ], []],
+    ["fragment split", "split-thread", [
+      thread("source", [frag("other")], { updatedAt: 5000 }),
+      thread("split-thread", [frag("owner", { imgs: ["photo"], updatedAt: 5000 })], { updatedAt: 5000 }),
+    ], []],
+    ["whole-Thread merge", "destination", [
+      thread("destination", [frag("owner", { imgs: ["photo"], updatedAt: 5000 })], { updatedAt: 5000 }),
+    ], [{ kind: "thread", id: "source", deletedAt: 5000 } as Tombstone]],
+  ] as const)("Action shot reconciliation after %s", (_case, actualHome, movedThreads, movedTombstones) => {
+    const staleAction = action("image-action", {
+      text: "newer stale-device edit",
+      shot: { threadId: "source", fragId: "owner" },
+      updatedAt: 7000,
+    });
+    const stale = {
+      board: board({
+        actions: [staleAction],
+        threads: [
+          thread("source", [frag("owner", { imgs: ["photo"], updatedAt: 1000 })]),
+          thread("destination", []),
+        ],
+        ledger: [{
+          id: "immutable-record", at: 1000, raw: "raw", clean: "clean",
+          kind: "action", source: "image", targetId: "image-action",
+          targetFragId: "owner", imgs: ["photo"],
+        }],
+      }),
+      tombstones: [] as Tombstone[],
+    };
+    const moved = {
+      board: board({
+        actions: [action("image-action", {
+          text: "before stale edit",
+          shot: { threadId: actualHome, fragId: "owner" },
+          updatedAt: 5000,
+        })],
+        threads: [...movedThreads],
+        ledger: stale.board.ledger,
+      }),
+      tombstones: [...movedTombstones],
+    };
+
+    it("converges in either merge order without rewriting Action/history/image metadata", () => {
+      for (const [left, right] of [[stale, moved], [moved, stale]] as const) {
+        const out = mergeSync(left, right, 8000).board;
+        const mergedAction = out.actions.find((item) => item.id === "image-action")!;
+        expect(mergedAction).toEqual({
+          ...staleAction,
+          shot: { threadId: actualHome, fragId: "owner" },
+        });
+        expect(out.threads.find((item) => item.id === actualHome)
+          ?.frags.find((item) => item.id === "owner")?.imgs).toEqual(["photo"]);
+        expect(out.ledger).toEqual(stale.board.ledger);
+      }
+    });
+  });
+
+  it.each([
+    ["missing", []],
+    ["ambiguous", [
+      thread("one", [frag("owner")]),
+      thread("two", [frag("owner")]),
+    ]],
+  ] as const)("fails closed by preserving a %s shot when no unique fragment home exists", (_case, threads) => {
+    const original = action("image-action", {
+      shot: { threadId: "stale-home", fragId: "owner" },
+      updatedAt: 7000,
+    });
+    const input = board({ actions: [original], threads: [...threads] });
+    const out = reconcileActionShotHomes(input);
+    expect(out.actions[0]).toBe(original);
+    expect(out.actions[0].shot).toEqual({ threadId: "stale-home", fragId: "owner" });
+    expect(out.actions[0].updatedAt).toBe(7000);
+  });
+
+  it("does not rewrite a legacy completed Action while reconciling live owners", () => {
+    const original = action("completed", {
+      done: true,
+      shot: { threadId: "obsolete-home", fragId: "owner" },
+      updatedAt: 7000,
+    });
+    const input = board({
+      actions: [original],
+      threads: [thread("actual-home", [frag("owner")])],
+    });
+    expect(reconcileActionShotHomes(input).actions[0]).toBe(original);
+  });
 });
 
 describe("tombstones", () => {
@@ -171,6 +264,247 @@ describe("tombstones", () => {
 });
 
 describe("mergeSync end to end", () => {
+  it("keeps the original Action shot when one input has duplicate fragment homes", () => {
+    const original = action("image-action", {
+      text: "keep every Action field",
+      imgs: ["action-image"],
+      shot: { threadId: "original-home", fragId: "owner" },
+      updatedAt: 7000,
+    });
+    const ledger = [{
+      id: "immutable-record", at: 900, raw: "raw", clean: "clean",
+      kind: "action" as const, source: "image" as const,
+      targetId: "image-action", targetFragId: "owner", imgs: ["ledger-image"],
+    }];
+    const duplicate = {
+      board: board({
+        actions: [original],
+        threads: [
+          thread("one", [frag("owner", { imgs: ["first-image"] })]),
+          thread("two", [frag("owner", { imgs: ["second-image"] })]),
+        ],
+        ledger,
+      }),
+      tombstones: [] as Tombstone[],
+    };
+    const empty = { board: board(), tombstones: [] as Tombstone[] };
+
+    for (const [left, right] of [[duplicate, empty], [empty, duplicate]] as const) {
+      const merged = mergeSync(left, right, 8000);
+      expect(merged.board.actions[0]).toEqual(original);
+      expect(merged.board.actions[0].updatedAt).toBe(7000);
+      expect(merged.board.ledger).toEqual(ledger);
+      expect(merged.board.threads.flatMap((item) => item.frags)
+        .flatMap((item) => item.imgs ?? []).sort()).toEqual([
+        "first-image", "second-image",
+      ]);
+    }
+  });
+
+  it("is order-independent for equal-timestamp fragment conflicts across inputs", () => {
+    const original = action("image-action", {
+      shot: { threadId: "original-home", fragId: "owner" },
+      updatedAt: 7000,
+    });
+    const left = {
+      board: board({
+        actions: [original],
+        threads: [thread("one", [frag("owner", {
+          text: "left content", imgs: ["left-image"], updatedAt: 5000,
+        })])],
+      }),
+      tombstones: [] as Tombstone[],
+    };
+    const right = {
+      board: board({
+        actions: [original],
+        threads: [thread("two", [frag("owner", {
+          text: "right content", imgs: ["right-image"], updatedAt: 5000,
+        })])],
+      }),
+      tombstones: [] as Tombstone[],
+    };
+
+    const forward = mergeSync(left, right, 8000).board;
+    const reverse = mergeSync(right, left, 8000).board;
+    const owners = (input: Board) => input.threads.flatMap((item) =>
+      item.frags.map((item) => ({ home: input.threads.find((thread) =>
+        thread.frags.includes(item))!.id, frag: item })))
+      .filter((item) => item.frag.id === "owner")
+      .sort((a, b) => a.home.localeCompare(b.home));
+
+    expect(forward.actions[0]).toEqual(original);
+    expect(reverse.actions[0]).toEqual(original);
+    expect(owners(forward)).toEqual(owners(reverse));
+    expect(owners(forward)).toHaveLength(2);
+  });
+
+  it("propagates equal-timestamp home ambiguity into later syncs", () => {
+    const original = action("image-action", {
+      shot: { threadId: "original-home", fragId: "owner" },
+      updatedAt: 7000,
+    });
+    const left = {
+      board: board({
+        actions: [original],
+        threads: [thread("one", [frag("owner", {
+          text: "left content", imgs: ["left-image"], updatedAt: 5000,
+        })])],
+      }),
+      tombstones: [] as Tombstone[],
+    };
+    const right = {
+      board: board({
+        actions: [original],
+        threads: [thread("two", [frag("owner", {
+          text: "right content", imgs: ["right-image"], updatedAt: 5000,
+        })])],
+      }),
+      tombstones: [] as Tombstone[],
+    };
+
+    const once = mergeSync(left, right, 8000);
+    const again = mergeSync(once, once, 8000);
+    expect(again.board.actions[0]).toEqual(original);
+    expect(again.board.threads.flatMap((item) => item.frags)
+      .filter((item) => item.id === "owner")).toHaveLength(2);
+  });
+
+  it("keeps the original shot when a fragment tombstone leaves no final home", () => {
+    const original = action("image-action", {
+      text: "preserve me exactly",
+      imgs: ["action-image"],
+      shot: { threadId: "original-home", fragId: "owner" },
+      updatedAt: 7000,
+    });
+    const ledger = [{
+      id: "immutable-record", at: 900, raw: "raw", clean: "clean",
+      kind: "action" as const, source: "image" as const,
+      targetId: "image-action", targetFragId: "owner", imgs: ["ledger-image"],
+    }];
+    const present = {
+      board: board({
+        actions: [original],
+        threads: [thread("apparent", [frag("owner", {
+          imgs: ["fragment-image"], updatedAt: 5000,
+        })])],
+        ledger,
+      }),
+      tombstones: [] as Tombstone[],
+    };
+    const deleted = {
+      board: board(),
+      tombstones: [{ kind: "frag", id: "owner", deletedAt: 5000 }] as Tombstone[],
+    };
+
+    for (const [left, right] of [[present, deleted], [deleted, present]] as const) {
+      const merged = mergeSync(left, right, 8000);
+      expect(merged.board.actions[0]).toEqual(original);
+      expect(merged.board.ledger).toEqual(ledger);
+      expect(merged.board.threads.flatMap((item) => item.frags)).toEqual([]);
+    }
+  });
+
+  it("keeps the original shot when a Thread tombstone leaves no final home", () => {
+    const original = action("image-action", {
+      imgs: ["action-image"],
+      shot: { threadId: "original-home", fragId: "owner" },
+      updatedAt: 7000,
+    });
+    const present = {
+      board: board({
+        actions: [original],
+        threads: [thread("apparent", [frag("owner", {
+          imgs: ["fragment-image"], updatedAt: 5000,
+        })], { updatedAt: 5000 })],
+      }),
+      tombstones: [] as Tombstone[],
+    };
+    const deleted = {
+      board: board(),
+      tombstones: [{ kind: "thread", id: "apparent", deletedAt: 5000 }] as Tombstone[],
+    };
+
+    for (const [left, right] of [[present, deleted], [deleted, present]] as const) {
+      const merged = mergeSync(left, right, 8000).board;
+      expect(merged.actions[0]).toEqual(original);
+      expect(merged.threads).toEqual([]);
+    }
+  });
+
+  it("repairs from the unique final home after a Thread tombstone removes the apparent winner", () => {
+    const original = action("image-action", {
+      shot: { threadId: "original-home", fragId: "owner" },
+      updatedAt: 7000,
+    });
+    const apparent = {
+      board: board({
+        actions: [original],
+        threads: [thread("doomed", [frag("owner", {
+          text: "newer but deleted", updatedAt: 5000,
+        })], { updatedAt: 5000 })],
+      }),
+      tombstones: [] as Tombstone[],
+    };
+    const survivor = {
+      board: board({
+        actions: [original],
+        threads: [thread("survivor", [frag("owner", {
+          text: "final live content", imgs: ["surviving-image"], updatedAt: 4000,
+        })], { updatedAt: 4000 })],
+      }),
+      tombstones: [{ kind: "thread", id: "doomed", deletedAt: 5000 }] as Tombstone[],
+    };
+
+    for (const [left, right] of [[apparent, survivor], [survivor, apparent]] as const) {
+      const merged = mergeSync(left, right, 8000).board;
+      expect(merged.actions[0]).toEqual({
+        ...original,
+        shot: { threadId: "survivor", fragId: "owner" },
+      });
+      expect(merged.threads.map((item) => item.id)).toEqual(["survivor"]);
+      expect(merged.threads[0].frags[0]).toEqual(frag("owner", {
+        text: "final live content", imgs: ["surviving-image"], updatedAt: 4000,
+      }));
+    }
+  });
+
+  it("does not let an unproven manual authority delete a valid automatic artifact", () => {
+    const automatic = board({
+      actions: [action("automatic-artifact")],
+      routingSettlements: [{
+        id: "automatic-authority",
+        captureId: "capture",
+        pendingId: "pending",
+        revision: 1,
+        settledBy: "automatic",
+        artifacts: [{ kind: "action", id: "automatic-artifact" }],
+      }],
+    });
+    const forged = board({
+      routingSettlements: [{
+        id: "unproven-manual-authority",
+        captureId: "capture",
+        pendingId: "pending",
+        revision: 1,
+        settledBy: "manual",
+        artifacts: [{ kind: "action", id: "missing-manual-artifact" }],
+      }],
+    });
+
+    for (const [left, right] of [[automatic, forged], [forged, automatic]] as const) {
+      const merged = mergeSync(
+        { board: left, tombstones: [] },
+        { board: right, tombstones: [] },
+        2000,
+      );
+      expect(merged.board.actions.map((item) => item.id)).toContain("automatic-artifact");
+      expect(merged.board.routingSettlements).toEqual([
+        expect.objectContaining({ id: "automatic-authority", settledBy: "automatic" }),
+      ]);
+    }
+  });
+
   it("converges when run twice (idempotent)", () => {
     const a = {
       board: board({ actions: [action("a1", { updatedAt: 100 })] }),
@@ -395,6 +729,55 @@ describe("boardSignature — what a pull compares before adopting a merge", () =
       threads: [thread("t1", []), thread("t2", [frag("f1", { updatedAt: 100 })])],
     });
     expect(boardSignature(before, [])).not.toBe(boardSignature(after, []));
+  });
+
+  it("notices a reconciled Action shot even though reconciliation preserves its timestamp", () => {
+    const threads = [thread("actual-home", [frag("owner")])];
+    const stale = board({
+      actions: [action("image-action", {
+        shot: { threadId: "obsolete-home", fragId: "owner" },
+        updatedAt: 7000,
+      })],
+      threads,
+    });
+    const reconciled = reconcileActionShotHomes(stale);
+    expect(reconciled.actions[0].updatedAt).toBe(7000);
+    expect(boardSignature(reconciled, [])).not.toBe(boardSignature(stale, []));
+  });
+
+  it("changes only for a valid mergeSync shot repair", () => {
+    const original = action("image-action", {
+      shot: { threadId: "obsolete-home", fragId: "owner" },
+      updatedAt: 7000,
+    });
+    const stale = {
+      board: board({
+        actions: [original],
+        threads: [thread("actual-home", [frag("owner", { updatedAt: 5000 })])],
+      }),
+      tombstones: [] as Tombstone[],
+    };
+    const valid = mergeSync(stale, stale, 8000);
+    expect(valid.board.actions[0].shot?.threadId).toBe("actual-home");
+    expect(boardSignature(valid.board, valid.tombstones)).not.toBe(
+      boardSignature(stale.board, stale.tombstones)
+    );
+
+    const ambiguous = {
+      board: board({
+        actions: [original],
+        threads: [
+          thread("one", [frag("owner", { updatedAt: 5000 })]),
+          thread("two", [frag("owner", { updatedAt: 5000 })]),
+        ],
+      }),
+      tombstones: [] as Tombstone[],
+    };
+    const invalid = mergeSync(ambiguous, ambiguous, 8000);
+    expect(invalid.board.actions[0]).toEqual(original);
+    expect(boardSignature(invalid.board, invalid.tombstones)).toBe(
+      boardSignature(ambiguous.board, ambiguous.tombstones)
+    );
   });
 
   it("notices a new tombstone", () => {

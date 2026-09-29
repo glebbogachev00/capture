@@ -1,0 +1,779 @@
+{
+  "revision": "p6-recovery-regressions-v1",
+  "initialBoard": {
+    "threads": [
+      {
+        "id": "thread-techtutor",
+        "name": "TechTutor lessons",
+        "summary": "Designing clear, playful technology lessons for students.",
+        "belongs": "Lesson structure, student exercises, and teaching explanations for TechTutor; not video editing or unrelated software work.",
+        "frags": [
+          {
+            "id": "seed-techtutor-1",
+            "at": 1760000000001,
+            "text": "Use a short worked example before the student challenge."
+          }
+        ]
+      },
+      {
+        "id": "thread-retake",
+        "name": "Retake editing workflow",
+        "summary": "Improving a fictional video review and editing workflow called Retake.",
+        "belongs": "Retake playback, review, edit, and export workflow; not lesson design or Capture filing.",
+        "frags": [
+          {
+            "id": "seed-retake-1",
+            "at": 1760000000002,
+            "text": "Playback should remain responsive while review markers load."
+          }
+        ]
+      },
+      {
+        "id": "thread-capture",
+        "name": "Capture filing",
+        "summary": "Improving how the Capture app files and retrieves thoughts.",
+        "belongs": "Capture input, filing, Threads, and retrieval behavior; not classical reading notes or recovery routines.",
+        "frags": [
+          {
+            "id": "seed-capture-1",
+            "at": 1760000000003,
+            "text": "The filing result should stay understandable after the original session."
+          }
+        ]
+      },
+      {
+        "id": "thread-ovid",
+        "name": "Ovid reading notes",
+        "summary": "Notes and questions from reading Ovid's Metamorphoses.",
+        "belongs": "Interpretation, imagery, and reading notes about Ovid; not software or daily recovery.",
+        "frags": [
+          {
+            "id": "seed-ovid-1",
+            "at": 1760000000004,
+            "text": "Transformation changes identity without erasing the earlier form."
+          }
+        ]
+      },
+      {
+        "id": "thread-rest-day",
+        "name": "Rest day practice",
+        "summary": "Learning what makes a deliberate rest day restorative.",
+        "belongs": "Recovery, rest-day boundaries, and restorative routines; not productivity software or literature.",
+        "frags": [
+          {
+            "id": "seed-rest-1",
+            "at": 1760000000005,
+            "text": "A rest day works better when it is not treated as a backlog day."
+          }
+        ]
+      },
+      {
+        "id": "thread-atlas-deployment",
+        "name": "Atlas deployment",
+        "summary": "Release planning for a fictional service named Atlas.",
+        "belongs": "Software deployment and release operations for Atlas; not animals or training routines.",
+        "frags": [
+          {
+            "id": "seed-atlas-1",
+            "at": 1760000000006,
+            "text": "The Atlas staging release needs a reversible rollout."
+          }
+        ]
+      },
+      {
+        "id": "thread-synthetic-bread",
+        "name": "Synthetic bread notebook",
+        "summary": "Clearly synthetic notes about sourdough timing and crust experiments.",
+        "belongs": "Only synthetic bread-baking experiments.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-stargazing",
+        "name": "Synthetic stargazing log",
+        "summary": "Clearly synthetic notes about constellations and telescope practice.",
+        "belongs": "Only synthetic amateur astronomy observations.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-ceramics",
+        "name": "Synthetic ceramics study",
+        "summary": "Clearly synthetic notes about glaze tests and wheel-throwing practice.",
+        "belongs": "Only synthetic ceramics practice.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-jazz",
+        "name": "Synthetic jazz practice",
+        "summary": "Clearly synthetic notes about harmony and improvisation exercises.",
+        "belongs": "Only synthetic jazz study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-maps",
+        "name": "Synthetic map collection",
+        "summary": "Clearly synthetic notes about historical map symbols and printing.",
+        "belongs": "Only synthetic cartography study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-kites",
+        "name": "Synthetic kite workshop",
+        "summary": "Clearly synthetic notes about kite frame and sail experiments.",
+        "belongs": "Only synthetic kite building.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-tea",
+        "name": "Synthetic tea tasting",
+        "summary": "Clearly synthetic notes about steeping and flavor comparison.",
+        "belongs": "Only synthetic tea tasting.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-origami",
+        "name": "Synthetic origami practice",
+        "summary": "Clearly synthetic notes about paper-folding diagrams and practice.",
+        "belongs": "Only synthetic origami study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-lighthouses",
+        "name": "Synthetic lighthouse history",
+        "summary": "Clearly synthetic notes about lighthouse lenses and signals.",
+        "belongs": "Only synthetic lighthouse history.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-cycling",
+        "name": "Synthetic cycling routes",
+        "summary": "Clearly synthetic notes about route-planning and bicycle fit.",
+        "belongs": "Only synthetic recreational cycling.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-calligraphy",
+        "name": "Synthetic calligraphy drills",
+        "summary": "Clearly synthetic notes about pen-angle and lettering practice.",
+        "belongs": "Only synthetic calligraphy practice.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-geology",
+        "name": "Synthetic geology cabinet",
+        "summary": "Clearly synthetic notes about mineral identification and rock classification.",
+        "belongs": "Only synthetic geology study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-chess",
+        "name": "Synthetic chess studies",
+        "summary": "Clearly synthetic notes about endgame positions and calculation exercises.",
+        "belongs": "Only synthetic chess study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-perfume",
+        "name": "Synthetic perfume notes",
+        "summary": "Clearly synthetic notes about fragrance accords and scent comparisons.",
+        "belongs": "Only synthetic fragrance study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-architecture",
+        "name": "Synthetic architecture sketches",
+        "summary": "Clearly synthetic notes about arches, courtyards, and facades.",
+        "belongs": "Only synthetic architecture study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-weather",
+        "name": "Synthetic weather journal",
+        "summary": "Clearly synthetic notes about cloud and rainfall observations.",
+        "belongs": "Only synthetic weather observation.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-weaving",
+        "name": "Synthetic weaving samples",
+        "summary": "Clearly synthetic notes about loom setup and textile patterns.",
+        "belongs": "Only synthetic weaving practice.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-fossils",
+        "name": "Synthetic fossil catalogue",
+        "summary": "Clearly synthetic notes about fossil classification and museum notes.",
+        "belongs": "Only synthetic paleontology study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-choir",
+        "name": "Synthetic choir rehearsal",
+        "summary": "Clearly synthetic notes about breathing, blend, and rehearsal.",
+        "belongs": "Only synthetic choir practice.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-canoe",
+        "name": "Synthetic canoe design",
+        "summary": "Clearly synthetic notes about hull-shape and paddling observations.",
+        "belongs": "Only synthetic canoe design.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-clocks",
+        "name": "Synthetic clock repair",
+        "summary": "Clearly synthetic notes about mechanical clock restoration.",
+        "belongs": "Only synthetic clock repair.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-languages",
+        "name": "Synthetic language sounds",
+        "summary": "Clearly synthetic notes about phonetics and pronunciation comparisons.",
+        "belongs": "Only synthetic language-sound study.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-mosaics",
+        "name": "Synthetic mosaic designs",
+        "summary": "Clearly synthetic notes about tile color and geometric patterns.",
+        "belongs": "Only synthetic mosaic design.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-trains",
+        "name": "Synthetic railway history",
+        "summary": "Clearly synthetic notes about railway timetables and locomotive design.",
+        "belongs": "Only synthetic railway history.",
+        "frags": []
+      },
+      {
+        "id": "thread-synthetic-dance",
+        "name": "Synthetic dance notation",
+        "summary": "Clearly synthetic notes about movement notation and choreography.",
+        "belongs": "Only synthetic dance notation.",
+        "frags": []
+      },
+      {
+        "id": "thread-health",
+        "name": "Work and training balance",
+        "summary": "Balancing exercise, mental work, health, and productivity.",
+        "frags": []
+      },
+      {
+        "id": "thread-landing-refs",
+        "name": "Landing page references",
+        "summary": "Website landing-page layouts, typography, and reference designs.",
+        "frags": []
+      },
+      {
+        "id": "thread-rooftop-garden",
+        "name": "Rooftop pollinator garden",
+        "summary": "Wind-tolerant herbs and native flowers in lightweight rooftop planters.",
+        "frags": []
+      },
+      {
+        "id": "thread-aquarium",
+        "name": "Aquarium design",
+        "summary": "Aquarium cabinet panels, material choices, and quiet pumps.",
+        "frags": []
+      }
+    ],
+    "actions": [
+      {
+        "id": "seed-action-1",
+        "text": "Review the synthetic lesson outline",
+        "at": 1760000000010
+      }
+    ],
+    "intentions": [
+      {
+        "id": "seed-intention-1",
+        "rawInput": "I protect room for careful thinking.",
+        "at": 1760000000011
+      }
+    ],
+    "ledger": [
+      {
+        "id": "seed-ledger-capture",
+        "at": 1760000000020,
+        "raw": "The filing result should stay understandable after the original session.",
+        "kind": "thread",
+        "target": "Capture filing"
+      },
+      {
+        "id": "seed-ledger-retake",
+        "at": 1760000000021,
+        "raw": "Playback should remain responsive while review markers load.",
+        "kind": "thread",
+        "target": "Retake editing workflow"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "original-three-existing-tea-origami-kites",
+      "covers": [
+        "three-existing"
+      ],
+      "raw": "For the synthetic tea notes, compare a shorter steep with cooler water. In the synthetic origami practice, the reverse fold diagram still needs a clearer reading. The synthetic kite workshop also needs notes on how a shorter bridle changes stability in gusts.",
+      "expected": {
+        "destinations": [
+          "thread-synthetic-origami",
+          "thread-synthetic-kites"
+        ],
+        "kinds": [
+          "both"
+        ],
+        "actions": {
+          "min": 1,
+          "max": 1
+        },
+        "requiredThreadIds": [
+          "thread-synthetic-origami",
+          "thread-synthetic-kites"
+        ],
+        "forbiddenThreadIds": [
+          "thread-capture",
+          "thread-ovid",
+          "thread-rest-day"
+        ],
+        "newThreads": [],
+        "expectedActions": [
+          {
+            "id": "tea-comparison",
+            "includesAll": [
+              [
+                "compare"
+              ],
+              [
+                "shorter"
+              ],
+              [
+                "cooler"
+              ]
+            ]
+          }
+        ],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {
+        "thread-synthetic-origami": {
+          "shareIncludesAll": [
+            [
+              "origami"
+            ],
+            [
+              "fold",
+              "diagram"
+            ]
+          ],
+          "shareExcludes": [
+            "tea",
+            "kite"
+          ]
+        },
+        "thread-synthetic-kites": {
+          "shareIncludesAll": [
+            [
+              "kite"
+            ],
+            [
+              "bridle",
+              "stability",
+              "gust"
+            ]
+          ],
+          "shareExcludes": [
+            "tea",
+            "origami"
+          ]
+        }
+      },
+      "diagnostic": true,
+      "diagnosticReason": "The kite clause can express a question or an indirect writing request. Keep both observed classifications as diagnostics, not passes. Uncertainty recognition remains unproven.",
+      "diagnosticObservedShapes": [
+        {
+          "actions": 1,
+          "threads": [
+            "thread-synthetic-origami",
+            "thread-synthetic-kites"
+          ],
+          "unresolved": 0
+        },
+        {
+          "actions": 2,
+          "threads": [
+            "thread-synthetic-origami"
+          ],
+          "unresolved": 0
+        }
+      ]
+    },
+    {
+      "id": "original-garden-paraphrase-reuse",
+      "covers": [
+        "paraphrased-duplicate-thread"
+      ],
+      "raw": "For the roof containers, stagger bloom times so pollinators have food across the season while the lightweight pots remain easy to move.",
+      "expected": {
+        "destinations": [],
+        "kinds": [
+          "action"
+        ],
+        "actions": {
+          "min": 1,
+          "max": 1
+        },
+        "requiredThreadIds": [],
+        "forbiddenThreadIds": [
+          "thread-synthetic-weather"
+        ],
+        "newThreads": [],
+        "expectedActions": [
+          {
+            "id": "stagger-blooms",
+            "includesAll": [
+              [
+                "stagger"
+              ],
+              [
+                "bloom"
+              ]
+            ]
+          }
+        ],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": [
+          {
+            "kind": "thread",
+            "existingId": "thread-rooftop-garden"
+          }
+        ]
+      },
+      "destinationExpectations": {},
+      "priorExpectation": {
+        "destinations": [
+          "thread-rooftop-garden"
+        ],
+        "kinds": [
+          "both"
+        ],
+        "actions": {
+          "min": 1,
+          "max": 1
+        },
+        "requiredThreadIds": [
+          "thread-rooftop-garden"
+        ],
+        "forbiddenThreadIds": [
+          "thread-synthetic-weather"
+        ],
+        "newThreads": [],
+        "expectedActions": [
+          {
+            "id": "stagger-blooms",
+            "includesAll": [
+              [
+                "stagger"
+              ],
+              [
+                "bloom"
+              ]
+            ]
+          }
+        ],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": [
+          {
+            "kind": "thread",
+            "existingId": "thread-rooftop-garden"
+          }
+        ]
+      },
+      "oracleNote": "Independent contract review: the imperative is one Action. Its purpose and movable-pot qualification are owned context, not an independent Thought. The observational garden-paraphrase-reuse contrast remains a Thread with zero Actions. Preserve full source and do not invent a Thread to associate the Action with its project."
+    },
+    {
+      "id": "original-correction-semantic-paraphrase",
+      "covers": [
+        "correction-paraphrase"
+      ],
+      "raw": "The final release passage should make the ownership transfer obvious without adding another control.",
+      "expected": {
+        "destinations": [],
+        "kinds": [
+          "pending"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        },
+        "requiredThreadIds": [],
+        "forbiddenThreadIds": [
+          "thread-retake",
+          "thread-atlas-deployment"
+        ],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": [],
+        "fallback": "pending"
+      },
+      "destinationExpectations": {},
+      "correctionExamples": [
+        {
+          "capture": "The ship handoff needs a clearer owner before Capture goes out.",
+          "kind": "thread",
+          "threadId": "thread-capture",
+          "threadName": "Capture filing"
+        }
+      ],
+      "diagnostic": true,
+      "diagnosticReason": "Project identity is absent. The oracle cannot uniquely distinguish a contextual inference from an incorrect destination. Retain for human review, not a semantic pass."
+    },
+    {
+      "id": "workout-rejects-unrelated-landing",
+      "raw": "Combining intense workouts with demanding mental work may increase fatigue. I am exploring how training intensity, work blocks, and recovery affect health and productivity together.",
+      "covers": [
+        "live-incident-regression"
+      ],
+      "expected": {
+        "destinations": [
+          "thread-health"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        },
+        "requiredThreadIds": [
+          "thread-health"
+        ],
+        "forbiddenThreadIds": [
+          "thread-landing-refs"
+        ],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {
+        "thread-health": {
+          "shareIncludesAll": [
+            [
+              "workout",
+              "work out"
+            ],
+            [
+              "mental"
+            ]
+          ],
+          "shareExcludes": []
+        }
+      },
+      "sourceNote": "Synthetic public regression. The exact personal incident replay remains in private local evidence and is not published."
+    },
+    {
+      "id": "mixed-aquarium-independent-dates",
+      "raw": "Measure the aquarium cabinet tomorrow and compare prices for two quiet pumps next Friday. I am considering cedar panels for the aquarium because their warm grain could soften the appearance of the glass.",
+      "covers": [
+        "live-incident-regression"
+      ],
+      "expected": {
+        "destinations": [
+          "thread-aquarium"
+        ],
+        "kinds": [
+          "both"
+        ],
+        "actions": {
+          "min": 2,
+          "max": 2
+        },
+        "requiredThreadIds": [
+          "thread-aquarium"
+        ],
+        "forbiddenThreadIds": [
+          "thread-landing-refs"
+        ],
+        "newThreads": [],
+        "expectedActions": [
+          {
+            "id": "measure",
+            "includesAll": [
+              [
+                "measure"
+              ],
+              [
+                "cabinet"
+              ]
+            ]
+          },
+          {
+            "id": "compare",
+            "includesAll": [
+              [
+                "compare"
+              ],
+              [
+                "pumps"
+              ]
+            ]
+          }
+        ],
+        "structuredDeadlines": [
+          {
+            "actionId": "measure",
+            "relative": "tomorrow"
+          },
+          {
+            "actionId": "compare",
+            "relative": "next-friday"
+          }
+        ],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {
+        "thread-aquarium": {
+          "shareIncludesAll": [
+            [
+              "cedar"
+            ],
+            [
+              "panels"
+            ],
+            [
+              "glass"
+            ]
+          ],
+          "shareExcludes": []
+        }
+      }
+    },
+    {
+      "id": "planned-personal-orientation",
+      "raw": "I protect my evenings so I can be fully present with my family.",
+      "covers": [
+        "intention-boundary"
+      ],
+      "expected": {
+        "destinations": [],
+        "kinds": [
+          "intention"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        },
+        "requiredThreadIds": [],
+        "forbiddenThreadIds": [],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {}
+    },
+    {
+      "id": "explicit-kite-question",
+      "covers": [
+        "semantic-kind-contrast"
+      ],
+      "raw": "In the kite workshop, I am unsure how a shorter bridle changes stability in gusts.",
+      "expected": {
+        "destinations": [
+          "thread-synthetic-kites"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        },
+        "requiredThreadIds": [
+          "thread-synthetic-kites"
+        ],
+        "forbiddenThreadIds": [
+          "thread-capture",
+          "thread-ovid",
+          "thread-rest-day"
+        ],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {
+        "thread-synthetic-kites": {
+          "shareIncludesAll": [
+            [
+              "kite"
+            ],
+            [
+              "bridle",
+              "stability",
+              "gust"
+            ]
+          ],
+          "shareExcludes": [
+            "tea",
+            "origami"
+          ]
+        }
+      }
+    },
+    {
+      "id": "explicit-kite-writing-task",
+      "covers": [
+        "semantic-kind-contrast"
+      ],
+      "raw": "Write notes explaining how a shorter bridle changes the kite's stability in gusts.",
+      "expected": {
+        "destinations": [],
+        "kinds": [
+          "action"
+        ],
+        "actions": {
+          "min": 1,
+          "max": 1
+        },
+        "requiredThreadIds": [],
+        "forbiddenThreadIds": [
+          "thread-capture",
+          "thread-ovid",
+          "thread-rest-day"
+        ],
+        "newThreads": [],
+        "expectedActions": [
+          {
+            "id": "write-bridle-notes",
+            "includesAll": [
+              [
+                "write",
+                "document",
+                "record",
+                "draft"
+              ],
+              [
+                "notes",
+                "note",
+                "explanation"
+              ],
+              [
+                "bridle"
+              ]
+            ]
+          }
+        ],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {}
+    }
+  ]
+}

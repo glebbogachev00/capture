@@ -6,6 +6,8 @@ import {
   applyFragResolve,
   applyFragSplit,
   applyFragUnresolve,
+  applyThreadDelete,
+  applyThreadMerge,
 } from "./fragOps";
 import { REFILE_WINDOW_MS } from "./refiled";
 import type { Board } from "./model";
@@ -38,6 +40,32 @@ function board(): Board {
       },
     ],
   } as unknown as Board;
+}
+
+function withImageOwner(): Board {
+  const value = board();
+  value.actions = [{
+    id: "image-action",
+    text: "Publish the release notes",
+    done: false,
+    at: T0 + 60_000,
+    shelf: "keep",
+    expires: null,
+    imgs: [],
+    shot: { threadId: "retake", fragId: "r2" },
+  }];
+  value.ledger = [{
+    id: "image-ledger",
+    at: T0 + 60_000,
+    raw: "Publish the release notes",
+    clean: "Publish the release notes",
+    kind: "action",
+    source: "image",
+    targetId: "image-action",
+    targetFragId: "r2",
+    imgs: ["img-9"],
+  }];
+  return value;
 }
 
 describe("editing a note", () => {
@@ -93,6 +121,16 @@ describe("deleting a note", () => {
     expect(out.removedThread).toBe(true);
     expect(out.board.threads.map((t) => t.id)).toEqual(["retake"]);
   });
+
+  it("refuses to delete the fragment that owns a live Action's image", () => {
+    expect(applyFragDelete(withImageOwner(), "retake", "r2")).toBeNull();
+  });
+
+  it("fails closed on a stale or ambiguous Thread pointer by protecting the fragment identity", () => {
+    const value = withImageOwner();
+    value.actions[0].shot = { threadId: "obsolete-home", fragId: "r2" };
+    expect(applyFragDelete(value, "retake", "r2")).toBeNull();
+  });
 });
 
 describe("moving a note between threads", () => {
@@ -129,6 +167,11 @@ describe("moving a note between threads", () => {
     expect(applyFragMove(b, "capture", "c1", "retake", T0)).toBeNull();
     expect(applyFragMove(board(), "retake", "r1", "retake", T0)).toBeNull(); // and never into itself
   });
+
+  it("moves every live Action image pointer with its owner fragment", () => {
+    const out = applyFragMove(withImageOwner(), "retake", "r2", "capture", T0 + 40_000)!;
+    expect(out.board.actions[0].shot).toEqual({ threadId: "capture", fragId: "r2" });
+  });
 });
 
 describe("splitting a note into its own thread", () => {
@@ -146,6 +189,38 @@ describe("splitting a note into its own thread", () => {
     const out = applyFragSplit(board(), "capture", "c1", () => "fresh-id")!;
     expect(out.emptied).toBe(true);
     expect(out.board.threads.some((t) => t.id === "capture")).toBe(false);
+  });
+
+  it("repoints every live Action image link to the split thread", () => {
+    const out = applyFragSplit(withImageOwner(), "retake", "r2", () => "fresh-id")!;
+    expect(out.board.actions[0].shot).toEqual({ threadId: "fresh-id", fragId: "r2" });
+  });
+});
+
+describe("whole-thread owner lifecycle", () => {
+  it("repoints Action image links when their owner thread is merged", () => {
+    const out = applyThreadMerge(withImageOwner(), "capture", "retake")!;
+    expect(out.board.actions[0].shot).toEqual({ threadId: "capture", fragId: "r2" });
+    expect(out.board.threads.map((thread) => thread.id)).toEqual(["capture"]);
+    expect(out.board.threads[0].frags.map((frag) => frag.id)).toEqual(["r1", "c1", "r2"]);
+  });
+
+  it("refuses to delete a thread while a live Action points to one of its fragments", () => {
+    expect(applyThreadDelete(withImageOwner(), "retake")).toBeNull();
+  });
+
+  it("fails closed on a stale or ambiguous Thread pointer by protecting every matching fragment home", () => {
+    const value = withImageOwner();
+    value.actions[0].shot = { threadId: "obsolete-home", fragId: "r2" };
+    expect(applyThreadDelete(value, "retake")).toBeNull();
+  });
+
+  it("returns image candidates only after an unowned thread is removed", () => {
+    const value = withImageOwner();
+    value.actions = [];
+    const out = applyThreadDelete(value, "retake")!;
+    expect(out.board.threads.map((thread) => thread.id)).toEqual(["capture"]);
+    expect(out.imgs).toEqual(["img-9"]);
   });
 });
 

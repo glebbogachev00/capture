@@ -2,17 +2,56 @@
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import * as storage from "@/lib/storage";
 import { get, set } from "@/lib/storage";
 import { EMPTY, KEY } from "@/lib/model";
 import * as model from "@/lib/model";
 
 import { useBoard } from "./useBoard";
 
+function intentionResponse(body: { raw: string; captureId?: string; routingPlanVersion?: number }) {
+  const recovery = {
+    kind: "intention",
+    clean: body.raw,
+    title: "Choose thoughtfully",
+    actions: [],
+    primaryActions: [],
+    shelfLife: "keep",
+    due: null,
+    threadId: null,
+    threadName: null,
+    primaryText: null,
+    also: [],
+  };
+  if (!body.routingPlanVersion) return recovery;
+  return {
+    ...recovery,
+    planned: true,
+    captureId: body.captureId,
+    recovery,
+    routingPlan: {
+      items: [{
+        id: "intention",
+        source: body.raw,
+        kind: "intention",
+        action: null,
+        due: null,
+        ownerId: null,
+        destinations: [],
+        duplicateActionId: null,
+        unresolved: false,
+        ambiguity: null,
+      }],
+      newThreads: [],
+    },
+  };
+}
+
 beforeEach(async () => {
   await set(KEY, JSON.stringify({ ...EMPTY, principles: [] }));
-  vi.stubGlobal("fetch", vi.fn(async (url) => {
+  vi.stubGlobal("fetch", vi.fn(async (url, init) => {
     if (url === "/api/intention") return Response.json({ expandedIntention: "I choose thoughtfully." });
-    if (url === "/api/sort") return Response.json({ kind: "intention", clean: "I choose thoughtfully." });
+    if (url === "/api/sort") return Response.json(intentionResponse(JSON.parse(String(init?.body))));
     return new Response(null, { status: 503 });
   }));
 });
@@ -29,7 +68,7 @@ it.each([undefined, "intention"] as const)("correcting an edited dictated draft 
       const body = JSON.parse(init!.body as string);
       return Response.json(body.force === "thread"
         ? { kind: "thread", clean: body.raw, threadName: "Training schedule", actions: [] }
-        : { kind: "intention", clean: body.raw });
+        : intentionResponse(body));
     }
     return new Response(null, { status: 503 });
   });
@@ -38,8 +77,11 @@ it.each([undefined, "intention"] as const)("correcting an edited dictated draft 
   const ids = vi.spyOn(model, "uid");
   act(() => { hook.result.current.setText(original); hook.result.current.setTranscript(recognizer); });
   await act(async () => { await hook.result.current.submit(true, force); });
+  await waitFor(() => expect(hook.result.current.draft?.rawInput).toBe(original));
   const captureId = ids.mock.results[0].value;
-  expect(hook.result.current.data.ledger).toHaveLength(0);
+  expect(hook.result.current.data.ledger).toEqual([
+    expect.objectContaining({ captureId, kind: "pending", raw: original }),
+  ]);
   expect(hook.result.current.text).toBe("");
   expect(hook.result.current.captureDictated).toBe(false);
   act(() => hook.result.current.setDraft({ ...hook.result.current.draft!, rawInput: reviewed }));
@@ -79,6 +121,7 @@ it("a failed thread correction parks edited words as an action without losing th
   const ids = vi.spyOn(model, "uid");
   act(() => { hook.result.current.setText(original); hook.result.current.setTranscript(recognizer); });
   await act(async () => { await hook.result.current.submit(true); });
+  await waitFor(() => expect(hook.result.current.draft?.rawInput).toBe(original));
   const captureId = ids.mock.results[0].value;
   act(() => hook.result.current.setDraft({ ...hook.result.current.draft!, rawInput: reviewed }));
   vi.mocked(fetch).mockImplementation(async () => new Response(null, { status: 503 }));
@@ -98,22 +141,50 @@ it.each([undefined, "intention"] as const)("discarding an edited dictated draft 
   const ids = vi.spyOn(model, "uid");
   act(() => { hook.result.current.setText(original); hook.result.current.setTranscript(recognizer); });
   await act(async () => { await hook.result.current.submit(true, force); });
+  await waitFor(() => expect(hook.result.current.draft?.rawInput).toBe(original));
   const captureId = ids.mock.results[0].value;
   act(() => hook.result.current.setDraft({ ...hook.result.current.draft!, rawInput: reviewed }));
   await act(async () => { await hook.result.current.discardDraft(); });
   expect(hook.result.current.draft).toBeNull();
-  expect(hook.result.current.data.actions).toHaveLength(0);
+  expect(hook.result.current.data.actions).toEqual([
+    expect.objectContaining({ text: original, unsorted: true }),
+  ]);
   expect(hook.result.current.data.threads).toHaveLength(0);
   expect(hook.result.current.data.intentions).toHaveLength(0);
   expect(JSON.parse((await get(KEY))!).ledger.at(-1)).toMatchObject({
-    raw: original, clean: reviewed, source: "dictated", transcript: recognizer, captureId, undone: true,
+    raw: original, clean: original, source: "dictated", transcript: recognizer, captureId, kind: "pending",
   });
   act(() => hook.result.current.setText("An unrelated typed intention."));
   await act(async () => { await hook.result.current.submit(); });
+  await waitFor(() => expect(hook.result.current.draft?.rawInput).toBe("An unrelated typed intention."));
   await act(async () => { await hook.result.current.saveDraft(); });
   const next = hook.result.current.data.ledger.find(entry => entry.raw === "An unrelated typed intention.");
   expect(next).toMatchObject({ source: "typed" });
   expect(next).not.toHaveProperty("transcript");
+});
+
+it("keeps the reviewed draft and existing UI when saveDraft persistence fails", async () => {
+  const hook = renderHook(() => useBoard(Date.now()));
+  await waitFor(() => expect(hook.result.current.loaded).toBe(true));
+  act(() => hook.result.current.setText("I choose a durable intention."));
+  await act(async () => { await hook.result.current.submit(false, "intention"); });
+  await waitFor(() => expect(hook.result.current.draft?.rawInput).toBe("I choose a durable intention."));
+  const beforeBoard = JSON.stringify(hook.result.current.data);
+  const beforeLanded = hook.result.current.landed;
+  const beforeTab = hook.result.current.tab;
+  const beforeUndo = hook.result.current.canUndo;
+  vi.spyOn(storage, "setMany").mockRejectedValueOnce(
+    new DOMException("quota", "QuotaExceededError"),
+  );
+
+  await act(async () => { await hook.result.current.saveDraft(); });
+
+  expect(JSON.stringify(hook.result.current.data)).toBe(beforeBoard);
+  expect(hook.result.current.draft?.rawInput).toBe("I choose a durable intention.");
+  expect(hook.result.current.data.intentions).toEqual([]);
+  expect(hook.result.current.landed).toBe(beforeLanded);
+  expect(hook.result.current.tab).toBe(beforeTab);
+  expect(hook.result.current.canUndo).toBe(beforeUndo);
 });
 
 it.each([undefined, "intention"] as const)("capture intention (%s) transfers its source to the pending draft, not the next capture", async (force) => {
@@ -124,6 +195,7 @@ it.each([undefined, "intention"] as const)("capture intention (%s) transfers its
     hook.result.current.setTranscript(" um My original intention.\n");
   });
   await act(async () => { await hook.result.current.submit(true, force); });
+  await waitFor(() => expect(hook.result.current.draft?.rawInput).toBe("My edited intention."));
   await act(async () => { await hook.result.current.saveDraft(); });
   expect(hook.result.current.data.ledger.at(-1)).toMatchObject({
     raw: "My edited intention.", source: "dictated", transcript: " um My original intention.\n",
@@ -131,6 +203,7 @@ it.each([undefined, "intention"] as const)("capture intention (%s) transfers its
   expect(hook.result.current.captureDictated).toBe(false);
   act(() => hook.result.current.setText("New typed intention."));
   await act(async () => { await hook.result.current.submit(false, force); });
+  await waitFor(() => expect(hook.result.current.draft?.rawInput).toBe("New typed intention."));
   await act(async () => { await hook.result.current.saveDraft(); });
   const next = hook.result.current.data.ledger.find(entry => entry.raw === "New typed intention.");
   expect(next).toMatchObject({ raw: "New typed intention.", source: "typed" });

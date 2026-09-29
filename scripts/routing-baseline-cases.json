@@ -1,5 +1,5 @@
 {
-  "revision": "r1-owner-accepted-recovery-v2",
+  "revision": "planned-routing-v2-explicit-intent",
   "initialBoard": {
     "threads": [
       {
@@ -289,14 +289,15 @@
   },
   "cases": [
     {
-      "id": "single-existing-techtutor",
+      "id": "two-existing-bread-jazz",
       "covers": [
-        "single-existing-reuse"
+        "two-existing"
       ],
-      "raw": "The TechTutor lesson should let students compare two prompts, explain why one is clearer, and then revise the weaker prompt themselves.",
+      "raw": "The synthetic sourdough notebook should compare the same dough at two proofing times. Separately, the synthetic jazz practice needs slower ii\u2013V\u2013I improvisation before increasing tempo.",
       "expected": {
         "destinations": [
-          "thread-techtutor"
+          "thread-synthetic-bread",
+          "thread-synthetic-jazz"
         ],
         "kinds": [
           "thread"
@@ -304,7 +305,280 @@
         "actions": {
           "min": 0,
           "max": 0
+        },
+        "requiredThreadIds": [
+          "thread-synthetic-bread",
+          "thread-synthetic-jazz"
+        ],
+        "forbiddenThreadIds": [
+          "thread-techtutor",
+          "thread-retake"
+        ],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {
+        "thread-synthetic-bread": {
+          "shareIncludesAll": [
+            [
+              "sourdough",
+              "dough"
+            ],
+            [
+              "proofing"
+            ]
+          ],
+          "shareExcludes": [
+            "jazz",
+            "improvisation"
+          ]
+        },
+        "thread-synthetic-jazz": {
+          "shareIncludesAll": [
+            [
+              "jazz"
+            ],
+            [
+              "improvisation",
+              "tempo"
+            ]
+          ],
+          "shareExcludes": [
+            "sourdough",
+            "proofing"
+          ]
         }
+      }
+    },
+    {
+      "id": "three-existing-tea-origami-kites",
+      "covers": [
+        "three-existing"
+      ],
+      "raw": "For the synthetic tea notes, I am exploring how a shorter steep compares with cooler water. In the synthetic origami practice, the reverse fold diagram still needs a clearer reading. The synthetic kite workshop also needs notes on how a shorter bridle changes stability in gusts.",
+      "expected": {
+        "destinations": [
+          "thread-synthetic-tea",
+          "thread-synthetic-origami",
+          "thread-synthetic-kites"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        },
+        "requiredThreadIds": [
+          "thread-synthetic-tea",
+          "thread-synthetic-origami",
+          "thread-synthetic-kites"
+        ],
+        "forbiddenThreadIds": [
+          "thread-capture",
+          "thread-ovid",
+          "thread-rest-day"
+        ],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {
+        "thread-synthetic-tea": {
+          "shareIncludesAll": [
+            [
+              "tea"
+            ],
+            [
+              "steep",
+              "water"
+            ]
+          ],
+          "shareExcludes": [
+            "origami",
+            "kite"
+          ]
+        },
+        "thread-synthetic-origami": {
+          "shareIncludesAll": [
+            [
+              "origami"
+            ],
+            [
+              "fold",
+              "diagram"
+            ]
+          ],
+          "shareExcludes": [
+            "tea",
+            "kite"
+          ]
+        },
+        "thread-synthetic-kites": {
+          "shareIncludesAll": [
+            [
+              "kite"
+            ],
+            [
+              "bridle",
+              "stability",
+              "gust"
+            ]
+          ],
+          "shareExcludes": [
+            "tea",
+            "origami"
+          ]
+        }
+      }
+    },
+    {
+      "id": "existing-capture-plus-new-garden",
+      "covers": [
+        "existing-plus-new"
+      ],
+      "raw": "Capture search should keep local matches visible while it finds a supported answer. A separate idea to develop is a small rooftop pollinator garden with wind-tolerant herbs and native flowers in lightweight planters.",
+      "expected": {
+        "destinations": [
+          "thread-capture",
+          "created:garden"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        },
+        "requiredThreadIds": [
+          "thread-capture"
+        ],
+        "forbiddenThreadIds": [
+          "thread-synthetic-weather"
+        ],
+        "newThreads": [
+          {
+            "token": "created:garden",
+            "deterministicId": "thread-rooftop-garden"
+          }
+        ],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {
+        "thread-capture": {
+          "shareIncludesAll": [
+            [
+              "capture"
+            ],
+            [
+              "search",
+              "local matches",
+              "supported answer"
+            ]
+          ],
+          "shareExcludes": [
+            "garden",
+            "pollinator"
+          ]
+        },
+        "created:garden": {
+          "shareIncludesAll": [
+            [
+              "garden",
+              "pollinator"
+            ],
+            [
+              "roof",
+              "rooftop"
+            ],
+            [
+              "flower",
+              "planter"
+            ]
+          ],
+          "shareExcludes": [
+            "capture search",
+            "local matches"
+          ],
+          "nameIncludesAny": [
+            "garden",
+            "pollinator",
+            "rooftop"
+          ]
+        }
+      },
+      "createdDestinations": {
+        "created:garden": "thread-rooftop-garden"
+      }
+    },
+    {
+      "id": "multiple-threads-plus-actions",
+      "covers": [
+        "multiple-threads-plus-actions"
+      ],
+      "raw": "The TechTutor mystery should reveal why one prompt is underspecified, while Retake marker jumps need a calmer loading transition. Draft two mystery variants tomorrow. Review the Retake playback notes next Friday.",
+      "expected": {
+        "destinations": [
+          "thread-techtutor",
+          "thread-retake"
+        ],
+        "kinds": [
+          "both"
+        ],
+        "actions": {
+          "min": 2,
+          "max": 2
+        },
+        "requiredThreadIds": [
+          "thread-techtutor",
+          "thread-retake"
+        ],
+        "forbiddenThreadIds": [
+          "thread-capture"
+        ],
+        "newThreads": [],
+        "expectedActions": [
+          {
+            "id": "draft-mystery",
+            "includesAll": [
+              [
+                "draft"
+              ],
+              [
+                "mystery",
+                "variant"
+              ]
+            ]
+          },
+          {
+            "id": "review-retake",
+            "includesAll": [
+              [
+                "review"
+              ],
+              [
+                "retake",
+                "playback"
+              ]
+            ]
+          }
+        ],
+        "structuredDeadlines": [
+          {
+            "actionId": "draft-mystery",
+            "relative": "tomorrow"
+          },
+          {
+            "actionId": "review-retake",
+            "relative": "next-friday"
+          }
+        ],
+        "forbiddenDuplicates": []
       },
       "destinationExpectations": {
         "thread-techtutor": {
@@ -313,17 +587,29 @@
               "techtutor"
             ],
             [
-              "lesson"
-            ],
-            [
-              "prompt"
+              "mystery",
+              "prompt",
+              "underspecified"
             ]
           ],
           "shareExcludes": [
             "retake",
-            "playback",
-            "ovid",
-            "rest day"
+            "marker"
+          ]
+        },
+        "thread-retake": {
+          "shareIncludesAll": [
+            [
+              "retake"
+            ],
+            [
+              "marker",
+              "loading"
+            ]
+          ],
+          "shareExcludes": [
+            "techtutor",
+            "mystery"
           ]
         }
       }
@@ -331,7 +617,7 @@
     {
       "id": "two-existing-techtutor-retake",
       "covers": [
-        "two-existing"
+        "techtutor-retake-regression"
       ],
       "raw": "For TechTutor, the lesson needs a small mystery that students solve by improving a prompt. Separately, Retake playback still pauses when a reviewer jumps between distant markers, and that editing flow needs more thought.",
       "expected": {
@@ -345,7 +631,18 @@
         "actions": {
           "min": 0,
           "max": 0
-        }
+        },
+        "requiredThreadIds": [
+          "thread-techtutor",
+          "thread-retake"
+        ],
+        "forbiddenThreadIds": [
+          "thread-capture"
+        ],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
       },
       "destinationExpectations": {
         "thread-techtutor": {
@@ -361,9 +658,7 @@
           ],
           "shareExcludes": [
             "retake",
-            "playback",
-            "reviewer",
-            "marker"
+            "playback"
           ]
         },
         "thread-retake": {
@@ -380,9 +675,7 @@
           ],
           "shareExcludes": [
             "techtutor",
-            "lesson",
-            "mystery",
-            "prompt"
+            "lesson"
           ]
         }
       }
@@ -390,9 +683,9 @@
     {
       "id": "three-existing-capture-ovid-rest",
       "covers": [
-        "three-existing"
+        "capture-ovid-rest-regression"
       ],
-      "raw": "Capture should show why a thought joined an existing Thread without turning the explanation into another setting. In my Ovid notes, transformation feels less like replacement and more like an earlier identity remaining visible inside the new form. For a rest day, I am noticing that recovery disappears when I use the day to quietly catch up on work.",
+      "raw": "Capture should show why a thought joined an existing Thread without turning the explanation into another setting. In the Ovid notes, transformation feels like an earlier identity remaining visible inside the new form. For a rest day, recovery disappears when I quietly catch up on work.",
       "expected": {
         "destinations": [
           "thread-capture",
@@ -405,7 +698,20 @@
         "actions": {
           "min": 0,
           "max": 0
-        }
+        },
+        "requiredThreadIds": [
+          "thread-capture",
+          "thread-ovid",
+          "thread-rest-day"
+        ],
+        "forbiddenThreadIds": [
+          "thread-techtutor",
+          "thread-retake"
+        ],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
       },
       "destinationExpectations": {
         "thread-capture": {
@@ -421,8 +727,7 @@
           ],
           "shareExcludes": [
             "ovid",
-            "rest day",
-            "recovery"
+            "rest day"
           ]
         },
         "thread-ovid": {
@@ -438,8 +743,7 @@
           ],
           "shareExcludes": [
             "capture",
-            "rest day",
-            "recovery"
+            "rest day"
           ]
         },
         "thread-rest-day": {
@@ -455,134 +759,7 @@
           ],
           "shareExcludes": [
             "capture",
-            "ovid",
-            "transformation"
-          ]
-        }
-      }
-    },
-    {
-      "id": "existing-capture-plus-new-garden",
-      "covers": [
-        "existing-plus-new"
-      ],
-      "raw": "Capture search should keep local matches visible while it finds a supported answer. A separate idea I want to develop is a small rooftop pollinator garden, starting with wind-tolerant herbs and native flowers in lightweight planters.",
-      "expected": {
-        "destinations": [
-          "thread-capture",
-          "created:garden"
-        ],
-        "kinds": [
-          "thread"
-        ],
-        "actions": {
-          "min": 0,
-          "max": 0
-        }
-      },
-      "createdDestinations": {
-        "created:garden": "thread-rooftop-garden"
-      },
-      "destinationExpectations": {
-        "thread-capture": {
-          "shareIncludesAll": [
-            [
-              "capture"
-            ],
-            [
-              "search",
-              "local matches",
-              "supported answer"
-            ]
-          ],
-          "shareExcludes": [
-            "garden",
-            "pollinator",
-            "flower",
-            "planter"
-          ]
-        },
-        "created:garden": {
-          "nameIncludesAny": [
-            "garden",
-            "pollinator",
-            "rooftop",
-            "planter"
-          ],
-          "shareIncludesAll": [
-            [
-              "garden",
-              "pollinator",
-              "flower",
-              "planter"
-            ],
-            [
-              "roof",
-              "rooftop"
-            ]
-          ],
-          "shareExcludes": [
-            "capture search",
-            "local matches",
-            "supported answer",
-            "atlas",
-            "puppy"
-          ]
-        }
-      }
-    },
-    {
-      "id": "unrelated-atlas-name-trap",
-      "covers": [
-        "unrelated-name-trap"
-      ],
-      "raw": "Atlas the rescue puppy settles faster when training sessions end after one calm success. I want to keep notes on which quiet games help Atlas build confidence around unfamiliar sounds.",
-      "expected": {
-        "destinations": [
-          "created:atlas-puppy"
-        ],
-        "kinds": [
-          "thread"
-        ],
-        "actions": {
-          "min": 0,
-          "max": 0
-        }
-      },
-      "createdDestinations": {
-        "created:atlas-puppy": "thread-atlas-puppy"
-      },
-      "destinationExpectations": {
-        "created:atlas-puppy": {
-          "nameIncludesAny": [
-            "atlas",
-            "puppy",
-            "dog",
-            "training"
-          ],
-          "shareIncludesAll": [
-            [
-              "atlas"
-            ],
-            [
-              "puppy",
-              "dog",
-              "rescue"
-            ],
-            [
-              "training",
-              "quiet game",
-              "confidence",
-              "unfamiliar sound"
-            ]
-          ],
-          "shareExcludes": [
-            "deployment",
-            "release",
-            "staging",
-            "rollout",
-            "garden",
-            "pollinator"
+            "ovid"
           ]
         }
       }
@@ -590,9 +767,9 @@
     {
       "id": "garden-paraphrase-reuse",
       "covers": [
-        "repeated-paraphrases"
+        "paraphrased-duplicate-thread"
       ],
-      "raw": "For the roof planters, perhaps stagger flowering times so the pollinators have something available across the season, while keeping the containers light enough to move.",
+      "raw": "For the roof containers, staggered bloom times could feed pollinators across the season while the lightweight pots remain easy to move.",
       "expected": {
         "destinations": [
           "thread-rooftop-garden"
@@ -603,42 +780,226 @@
         "actions": {
           "min": 0,
           "max": 0
-        }
+        },
+        "requiredThreadIds": [
+          "thread-rooftop-garden"
+        ],
+        "forbiddenThreadIds": [
+          "thread-synthetic-weather"
+        ],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": [
+          {
+            "kind": "thread",
+            "existingId": "thread-rooftop-garden"
+          }
+        ]
       },
       "destinationExpectations": {
         "thread-rooftop-garden": {
           "shareIncludesAll": [
             [
-              "roof",
-              "planter"
+              "roof"
             ],
             [
-              "pollinator",
-              "pollinators",
-              "flower",
-              "flowers",
-              "flowering"
+              "bloom",
+              "pollinator"
             ],
             [
               "container",
+              "pot",
               "light",
               "move"
             ]
           ],
           "shareExcludes": [
             "capture",
-            "atlas",
-            "retake"
+            "tea"
           ]
         }
       }
     },
     {
-      "id": "short-retake-reuse",
+      "id": "action-paraphrase-duplicate",
       "covers": [
-        "short-capture"
+        "paraphrased-duplicate-action"
       ],
-      "raw": "Retake scrubbing still stutters.",
+      "raw": "Look over the made-up lesson plan.",
+      "expected": {
+        "destinations": [],
+        "kinds": [
+          "action"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        },
+        "requiredThreadIds": [],
+        "forbiddenThreadIds": [],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": [
+          {
+            "kind": "action",
+            "existingId": "seed-action-1"
+          }
+        ]
+      },
+      "destinationExpectations": {}
+    },
+    {
+      "id": "three-relative-deadlines",
+      "covers": [
+        "relative-deadlines"
+      ],
+      "raw": "Send the synthetic workshop note today. Draft the fictional telescope checklist tomorrow. Review the sample ceramics table next Friday.",
+      "expected": {
+        "destinations": [],
+        "kinds": [
+          "action"
+        ],
+        "actions": {
+          "min": 3,
+          "max": 3
+        },
+        "requiredThreadIds": [],
+        "forbiddenThreadIds": [],
+        "newThreads": [],
+        "expectedActions": [
+          {
+            "id": "send-note",
+            "includesAll": [
+              [
+                "send"
+              ],
+              [
+                "workshop",
+                "note"
+              ],
+              [
+                "today"
+              ]
+            ]
+          },
+          {
+            "id": "draft-checklist",
+            "includesAll": [
+              [
+                "draft"
+              ],
+              [
+                "telescope",
+                "checklist"
+              ],
+              [
+                "tomorrow"
+              ]
+            ]
+          },
+          {
+            "id": "review-table",
+            "includesAll": [
+              [
+                "review"
+              ],
+              [
+                "ceramics",
+                "table"
+              ],
+              [
+                "next friday",
+                "friday"
+              ]
+            ]
+          }
+        ],
+        "structuredDeadlines": [
+          {
+            "actionId": "send-note",
+            "relative": "today"
+          },
+          {
+            "actionId": "draft-checklist",
+            "relative": "tomorrow"
+          },
+          {
+            "actionId": "review-table",
+            "relative": "next-friday"
+          }
+        ],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {}
+    },
+    {
+      "id": "correction-semantic-paraphrase",
+      "covers": [
+        "correction-paraphrase"
+      ],
+      "raw": "For the thought inbox release, the passage from Unsorted into Threads should make the ownership transfer obvious without adding another control.",
+      "expected": {
+        "destinations": [
+          "thread-capture"
+        ],
+        "kinds": [
+          "thread"
+        ],
+        "actions": {
+          "min": 0,
+          "max": 0
+        },
+        "requiredThreadIds": [
+          "thread-capture"
+        ],
+        "forbiddenThreadIds": [
+          "thread-retake",
+          "thread-atlas-deployment"
+        ],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
+      },
+      "destinationExpectations": {
+        "thread-capture": {
+          "shareIncludesAll": [
+            [
+              "release"
+            ],
+            [
+              "ownership",
+              "transfer",
+              "handoff"
+            ],
+            [
+              "Unsorted",
+              "Threads"
+            ]
+          ],
+          "shareExcludes": [
+            "retake",
+            "atlas"
+          ]
+        }
+      },
+      "correctionExamples": [
+        {
+          "capture": "The ship handoff needs a clearer owner before Capture goes out.",
+          "kind": "thread",
+          "threadId": "thread-capture",
+          "threadName": "Capture filing"
+        }
+      ]
+    },
+    {
+      "id": "correction-overlap-no-redirect",
+      "covers": [
+        "correction-word-nonredirect"
+      ],
+      "raw": "The Retake release handoff feels slow when marker caches rebuild, so I am comparing ways to keep playback responsive during review.",
       "expected": {
         "destinations": [
           "thread-retake"
@@ -649,7 +1010,18 @@
         "actions": {
           "min": 0,
           "max": 0
-        }
+        },
+        "requiredThreadIds": [
+          "thread-retake"
+        ],
+        "forbiddenThreadIds": [
+          "thread-capture",
+          "thread-atlas-deployment"
+        ],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": []
       },
       "destinationExpectations": {
         "thread-retake": {
@@ -658,213 +1030,55 @@
               "retake"
             ],
             [
-              "scrubbing",
-              "stutter"
+              "marker",
+              "cache"
+            ],
+            [
+              "playback",
+              "review",
+              "responsive"
             ]
           ],
           "shareExcludes": [
-            "techtutor",
-            "capture",
-            "ovid"
+            "capture filing",
+            "atlas"
           ]
-        }
-      }
-    },
-    {
-      "id": "long-multi-topic-existing",
-      "covers": [
-        "long-multi-topic"
-      ],
-      "raw": "I have been thinking through three unrelated areas and want each to remain where I would look for it later. The TechTutor exercise works best if students first predict what an assistant will misunderstand, then compare the prediction with the result, because the surprise gives the explanation a purpose. In the Ovid reading, the recurring movement between human and nonhuman forms makes memory feel like the continuity that survives visible change, which may be why several episodes remain moving rather than merely strange. My rest-day experiment also needs a clearer boundary: gentle cooking and walking feel restorative, but opening project dashboards turns the day into disguised work even when I tell myself I am only checking one thing.",
-      "expected": {
-        "destinations": [
-          "thread-techtutor",
-          "thread-ovid",
-          "thread-rest-day"
-        ],
-        "kinds": [
-          "thread"
-        ],
-        "actions": {
-          "min": 0,
-          "max": 0
         }
       },
-      "destinationExpectations": {
-        "thread-techtutor": {
-          "shareIncludesAll": [
-            [
-              "techtutor"
-            ],
-            [
-              "student",
-              "students"
-            ],
-            [
-              "assistant",
-              "prediction",
-              "result",
-              "surprise",
-              "explanation"
-            ]
-          ],
-          "shareExcludes": [
-            "ovid",
-            "rest day",
-            "cooking",
-            "walking"
-          ]
-        },
-        "thread-ovid": {
-          "shareIncludesAll": [
-            [
-              "ovid"
-            ],
-            [
-              "human",
-              "nonhuman",
-              "form",
-              "forms"
-            ],
-            [
-              "memory",
-              "change"
-            ]
-          ],
-          "shareExcludes": [
-            "techtutor",
-            "rest day",
-            "cooking",
-            "dashboard"
-          ]
-        },
-        "thread-rest-day": {
-          "shareIncludesAll": [
-            [
-              "rest day"
-            ],
-            [
-              "cooking",
-              "walking",
-              "restorative"
-            ],
-            [
-              "dashboard",
-              "dashboards",
-              "work"
-            ]
-          ],
-          "shareExcludes": [
-            "techtutor",
-            "ovid",
-            "prompt"
-          ]
+      "correctionExamples": [
+        {
+          "capture": "The ship handoff needs a clearer owner before Capture goes out.",
+          "kind": "thread",
+          "threadId": "thread-capture",
+          "threadName": "Capture filing"
         }
-      }
+      ]
     },
     {
-      "id": "capture-thinking-with-actions",
+      "id": "malformed-provider-safe-pending",
       "covers": [
-        "actions-mixed-with-thinking"
+        "malformed-provider-fallback"
       ],
-      "raw": "Capture's filing explanation should stay quiet and specific so it builds trust without slowing the capture flow. Draft two alternative explanation labels for review tomorrow, and schedule a synthetic usability session for Friday.",
-      "expected": {
-        "destinations": [
-          "thread-capture"
-        ],
-        "kinds": [
-          "both"
-        ],
-        "actions": {
-          "min": 2,
-          "max": 2
-        }
-      },
-      "destinationExpectations": {
-        "thread-capture": {
-          "shareIncludesAll": [
-            [
-              "capture"
-            ],
-            [
-              "filing",
-              "explanation"
-            ],
-            [
-              "trust",
-              "flow"
-            ]
-          ],
-          "shareExcludes": [
-            "retake",
-            "ovid",
-            "rest day"
-          ]
-        }
-      }
-    },
-    {
-      "id": "clear-intention",
-      "covers": [
-        "intention"
-      ],
-      "raw": "I make room for deliberate rest without needing to earn it first.",
+      "raw": "A synthetic malformed provider response must leave this exact fragment waiting to sort.",
       "expected": {
         "destinations": [],
         "kinds": [
-          "intention"
+          "pending"
         ],
         "actions": {
           "min": 0,
           "max": 0
-        }
+        },
+        "requiredThreadIds": [],
+        "forbiddenThreadIds": [],
+        "newThreads": [],
+        "expectedActions": [],
+        "structuredDeadlines": [],
+        "forbiddenDuplicates": [],
+        "fallback": "pending"
       },
-      "destinationExpectations": {}
-    },
-    {
-      "id": "garden-duplicate-resistance",
-      "covers": [
-        "duplicate-destination-resistance",
-        "repeated-paraphrases"
-      ],
-      "raw": "The rooftop garden notes keep returning to the same idea: light movable planters, native flowers, and staggered blooms. Those are all parts of the one roof-garden experiment, not separate projects.",
-      "expected": {
-        "destinations": [
-          "thread-rooftop-garden"
-        ],
-        "kinds": [
-          "thread"
-        ],
-        "actions": {
-          "min": 0,
-          "max": 0
-        }
-      },
-      "destinationExpectations": {
-        "thread-rooftop-garden": {
-          "shareIncludesAll": [
-            [
-              "rooftop garden",
-              "roof garden"
-            ],
-            [
-              "planter",
-              "planters"
-            ],
-            [
-              "flower",
-              "flowers",
-              "bloom",
-              "blooms"
-            ]
-          ],
-          "shareExcludes": [
-            "capture",
-            "atlas",
-            "retake"
-          ]
-        }
-      }
+      "destinationExpectations": {},
+      "execution": "malformed-provider-fixture"
     }
   ]
 }

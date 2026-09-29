@@ -28,14 +28,17 @@ export function editUnsortedCapture(
   if (!clean) return null;
   const target = board.actions.find((action) => action.id === id && action.unsorted);
   if (!target || (target.text === clean && target.src === clean)) return null;
+  const revision = (target.pendingRevision ?? 1) + 1;
   return {
     ...board,
     actions: board.actions.map((action) =>
-      action.id === id ? { ...action, text: clean, src: clean } : action
+      action.id === id
+        ? { ...action, text: clean, src: clean, pendingRevision: revision }
+        : action
     ),
     ledger: board.ledger.map((entry) =>
       entry.kind === "pending" && entry.targetId === id
-        ? { ...entry, raw: clean, clean }
+        ? { ...entry, clean, pendingSource: clean, pendingRevision: revision }
         : entry
     ),
   };

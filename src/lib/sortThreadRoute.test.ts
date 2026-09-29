@@ -109,6 +109,214 @@ it("prompt reserves clean for the whole capture, primaryText for thinking", asyn
   expect(response.status).toBe(200);
 });
 
+const actionBoundaryFixtures = [
+  {
+    label: "ongoing observation scope",
+    raw: "I want to keep a field journal of which shaded corners stay coolest through summer.",
+  },
+  {
+    label: "hoped-for understanding",
+    raw: "I hope to understand why the rehearsal feels easier after a quiet opening.",
+  },
+  {
+    label: "discrete wanted errand",
+    raw: "I want to return the library books after lunch.",
+  },
+  {
+    label: "discrete wanted commitment",
+    raw: "I want to send Priya the revised estimate before Friday.",
+  },
+];
+
+it.each(actionBoundaryFixtures)(
+  "gives the provider a general observation-versus-action contract for $label",
+  async ({ raw: fixtureRaw }) => {
+    ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
+      expect(prompt).toContain(fixtureRaw);
+      expect(prompt).toContain(
+        "A desire to keep noticing, tracking, documenting, learning about, or understanding a subject is developing thought",
+      );
+      expect(prompt).toContain('The words "I want to" do not decide the kind');
+      expect(prompt).toContain(
+        "A discrete requested act such as an errand, delivery, booking, message, or purchase is still an action",
+      );
+      expect(schema.shape.actions.description).toContain(
+        "An ongoing scope for noticing, tracking, documenting, learning, or understanding belongs in a Thread",
+      );
+      expect(prompt).not.toMatch(/Atlas|puppy/i);
+      return { object: schema.parse({ ...modelResult, clean: fixtureRaw }) };
+    });
+
+    const response = await POST(new Request("http://localhost/api/sort", {
+      method: "POST",
+      body: JSON.stringify({ raw: fixtureRaw, threads: [] }),
+    }));
+    expect(response.status).toBe(200);
+  },
+);
+
+it("teaches the finish-line test with an ongoing record and a bounded deliverable", async () => {
+  const fixtureRaw = "The shaded beds stay cooler. I want to keep observing which spots help seedlings recover.";
+  ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
+    expect(prompt).toContain("apply the completion test");
+    expect(prompt).toContain("could the person mark it done");
+    expect(prompt).toContain("Keeping an open-ended record defines what accumulates in the Thread");
+    expect(prompt).toContain("These have stated one-time results and can be completed");
+    expect(prompt).not.toMatch(/Atlas|puppy/i);
+    return {
+      object: schema.parse({
+        ...modelResult,
+        clean: fixtureRaw,
+        kind: "thread",
+        actions: [],
+        primaryActions: [],
+        threadId: null,
+        threadName: "Field observations",
+        primaryText: null,
+      }),
+    };
+  });
+  const response = await POST(new Request("http://localhost/api/sort", {
+    method: "POST",
+    body: JSON.stringify({ raw: fixtureRaw, threads: [] }),
+  }));
+  expect(response.status).toBe(200);
+});
+
+const mixedExistingNewThinkingFixtures = [
+  {
+    raw: "The harbor acoustics notes should compare foghorn echoes across the inlet. Separately, I want to develop a compact archive of hand-bound paper samples and how they age.",
+    existing: { id: "harbor", name: "Harbor acoustics", about: "Sound observations around the harbor." },
+    primaryText: "The harbor acoustics notes should compare foghorn echoes across the inlet.",
+    newText: "I want to develop a compact archive of hand-bound paper samples and how they age.",
+    newName: "Hand-bound paper archive",
+  },
+  {
+    raw: "The fermentation notebook should track how cool proofing changes aroma. Another subject I want to shape is a meteor-sketch index organized by cloud cover and viewing angle.",
+    existing: { id: "fermentation", name: "Fermentation notebook", about: "Bread fermentation observations." },
+    primaryText: "The fermentation notebook should track how cool proofing changes aroma.",
+    newText: "Another subject I want to shape is a meteor-sketch index organized by cloud cover and viewing angle.",
+    newName: "Meteor sketch index",
+  },
+];
+
+it.each(mixedExistingNewThinkingFixtures)(
+  "keeps mixed existing-and-new developing thoughts representable as one legacy Thread result",
+  async ({ raw: fixtureRaw, existing, primaryText, newText, newName }) => {
+    ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
+      expect(prompt).toContain(fixtureRaw);
+      expect(prompt).toContain(
+        "Destination shape does not change semantic kind. If every independent claim is developing thought, set the top-level kind to thread",
+      );
+      expect(prompt).toContain(
+        "Distinguish what the speaker wants an external subject or project to become from how the speaker chooses to live",
+      );
+      expect(schema.shape.kind.description).toContain(
+        "one or more observations or inquiries",
+      );
+      return {
+        object: schema.parse({
+          ...modelResult,
+          clean: fixtureRaw,
+          kind: "thread",
+          actions: [],
+          primaryActions: [],
+          threadId: existing.id,
+          threadName: null,
+          primaryText,
+          also: [{ text: newText, threadId: null, threadName: newName }],
+        }),
+      };
+    });
+
+    const response = await POST(new Request("http://localhost/api/sort", {
+      method: "POST",
+      body: JSON.stringify({ raw: fixtureRaw, threads: [existing] }),
+    }));
+    expect(response.status).toBe(200);
+    const output = await response.json();
+    expect(output).toMatchObject({
+      kind: "thread",
+      actions: [],
+      threadId: existing.id,
+      threadName: null,
+      primaryText,
+      also: [{ text: newText, threadId: null, threadName: newName }],
+    });
+  },
+);
+
+const intentionBoundaryFixtures = [
+  {
+    label: "permission about growth",
+    raw: "I give myself permission to learn in public before I feel fully prepared.",
+  },
+  {
+    label: "chosen relational stance",
+    raw: "I lead with patience when collaboration gets tense.",
+  },
+  {
+    label: "self-directed resolve",
+    raw: "I choose curiosity over defensiveness in difficult conversations.",
+  },
+  {
+    label: "present-tense observation",
+    raw: "I notice collaboration gets tense when decisions stay implicit.",
+  },
+  {
+    label: "open inquiry",
+    raw: "What makes me defensive in difficult conversations?",
+  },
+  {
+    label: "concrete commitment",
+    raw: "I will send Noor the workshop outline by Thursday.",
+  },
+];
+
+it.each(intentionBoundaryFixtures)(
+  "gives the provider a general declaration-versus-observation-versus-commitment contract for $label",
+  async ({ raw: fixtureRaw }) => {
+    let observedPrompt = "";
+    let observedKindDescription = "";
+    ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
+      observedPrompt = prompt;
+      observedKindDescription = schema.shape.kind.description ?? "";
+      return { object: schema.parse({ ...modelResult, clean: fixtureRaw }) };
+    });
+
+    const response = await POST(new Request("http://localhost/api/sort", {
+      method: "POST",
+      body: JSON.stringify({ raw: fixtureRaw, threads: [] }),
+    }));
+    expect(response.status).toBe(200);
+    expect(observedPrompt).toContain(fixtureRaw);
+    expect(observedPrompt).toContain(
+      "A concise present-tense declaration can be an Intention without wish, hope, or future-tense language",
+    );
+    expect(observedPrompt).toContain(
+      "values, permissions, personal stances, and self-directed resolves",
+    );
+    expect(observedPrompt).toContain(
+      "reporting or questioning what is true is developing thought for a Thread",
+    );
+    expect(observedPrompt).toContain(
+      "A concrete commitment with a source-stated finish line is an Action",
+    );
+    expect(observedPrompt).toContain(
+      'For an Intention, set "actions" and "primaryActions" to [] and leave every Thread destination null',
+    );
+    expect(observedPrompt).toContain(
+      "Do not treat a concise declaration as ambiguous merely because it is present tense",
+    );
+    expect(observedKindDescription).toContain("chosen way of being or living");
+    expect(observedKindDescription).toContain("observation or inquiry");
+    expect(observedKindDescription).toContain(
+      "concrete commitment with a source-stated finish line",
+    );
+    expect(observedPrompt).not.toMatch(/\bearn\b|deliberate rest/i);
+  },
+);
+
 it("runs the real route schema, reconciliation and filing without a provider call", async () => {
   ai.generateObject.mockImplementation(async ({ schema }) => ({ object: schema.parse(modelResult) }));
   const response = await POST(new Request("http://localhost/api/sort", { method: "POST", body: JSON.stringify({ raw, threads: [{ id: "pricing", name: "Annual pricing", about: thinking }] }) }));

@@ -35,11 +35,22 @@ export function brief(summary: string | undefined, limit: number): string {
   return stop > limit * 0.5 ? cut.slice(0, stop + 1) : cut.trimEnd() + "…";
 }
 
+export function semanticThreads(threads: Thread[]): Thread[] {
+  return threads.filter((thread) => !thread.temporaryName);
+}
+
+export function semanticSiblingNames(threads: Thread[], targetId: string): string[] {
+  return semanticThreads(threads)
+    .filter((thread) => thread.id !== targetId)
+    .map((thread) => thread.name);
+}
+
 export function threadBriefs(
   threads: Thread[]
 ): { id: string; name: string; about: string }[] {
-  const limit = briefLength(threads.length);
-  return threads.map((t) => ({
+  const candidates = semanticThreads(threads);
+  const limit = briefLength(candidates.length);
+  return candidates.map((t) => ({
     id: t.id,
     name: t.name,
     /* The boundary first, because it is the part that decides. A summary

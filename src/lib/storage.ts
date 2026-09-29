@@ -19,26 +19,46 @@ export function createStorage(lifetime: OwnershipLifetime) {
     });
     return open;
   }
-  async function run<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T> | void): Promise<T> {
+  async function run<T>(
+    mode: IDBTransactionMode,
+    fn: (s: IDBObjectStore) => IDBRequest<T> | void,
+    guard?: { signal?: AbortSignal; current?: () => boolean },
+  ): Promise<T> {
     const conn = await db();
     lifetime.assert();
     return new Promise<T>((resolve, reject) => {
       const tx = conn.transaction(STORE, mode);
       const abort = () => { try { tx.abort(); } catch { /* already complete */ } };
       lifetime.controller.signal.addEventListener("abort", abort, { once: true });
-      const finish = () => lifetime.controller.signal.removeEventListener("abort", abort);
+      guard?.signal?.addEventListener("abort", abort, { once: true });
+      const finish = () => {
+        lifetime.controller.signal.removeEventListener("abort", abort);
+        guard?.signal?.removeEventListener("abort", abort);
+      };
       let req: IDBRequest<T> | void;
       const store = tx.objectStore(STORE);
-      if (lifetime.cloud) {
-        // IDB transactions can wait behind an import. Recheck at execution,
-        // not only when queued, before a stale full-board write can land.
+      const execute = () => {
+        try {
+          lifetime.assert();
+          if (guard?.signal?.aborted || guard?.current?.() === false) {
+            throw new DOMException("Commit authority expired", "AbortError");
+          }
+          req = fn(store);
+        } catch { abort(); }
+      };
+      if (lifetime.cloud || guard) {
+        // IDB transactions can wait behind another write. Recheck at actual
+        // execution, not only when queued, before a stale full-board write.
         store.count("capture:ownership-guard").onsuccess = () => {
-          try { lifetime.assert(); req = fn(store); } catch { abort(); }
+          execute();
         };
-      } else req = fn(store);
+      } else execute();
       tx.oncomplete = () => {
         finish();
-        try { lifetime.assert(); resolve(req?.result as T); } catch (e) { reject(e); }
+        /* Completion means IndexedDB committed. Revocable guards belong before
+           writes execute; rejecting here would report cancellation after disk
+           already changed and split durable state from the UI. */
+        resolve(req?.result as T);
       };
       tx.onerror = tx.onabort = () => { finish(); reject(tx.error ?? new DOMException("Ownership revoked", "AbortError")); };
     });
@@ -76,8 +96,13 @@ export function createStorage(lifetime: OwnershipLifetime) {
     },
     async get(key: string): Promise<string | null> { return await run<string | undefined>("readonly", s => s.get(key)) ?? null; },
     async set(key: string, value: string): Promise<void> { await run("readwrite", s => s.put(value, key)); },
-    async setMany(entries: [string, string][]): Promise<void> {
-      await run("readwrite", s => { for (const [key, value] of entries) s.put(value, key); });
+    async setMany(
+      entries: [string, string][],
+      guard?: { signal?: AbortSignal; current?: () => boolean },
+    ): Promise<void> {
+      await run("readwrite", s => {
+        for (const [key, value] of entries) s.put(value, key);
+      }, guard);
     },
     async del(key: string): Promise<void> { await run("readwrite", s => s.delete(key)); },
     async keys(): Promise<string[]> { return (await run<IDBValidKey[]>("readonly", s => s.getAllKeys())).map(String); },
@@ -92,6 +117,9 @@ function storage() {
 }
 export const get = (key: string) => storage().get(key);
 export const set = (key: string, value: string) => storage().set(key, value);
-export const setMany = (entries: [string, string][]) => storage().setMany(entries);
+export const setMany = (
+  entries: [string, string][],
+  guard?: { signal?: AbortSignal; current?: () => boolean },
+) => storage().setMany(entries, guard);
 export const del = (key: string) => storage().del(key);
 export const keys = () => storage().keys();

@@ -4,6 +4,7 @@ import { clientIp } from "@/lib/clientIp";
 import { hubStore } from "@/lib/hubStore";
 import { isSafeImageId } from "@/lib/imgSync";
 import { limitFromEnv, rateLimit } from "@/lib/limiter";
+import { MAX_SYNC_IMAGE_SOURCE_LENGTH } from "@/lib/imageLimits";
 
 /**
  * The photo hub. Cloud delegates to authenticated, per-user Supabase Storage;
@@ -35,9 +36,6 @@ export const maxDuration = 60;
 /** One key per image id, under a folder of their own. */
 const keyFor = (id: string) => `img/${id}`;
 
-/** A shrunk photo lands around a few hundred KB as a data URL; this is the
-    ceiling a hand-built payload cannot climb past. */
-const MAX_BYTES = 3_000_000;
 
 const IMG_LIMIT = limitFromEnv("CAPTURE_IMG_LIMIT", 120);
 const BACKUP_IMG_LIMIT = limitFromEnv("CAPTURE_BACKUP_IMG_LIMIT", 1000);
@@ -125,7 +123,7 @@ export async function PUT(
   } catch {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
-  if (src.length > MAX_BYTES)
+  if (src.length > MAX_SYNC_IMAGE_SOURCE_LENGTH)
     return NextResponse.json({ error: "too large" }, { status: 413 });
 
   const key = keyFor(id);

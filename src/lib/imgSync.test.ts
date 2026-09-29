@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Board } from "./model";
 import { appendLedger, LEDGER_CAP, type CaptureEntry } from "./ledger";
-import { ensureHubImage, isSafeImageId, referencedImageIds } from "./imgSync";
+import {
+  ensureHubImage,
+  isSafeImageId,
+  referencedImageIds,
+  syncHubImage,
+  unreferencedImageIds,
+} from "./imgSync";
 
 const board = (over: Partial<Board> = {}): Board => ({
   actions: [],
@@ -143,6 +149,17 @@ describe("referencedImageIds", () => {
     });
     expect(referencedImageIds(b)).toEqual(["same"]);
   });
+
+  it("does not retire bytes still named by immutable ledger history", () => {
+    const b = board({
+      ledger: [{
+        id: "history", at: 1, raw: "photo", clean: "photo", kind: "action",
+        source: "image", targetId: "gone", imgs: ["historical-photo"],
+      }],
+    });
+    expect(unreferencedImageIds(b, ["historical-photo", "orphan-photo"]))
+      .toEqual(["orphan-photo"]);
+  });
 });
 
 describe("isSafeImageId", () => {
@@ -217,5 +234,36 @@ describe("ensureHubImage", () => {
 
     expect(confirmed).toBe(false);
     expect(calls).toEqual([{ method: "HEAD", body: undefined }]);
+  });
+
+  it("reports an over-envelope original as pending without attempting or claiming an upload", async () => {
+    const src = `data:image/png;base64,${"A".repeat(3_100_000)}`;
+    const bodies: BodyInit[] = [];
+    const result = await syncHubImage("oversized-photo", src, async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      if (init?.body) bodies.push(init.body);
+      return new Response(null, { status: init?.method === "HEAD" ? 404 : 200 });
+    });
+
+    expect(result).toEqual({ ok: false, reason: "too_large", status: 413 });
+    expect(bodies).toEqual([]);
+  });
+
+  it("retries an earlier failed upload and confirms success without changing the image", async () => {
+    const src = "data:image/jpeg;base64,original-bytes";
+    let attempt = 0;
+    const request = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "HEAD") return new Response(null, { status: 404 });
+      attempt++;
+      return new Response(null, { status: attempt === 1 ? 503 : 200 });
+    };
+
+    await expect(syncHubImage("retry-photo", src, request)).resolves
+      .toEqual({ ok: false, reason: "remote", status: 503 });
+    await expect(syncHubImage("retry-photo", src, request)).resolves
+      .toEqual({ ok: true, source: "upload" });
+    expect(attempt).toBe(2);
   });
 });

@@ -88,7 +88,7 @@ describe("retrying a waiting-to-sort capture", () => {
     expect(hook.result.current.data.actions.find((action) => action.id === "waiting"))
       .toMatchObject({ text: "Edited offline words", src: "Edited offline words" });
     expect(hook.result.current.data.ledger.find((entry) => entry.id === "record"))
-      .toMatchObject({ kind: "pending", raw: "Edited offline words", clean: "Edited offline words" });
+      .toMatchObject({ kind: "pending", raw, clean: "Edited offline words" });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -201,7 +201,7 @@ describe("retrying a waiting-to-sort capture", () => {
       entry.kind === "intention" && entry.imgs?.includes("pic")
     )).toBe(true);
     expect(hook.result.current.data.ledger.find((entry) => entry.id === "record")?.imgs)
-      .toEqual(["pic"]);
+      .toBeUndefined();
     expect(await get(IMG("pic"))).toBe(image);
   });
 

@@ -55,6 +55,8 @@ import { ReportBug } from "@/components/ReportBug";
 import { PlaygroundNotice } from "@/components/PlaygroundNotice";
 import { TrialMeter } from "@/components/TrialMeter";
 import { UnsortedCaptures } from "@/components/UnsortedCaptures";
+import { useDestinationPicker } from "@/components/DestinationPicker";
+import { RecoveryDisclosure } from "@/components/RecoveryDisclosure";
 import { InstallInvitation } from "@/components/InstallInvitation";
 import { OfflineInvitation } from "@/components/OfflineSettings";
 import { CheckoutReturnNotice } from "@/components/CloudBilling";
@@ -148,6 +150,7 @@ export function Capture() {
     err,
     landed,
     landedLines,
+    pendingReceiptId,
     landedIds,
     summarising,
     suggestion,
@@ -206,8 +209,7 @@ export function Capture() {
     hits,
     searching,
     shareable,
-    submit,
-    resort,
+    submit, resort, manualSort, manualSplit, finalizingUnsortedIds,
     editUnsorted, removeUnsorted,
     toggleAction,
     setShelf,
@@ -268,15 +270,18 @@ export function Capture() {
     sync,
     syncNow,
     canUndo,
+    canUndoManual,
     noticeUndoable,
     misfiled,
     sortAgainAs,
     sortAgainIntoThread,
     dismissMisfiled,
     undo,
+    undoManual,
     learnedRules,
     toggleLearnedRule,
   } = useBoard(now);
+  const { openPlacePicker, picker } = useDestinationPicker(data.threads, finalizingUnsortedIds, manualSort);
   const updateQuery = (next: string) => { if (next !== query) {
     setAnswerSession((value) => ({ ...value, revision: value.revision + 1 }));
     setAnswerProgress({ question: next, phase: isLikelyRecallQuestion(next) ? "loading" : "inactive" }); setQuery(next); } };
@@ -706,15 +711,11 @@ export function Capture() {
             {summarising}…
           </div>
         )}
-        {err && <div className="err">{err}</div>}
-        {landed && (
-          <CaptureReceipt
-            receipt={landed}
-            lines={landedLines}
-            canUndo={canUndo}
-            onUndo={() => void undo()}
-          />
-        )}
+        <CaptureReceipt error={err} receipt={landed} lines={landedLines} pendingReceipt={!!pendingReceiptId}
+          pending={unsorted.find((action) => action.id === pendingReceiptId)}
+          canUndo={canUndo} canUndoManual={canUndoManual} onChoosePlace={openPlacePicker}
+          onUndo={undo} onUndoManual={undoManual} />
+        {picker}
         {/* The undo asked a question. One tap answers it: the capture is
             sorted again with that destination pinned, and the pair — wrong
             kind, right kind — becomes something the engine reads next time.
@@ -977,8 +978,9 @@ export function Capture() {
           />
         ) : (
           <>
-            <UnsortedCaptures items={unsorted} busy={!!busy} onSort={(action) => void resort(action)}
-              onEdit={editUnsorted} onDelete={removeUnsorted} />
+            <UnsortedCaptures items={unsorted} pendingEntries={data.ledger} busy={!!busy} finalizingIds={finalizingUnsortedIds} threads={data.threads}
+              onSort={(action) => void resort(action)} onManualSort={manualSort} onManualSplit={manualSplit}
+              onChoosePlace={openPlacePicker} onEdit={editUnsorted} onDelete={removeUnsorted} />
             <div className="searchbar">
               <input
                 type="search"
@@ -1117,13 +1119,9 @@ export function Capture() {
 
                 {!!fadedList.length && (
                   <>
-                    <button
-                      className="section-label"
-                      onClick={() => setShowFaded((v) => !v)}
-                    >
-                      {showFaded ? "▾" : "▸"} Faded · {fadedList.length}
-                    </button>
-                    {showFaded && fadedList.map((a) => row(a, true))}
+                    <RecoveryDisclosure label="Faded" count={fadedList.length} expanded={showFaded}
+                      controls="faded-actions" onToggle={() => setShowFaded((v) => !v)} />
+                    {showFaded && <div id="faded-actions">{fadedList.map((a) => row(a, true))}</div>}
                   </>
                 )}
               </div>
