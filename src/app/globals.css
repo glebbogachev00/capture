@@ -1702,6 +1702,10 @@ body {
 .playground-note-action.is-primary:hover {
   filter: brightness(1.08);
 }
+.playground-note-action.is-secondary {
+  border-color: rgba(47, 93, 63, 0.48);
+  color: #2f5d3f;
+}
 .playground-note-action.is-secondary:hover {
   border-color: var(--accent);
   background: var(--accent-soft);

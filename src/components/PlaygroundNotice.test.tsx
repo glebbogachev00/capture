@@ -17,8 +17,8 @@ describe("PlaygroundNotice trial boundary", () => {
     )).toBeTruthy();
     expect(screen.queryByText(/install Capture/i)).toBeNull();
 
-    const cloudLink = screen.getByRole("link", { name: "Use Capture Cloud" });
-    const loginLink = screen.getByRole("link", { name: "Log in to Capture Cloud" });
+    const cloudLink = screen.getByRole("link", { name: "Start with Capture Cloud" });
+    const loginLink = screen.getByRole("link", { name: "Try Capture Locally" });
     const actions = cloudLink.parentElement;
     expect(cloudLink.getAttribute("href")).toBe("https://cloud.trycapture.app/pricing#plans");
     expect(loginLink.getAttribute("href")).toBe("https://cloud.trycapture.app/app");

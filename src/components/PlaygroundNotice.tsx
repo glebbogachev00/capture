@@ -17,12 +17,12 @@ export function PlaygroundNotice() {
       <div className="playground-note-actions">
         {cloudPricing && (
           <a className="playground-note-action is-primary" href={cloudPricing}>
-            Use Capture Cloud
+            Start with Capture Cloud
           </a>
         )}
         {cloudAccount && (
           <a className="playground-note-action is-secondary" href={cloudAccount}>
-            Log in to Capture Cloud
+            Try Capture Locally
           </a>
         )}
       </div>
