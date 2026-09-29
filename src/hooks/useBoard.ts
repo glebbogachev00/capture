@@ -18,7 +18,7 @@ import { logoutAndNavigate, ownedFetch as fetch } from "@/lib/ownership";
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stamp } from "@/lib/clock";
-import { del, get, keys, set, setMany } from "@/lib/storage";
+import { del, get, keys, set } from "@/lib/storage";
 import {
   type Action,
   type Board,
@@ -28,9 +28,7 @@ import {
   type Thread,
   DORMANT,
   EMPTY,
-  CORRUPT,
   IMG,
-  KEY,
   SHELF,
   dropImages,
   hydrate,
@@ -43,7 +41,7 @@ import { hasCloudEntitlement } from "@/lib/cloudEntitlement";
 import { useDegradedProviderStatus } from "@/hooks/useDegradedProviderStatus";
 import { useBackupNavigationGuard } from "@/hooks/useBackupNavigationGuard";
 import { importIntentBackup } from "@/lib/importIntent";
-import { threadBriefs } from "@/lib/threadBrief";
+import { semanticSiblingNames, threadBriefs } from "@/lib/threadBrief";
 import { warmDelay } from "@/lib/tidyWarm";
 import { acceptWrap, markWrapsSeen, type DayWrap,
   mergeCompletions,
@@ -52,14 +50,7 @@ import { acceptWrap, markWrapsSeen, type DayWrap,
   pendingWrap,
   mergeWraps,
 } from "@/lib/wrap";
-import {
-  expiredDays,
-  snapshotDay,
-  snapshotDays,
-  snapshotKey,
-  snapshotLabel,
-  worthSnapshotting,
-} from "@/lib/snapshots";
+import { snapshotDays, snapshotKey, snapshotLabel } from "@/lib/snapshots";
 import {
   type DistillResult,
   type DistillSession,
@@ -89,7 +80,6 @@ import {
 import { search } from "@/lib/search";
 import {
   byRecency,
-  applySorted,
   computeSuggestion,
   type Suggestion,
 } from "@/lib/boardOps";
@@ -99,7 +89,6 @@ import {
   type SortKind,
 } from "@/lib/refiled";
 import { expiryFor, parseDue } from "@/lib/due";
-import { seriesFor } from "@/lib/series";
 import { createPoller } from "@/lib/poll";
 import { createCaptureGate, PLAYGROUND, TRIAL_LIMIT, isTrialExhausted, playgroundError, trialState } from "@/lib/playground";
 import { useCaptureLimit } from "@/hooks/useCaptureLimit";
@@ -110,7 +99,7 @@ import {
   type TangleProposal,
 } from "@/lib/tangle";
 import { dayKey } from "@/lib/record";
-import { imgLoad, imgSave } from "@/lib/imgCache";
+import { imgSave } from "@/lib/imgCache";
 import { adoptHubState } from "@/lib/adopt";
 import { createPushGovernor, type PushGovernor } from "@/lib/pushGovernor";
 import { createReceiptWindow, type ReceiptWindow } from "@/lib/receiptWindow";
@@ -124,6 +113,8 @@ import {
   applyFragResolve,
   applyFragSplit,
   applyFragUnresolve,
+  applyThreadDelete,
+  applyThreadMerge,
 } from "@/lib/fragOps";
 import {
   applyActionDone,
@@ -133,20 +124,21 @@ import {
 import { suggestionOutcome } from "@/lib/suggestionRecord";
 import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
-import { recordSortedCapture, settleUnsortedCapture } from "@/lib/settle";
 import { applySaveDraft, type CaptureOrigin } from "@/lib/intentionOps";
-import { editUnsortedCapture, removeUnsortedCapture, settledLedgerEntries } from "@/lib/unsortedOps";
-import { matchingPendingAction, pendingDraftAction, pendingEntry, pinResortDestination,
-  recordResortedCapture, requestIntentionExpansion, resortIntentionOrigin } from "@/lib/resortOps";
+import { editUnsortedCapture, removeUnsortedCapture } from "@/lib/unsortedOps";
+import { pendingDraftAction, pendingEntry, prepareResortedCapture, requestBoardSort,
+  requestIntentionExpansion, resortIntentionOrigin } from "@/lib/resortOps";
 import { applyTangleAccept } from "@/lib/tangleOps";
 import { assemblePanel } from "@/lib/tidyPanel";
-import { restoreCapture } from "@/lib/undoOps";
-import { ensureHubImage, referencedImageIds } from "@/lib/imgSync";
+import { captureUndoOutcome, restoreCapture, tombstonesAfterUndo } from "@/lib/undoOps";
+import { unreferencedImageIds } from "@/lib/imgSync";
 import {
-  TOMBSTONE_KEY,
+  imageSyncStatus,
+  reconcileBoardImages,
+  type SyncStatus,
+} from "@/lib/imageReconciliation";
+import {
   boardSignature,
-  applyTombstones,
-  mergeTombstones,
   stampChanges,
   type SyncState,
   type Tombstone,
@@ -161,6 +153,7 @@ import {
   sourceOf,
   withCorrection,
   withLedger,
+  type CaptureEntry,
   type CorrectionEntry,
 } from "@/lib/ledger";
 import { setRuleEnabled, type RulePreference } from "@/lib/rules";
@@ -175,11 +168,39 @@ import {
   type RawAiProposal,
 } from "@/lib/organizeAi";
 import { playgroundUsage } from "@/lib/playgroundUsageClient";
+import {
+  parsePlannedRoutingResponse,
+  reconcilePersistedComposerImages,
+  stagePlannedRoutingIntake,
+} from "@/lib/plannedRoutingIntake";
+import { validateRoutingPlan } from "@/lib/plannedRouting";
+import { settlePlannedRouting, type PlannedSettlementResult } from "@/lib/plannedRoutingSettlement";
+import { useManualFiling } from "./useManualFiling";
+import { MANUAL_ROUTING_UNDO_KEY } from "@/lib/manualRoutingUndo";
+import { finalizingPendingTargetIds, PlannedSortAuthority } from "@/lib/plannedSortAuthority";
+import { applyThreadRename } from "@/lib/threadRename";
+import {
+  captureUndoSnapshot,
+  newCaptureIds as newIds,
+  preserveDraftOrigin,
+  type CaptureUndoSnapshot,
+} from "@/lib/captureTransaction";
+import {
+  DurableBoardCommitQueue,
+  prepareDurableBoardCommit,
+  rebaseBoardMutation,
+  runDurableBoardMutation,
+  type DurableMutation, type DurableMutationResult, type DurableFinalizationClaim,
+} from "@/lib/durableBoardCommit";
+import { loadStartupBoard } from "@/lib/startupBoard";
+import { PENDING_RECOVERY_BACKOFF_MS, PENDING_RECOVERY_KEY, exactPendingSnapshot,
+  snapshotMatchesPending, type PendingRecoverySnapshot } from "@/lib/pendingRecovery";
+import { PendingRecoveryOrchestrator } from "@/lib/pendingRecoveryOrchestrator";
+import { usePendingRecoveryWake } from "./usePendingRecoveryWake";
 /* Carries the server's explanation so the board can show it verbatim. */
 class SortError extends Error {}
 /* Which learned rules this device has cleared, by normalised key. */
 const FORGOTTEN_RULES_KEY = "capture:forgotten-rules";
-
 /* Organize proposals this device has waved off, by deterministic id — a
    dismissed pair stays dismissed, like a cleared rule. Device-local on
    purpose (v1): the proposal ids embed item ids that are stable per device. */
@@ -198,6 +219,13 @@ const TANGLE_DISMISSED_KEY = "capture:tangle-dismissed";
 const TANGLE_ASKED_KEY = "capture:tangle-asked-at";
 /** When the record last went out to an agent. Per device, never synced. */
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+function createHydrationGate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
 const reasonOf = (error: unknown) => {
   /* The server names its own failures precisely — rate limit, spent quota,
      billing, a rejected key — and those come back as a SortError carrying
@@ -220,69 +248,6 @@ const reasonOf = (error: unknown) => {
 /* SortResult, LandedSource, Suggestion, applySorted and computeSuggestion now
    live in @/lib/boardOps — the pure board logic, testable without React. */
 
-/**
- * Keep today's rollback, drop the ones past the week.
- *
- * Failures are swallowed on purpose: a snapshot that cannot be written is
- * a shame, and an app that will not open because of it is a disaster.
- */
-async function keepDailySnapshot(board: Board): Promise<void> {
-  if (!worthSnapshotting(board)) return;
-  try {
-    const today = snapshotKey(snapshotDay(Date.now()));
-    const existing = await keys();
-    if (!existing.includes(today)) {
-      await set(today, JSON.stringify(board));
-    }
-    for (const day of expiredDays(snapshotDays([...existing, today]))) {
-      await del(snapshotKey(day));
-    }
-  } catch {
-    /* out of quota, private mode, storage locked: never block the board */
-  }
-}
-
-/** The ledger entry `after` has that `before` does not — the one a capture
-    just wrote, found before any merge can put someone else's beside it. */
-function boardIds(b: Board): Set<string> {
-  const s = new Set<string>();
-  for (const a of b.actions) s.add(a.id);
-  for (const t of b.threads) {
-    s.add(t.id);
-    for (const f of t.frags) s.add(f.id);
-  }
-  for (const i of b.intentions) s.add(i.id);
-  for (const p of b.principles) s.add(p.id);
-  return s;
-}
-
-/** The ids `after` has that `before` does not — what one capture created. */
-function newIds(before: Board, after: Board): Set<string> {
-  const had = boardIds(before);
-  return new Set([...boardIds(after)].filter((id) => !had.has(id)));
-}
-
-/* Every ledger entry this capture wrote. A split lands in more than one
-   thread and writes one entry per destination, so undoing it has to take
-   them all back — marking only the first left the other halves counted as
-   things that still happened. */
-function newLedgerIds(before: Board, after: Board): string[] {
-  const had = new Set((before.ledger ?? []).map((e) => e.id));
-  return (after.ledger ?? []).filter((e) => !had.has(e.id)).map((e) => e.id);
-}
-
-/** Attach a pending draft's evidence only to entries created by this landing. */
-function preserveDraftOrigin(before: Board, after: Board, origin?: CaptureOrigin | null): Board {
-  if (!origin) return after;
-  const fresh = new Set(newLedgerIds(before, after));
-  return {
-    ...after,
-    ledger: after.ledger.map(entry => fresh.has(entry.id)
-      ? { ...entry, raw: origin.raw, source: origin.source, transcript: origin.transcript }
-      : entry),
-  };
-}
-
 export function useBoard(now: number) {
   /* ------------------------------ state ------------------------------ */
   const { lifetime, ownershipStatus, data, setData } = useOwnedState<Board>(EMPTY);
@@ -304,25 +269,34 @@ export function useBoard(now: number) {
      at thirty-five seconds. */
   const [summarising, setSummarising] = useState<string | null>(null);
   const [err, setErr] = useState("");
-  const [landed, setLanded] = useState<string | null>(null); const [landedLines, setLandedLines] = useState<string[]>([]);
+  const [landed, setLanded] = useState<string | null>(null);
+  const [landedLines, setLandedLines] = useState<string[]>([]);
+  const [pendingReceiptId, setPendingReceiptId] = useState<string | null>(null);
+  const pendingReceiptRef = useRef<string | null>(null);
   /* How long a receipt stays, and why a second one is never blanked by the
      first one's clock — lib/receiptWindow owns the timing. Everything that
      leaves with the banner leaves through its one close channel. */
   const receiptWindow = useRef<ReceiptWindow | null>(null);
   if (!receiptWindow.current)
     receiptWindow.current = createReceiptWindow(() => {
-      setLanded(null); setLandedLines([]);
+      setLanded(null);
+      setLandedLines([]);
+      pendingReceiptRef.current = null;
+      setPendingReceiptId(null);
       setLandedIds([]);
       setSuggestion(null);
     });
-  const showReceipt = useCallback((text: string, lines = receiptLines(text)) => {
-    setLanded(text); setLandedLines(lines);
+  const showReceipt = useCallback((text: string, pendingTargetId: string | null = null, lines = text === "Actions" ? ["Actions"] : receiptLines(text)) => {
+    setLanded(text);
+    setLandedLines(lines);
+    pendingReceiptRef.current = pendingTargetId;
+    setPendingReceiptId(pendingTargetId);
     receiptWindow.current!.open();
   }, []);
   /* What the last capture created, so the board can wash those rows once —
      the banner says a capture landed; this shows WHERE. Cleared with the
      banner, and by the animation's own end on each row. */
-  const [landedIds, setLandedIds] = useState<string[]>([]);
+  const [landedIds, setLandedIds] = useState<string[]>([]), [finalizingCaptureIds, setFinalizingCaptureIds] = useState<string[]>([]);
   /* The "this also belongs with X" proposal, shown under the landed line
      until it is acted on, dismissed, or the landed window closes. */
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
@@ -419,6 +393,9 @@ export function useBoard(now: number) {
   /* The latest board, read by handlers so async work never builds on stale
      state. `commit` (and the loader) are the only writers. */
   const latest = useRef<Board>(data);
+  const durableBoardCommits = useRef(new DurableBoardCommitQueue());
+  const [hydrationGate] = useState(createHydrationGate);
+  const hydrationSucceeded = useRef(false);
   const backupGate = useRef(new BackupOperationGate());
   useBackupNavigationGuard(backupGate);
   const { applies: dailyTrialApplies, ready: captureLimitReady } = useCaptureLimit();
@@ -449,11 +426,9 @@ export function useBoard(now: number) {
      still pushed once the hub is reachable again. Persisted under its own
      key, next to the board. */
   const tombstones = useRef<Tombstone[]>([]);
+  const pendingRecovery = useRef(new PendingRecoveryOrchestrator());
   /* When the last exchange with the hub happened, and whether it worked. */
-  const [sync, setSync] = useState<
-    | { ok: boolean; at: number; note?: string }
-    | null
-  >(null);
+  const [sync, setSync] = useState<SyncStatus>(null);
   /* Push scheduling lives in lib/pushGovernor — the state machine that
      cannot drop: an edit made during an in-flight push becomes pending,
      and the finishing push re-schedules it. The old timer-plus-flag pair
@@ -468,55 +443,22 @@ export function useBoard(now: number) {
 
   /* ------------------------------ undo ------------------------------ */
 
-  /* The board and tombstones as they were just before the last capture
-     landed, so "Undo" can put it back exactly — including the raw words
-     (and pictures) that sat in the capture box, so an undone capture can
-     be edited and re-submitted instead of being lost. Only the capture
-     flows (submit/resort) take the snapshot — summary refreshes and fades
-     never do, so Undo always reverts something the user watched land,
-     never a background change. */
-  /* Only the image IDS ride in the snapshot — the bytes were written to
-     IndexedDB before the sort ran and are never garbage-collected, so undo
-     re-reads them. Holding the data URLs here pinned ~300KB per photo in
-     memory for the rest of the session. */
-  const captureSnapshot = useRef<{
-    board: Board;
-    tombstones: Tombstone[];
-    text?: string;
-    picIds?: string[];
-    /** The ledger entry this capture wrote — the one Undo asks about. */
-    ledgerIds?: string[];
-    /** Every id this capture created. Undo takes back these and only
-        these: anything that arrived from another device in between — the
-        push reply and the poll both merge — is not the capture's. */
-    addedIds?: Set<string>;
-  } | null>(null);
+  /* Exact inverse ownership plus composer evidence for the last user-visible
+     landing. Image ids ride here; bytes remain in IndexedDB. */
+  const captureSnapshot = useRef<CaptureUndoSnapshot | null>(null);
   const [canUndo, setCanUndo] = useState(false);
 
-  /* Whether the notice line itself can be taken back. Organize applies its
-     changes away from the capture box, so its Undo cannot ride on the
-     "Landed in X" receipt — it sits on the notice that announced the
-     change, and leaves when that notice does. */
+  /* Tidy Undo rides on the notice rather than the capture receipt. */
   const [noticeUndoable, setNoticeUndoable] = useState(false);
 
-  /* Tidy's notices run on the capture receipt's clock rather than the four
-     seconds an ordinary notice gets. A change you can take back is only
-     takeable while the way back is on screen, and four seconds is not long
-     enough to read what moved and decide you disagree. Same machine as the
-     receipt, so two tidy changes in a row can't blank each other's window
-     early. */
+  /* Give each undoable Tidy notice a full receipt window. */
   const tidyNoticeWindow = useRef<ReceiptWindow | null>(null);
   if (!tidyNoticeWindow.current)
     tidyNoticeWindow.current = createReceiptWindow(() => {
       setNotice(null);
       setNoticeUndoable(false);
     });
-  /* A notice clears on its own clock — and only if it is still the notice
-     that asked for the clear. Twenty-two call sites schedule a blank four
-     or five seconds out, and any of them landing after a LATER notice went
-     up would wipe it early. Harmless when a notice only reports; not
-     harmless once one carries an Undo, which would vanish seconds after
-     appearing and take the way back with it. */
+  /* Generation prevents an older timer from clearing a newer Undo notice. */
   const noticeGen = useRef(0);
   const clearNoticeIn = (ms: number) => {
     const gen = ++noticeGen.current;
@@ -534,6 +476,8 @@ export function useBoard(now: number) {
 
   /* Pictures belonging to something Undo can still bring back — the rule
      for when one is safe to destroy lives in lib/heldImages. */
+  const dropUnreferencedImages = (ids: string[] | undefined) =>
+    dropImages(unreferencedImageIds(latest.current, ids));
   const heldImages = useRef<HeldImages | null>(null);
   if (!heldImages.current) heldImages.current = createHeldImages();
   const holdImages = (ids: string[] | undefined) =>
@@ -542,7 +486,7 @@ export function useBoard(now: number) {
      never be brought back now, so the bytes go. */
   const releaseHeldImages = () => {
     const stale = heldImages.current!.release();
-    if (stale.length) void backupGate.current.trackMutation(dropImages(stale));
+    if (stale.length) void backupGate.current.trackMutation(dropUnreferencedImages(stale));
   };
 
   /* What the last undo threw away, kept just long enough to ask one
@@ -569,60 +513,50 @@ export function useBoard(now: number) {
       first reconciliation asks with HEAD and sends bytes only when missing. */
   const imgsOnHub = useRef<Set<string>>(new Set());
 
-  /**
-   * Make the photos match the board.
-   *
-   * The board syncs as text and carries only image ids, so after a merge a
-   * device can hold a fragment whose picture it has never seen — and hold
-   * pictures the hub has never seen. Both directions are settled here:
-   * anything referenced but missing locally is fetched, anything held
-   * locally but not yet offered is uploaded. Failures are silent by design;
-   * the next sync tries again, and a missing photo never blocks the text.
-   */
-  const reconcileImages = useCallback(async (board: Board) => {
-    /* A few at a time, not one at a time. Each exchange is a serverless
-       round-trip of a few hundred KB; strictly sequential, a board of
-       twenty photos took minutes to refill — which a phone that had just
-       lost its storage experienced as "the images don't save, I wait
-       minutes for them to reappear". Four in flight cuts that to seconds
-       without stampeding the hub's rate limit. */
-    const ids = referencedImageIds(board);
-    const lane = async (mine: string[]) => {
-      for (const id of mine) {
-        try {
-          const have = await imgLoad(id);
-          if (!have) {
-            const res = await fetch(`/api/img/${id}`);
-            if (!res.ok) continue;
-            const { src } = (await res.json()) as { src?: string };
-            if (src) await imgSave(id, src);
-            imgsOnHub.current.add(id);
-            continue;
-          }
-          if (imgsOnHub.current.has(id)) continue;
-          if (await ensureHubImage(id, have)) imgsOnHub.current.add(id);
-        } catch {
-          /* hub unreachable or disk hiccup — the next sync picks it up */
-        }
-      }
-    };
-    const LANES = 4;
-    await Promise.all(
-      Array.from({ length: LANES }, (_, k) =>
-        lane(ids.filter((_, i) => i % LANES === k))
-      )
-    );
-  }, []);
+  const reconcileImages = useCallback(
+    (board: Board) => reconcileBoardImages(board, imgsOnHub.current),
+    [],
+  );
 
   // Saved Cloud edits must wait for a successful read/merge, including after
   // reconnect. A failed read must not consume this pending work.
   const offlineChangesPending = useRef(lifetime.cloud && lifetime.owner !== null);
 
+  const adoptSyncState = useCallback((
+    remote: SyncState,
+  ): Promise<DurableMutationResult<ReturnType<typeof adoptHubState>>> =>
+    runDurableBoardMutation<ReturnType<typeof adoptHubState>>({
+    queue: durableBoardCommits.current,
+    allowed: () => hydrationSucceeded.current && lifetime.active && backupGate.current.allowMutation(),
+    read: () => ({ board: latest.current, tombstones: tombstones.current }),
+    build: (current, currentTombstones) => {
+      const adopted = adoptHubState(
+        { board: current, tombstones: currentTombstones },
+        remote,
+      );
+      return adopted.changed
+        ? {
+            next: adopted.board,
+            replaceTombstones: adopted.tombstones,
+            value: adopted,
+          }
+        : { skip: adopted };
+    },
+    adopt: (state) => {
+      latest.current = state.board;
+      tombstones.current = state.tombstones;
+      setData(state.board);
+    },
+    /* Sync adoption already came from the hub. Scheduling another push is a
+       caller decision after the read/merge gate, never a queue side effect. */
+    committed: () => {},
+  }), [lifetime, setData]);
+
   /** Send our state to the hub and adopt its merged answer. */
   const pushNow = useCallback(async () => {
     /* Playground: no hub. See lib/playground.ts for why this is a hard stop.
        Serialization is the governor's job now, not a flag's. */
-    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    if (!hydrationSucceeded.current || PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
     if (backupGate.current.restoreActive) return;
     const generation = backupGate.current.generation;
     // Also gate debounced edits and Undo, not only manual sync.
@@ -640,46 +574,57 @@ export function useBoard(now: number) {
       if (!res.ok) throw new Error("sync failed");
       const stored = (await res.json()) as SyncStore;
       if (!backupGate.current.isCurrent(generation)) return;
-      hubRev.current = stored.rev ?? null;
+
       /* The adoption policy lives in lib/adopt — pure, and pinned by tests
          that replay sync's shipped incidents (the in-flight capture eaten
          by its own reply, the cheap changed-test dropping edits). The note
          is deliberately unused here: a push's job is sending, and the next
          pull narrates arrivals. */
-      const adopted = adoptHubState(
-        { board: latest.current, tombstones: tombstones.current },
-        { board: stored.board, tombstones: stored.tombstones }
-      );
-      if (adopted.changed) {
-        latest.current = adopted.board;
-        setData(adopted.board);
-        tombstones.current = adopted.tombstones;
-        try {
-          await setMany([
-            [KEY, JSON.stringify(adopted.board)],
-            [TOMBSTONE_KEY, JSON.stringify(adopted.tombstones)],
-          ]);
-        } catch { /* disk hiccup; next commit retries */ }
-      }
-      setSync({ ok: true, at: stamp() });
-      /* The text is up; hand the pictures over too. Not awaited — a photo
-         upload must never hold up the sync status the user is watching. */
-      void reconcileImages(adopted.board);
+      const durable = await adoptSyncState({
+        board: stored.board,
+        tombstones: stored.tombstones,
+      });
+      if (durable.status === "failed") throw new Error("sync persistence failed");
+      const adopted = durable.value;
+      hubRev.current = stored.rev ?? null;
+      const images = await reconcileImages(adopted.board);
+      if (!backupGate.current.isCurrent(generation)) return;
+      setSync(imageSyncStatus(images));
     } catch {
       if (!backupGate.current.isCurrent(generation)) return;
       /* hub unreachable — keep everything local, retry on the next change */
       setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
     }
-  }, [reconcileImages, lifetime, setData]);
+  }, [adoptSyncState, reconcileImages, lifetime]);
 
   /** Coalesce bursts of edits into one push a beat after the last one. */
   const schedulePush = useCallback(() => {
-    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    if (!hydrationSucceeded.current || PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
     if (backupGate.current.restoreActive) return;
     if (!pushGovernor.current)
       pushGovernor.current = createPushGovernor(pushNow);
     pushGovernor.current.schedule();
   }, [pushNow, lifetime]);
+
+  const transactDurable = useCallback(async <T,>(
+    build: (current: Board, currentTombstones: Tombstone[]) => DurableMutation<T>,
+    authority?: { guard: () => boolean; signal: AbortSignal; finalize?: () => DurableFinalizationClaim | null },
+  ): Promise<DurableMutationResult<T>> => {
+    await hydrationGate.promise;
+    return runDurableBoardMutation({
+    queue: durableBoardCommits.current,
+    allowed: () => hydrationSucceeded.current && lifetime.active && backupGate.current.allowMutation(),
+    guard: authority?.guard,
+    signal: authority?.signal,
+    finalize: authority?.finalize,
+    read: () => ({ board: latest.current, tombstones: tombstones.current }),
+    build,
+    adopt: (state) => {
+      latest.current = state.board; tombstones.current = state.tombstones; setData(state.board);
+    },
+    committed: schedulePush,
+    });
+  }, [hydrationGate, lifetime, schedulePush, setData]);
 
   /**
    * Pull the hub's copy, merge it with ours, and adopt the result. Returns
@@ -687,7 +632,7 @@ export function useBoard(now: number) {
    * is recorded in `sync`, so an unchanged successful read still shows a live hub.
    */
   const pullNow = useCallback(async (): Promise<{ ok: false } | { ok: true; changed: boolean }> => {
-    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return { ok: false };
+    if (!hydrationSucceeded.current || PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return { ok: false };
     if (backupGate.current.restoreActive) return { ok: false };
     const generation = backupGate.current.generation;
     try {
@@ -702,39 +647,31 @@ export function useBoard(now: number) {
          parse-and-merge work, but retry referenced images because their bytes
          arrive separately and do not move the board revision. */
       if (remote.unchanged) {
-        setSync({ ok: true, at: stamp() }); void reconcileImages(latest.current);
+        const images = await reconcileImages(latest.current);
+        if (!backupGate.current.isCurrent(generation)) return { ok: false };
+        setSync(imageSyncStatus(images));
         if (offlineChangesPending.current) {
           offlineChangesPending.current = false;
           schedulePush();
         }
         return { ok: true, changed: false };
       }
-      hubRev.current = remote.rev ?? null;
+
       /* One policy for both halves of sync — see lib/adopt for the rules
          and the incidents behind them. */
-      const adopted = adoptHubState(
-        { board: latest.current, tombstones: tombstones.current },
-        { board: remote.board, tombstones: remote.tombstones }
-      );
+      const durable = await adoptSyncState({
+        board: remote.board,
+        tombstones: remote.tombstones,
+      });
+      if (durable.status === "failed") throw new Error("sync persistence failed");
+      const adopted = durable.value;
       const changed = adopted.changed;
-      if (changed) {
-        latest.current = adopted.board;
-        setData(adopted.board);
-        tombstones.current = adopted.tombstones;
-        if (adopted.note) {
-          setNotice(adopted.note);
-          clearNoticeIn(5000);
-        }
-        try {
-          await setMany([
-            [KEY, JSON.stringify(adopted.board)],
-            [TOMBSTONE_KEY, JSON.stringify(adopted.tombstones)],
-          ]);
-        } catch {
-          /* next commit retries */
-        }
+      hubRev.current = remote.rev ?? null;
+      if (changed && adopted.note) {
+        setNotice(adopted.note);
+        clearNoticeIn(5000);
       }
-      setSync({ ok: true, at: stamp() });
+
       // Push merged changes or retained offline work; an ordinary unchanged
       // poll still avoids a redundant round trip.
       /* Every successful pull, not only the ones that changed something.
@@ -743,7 +680,9 @@ export function useBoard(now: number) {
          the merge reads as unchanged from then on and the fetch was never
          retried. The device kept the text and lost the photograph, for
          good. Reconciling is a no-op for images it already holds. */
-      void reconcileImages(adopted.board);
+      const images = await reconcileImages(adopted.board);
+      if (!backupGate.current.isCurrent(generation)) return { ok: false };
+      setSync(imageSyncStatus(images));
       const pending = offlineChangesPending.current;
       offlineChangesPending.current = false;
       if (changed || pending) schedulePush();
@@ -754,11 +693,11 @@ export function useBoard(now: number) {
       setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
       return { ok: false };
     }
-  }, [schedulePush, reconcileImages, lifetime, setData]);
+  }, [adoptSyncState, schedulePush, reconcileImages, lifetime]);
 
   /** Manual "sync now": bring the other device's changes in, then push ours up. */
   const syncNow = useCallback(async () => {
-    if (PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
+    if (!hydrationSucceeded.current || PLAYGROUND || !lifetime.active || (lifetime.cloud && lifetime.owner === null)) return;
     if (backupGate.current.restoreActive) return;
     const pulled = await pullNow();
     if (!pulled.ok) return;
@@ -783,84 +722,82 @@ export function useBoard(now: number) {
   const undo = useCallback(async () => {
     const snap = captureSnapshot.current;
     if (!snap) return;
+    const durable = await transactDurable<{
+      wrongKind: SortKind | null;
+      undoneEntry: CaptureEntry | undefined;
+      landedIn: { id: string; name: string } | undefined;
+    }>((current, currentTombstones) => {
+      /* Restore only the exact inverse recorded when this transition landed.
+         The live Board and tombstones may already contain newer sync work. */
+      const now = Date.now();
+      const captureArtifacts = snap.captureId
+        ? new Set(current.ledger
+            .filter((entry) =>
+              entry.kind !== "pending" &&
+              (entry.captureId ?? entry.id) === snap.captureId
+            )
+            .flatMap((entry) => [entry.targetId, entry.targetFragId]
+              .filter((id): id is string => !!id)))
+        : new Set<string>();
+      const additionsSinceSnapshot = newIds(snap.board, current);
+      const ownedAddedIds = new Set([
+        ...(snap.addedIds ?? []),
+        ...[...captureArtifacts].filter((id) => additionsSinceSnapshot.has(id)),
+      ]);
+      const board = restoreCapture(current, { ...snap, addedIds: ownedAddedIds }, now);
+      const added = stampChanges(current, board, now).tombstones;
+      const settlementEntries = snap.ledgerIds?.length
+        ? current.ledger.filter((entry) => snap.ledgerIds!.includes(entry.id))
+        : current.ledger.filter((entry) =>
+            !snap.board.ledger.some((prior) => prior.id === entry.id)
+          );
+      const outcome = captureUndoOutcome(settlementEntries);
+      const undoneEntry = outcome.representative;
+      const wrongKind = outcome.learningKind;
+      const threadEntry = settlementEntries.find((entry) =>
+        (entry.kind === "thread" || entry.kind === "both") && entry.targetId
+      );
+      const landed = threadEntry
+        ? current.threads.find((thread) => thread.id === threadEntry.targetId)
+        : undefined;
+      const learned = wrongKind
+        ? withCorrection(board, {
+            id: uid(), at: now, proposalKind: "undone", accepted: false,
+            context: (undoneEntry!.raw || undoneEntry!.clean).slice(0, 160),
+          })
+        : board;
+      return {
+        next: learned,
+        replaceTombstones: tombstonesAfterUndo(
+          currentTombstones,
+          snap.ownedTombstones ?? [],
+          added,
+          now,
+        ),
+        value: {
+          wrongKind,
+          undoneEntry,
+          landedIn: landed ? { id: landed.id, name: landed.name } : undefined,
+        },
+      };
+    });
+    if (durable.status !== "committed") {
+      setErr("Couldn't save Undo. Nothing was changed.");
+      return;
+    }
     captureSnapshot.current = null;
     setCanUndo(false);
     setNoticeUndoable(false);
-    /* The restore below brings back whatever was holding these, so the
-       bytes must stay exactly where they are. */
+    /* The durable restore brought back whatever held these image ids. */
     heldImages.current!.cancel();
-
-    /* The capture's own push landed on the hub before the undo window
-       opened, so restoring the board alone would let the next pull merge it
-       straight back. Two things make the hub agree with the restore:
-       - everything the capture ADDED gets a tombstone, so the hub removes it;
-       - everything the capture REMOVED (a re-sort replaces the raw action)
-         comes back with a fresh updatedAt, so it out-ages the tombstone the
-         capture itself pushed for it. */
-    const now = Date.now();
-    /* The restore math lives in lib/undoOps — pure, and pinned by behavior
-       tests that replay every incident this code has shipped: the deleted
-       foreign capture, the tombstone race, the destroyed wraps. This
-       callback owns what React owns — tombstones, the misfiled question,
-       persistence. */
-    const board: Board = restoreCapture(latest.current, snap, now);
-
-    const added = stampChanges(latest.current, board, now).tombstones;
-
-    /* The capture being undone: the one ledger entry the snapshot does not
-       have. It carries both halves of the question — what was said, and
-       what the sorter decided it was. */
-    const undoneEntry = snap.ledgerIds?.length
-      ? latest.current.ledger.find((e) => e.id === snap.ledgerIds![0])
-      : latest.current.ledger.find(
-          (e) => !snap.board.ledger.some((x) => x.id === e.id)
-        );
-    /* "both" is not a kind anyone can pick, so there is nothing to ask. */
-    const wrongKind: SortKind | null =
-      undoneEntry && undoneEntry.kind !== "both" && undoneEntry.kind !== "pending"
-        ? undoneEntry.kind
-        : null;
-    /* Which thread it went to, read from the board as it stands NOW —
-       before the restore below removes it. A capture that opened a thread
-       of its own is the commonest version of this mistake, and that thread
-       exists nowhere else by the time the question is asked. */
-    const landedIn =
-      undoneEntry &&
-      (undoneEntry.kind === "thread" || undoneEntry.kind === "both") &&
-      undoneEntry.targetId
-        ? latest.current.threads.find((t) => t.id === undoneEntry.targetId)
-        : undefined;
-    /* The complaint is worth recording even if the question goes
-       unanswered: it has no rule attached, so it can never become a
-       learned rule on its own, but the record shows the engine was wrong
-       here. */
-    const learned: Board = wrongKind
-      ? withCorrection(board, {
-          id: uid(),
-          at: now,
-          proposalKind: "undone",
-          accepted: false,
-          context: (undoneEntry!.raw || undoneEntry!.clean).slice(0, 160),
-        })
-      : board;
-    const nextTombstones = mergeTombstones(snap.tombstones, added);
-
-    latest.current = learned;
-    setData(learned);
-    tombstones.current = nextTombstones;
-    if (wrongKind) {
+    const { wrongKind, undoneEntry, landedIn } = durable.value;
+    if (wrongKind && undoneEntry) {
       setMisfiled({
-        text: undoneEntry!.raw || undoneEntry!.clean,
+        text: undoneEntry.raw || undoneEntry.clean,
         wrong: wrongKind,
-        captureId: undoneEntry!.captureId ?? undoneEntry!.id,
-        thread: landedIn ? { id: landedIn.id, name: landedIn.name } : undefined,
+        captureId: undoneEntry.captureId ?? undoneEntry.id,
+        thread: landedIn,
       });
-    }
-    try {
-      await set(KEY, JSON.stringify(learned));
-      await set(TOMBSTONE_KEY, JSON.stringify(nextTombstones));
-    } catch {
-      /* disk hiccup; next commit retries */
     }
     receiptWindow.current!.retire();
     /* The capture box gets its words back too — Undo returns the draft as
@@ -891,7 +828,7 @@ export function useBoard(now: number) {
     if (!pushGovernor.current)
       pushGovernor.current = createPushGovernor(pushNow);
     await pushGovernor.current.flush();
-  }, [pushNow, text, pics, setData]);
+  }, [pushNow, text, pics, transactDurable]);
 
   /**
    * The answer to "then what was it?".
@@ -924,13 +861,7 @@ export function useBoard(now: number) {
           context: words.slice(0, 160),
           routing: { kind: right },
         });
-        latest.current = learned;
-        setData(learned);
-        try {
-          await set(KEY, JSON.stringify(learned));
-        } catch {
-          /* disk hiccup; the next commit writes it */
-        }
+        if (!await commit(learned)) return;
       }
       /* The box holds the restored words, but a re-sort must not depend on
          that: if anything cleared them, the capture being corrected is
@@ -977,13 +908,7 @@ export function useBoard(now: number) {
           context: words.slice(0, 160),
           routing: { kind: "thread", threadId: home.id, threadName: home.name },
         });
-        latest.current = learned;
-        setData(learned);
-        try {
-          await set(KEY, JSON.stringify(learned));
-        } catch {
-          /* disk hiccup; the next commit writes it */
-        }
+        if (!await commit(learned)) return;
       }
       if (!text.trim()) setText(m.text);
     }
@@ -1000,7 +925,32 @@ export function useBoard(now: number) {
       restoreToken?: BackupOperationToken,
       legacyImages?: Record<string, string>,
     ): Promise<boolean> => {
-      if (!lifetime.active || !backupGate.current.allowMutation(restoreToken)) return false;
+      await hydrationGate.promise;
+      if (!hydrationSucceeded.current) return false;
+      const base = latest.current;
+      if (legacyImages) return durableBoardCommits.current.run(async () => {
+        if (!lifetime.active || !backupGate.current.allowMutation(restoreToken)) return false;
+        const rebased = rebaseBoardMutation(base, next, latest.current);
+        if (!rebased) return false;
+        const prepared = prepareDurableBoardCommit(
+          latest.current, rebased, tombstones.current,
+        );
+        if (!await commitLegacyBackup(lifetime, prepared, legacyImages)
+          .then(() => true, () => false)) {
+          setErr("Couldn't save that restore. Your existing board is unchanged.");
+          return false;
+        }
+        latest.current = prepared.board;
+        tombstones.current = prepared.tombstones;
+        setData(prepared.board);
+        schedulePush();
+        return true;
+      });
+
+      const durable = await transactDurable<boolean>((current) => {
+        if (!backupGate.current.allowMutation(restoreToken)) return { skip: false };
+        const rebased = rebaseBoardMutation(base, next, current);
+        if (!rebased) return { skip: false };
       /* Every mutation funnels through here, so the sync bookkeeping lives in
          one place: diff what changed, stamp the changed items, tombstone the
          deletions, then push.
@@ -1023,52 +973,25 @@ export function useBoard(now: number) {
          are append-only and keyed by id, so unioning them is always safe
          and never loses a record to a slow reply. */
       const merged: Board = {
-        ...next,
-        ledger: mergeLedgers(latest.current.ledger ?? [], next.ledger ?? []),
+        ...rebased,
+        ledger: mergeLedgers(current.ledger ?? [], rebased.ledger ?? []),
         corrections: mergeCorrections(
-          latest.current.corrections ?? [],
-          next.corrections ?? []
+          current.corrections ?? [],
+          rebased.corrections ?? []
         ),
-        wraps: mergeWraps(latest.current.wraps ?? [], next.wraps ?? []),
+        wraps: mergeWraps(current.wraps ?? [], rebased.wraps ?? []),
         completions: mergeCompletions(
-          latest.current.completions ?? [],
-          next.completions ?? []
+          current.completions ?? [],
+          rebased.completions ?? []
         ),
       };
-      const stamped = stampChanges(
-        latest.current,
-        applyTombstones(merged, tombstones.current)
-      );
-      const nextTombstones = stamped.tombstones.length
-        ? mergeTombstones(tombstones.current, stamped.tombstones)
-        : tombstones.current;
-      if (legacyImages && !await commitLegacyBackup(
-        lifetime,
-        { board: stamped.board, tombstones: nextTombstones },
-        legacyImages,
-      ).then(() => true, () => false)) {
-        setErr("Couldn't save that restore. Your existing board is unchanged.");
-        return false;
-      }
-      setData(stamped.board);
-      latest.current = stamped.board;
-      tombstones.current = nextTombstones;
-      if (!legacyImages) {
-        try {
-          /* One transaction, not two: board and tombstones are one commit,
-             and each extra readwrite window blocks image reads behind it. */
-          await setMany([
-            [KEY, JSON.stringify(stamped.board)],
-            [TOMBSTONE_KEY, JSON.stringify(nextTombstones)],
-          ]);
-        } catch {
-          setErr("Couldn't save that. Your last capture is still on screen — try again.");
-        }
-      }
-      schedulePush();
-      return true;
+        return { next: merged, value: true };
+      });
+      if (durable.status === "committed") return true;
+      setErr("Couldn't save that. Your last capture is still on screen — try again.");
+      return false;
     },
-    [schedulePush, lifetime, setData]
+    [hydrationGate, schedulePush, lifetime, setData, transactDurable]
   );
 
   /* load, then sweep. A board already on the device that fails to parse is
@@ -1077,42 +1000,26 @@ export function useBoard(now: number) {
      it, and the UI is told so it can offer a restore. */
   useEffect(() => {
     (async () => {
-      let d: Board = EMPTY;
-      let quarantined = false;
+      let startup: Awaited<ReturnType<typeof loadStartupBoard>> = null;
       try {
-        const raw = await get(KEY);
-        if (raw) {
-          try {
-            d = hydrate(JSON.parse(raw));
-          } catch {
-            quarantined = true;
-            try {
-              await set(CORRUPT, raw);
-            } catch {
-              /* quarantine failed; keep going */
-            }
-          }
-        }
+        startup = await loadStartupBoard(
+          durableBoardCommits.current,
+          () => lifetime.active,
+        );
       } catch {
-        /* first run */
+        /* surfaced below without adopting an unpersisted Board */
       }
-      if (quarantined) setCorrupt(true);
-      /* A day's first look at the board is the last moment it is certainly
-         the board the person left: before the sweep fades anything and
-         before the first pull merges the hub in. Snapshot here or the copy
-         is already downstream of whatever went wrong. */
-      void keepDailySnapshot(d);
-      const { next, faded, cleared } = await sweep(d);
-      if (!lifetime.active) return;
-      setData(next);
-      latest.current = next;
-      if (faded || cleared) {
-        try {
-          await set(KEY, JSON.stringify(next));
-        } catch {
-          /* ignore */
-        }
-        setSwept({ faded, cleared });
+      if (!startup) {
+        setErr("Couldn't finish opening your saved board. Nothing new was written.");
+        hydrationGate.resolve();
+        return;
+      }
+      if (startup.quarantined) setCorrupt(true);
+      latest.current = startup.board;
+      tombstones.current = startup.tombstones;
+      setData(startup.board);
+      if (startup.faded || startup.cleared) {
+        setSwept({ faded: startup.faded, cleared: startup.cleared });
       }
       // A half-finished Distill conversation is a capture like any other.
       // A turn sent before this resolves already adopted the disk copy and
@@ -1126,14 +1033,6 @@ export function useBoard(now: number) {
         /* first run */
       }
       if (!distillLoadedRef.current) distillLoadedRef.current = true;
-      // This device's deletions survive a reload, so an offline delete is
-      // still pushed to the hub once the connection is back.
-      try {
-        const tbRaw = await get(TOMBSTONE_KEY);
-        if (tbRaw) tombstones.current = JSON.parse(tbRaw);
-      } catch {
-        /* first run */
-      }
       // Cleared learning rules survive a reload too.
       try {
         const frRaw = await get(FORGOTTEN_RULES_KEY);
@@ -1148,9 +1047,16 @@ export function useBoard(now: number) {
       } catch {
         /* first run */
       }
+      pendingRecovery.current.load(await get(PENDING_RECOVERY_KEY).catch(() => null), startup.board);
+      restoreManualReceipt(
+        await get(MANUAL_ROUTING_UNDO_KEY).catch(() => null),
+        startup.board, tombstones.current,
+      );
+      hydrationSucceeded.current = true;
       setLoaded(true);
+      hydrationGate.resolve();
     })();
-  }, [lifetime, setData]);
+  }, [hydrationGate, lifetime, setData]);
 
   /* --------------------------- sync loop ---------------------------- */
   /* Pull on load and whenever the tab comes back into focus, then merge the
@@ -1252,9 +1158,8 @@ export function useBoard(now: number) {
     const id = setTimeout(() => setErr(""), 12000);
     return () => clearTimeout(id);
   }, [err]);
-
   /* --------------------------- sorting ----------------------------- */
-
+  const plannedSortAuthority = useRef(new PlannedSortAuthority(setFinalizingCaptureIds));
   /**
    * Ask the server to sort a capture. Throws SortError with the reason.
    *
@@ -1265,85 +1170,23 @@ export function useBoard(now: number) {
   const requestSort = async (
     raw: string,
     force?: "action" | "thread" | "intention",
-    /* The first attached photo, so the sort route can caption it and file
-       the capture by what it shows rather than as "(image only)". */
-    imgSrc?: string
-  ) => {
-    const known = threadBriefs(latest.current.threads);
-    // A bounded slice of filing history, so the engine files the way this
-    // person files and routes into the thread they'd choose. Kept small on
-    // purpose — every capture pays for this context, so it stays recent and
-    // compact rather than the whole 500-entry ledger.
-    const threadName = (id: string) =>
-      latest.current.threads.find((t) => t.id === id)?.name || "";
-    const settledHistory = settledLedgerEntries(latest.current).filter((entry) => !entry.undone);
-    /* The capture just before this one, if it went to a thread — the only
-       thing a series can continue. */
-    const prev = settledHistory.find(
-      (e) =>
-        (e.kind === "thread" || e.kind === "both") &&
-        e.targetId &&
-        latest.current.threads.some((t) => t.id === e.targetId)
-    );
-    const series = prev
-      ? seriesFor(raw, {
-          raw: prev.raw,
-          at: prev.at,
-          threadId: prev.targetId,
-          threadName: threadName(prev.targetId),
-        })
-      : null;
-    const recent = settledHistory
-      .slice(0, 30)
-      .map((e) => ({
-        raw: e.raw.length > 120 ? e.raw.slice(0, 120) : e.raw,
-        kind: e.kind,
-        at: e.at,
-        target:
-          e.kind === "thread" || e.kind === "both" ? threadName(e.targetId) : "",
-      }));
-    // Explicit routing corrections, bounded and advisory. The entire corrected
-    // capture and outcome travel together; no words are extracted or matched.
-    const correctionExamples = deriveCorrectionExamples(
-      latest.current.corrections ?? [],
-      latest.current.threads,
-      forgottenRules
-    ).map(({ capture, kind, threadId, threadName }) => ({
-      capture,
-      kind,
-      threadId,
-      threadName,
-    }));
-    const res = await fetch("/api/sort", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        raw,
-        threads: known,
-        recent,
-        series: series ?? undefined,
-        force,
-        correctionExamples,
-        imgs: imgSrc ? [imgSrc] : undefined,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new SortError(body.error);
-    }
-    /* Every answer reports the tier that produced it. Sorting is the most
-       frequent call by far, so it is the honest sample of what the app is
-       actually running on. */
-    const out = await res.json();
-    noteVia(out?.via, out?.routing);
-    return out;
-  };
+    /* Every attached photo. Image-dependent sorting is authorized only when
+       all referenced bytes were loaded; callers fail closed before this seam. */
+    imgSrcs?: string[],
+    plannedCaptureId?: string,
+    plannedSignal?: AbortSignal,
+  ) => requestBoardSort({
+    request: fetch, board: latest.current, raw, forgottenRules, force,
+    imageSources: imgSrcs, captureId: plannedCaptureId, signal: plannedSignal,
+    noteVia, errorFor: (message) => new SortError(message),
+  });
 
   /** Fold a sorted result into a board. Shared by first capture and re-sort. */
   /* applySorted moved to @/lib/boardOps (pure, unit-tested). */
 
   /** Ask the server to rewrite a thread's summary. Throws SortError. */
   const requestSummary = async (
+    threadId: string,
     name: string,
     frags: Frag[]
   ): Promise<{ summary: string; next: string | null; belongs: string | null }> => {
@@ -1359,10 +1202,7 @@ export function useBoard(now: number) {
           .map((a) => a.text),
         /* The neighbours, so this thread can describe its own edges. A
            summary written alone can never say "that goes next door". */
-        siblings: latest.current.threads
-          .filter((t) => t.name !== name)
-          .slice(0, 40)
-          .map((t) => t.name),
+        siblings: semanticSiblingNames(latest.current.threads, threadId).slice(0, 40),
       }),
     });
     if (!res.ok) {
@@ -1427,7 +1267,7 @@ export function useBoard(now: number) {
   const activeSummaries = useRef(0);
   const regenerate = async (board: Board, threadId: string): Promise<Board> => {
     const target = board.threads.find((t) => t.id === threadId);
-    if (!target?.frags.length) return board;
+    if (!target?.frags.length || target.temporaryName) return board;
     activeSummaries.current += 1;
     setSummarising("Updating what this thread says now");
     let result = board;
@@ -1441,11 +1281,12 @@ export function useBoard(now: number) {
          content it summarized — see lib/summaryAccept (gate 6). */
       const sentFingerprint = threadFingerprint(target);
       const { summary, next, belongs } = await requestSummary(
+        target.id,
         target.name,
         target.frags
       ).catch(async () => {
         await new Promise((r) => setTimeout(r, 1200));
-        return requestSummary(target.name, target.frags);
+        return requestSummary(target.id, target.name, target.frags);
       });
       const accepted = acceptSummary(latest.current, threadId, sentFingerprint, {
         summary,
@@ -1469,15 +1310,15 @@ export function useBoard(now: number) {
    */
   const refreshSummary = async (threadId: string) => {
     const target = latest.current.threads.find((t) => t.id === threadId);
-    if (!target?.frags.length) return;
+    if (!target?.frags.length || target.temporaryName) return;
     setErr("");
     setBusy("Updating what this thread says now");
     try {
       const sentFingerprint = threadFingerprint(target);
-      const out = await requestSummary(target.name, target.frags);
+      const out = await requestSummary(target.id, target.name, target.frags);
       const accepted = acceptSummary(latest.current, threadId, sentFingerprint, out);
       if (!accepted) return;
-      await commit(
+      if (!await commit(
         noteCorrection(
           accepted,
           {
@@ -1486,7 +1327,7 @@ export function useBoard(now: number) {
             context: target.name,
           }
         )
-      );
+      )) return;
       setNotice("Summary refreshed.");
       clearNoticeIn(4000);
     } catch (error) {
@@ -1496,93 +1337,118 @@ export function useBoard(now: number) {
     }
   };
 
-  const saveUnsorted = async (
-    raw: string,
-    imgIds: string[],
-    at: number,
-    reason: string,
-    dictated = false,
-    captureId?: string,
-    rawTranscript?: string,
-    origin?: CaptureOrigin | null
-  ) => {
-    const settled = settleUnsortedCapture(
-      latest.current,
-      { raw, imgIds, at, dictated, transcript: rawTranscript, openThreadId: open ?? undefined },
-      { itemId: uid(), ledgerId: uid(), captureId }
-    );
-    const next = preserveDraftOrigin(latest.current, settled.board, origin);
-    showReceipt(settled.receipt);
-    setText("");
-    setPics([]);
-    setTranscript("");
-
-    captureSnapshot.current = {
-      board: latest.current,
-      tombstones: tombstones.current,
-      text: raw,
-      picIds: pics.map((p) => p.id),
-      ledgerIds: newLedgerIds(latest.current, next),
-      addedIds: newIds(latest.current, next),
-    };
-    releaseHeldImages();
-    setNoticeUndoable(false);
-    setCanUndo(true);
-    await commit(next);
-    setErr(reason + " Saved as it is, so nothing is lost — sort it later.");
-  };
-
   const resort = async (a: Action, pinned?: SortKind) => {
+    const sentRecovery = exactPendingSnapshot(latest.current, a.id);
+    const force = pinned ?? sentRecovery?.force;
+    const sentPending = sentRecovery ? latest.current.ledger.find((entry) =>
+      entry.id === sentRecovery.pendingId) : undefined;
+    const sentCaptureId = sentPending && (sentPending.captureId ?? sentPending.id);
+    const attempt = sentCaptureId
+      ? plannedSortAuthority.current.begin(sentCaptureId, 55_000)
+      : null;
     setErr("");
     receiptWindow.current!.retire();
-    setBusy("Sorting");
+    if (!attempt) setBusy("Sorting");
     try {
-      let imgSrc: string | undefined;
-      if (a.imgs?.[0]) {
-        try {
-          imgSrc = (await get(IMG(a.imgs[0]))) || undefined;
-        } catch {
-          /* gone — sort the text alone */
+      const work = async () => {
+        const imageIds = a.imgs ?? [];
+        const imageSources = await Promise.all(imageIds.map(async (id) => {
+          const src = await get(IMG(id));
+          if (!src) throw new Error(`missing image ${id}`);
+          return src;
+        }));
+        if (sentRecovery && !snapshotMatchesPending(sentRecovery, latest.current)) return;
+        if (attempt && !attempt.authoritative()) return;
+        const sorted = await requestSort(
+          a.src || a.text || "(image only)",
+          force,
+          imageSources,
+          undefined,
+          attempt?.signal,
+        );
+        if (attempt && !attempt.authoritative()) return;
+        if (force && sorted.kind !== force) throw new Error("command kind conflict");
+        const prepared = prepareResortedCapture(latest.current, a, sorted, uid);
+        if (!prepared) return;
+        if (prepared.kind === "intention") {
+          const origin = resortIntentionOrigin(prepared.current, prepared.pending, prepared.out.via);
+          if (await expandIntention(
+            prepared.current.src || prepared.current.text,
+            origin,
+            prepared.current,
+            !!attempt,
+            attempt?.signal,
+            attempt?.authoritative,
+          )) setPendingSource(prepared.current.id);
+          return;
         }
-      }
-      const sorted = await requestSort(a.src || a.text, pinned, imgSrc);
-      const current = matchingPendingAction(latest.current, a);
-      if (!current) { setBusy(null); return; }
-      const out = pinResortDestination(sorted, current);
-      const pending = pendingEntry(latest.current, current.id);
-      if (out.kind === "intention") {
-        const origin = resortIntentionOrigin(current, pending, out.via);
-        if (await expandIntention(current.src || current.text, origin, current)) setPendingSource(current.id);
-        setBusy(null);
-        return;
-      }
-      const board = {
-        ...latest.current,
-        actions: latest.current.actions.filter((x) => x.id !== current.id),
+        const durable = await transactDurable((boardNow, tombstonesNow) => {
+          if (attempt && !attempt.authoritative()) return { skip: null };
+          if (sentRecovery && !snapshotMatchesPending(sentRecovery, boardNow)) return { skip: null };
+          const next = prepareResortedCapture(boardNow, a, sorted, uid);
+          if (!next || next.kind !== "settled") return { skip: null };
+          return {
+            next: next.board,
+            value: {
+              beforeBoard: boardNow,
+              beforeTombstones: [...tombstonesNow],
+              ...next,
+              recorded: next.board,
+            },
+          };
+        }, attempt ? {
+          guard: attempt.authoritative,
+          signal: attempt.signal,
+          finalize: attempt.claimFinalization,
+        } : undefined);
+        if (durable.status === "failed") {
+          if (!attempt?.signal.aborted) {
+            setErr("Couldn't save that sort. It is still safely Unsorted.");
+          }
+          return;
+        }
+        if (durable.status !== "committed" || !durable.value) return;
+        const {
+          beforeBoard,
+          beforeTombstones,
+          current: committedPending,
+          out: committedOut,
+          applied,
+          recorded,
+          summaryTargets,
+        } = durable.value;
+        const { targetId, landed, landedLines, source, landedIds: fresh } = applied;
+        captureSnapshot.current = captureUndoSnapshot(
+          beforeBoard,
+          beforeTombstones,
+          recorded,
+          durable.tombstones,
+          { text: committedPending.src || committedPending.text, captureId: sentCaptureId },
+        );
+        releaseHeldImages();
+        setNoticeUndoable(false);
+        setCanUndo(true);
+        showReceipt(landed, null, landedLines); setLandedIds(fresh);
+        setTab(committedOut.kind === "action" ? "actions" : "threads");
+        setSuggestion(computeSuggestion(recorded, committedOut.clean, source));
+        if (targetId) {
+          if (attempt) scheduleSummary(targetId);
+          else await regenerate(recorded, targetId);
+        }
+        for (const id of summaryTargets) if (id !== targetId) scheduleSummary(id);
       };
-      const applied = applySorted(out, current.imgs || [], current.at, board);
-      const { targetId, landed, landedLines, source, landedIds: fresh } = applied;
-      const { board: recorded, summaryTargets } = recordResortedCapture(applied, out, current, pending, uid);
-      showReceipt(landed, landedLines); setLandedIds(fresh);
-      setTab(out.kind === "action" ? "actions" : "threads");
-      captureSnapshot.current = {
-        board: latest.current,
-        tombstones: tombstones.current,
-        text: current.src || current.text,
-        ledgerIds: newLedgerIds(latest.current, recorded),
-        addedIds: newIds(latest.current, recorded),
-      };
-      releaseHeldImages();
-      setNoticeUndoable(false);
-      setCanUndo(true);
-      await commit(recorded);
-      setSuggestion(computeSuggestion(recorded, out.clean, source));
-      if (targetId) await regenerate(recorded, targetId);
-      for (const id of summaryTargets) if (id !== targetId) scheduleSummary(id);
+      if (attempt) await attempt.run(work());
+      else await work();
     } catch (error) {
-      setErr(reasonOf(error) + " It is still here, untouched.");
+      if (!sentCaptureId || !plannedSortAuthority.current.claimed(sentCaptureId)) {
+        setErr(attempt?.signal.aborted
+          ? "Saved here. Sorting is unavailable right now."
+          : reasonOf(error) + " It is still here, untouched.");
+      }
+    } finally {
+      attempt?.finish();
+      if (!attempt) setBusy(null);
     }
-    setBusy(null);
   };
 
   /**
@@ -1600,48 +1466,163 @@ export function useBoard(now: number) {
     intention: "An intention, then — a state, not a task.",
   };
 
-  /** Write a command's semantic example on its own.
-      The forced-intention branch hands off to the intention engine and
-      never reaches the capture's commit, so its example is recorded here or
-      nowhere. Same shape as the one folded into a filed capture. */
-  const noteCommand = async (kind: SortKind, context: string) => {
-    const learned = noteCorrection(latest.current, {
-      proposalKind: "commanded",
-      accepted: true,
-      context: context.slice(0, 160),
-      routing: { kind },
-    });
-    latest.current = learned;
-    setData(learned);
+  const runPlannedSort = async (input: PendingRecoverySnapshot) => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    const attempt = plannedSortAuthority.current.begin(input.captureId, 55_000);
     try {
-      await set(KEY, JSON.stringify(learned));
+      const work = async () => {
+        const value = await requestSort(
+          input.source || "(image only)",
+          input.force,
+          undefined,
+          input.captureId,
+          attempt.signal,
+        );
+      if (!attempt.authoritative()) return;
+      const response = parsePlannedRoutingResponse(value, input.captureId);
+      if (!response) throw new Error("invalid planned response");
+      if (!snapshotMatchesPending(input, latest.current)) return;
+      const failures = validateRoutingPlan(response.routingPlan, {
+        captureId: input.captureId,
+        raw: input.source,
+        force: input.force,
+        recovery: response.recovery,
+        threads: latest.current.threads.map((thread) => ({
+          id: thread.id, name: thread.name, about: thread.summary,
+        })),
+        actions: latest.current.actions.filter((action) => !action.unsorted && !action.done),
+        now: stamp(),
+      });
+      if (failures.length) throw new Error("invalid final routing plan");
+      const pureIntention = response.routingPlan.items.some((item) => item.kind === "intention") &&
+        response.routingPlan.items.every((item) => !item.unresolved &&
+          (item.kind === "intention" || item.kind === "supporting_context"));
+      if (pureIntention) {
+        const pendingEntryForCapture = latest.current.ledger.find((entry) =>
+          entry.kind === "pending" &&
+          !entry.undone &&
+          (entry.captureId ?? entry.id) === input.captureId &&
+          (entry.pendingRevision ?? 1) === input.revision
+        );
+        const expected = pendingEntryForCapture
+          ? latest.current.actions.find((action) =>
+              action.id === pendingEntryForCapture.targetId && action.unsorted
+            )
+          : undefined;
+        if (!expected || !attempt.authoritative()) return;
+        const origin = resortIntentionOrigin(
+          expected,
+          pendingEntryForCapture,
+          response.via,
+        );
+        if (await expandIntention(
+          input.source,
+          origin,
+          expected,
+          true,
+          attempt.signal,
+          attempt.authoritative,
+        )) {
+          setPendingSource(expected.id);
+        }
+        return;
+      }
+      const durable = await transactDurable<PlannedSettlementResult | null>((current) => {
+        if (!attempt.authoritative()) return { skip: null };
+        if (!snapshotMatchesPending(input, current)) return { skip: null };
+        const settled = settlePlannedRouting(current, {
+          captureId: input.captureId,
+          revision: input.revision,
+          plan: response.routingPlan,
+          recovery: response.recovery,
+          now: stamp(),
+          via: response.via,
+        });
+        return settled.status === "applied"
+          ? { next: settled.board, tombstones: settled.tombstones, value: settled }
+          : { skip: settled };
+      }, {
+        guard: attempt.authoritative,
+        signal: attempt.signal,
+        finalize: attempt.claimFinalization,
+      });
+      if (
+        durable.status !== "committed" ||
+        !durable.value ||
+        durable.value.status !== "applied"
+      ) return;
+      const settled = durable.value;
+      for (const id of settled.summaryThreadIds) scheduleSummary(id);
+      playgroundUsage.captureSorted(response.via);
+      if (captureSnapshot.current?.captureId !== input.captureId) return;
+      const beforeUndo = captureSnapshot.current;
+      captureSnapshot.current = captureUndoSnapshot(
+        beforeUndo.board,
+        beforeUndo.tombstones,
+        durable.board,
+        durable.tombstones,
+        {
+          text: beforeUndo.text,
+          picIds: beforeUndo.picIds,
+          captureId: beforeUndo.captureId,
+        },
+      );
+      setLandedIds([
+        ...settled.actionIds,
+        ...settled.threadIds,
+        ...settled.intentionIds,
+      ]);
+      const lines = [
+        ...(settled.actionIds.length ? ["Actions"] : []),
+        ...settled.summaryThreadIds.flatMap((id) => {
+          const thread = settled.board.threads.find((item) => item.id === id);
+          return thread ? [`Thread: ${thread.name}`] : [];
+        }),
+        ...(settled.intentionIds.length ? ["Intentions"] : []),
+      ];
+      if (!lines.length && settled.pendingActionIds.length) {
+        showReceipt("Saved. Awaiting sorting or placement", settled.pendingActionIds[0]);
+      } else {
+        setTab(settled.actionIds.length && !settled.threadIds.length ? "actions" : "threads");
+        showReceipt(lines.join(" · "), null, lines);
+      }
+      };
+      await attempt.run(work());
     } catch {
-      /* disk hiccup; the next commit writes it */
+      const stillPending = latest.current.ledger.some((entry) =>
+        entry.kind === "pending" &&
+        !entry.undone &&
+        (entry.captureId ?? entry.id) === input.captureId &&
+        (entry.pendingRevision ?? 1) === input.revision
+      );
+      if (
+        stillPending &&
+        pendingReceiptRef.current !== input.targetId &&
+        (attempt.authoritative() ||
+          (attempt.signal.aborted && !plannedSortAuthority.current.claimed(input.captureId)))
+      )
+        setErr("Saved here. Sorting is unavailable right now.");
+    } finally {
+      attempt.finish();
     }
   };
 
-  /** Praise be. The main capture, sorted and filed.
-      `dictated` says the words came from the microphone — the ledger records
-      that so a later export can tell speech from typing. */
+  /** Persist one complete pending envelope before launching one bounded sort. */
   const submit = async (
     dictated = false,
     pinned?: SortKind,
-    /* The words to sort, when the caller holds them and the box may not
-       yet — a re-sort after undo runs a tick before the draft is back. */
     override?: string,
-    /* The thread the person picked by hand. Unlike the series hint, this
-       is not a default the model may talk itself out of: they were asked
-       and they answered, so it is applied to whatever comes back. */
     pinnedThread?: string,
-    /* Undo-and-correct is the same capture, not another use of the trial. */
     existingCaptureId?: string,
     origin?: CaptureOrigin | null
   ) => {
-    const raw = (override ?? text).trim();
-    /* What the capture's opening decides — command prefix, undo-answer
-       precedence, and whether it teaches — lives in lib/command. */
-    const { payload, force, commandCorrection } = resolveCapture(raw, pinned);
-    if (!payload && !pics.length) return;
+    const composerText = text;
+    const composerPics = [...pics];
+    const composerTranscript = transcript;
+    const submittedRaw = override ?? text;
+    const { payload, force, commandCorrection } = resolveCapture(submittedRaw.trim(), pinned);
+    const raw = force ? submittedRaw : submittedRaw.trim();
+    if (!payload && !composerPics.length) return;
     if (!captureGate.current.enter()) return;
     if (!existingCaptureId && trialExhaustedNow()) {
       captureGate.current.leave();
@@ -1649,201 +1630,144 @@ export function useBoard(now: number) {
       setErr(`You have used today's ${TRIAL_LIMIT} captures. Your board is still here.`);
       return;
     }
-    try {
+
     setErr("");
     setSwept(null);
-    // A new capture takes over the banner: no stale proposal survives.
     setSuggestion(null);
-    /* Asking about the previous capture stops making sense once a new one
-       is on its way. A re-sort passes `pinned`, and must keep its own
-       question alive long enough to have written the rule. */
     if (!pinned) setMisfiled(null);
-    /* Same rule as resort: a new capture retires the previous receipt. */
     receiptWindow.current!.retire();
-    setBusy("Sorting");
-
     const at = stamp();
     const captureId = existingCaptureId ?? uid();
-    // Stored before the sort so both outcomes keep the pictures.
-    const imgIds: string[] = [];
-    for (const p of pics) {
-      try {
-        await imgSave(p.id, p.src);
-        imgIds.push(p.id);
-      } catch {
-        /* skip */
-      }
-    }
-
+    const ids = { itemId: uid(), ledgerId: uid() };
+    const online = typeof navigator === "undefined" || navigator.onLine;
+    let durable: DurableMutationResult<{
+      before: Board;
+      beforeTombstones: Tombstone[];
+      staged: ReturnType<typeof stagePlannedRoutingIntake>;
+      recoveryStore: ReturnType<PendingRecoveryOrchestrator["nextForIntake"]>;
+    }>;
     try {
-      // A forced intention is declared rather than filed, and the intention
-      // engine rewrites the words from scratch — the sorter's output would
-      // be thrown away, so it is never asked. A destination the model chose
-      // on its own still goes through the sorter to learn the kind first.
-      if (force === "intention") {
-        captureSnapshot.current = null;
-        releaseHeldImages();
-        setNoticeUndoable(false);
-        setCanUndo(false);
-        setText("");
-        setPics([]);
-        setTranscript("");
-        /* This branch never reaches the commit below, so the lesson is
-           written here or not at all. */
-        if (commandCorrection) await noteCommand(commandCorrection.kind, payload);
-        await expandIntention(payload, {
-          raw: payload,
-          source: sourceOf(payload, dictated, imgIds.length > 0),
-          at,
-          imgs: imgIds,
-          transcript: transcript || undefined,
+      durable = await transactDurable((current, currentTombstones) => {
+        const staged = stagePlannedRoutingIntake(current, {
           captureId,
-        });
-        setTimeout(() => setLanded(null), 4500);
-        return;
-      }
-
-      const sorted = await requestSort(
-        payload || "(image only)",
-        force,
-        pics[0]?.src
-      );
-      const out = pinnedThread
-        ? { ...sorted, threadId: pinnedThread, threadName: null }
-        : sorted;
-
-      // An intention is declared rather than filed, so it takes a second
-      // pass through its own engine and stops at a review step instead of
-      // landing on the board. Nothing has committed yet, so there is
-      // nothing to undo — the draft is the undo.
-      if (out.kind === "intention") {
-        captureSnapshot.current = null;
-        releaseHeldImages();
-        setNoticeUndoable(false);
-        setCanUndo(false);
-        setText("");
-        setPics([]);
-        setTranscript("");
-        await expandIntention(payload, {
-          raw: payload,
-          source: sourceOf(payload, dictated, imgIds.length > 0),
-          at,
-          imgs: imgIds,
-          transcript: transcript || undefined,
-          captureId,
-        });
-        setTimeout(() => setLanded(null), 4500);
-        return;
-      }
-
-      const {
-        next,
-        targetId,
-        landed,
-        landedLines,
-        source,
-        landedIds: fresh,
-        alsoLanded,
-      } = applySorted(out, imgIds, at, latest.current);
-      /* The account of the landing — every entry, every share, and the
-         list of threads whose descriptions are now stale — comes from
-         lib/settle.recordSortedCapture, behavior-tested beside the
-         failed-sort settlement it mirrors. */
-      const { board: sortedBoard, summaryTargets } = recordSortedCapture(
-        next,
-        {
           raw,
           payload,
-          at,
-          dictated,
-          imgIds,
-          transcript,
-          captureId,
-          kind: out.kind,
-          clean: out.clean,
-          primaryText: out.primaryText,
-          via: out.via,
-          primary: {
-            targetId:
-              out.kind === "action"
-                ? source?.id ?? next.actions[0]?.id ?? ""
-                : (source?.id ?? targetId ?? ""),
-            fragId: source?.fragId,
-          },
-          summaryThreadIds: targetId ? [targetId] : [],
-          also: (alsoLanded ?? []).map((p) => ({
-            text: p.text,
-            threadId: p.threadId,
-            fragId: p.fragId,
-          })),
-        },
-        uid
-      );
-      const withAll = preserveDraftOrigin(latest.current, sortedBoard, origin);
-      const recorded = commandCorrection
-        ? noteCorrection(withAll, {
+          transcript: (origin?.transcript ?? composerTranscript) || undefined,
+          images: composerPics,
+          imageIds: origin?.imgs,
+          at: origin?.at ?? at,
+          dictated: origin?.source === "dictated" || dictated,
+          openThreadId: pinnedThread ?? open ?? undefined,
+        }, ids);
+        let pendingBoard = preserveDraftOrigin(current, staged.board, origin);
+        if (force) pendingBoard = {
+          ...pendingBoard,
+          actions: pendingBoard.actions.map((action) => action.id === staged.target.id
+            ? { ...action, pendingForce: force } : action),
+        };
+        if (commandCorrection) {
+          pendingBoard = noteCorrection(pendingBoard, {
             proposalKind: "commanded",
             accepted: true,
             context: payload.slice(0, 160),
             routing: { kind: commandCorrection.kind },
-          })
-        : withAll;
-      showReceipt(landed, landedLines);
-      setLandedIds(fresh);
-      setTab(out.kind === "action" ? "actions" : "threads");
-      setText("");
-      setPics([]);
-      setTranscript("");
-      // Snapshot right before it lands — edits made while the sort ran
-      // survive; only the capture itself is reverted by Undo, and the raw
-      // words come back to the box so the capture can be edited and
-      // re-submitted.
-      captureSnapshot.current = {
-        board: latest.current,
-        tombstones: tombstones.current,
-        text: override ?? text,
-        picIds: pics.map((p) => p.id),
-        ledgerIds: newLedgerIds(latest.current, recorded),
-      addedIds: newIds(latest.current, recorded),
-      };
-      releaseHeldImages();
-      setNoticeUndoable(false);
-      setCanUndo(true);
-      await commit(recorded);
-      playgroundUsage.captureSorted(out.via);
-      /* A quiet proposal, never applied: if this capture clearly belongs
-         with an existing thread, offer the fold. An explicit /action,
-         /thread or /intention command is respected — only the model's
-         choice is ever second-guessed. Computed before the summary refresh
-         so it lands with the banner, never a model round-trip later. */
-      setSuggestion(
-        force ? null : computeSuggestion(withAll, out.clean, source)
-      );
-      /* Not awaited. The capture has landed, the banner is up, and the box
-         is free for the next thought; the summary catches up behind it. */
-      /* Every thread this capture reached, not just the first. A split left
-         the secondary thread holding a new fragment and an account of itself
-         written before that fragment arrived — so the thread said one thing
-         and contained another, and the sorter went on routing against the
-         stale description. */
-      for (const id of summaryTargets) scheduleSummary(id);
-    } catch (error) {
-      const reason = reasonOf(error);
-      await saveUnsorted(raw, imgIds, at, reason, dictated, captureId, transcript || undefined, origin);
-      playgroundUsage.captureFailed(reason);
-    }
+          });
+        }
+        const recoverySnapshot = exactPendingSnapshot(pendingBoard, staged.target.id);
+        if (!recoverySnapshot) throw new Error("pending recovery snapshot mismatch");
+        const immediateAttempt = online && (
+          !recoverySnapshot.imageIds.length ||
+          !!pinned || !!pinnedThread || !!existingCaptureId || !!origin
+        );
+        const recoveryStore = pendingRecovery.current.nextForIntake(
+          current,
+          recoverySnapshot,
+          immediateAttempt ? 1 : 0,
+          immediateAttempt ? at + PENDING_RECOVERY_BACKOFF_MS : at,
+        );
+        return {
+          next: pendingBoard,
+          entries: [
+            ...staged.imageEntries,
+            [recoveryStore.key, recoveryStore.serialized] as [string, string],
+            [MANUAL_ROUTING_UNDO_KEY, "null"] as [string, string],
+          ],
+          value: {
+            before: current,
+            beforeTombstones: [...currentTombstones],
+            staged,
+            recoveryStore,
+          },
+        };
+      });
+    } catch {
+      durable = { status: "failed" };
     } finally {
-      setBusy(null);
       captureGate.current.leave();
     }
-    /* No timer. The banner is the receipt — where the capture went, with
-       the only Undo button in it — and a receipt that shreds itself after
-       nine seconds is how "it filed somewhere and I never saw where"
-       happens: dictate, glance away while the sort runs, look back at a
-       clean screen. It stays until the next capture, an undo, or an
-       accepted suggestion replaces it, which is also what the intention
-       path already does. */
+    if (durable.status !== "committed") {
+      setErr("Couldn't save that. Your capture is still in the composer.");
+      return;
+    }
+    const { before, beforeTombstones, staged, recoveryStore } = durable.value;
+    pendingRecovery.current.adopt(recoveryStore.records);
+    const committed = durable.board;
+
+    captureSnapshot.current = captureUndoSnapshot(
+      before,
+      beforeTombstones,
+      committed,
+      durable.tombstones,
+      {
+        text: override ?? composerText,
+        picIds: composerPics.map((picture) => picture.id),
+        captureId,
+      },
+    );
+    releaseHeldImages();
+    setManualUndo(null);
+    setNoticeUndoable(false);
+    setCanUndo(true);
+    showReceipt("Saved. Awaiting sorting or placement", staged.target.id);
+    setText((current) => current === composerText ? "" : current);
+    setPics((current) => reconcilePersistedComposerImages(current, composerPics, uid));
+    setTranscript((current) => current === composerTranscript ? "" : current);
+    const expected = latest.current.actions.find((action) => action.id === staged.target.id);
+    if (expected && force === "intention") {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        return;
+      }
+      const pending = pendingEntry(latest.current, expected.id);
+      const intentionOrigin = resortIntentionOrigin(expected, pending);
+      void expandIntention(payload, intentionOrigin, expected, true).then((opened) => {
+        if (opened) setPendingSource(expected.id);
+      });
+      return;
+    }
+    if (expected && (pinned || pinnedThread || existingCaptureId || origin)) {
+      await resort(expected, force);
+      return;
+    }
+    /* The planned schema does not assign image meaning or ownership to atomic
+       outputs. Sending text alone (or the placeholder for an image-only
+       capture) would let an incomplete plan settle and retire the bytes. Keep
+       the exact durable envelope pending until an image-aware route is used. */
+    if (expected?.imgs?.length) {
+      return;
+    }
+    const recovery = recoveryStore.records.find((record) => record.targetId === staged.target.id);
+    if (recovery) void runPlannedSort(recovery);
   };
+
+  const pendingRecoveryAccess = () => ({ board: () => latest.current,
+    allowed: () => hydrationSucceeded.current && lifetime.active, persist: set,
+    exclusive: <T,>(work: () => Promise<T>) => durableBoardCommits.current.run(work) });
+  usePendingRecoveryWake({ loaded, board: data, orchestrator: pendingRecovery.current,
+    access: pendingRecoveryAccess, now: stamp, run: async (snapshot) => {
+      if (!snapshot.imageIds.length) return runPlannedSort(snapshot);
+      const action = latest.current.actions.find((item) => item.id === snapshot.targetId);
+      if (action && snapshotMatchesPending(snapshot, latest.current)) await resort(action);
+    } });
 
   /* ----------------------- capture suggestion ----------------------- */
 
@@ -1861,21 +1785,15 @@ export function useBoard(now: number) {
   const acceptSuggestion = async () => {
     const s = suggestion;
     if (!s) return;
-    setSuggestion(null);
     /* The wording — the rules the personal model learns from — lives in
        lib/suggestionRecord, mirror-tested against dismiss. */
     const { context, rule } = suggestionOutcome(s, true);
     if (s.kind === "duplicate") {
-      setNotice("Removed the duplicate.");
-      clearNoticeIn(4000);
       if (s.sourceKind === "thread") {
-        /* The copy is a note; drop that fragment (or its whole fresh thread
-           when it was the only note) and re-summarise. The original stays
-           where it was. The notice goes out before the refresh — the model
-           call can take a second, and the outcome is the same either way.
-           deleteFrag commits inside; the outcome is recorded on top of
-           whatever it left behind. */
-        await deleteFrag(s.sourceId, s.sourceFragId!);
+        if (!await deleteFrag(s.sourceId, s.sourceFragId!)) return;
+        /* The deletion is already durable. Record the learning outcome on the
+           latest board; failure keeps the truthful deletion without claiming
+           that the correction was saved. */
         await commit(
           noteCorrection(latest.current, {
             proposalKind: "related_suggestion",
@@ -1886,8 +1804,7 @@ export function useBoard(now: number) {
         );
       } else {
         const dup = latest.current.actions.find((x) => x.id === s.sourceId);
-        await backupGate.current.trackMutation(dropImages(dup?.imgs));
-        await commit(
+        const saved = await commit(
           noteCorrection(
             {
               ...latest.current,
@@ -1903,16 +1820,21 @@ export function useBoard(now: number) {
             }
           )
         );
+        if (!saved) return;
+        await backupGate.current.trackMutation(dropUnreferencedImages(dup?.imgs));
       }
+      setSuggestion(null);
+      setNotice("Removed the duplicate.");
+      clearNoticeIn(4000);
       return;
     }
-    if (s.sourceKind === "action") {
-      await foldActionIntoThread(s.sourceId, s.targetId);
-    } else if (s.fragId) {
-      await moveFrag(s.sourceId, s.fragId, s.targetId);
-    } else {
-      await mergeThreads(s.targetId, s.sourceId);
-    }
+    const applied = s.sourceKind === "action"
+      ? await foldActionIntoThread(s.sourceId, s.targetId)
+      : s.fragId
+        ? await moveFrag(s.sourceId, s.fragId, s.targetId)
+        : await mergeThreads(s.targetId, s.sourceId);
+    if (!applied) return;
+    setSuggestion(null);
     await commit(
       noteCorrection(latest.current, {
         proposalKind: "related_suggestion",
@@ -1925,19 +1847,19 @@ export function useBoard(now: number) {
 
   /** Keep it where it landed — and remember that the proposal was waved off,
       so the personal model can weigh it. */
-  const dismissSuggestion = () => {
+  const dismissSuggestion = async () => {
     const s = suggestion;
-    setSuggestion(null);
     if (!s) return;
     const { context, rule } = suggestionOutcome(s, false);
-    void commit(
+    if (!await commit(
       noteCorrection(latest.current, {
         proposalKind: "related_suggestion",
         accepted: false,
         context,
         rule,
       })
-    );
+    )) return;
+    setSuggestion(null);
   };
 
   /* ---------------------------- organize ---------------------------- */
@@ -2059,9 +1981,9 @@ export function useBoard(now: number) {
 
   /** Read once: the line stays, it just stops calling attention to itself. */
   const dismissWrap = useCallback(async () => {
-    setShowWrap(false);
     const next = markWrapsSeen(latest.current);
-    if (next) await commit(next);
+    if (next && !await commit(next)) return;
+    setShowWrap(false);
   }, [commit]);
 
   /* TWO THREADS THAT KEEP BEING CONFUSED.
@@ -2219,7 +2141,6 @@ export function useBoard(now: number) {
     async (fragIds: string[], rename: boolean, takeAll = false) => {
       const t = tangle;
       if (!t) return;
-      setTangle(null);
 
       /* The merge math lives in lib/tangleOps — pure, and pinned by
          behavior tests that replay this feature's two shipped bugs. This
@@ -2230,7 +2151,7 @@ export function useBoard(now: number) {
 
       /* One correction for the batch. Twenty-one of them would drown the
          signal the correction ledger exists to carry. */
-      await commit(
+      if (!await commit(
         noteCorrection(out.board, {
           proposalKind: "related_suggestion",
           accepted: true,
@@ -2239,7 +2160,8 @@ export function useBoard(now: number) {
             : `untangled ${t.pair.fromName} and ${t.pair.toName}`,
           rule: `Notes like these belong in "${t.pair.toName}", not "${t.pair.fromName}"`,
         })
-      );
+      )) return;
+      setTangle(null);
       /* Both accounts of themselves are now wrong: one gained a pile, the
          other lost one — unless it stopped existing. Once each, after. */
       const after = await regenerate(latest.current, t.pair.toId);
@@ -2520,9 +2442,9 @@ export function useBoard(now: number) {
 
   /* Commit a tidy change together with whatever it teaches the sorter —
      lib/organizeOps owns which kinds teach anything at all. */
-  const commitTidy = async (p: OrganizeProposal, next: Board) => {
+  const commitTidy = async (p: OrganizeProposal, next: Board): Promise<boolean> => {
     const note = organizeCorrection(p);
-    await commit(note ? noteCorrection(next, note) : next);
+    return commit(note ? noteCorrection(next, note) : next);
   };
 
   /**
@@ -2541,31 +2463,42 @@ export function useBoard(now: number) {
     p: OrganizeProposal
   ): Promise<boolean> => {
     const id = p.id;
-    /* The row leaves the list immediately, and the applied change must not
-       ride back in from the cached AI results on a future scan — a
-       resolved proposal is resolved. */
-    aiOrganize.current = aiOrganize.current.filter((x) => x.id !== id);
-    setOrganize((cur) => (cur ? cur.filter((x) => x.id !== id) : cur));
+    const acknowledge = () => {
+      aiOrganize.current = aiOrganize.current.filter((item) => item.id !== id);
+      setOrganize((current) =>
+        current ? current.filter((item) => item.id !== id) : current
+      );
+      return true;
+    };
     if (p.kind === "dup_action") {
       const a = latest.current.actions.find((x) => x.id === p.sourceId);
       /* Held, not dropped: this delete is undoable, and destroying the
          bytes here would restore an action pointing at a missing photo. */
-      holdImages(a?.imgs);
-      await commitTidy(p, {
+      if (!await commitTidy(p, {
         ...latest.current,
         actions: latest.current.actions.filter((x) => x.id !== p.sourceId),
-      });
+      })) return false;
+      holdImages(a?.imgs);
       showTidyNotice(`Removed the duplicate of ${p.targetName}.`);
-      return true;
+      return acknowledge();
     } else if (p.kind === "dup_fragment") {
+      const out = applyFragDelete(latest.current, p.sourceThreadId!, p.sourceFragId!);
+      if (!out || !await commitTidy(p, out.board)) return false;
+      holdImages(out.imgs);
+      if (out.removedThread) setOpen(null);
+      else await regenerate(out.board, p.sourceThreadId!);
       showTidyNotice(`Removed the duplicate of ${p.targetName}.`);
-      await deleteFrag(p.sourceThreadId!, p.sourceFragId!);
-      await commitTidy(p, latest.current);
-      return true;
+      return acknowledge();
     } else if (p.kind === "fold_action") {
-      await foldActionIntoThread(p.sourceId, p.targetId);
-      await commitTidy(p, latest.current);
-      return true;
+      const out = applyActionFold(latest.current, p.sourceId, p.targetId, stamp(), uid);
+      if (!out || !await commitTidy(p, out.board)) return false;
+      if (!out.already) await regenerate(out.board, p.targetId);
+      showTidyNotice(
+        out.already
+          ? `${out.threadName} already has this note — task retired.`
+          : `Moved into ${out.threadName}.`,
+      );
+      return acknowledge();
     } else if (p.kind === "looks_done") {
       /* The label, not a deletion: the note stays in its thread with a
          "resolved" mark, and an open action born from the same note is
@@ -2577,14 +2510,13 @@ export function useBoard(now: number) {
         p.sourceFragId!,
         stamp()
       );
-      if (!out) return false;
-      await commit(out.board);
+      if (!out || !await commit(out.board)) return false;
       showTidyNotice(
         out.tickedActionText
           ? "Labeled resolved — its action is ticked off too."
           : "Labeled resolved — the note stays in the thread."
       );
-      return true;
+      return acknowledge();
     } else if (p.kind === "let_go") {
       /* Fade it, never delete it. The action moves to Faded exactly as it
          would have if it had a shelf life that ran out — recoverable for
@@ -2597,16 +2529,16 @@ export function useBoard(now: number) {
       const gone = latest.current.actions.find((x) => x.id === p.sourceId);
       if (!gone) return false;
       const at = stamp();
-      await commit({
+      if (!await commit({
         ...latest.current,
         actions: latest.current.actions.map((x) =>
           x.id === p.sourceId
             ? { ...x, faded: true, fadedAt: at, updatedAt: at }
             : x
         ),
-      });
+      })) return false;
       showTidyNotice("Let go — it sits in Faded for two weeks if you want it back.");
-      return true;
+      return acknowledge();
     } else if (p.kind === "revisit_intention") {
       /* Saying it is still true IS the revisit. Nothing about the intention
          changes except when it was last stood behind, which is exactly what
@@ -2617,48 +2549,42 @@ export function useBoard(now: number) {
       const still = latest.current.intentions.find((x) => x.id === p.sourceId);
       if (!still) return false;
       const at = stamp();
-      await commit({
+      if (!await commit({
         ...latest.current,
         intentions: latest.current.intentions.map((x) =>
           x.id === p.sourceId ? { ...x, updatedAt: at } : x
         ),
-      });
+      })) return false;
       showTidyNotice("Still yours. It won't ask again for a while.");
-      return true;
-    } else if (p.kind === "move_fragment") {
-      await moveFrag(p.sourceThreadId!, p.sourceFragId!, p.targetId);
-      await commitTidy(p, latest.current);
-      return true;
+      return acknowledge();
+    } else if (p.kind === "move_fragment" || p.kind === "merge_fragments") {
+      const out = applyFragMove(
+        latest.current,
+        p.sourceThreadId!,
+        p.sourceFragId!,
+        p.targetId,
+        stamp(),
+      );
+      if (!out || !await commitTidy(p, out.board)) return false;
+      const afterTarget = await regenerate(out.board, p.targetId);
+      if (!out.emptied) await regenerate(afterTarget, p.sourceThreadId!);
+      return acknowledge();
     } else if (p.kind === "split_fragment") {
-      await moveFragToNew(p.sourceThreadId!, p.sourceFragId!);
-      await commitTidy(p, latest.current);
-      return true;
+      const out = applyFragSplit(latest.current, p.sourceThreadId!, p.sourceFragId!, uid);
+      if (!out || !await commitTidy(p, out.board)) return false;
+      const afterNew = await regenerate(out.board, out.freshId);
+      if (!out.emptied) await regenerate(afterNew, p.sourceThreadId!);
+      return acknowledge();
     } else if (p.kind === "extract_action") {
-      /* extractAction records its own correction and notice. Extraction leaves
-         the note in place, so a success also remembers the proposal by id —
-         otherwise the same card would re-propose on every scan. A failure
-         keeps the card, so the user can retry — the row was removed at the
-         top, so a failed extraction puts it back. */
+      /* Extraction owns its model request and durable commit. Only a committed
+         extraction retires this proposal and its deterministic dismissal id. */
       const ok = await extractAction(p.sourceThreadId!, p.sourceFragId!);
-      if (ok) {
-        dismissedOrganize.current = [...dismissedOrganize.current, p.id];
-        void set(ORGANIZE_DISMISSED_KEY, JSON.stringify(dismissedOrganize.current));
-      } else {
-        setOrganize((cur) => (cur ? [p, ...cur] : cur));
-        aiOrganize.current = [p, ...aiOrganize.current];
-      }
-      return ok;
-    } else if (p.kind === "merge_fragments") {
-      /* The same idea lives in two notes — move the newer one into the
-         thread that already holds it. moveFrag interleaves by date, carries
-         images, re-summarises, and removes an emptied source thread. */
-      await moveFrag(p.sourceThreadId!, p.sourceFragId!, p.targetId);
-      await commitTidy(p, latest.current);
-      return true;
+      if (!ok) return false;
+      dismissedOrganize.current = [...dismissedOrganize.current, p.id];
+      void set(ORGANIZE_DISMISSED_KEY, JSON.stringify(dismissedOrganize.current));
+      return acknowledge();
     }
-    /* The row is already gone from the list (removed above); the board
-       change is committed, so a future scan will not re-propose it. */
-    return true;
+    return false;
   };
 
   /**
@@ -2674,13 +2600,14 @@ export function useBoard(now: number) {
    * the same pure code path.
    */
   const armOrganizeUndo = (before: Board, beforeTombstones: Tombstone[]) => {
-    captureSnapshot.current = {
-      board: before,
-      tombstones: beforeTombstones,
-      /* No ledgerIds: tidying writes corrections, not capture entries, so
-         there is no "what should this have been?" question to ask. */
-      addedIds: newIds(before, latest.current),
-    };
+    captureSnapshot.current = captureUndoSnapshot(
+      before,
+      beforeTombstones,
+      latest.current,
+      tombstones.current,
+      {},
+      false,
+    );
     setCanUndo(true);
     setNoticeUndoable(true);
   };
@@ -2690,10 +2617,13 @@ export function useBoard(now: number) {
     if (!p) return false;
     const before = latest.current;
     const beforeTombstones = tombstones.current;
-    /* Whatever the previous Undo was protecting is now unreachable. */
-    releaseHeldImages();
+    const previouslyHeld = heldImages.current!.release();
     const ok = await applyOrganizeProposal(p);
-    if (ok) armOrganizeUndo(before, beforeTombstones);
+    if (ok) {
+      if (previouslyHeld.length)
+        void backupGate.current.trackMutation(dropUnreferencedImages(previouslyHeld));
+      armOrganizeUndo(before, beforeTombstones);
+    } else holdImages(previouslyHeld);
     return ok;
   };
 
@@ -2716,7 +2646,7 @@ export function useBoard(now: number) {
        — so Undo has to take the whole run back, not just the last row. */
     const before = latest.current;
     const beforeTombstones = tombstones.current;
-    releaseHeldImages();
+    const previouslyHeld = heldImages.current!.release();
     /* A row that throws must not brick the button for the rest of the
        session — the guard is cleared even when a handler misbehaves. */
     try {
@@ -2726,7 +2656,13 @@ export function useBoard(now: number) {
     } finally {
       applyingOrganize.current = false;
     }
-    if (applied) armOrganizeUndo(before, beforeTombstones);
+    if (!applied) {
+      holdImages(previouslyHeld);
+      return;
+    }
+    if (previouslyHeld.length)
+      void backupGate.current.trackMutation(dropUnreferencedImages(previouslyHeld));
+    armOrganizeUndo(before, beforeTombstones);
     const diff = list.length - applied;
     showTidyNotice(
       applied === list.length
@@ -2741,22 +2677,21 @@ export function useBoard(now: number) {
 
   /** Wave an Organize proposal off — remembered by id so it never reappears,
       and recorded in the correction ledger as a waved-off merge. */
-  const dismissOrganize = (id: string) => {
+  const dismissOrganize = async (id: string) => {
     const p = organize?.find((x) => x.id === id);
     if (!p) return;
+    const next = noteCorrection(latest.current, {
+      proposalKind: "related_suggestion",
+      accepted: false,
+      context: `kept "${p.sourceName}" separate from "${p.targetName}"`,
+    });
+    if (!await commit(next)) return;
     aiOrganize.current = aiOrganize.current.filter((x) => x.id !== id);
     setOrganize((cur) =>
       cur ? cur.filter((x) => x.id !== id) : cur
     );
     dismissedOrganize.current = [...dismissedOrganize.current, id];
     void set(ORGANIZE_DISMISSED_KEY, JSON.stringify(dismissedOrganize.current));
-    void commit(
-      noteCorrection(latest.current, {
-        proposalKind: "related_suggestion",
-        accepted: false,
-        context: `kept "${p.sourceName}" separate from "${p.targetName}"`,
-      })
-    );
   };
 
   /* ---------------------------- actions ----------------------------- */
@@ -2771,7 +2706,7 @@ export function useBoard(now: number) {
     if (!await commit(out.board)) return;
     /* Bytes AFTER the durable board attempt. A refused commit leaves both the
        action and its pictures untouched. */
-    if (out.imgs.length) void backupGate.current.trackMutation(dropImages(out.imgs));
+    if (out.imgs.length) void backupGate.current.trackMutation(dropUnreferencedImages(out.imgs));
   };
 
   const setShelf = (id: string, span: number | null, label: ShelfLife) =>
@@ -2797,26 +2732,89 @@ export function useBoard(now: number) {
       ...latest.current,
       actions: latest.current.actions.filter((x) => x.id !== a.id),
     })) return;
-    await backupGate.current.trackMutation(dropImages(a.imgs));
+    await backupGate.current.trackMutation(dropUnreferencedImages(a.imgs));
     setShelfFor(null);
   };
-
-  const editUnsorted = async (id: string, text: string) => {
-    const next = editUnsortedCapture(latest.current, id, text);
-    if (next) await commit(next);
+  const clearManualPendingState = (shown: Action) => {
+    if (pendingIntentionSource.current?.id === shown.id) {
+      intentionLedger.current = null; pendingIntentionSource.current = null;
+      setPendingSource(null); setDraft(null);
+    }
+    captureSnapshot.current = null;
+    releaseHeldImages();
+    setNoticeUndoable(false);
+    setCanUndo(false);
+  };
+  const { manualSort, manualSplit, manualUndo, setManualUndo, restoreManualReceipt, undoManual } = useManualFiling({
+    read: () => latest.current,
+    authority: plannedSortAuthority.current,
+    transact: transactDurable,
+    now: stamp,
+    clearPending: clearManualPendingState,
+    fail: setErr,
+    notice: (message) => { setNotice(message); clearNoticeIn(4500); },
+    receipt: showReceipt,
+    retire: () => receiptWindow.current!.retire(),
+    highlight: setLandedIds,
+    tab: setTab,
+    open: setOpen,
+    summarize: scheduleSummary,
+  });
+  const editUnsorted = async (id: string, text: string): Promise<boolean> => {
+    const pending = latest.current.ledger.find((entry) =>
+      entry.kind === "pending" && !entry.undone && entry.targetId === id
+    );
+    if (!pending) return false;
+    const captureId = pending.captureId ?? pending.id;
+    const owner = plannedSortAuthority.current.claim(captureId);
+    if (!owner) return false;
+    try {
+      const durable = await transactDurable((current) => {
+        const next = editUnsortedCapture(current, id, text);
+        return next ? { next, value: true } : { skip: false };
+      });
+      if (durable.status !== "committed") {
+        setErr("Couldn't save that. Your last capture is still on screen — try again.");
+        return false;
+      }
+      plannedSortAuthority.current.cancel(captureId);
+      if (captureSnapshot.current?.captureId === captureId) {
+        captureSnapshot.current.text = text.trim();
+      }
+      return true;
+    } finally {
+      plannedSortAuthority.current.release(captureId, owner);
+    }
   };
 
-  const removeUnsorted = async (a: Action) => {
-    const next = removeUnsortedCapture(latest.current, a);
-    if (!next) return;
-    if (!await commit(next)) return;
-    if (a.imgs?.length) void backupGate.current.trackMutation(dropImages(a.imgs));
+  const removeUnsorted = async (a: Action): Promise<boolean> => {
+    const pending = latest.current.ledger.find((entry) =>
+      entry.kind === "pending" && !entry.undone && entry.targetId === a.id
+    );
+    if (!pending) return false;
+    const captureId = pending.captureId ?? pending.id;
+    const owner = plannedSortAuthority.current.claim(captureId);
+    if (!owner) return false;
+    try {
+      const durable = await transactDurable((current) => {
+        const next = removeUnsortedCapture(current, a);
+        return next ? { next, value: true } : { skip: false };
+      });
+      if (durable.status !== "committed") {
+        setErr("Couldn't save that. Your last capture is still on screen — try again.");
+        return false;
+      }
+      plannedSortAuthority.current.cancel(captureId);
+      if (a.imgs?.length) void backupGate.current.trackMutation(dropUnreferencedImages(a.imgs));
+      return true;
+    } finally {
+      plannedSortAuthority.current.release(captureId, owner);
+    }
   };
 
   const moveToThread = async (a: Action) => {
     const out = applyActionToNewThread(latest.current, a.id, uid);
-    if (!out) return;
-    await commit(out.board);
+    if (!out || !await commit(out.board)) return;
     setTab("threads");
   };
 
@@ -2825,12 +2823,12 @@ export function useBoard(now: number) {
    * belongs with X" suggestion. The action becomes a fragment of the thread
    * (interleaved by date, images carried over) and the thread is re-summarised.
    */
-  const foldActionIntoThread = async (actionId: string, threadId: string) => {
+  const foldActionIntoThread = async (actionId: string, threadId: string): Promise<boolean> => {
     /* The dedupe safety net (approve-all can never stack copies) and the
        fold-as-correction lesson both live in lib/actionOps. */
     const out = applyActionFold(latest.current, actionId, threadId, stamp(), uid);
-    if (!out) return;
-    await commit(
+    if (!out) return false;
+    if (!await commit(
       out.corrected
         ? noteCorrection(out.board, {
             proposalKind: "refiled",
@@ -2839,7 +2837,7 @@ export function useBoard(now: number) {
             routing: { kind: "thread", threadId, threadName: out.threadName },
           })
         : out.board
-    );
+    )) return false;
     setNotice(
       out.already
         ? `${out.threadName} already has this note — task retired.`
@@ -2847,6 +2845,7 @@ export function useBoard(now: number) {
     );
     clearNoticeIn(4500);
     if (!out.already) await regenerate(latest.current, threadId);
+    return true;
   };
 
   /* ---------------------------- threads ----------------------------- */
@@ -2936,30 +2935,15 @@ export function useBoard(now: number) {
       }),
     });
   };
-
   const renameThread = async (id: string, name: string) => {
-    const prev = latest.current.threads.find((t) => t.id === id)?.name;
-    if (prev === undefined || !name.trim() || name === prev) return;
-    await commit(
-      noteCorrection(
-        {
-          ...latest.current,
-          threads: latest.current.threads.map((t) =>
-            t.id === id ? { ...t, name, summary: "", belongs: undefined, next: null } : t
-          ),
-        },
-        {
-          proposalKind: "rename_thread",
-          accepted: true,
-          context: prev || "",
-          correctionText: name,
-          rule: `threads get named "${name}"`,
-        }
-      )
-    );
+    const renamed = applyThreadRename(latest.current, id, name);
+    if (!renamed) return;
+    await commit(renamed.wasTemporary ? renamed.board : noteCorrection(renamed.board, {
+      proposalKind: "rename_thread", accepted: true, context: renamed.previous,
+      correctionText: name, rule: `threads get named "${name}"`,
+    }));
     await regenerate(latest.current, id);
   };
-
   /**
    * Add pictures to a note that already exists.
    *
@@ -3015,18 +2999,18 @@ export function useBoard(now: number) {
     await regenerate(latest.current, threadId);
   };
 
-  const deleteFrag = async (threadId: string, fragId: string) => {
+  const deleteFrag = async (threadId: string, fragId: string): Promise<boolean> => {
     /* Idempotency, empty-thread removal, and the image handover all live
        in fragOps — a double-tap comes back null before any work. */
     const out = applyFragDelete(latest.current, threadId, fragId);
-    if (!out) return;
-    if (!await commit(out.board)) return;
-    await backupGate.current.trackMutation(dropImages(out.imgs));
+    if (!out || !await commit(out.board)) return false;
+    await backupGate.current.trackMutation(dropUnreferencedImages(out.imgs));
     if (out.removedThread) {
       setOpen(null);
-      return;
+      return true;
     }
     await regenerate(out.board, threadId);
+    return true;
   };
 
   /**
@@ -3036,12 +3020,12 @@ export function useBoard(now: number) {
    * remedy being "delete it and say it again" was a real loss. Both threads
    * are re-summarised afterwards.
    */
-  const moveFrag = async (fromId: string, fragId: string, toId: string) => {
+  const moveFrag = async (fromId: string, fragId: string, toId: string): Promise<boolean> => {
     /* The board math, the time-order landing, and the refile lesson (a
        note moved out within minutes of landing is the sorter being told it
        was wrong, with the right home attached) all live in fragOps. */
     const out = applyFragMove(latest.current, fromId, fragId, toId, stamp());
-    if (!out) return;
+    if (!out) return false;
     const next = out.corrected
       ? noteCorrection(out.board, {
           proposalKind: "refiled",
@@ -3050,7 +3034,7 @@ export function useBoard(now: number) {
           routing: { kind: "thread", threadId: toId, threadName: out.toName },
         })
       : out.board;
-    await commit(next);
+    if (!await commit(next)) return false;
     setNotice(
       out.emptied
         ? `Moved to ${out.toName}. ${out.fromName} was left empty and removed.`
@@ -3063,6 +3047,7 @@ export function useBoard(now: number) {
     if (out.emptied) setOpen(toId);
     const afterTo = await regenerate(next, toId);
     if (!out.emptied) await regenerate(afterTo, fromId);
+    return true;
   };
 
   /** Split a fragment out into a thread of its own. */
@@ -3072,8 +3057,7 @@ export function useBoard(now: number) {
       lib/fragOps owns both directions. */
   const resolveFrag = async (threadId: string, fragId: string) => {
     const out = applyFragResolve(latest.current, threadId, fragId, stamp());
-    if (!out) return;
-    await commit(out.board);
+    if (!out || !await commit(out.board)) return;
     setNotice(
       out.tickedActionText
         ? "Labeled resolved — its action is ticked off too."
@@ -3088,16 +3072,16 @@ export function useBoard(now: number) {
     await commit(next);
   };
 
-  const moveFragToNew = async (fromId: string, fragId: string) => {
+  const moveFragToNew = async (fromId: string, fragId: string): Promise<boolean> => {
     const out = applyFragSplit(latest.current, fromId, fragId, uid);
-    if (!out) return;
-    await commit(out.board);
+    if (!out || !await commit(out.board)) return false;
     setOpen(out.freshId);
     setNotice(`Split into a new thread. Rename it if the name is wrong.`);
     clearNoticeIn(5000);
 
     const afterNew = await regenerate(out.board, out.freshId);
     if (!out.emptied) await regenerate(afterNew, fromId);
+    return true;
   };
 
   const copyFragment = async (threadId: string, fragId: string) => {
@@ -3152,7 +3136,7 @@ export function useBoard(now: number) {
         expires: span ? stamp() + span : null,
         threadId,
       };
-      await commit(
+      if (!await commit(
         noteCorrection(
           {
             ...latest.current,
@@ -3167,13 +3151,14 @@ export function useBoard(now: number) {
             context: step.slice(0, 120),
           }
         )
-      );
+      )) return;
       setNotice("Added to your actions.");
       clearNoticeIn(5000);
     } catch (error) {
       setErr(reasonOf(error) + " Nothing was added.");
+    } finally {
+      setBusy(null);
     }
-    setBusy(null);
   };
 
   /** Not now: the step stays hidden until the thread names a different one. */
@@ -3216,7 +3201,7 @@ export function useBoard(now: number) {
           };
         }
       );
-      await commit(
+      if (!await commit(
         noteCorrection(
           {
             ...latest.current,
@@ -3228,7 +3213,7 @@ export function useBoard(now: number) {
             context: frag.text.slice(0, 120),
           }
         )
-      );
+      )) return false;
       setNotice(
         `${count(items.length, "action")} taken from this note. The note stays here.`
       );
@@ -3242,14 +3227,12 @@ export function useBoard(now: number) {
     }
   };
 
-  const deleteThread = async (id: string) => {
-    const target = latest.current.threads.find((t) => t.id === id);
-    if (!await commit({
-      ...latest.current,
-      threads: latest.current.threads.filter((t) => t.id !== id),
-    })) return;
-    for (const f of target?.frags || []) await backupGate.current.trackMutation(dropImages(f.imgs));
+  const deleteThread = async (id: string): Promise<boolean> => {
+    const out = applyThreadDelete(latest.current, id);
+    if (!out || !await commit(out.board)) return false;
+    await backupGate.current.trackMutation(dropUnreferencedImages(out.imgs));
     setOpen(null);
+    return true;
   };
 
   /**
@@ -3258,22 +3241,13 @@ export function useBoard(now: number) {
    * Fragments are interleaved by date rather than appended, so the merged
    * thread reads as one history, and the summary is rebuilt from the whole.
    */
-  const mergeThreads = async (intoId: string, fromId: string) => {
-    const into = latest.current.threads.find((t) => t.id === intoId);
-    const from = latest.current.threads.find((t) => t.id === fromId);
-    if (!into || !from) return;
-
-    const frags = [...into.frags, ...from.frags].sort((a, b) => a.at - b.at);
-    const next: Board = {
-      ...latest.current,
-      threads: latest.current.threads
-        .filter((t) => t.id !== fromId)
-        .map((t) => (t.id === intoId ? { ...t, frags } : t)),
-    };
-    await commit(next);
-    setNotice(from.name + " folded into " + into.name + ".");
+  const mergeThreads = async (intoId: string, fromId: string): Promise<boolean> => {
+    const out = applyThreadMerge(latest.current, intoId, fromId);
+    if (!out || !await commit(out.board)) return false;
+    setNotice(out.fromName + " folded into " + out.intoName + ".");
     clearNoticeIn(4500);
-    await regenerate(next, intoId);
+    await regenerate(out.board, intoId);
+    return true;
   };
 
   /* --------------------------- intentions -------------------------- */
@@ -3286,28 +3260,32 @@ export function useBoard(now: number) {
     rawInput: string,
     ledger?: CaptureOrigin | null,
     expectedPending?: Action,
+    background = false,
+    signal?: AbortSignal,
+    authoritative?: () => boolean,
   ) => {
-    intentionLedger.current = ledger ?? null;
-    pendingIntentionSource.current = expectedPending ?? null;
     setErr("");
-    setBusy("Finding the intention");
+    if (!background) setBusy("Finding the intention");
     try {
       const result = await requestIntentionExpansion(
         fetch, rawInput, latest.current.principles, () => latest.current, expectedPending,
         (message) => new SortError(message),
+        signal,
       );
-      if (!result) {
+      if (!result || signal?.aborted || (authoritative && !authoritative())) {
         intentionLedger.current = null;
         pendingIntentionSource.current = null;
         return false;
       }
+      intentionLedger.current = ledger ?? null;
+      pendingIntentionSource.current = expectedPending ?? null;
       if (intentionLedger.current) intentionLedger.current.via = result.via;
       setDraft(result.draft);
       setTab("intentions");
       setOpenIntention(null);
       return true;
     } finally {
-      setBusy(null);
+      if (!background) setBusy(null);
     }
   };
 
@@ -3327,13 +3305,16 @@ export function useBoard(now: number) {
        only now, and a capture-born draft writes its ledger entry. This
        callback keeps what React owns. */
     const fromCapture = intentionLedger.current;
+    const beforeBoard = latest.current;
+    const beforeTombstones = tombstones.current;
     const { board: next, intention } = applySaveDraft(
-      latest.current,
+      beforeBoard,
       draft,
       { pendingSource, capture: fromCapture },
       { intentionId: uid(), ledgerId: uid() },
       at
     );
+    if (!await commit(next)) return;
     if (fromCapture) intentionLedger.current = null;
     pendingIntentionSource.current = null;
     /* Saving is the first commit on this path. The capture fork threw the
@@ -3342,17 +3323,16 @@ export function useBoard(now: number) {
        Undo is the only way back, exactly as it is for an action or a
        thread. The words return to the capture box only when they came from
        it; a converted action returns as the action itself. */
-    captureSnapshot.current = {
-      board: latest.current,
-      tombstones: tombstones.current,
-      text: fromCapture ? draft.rawInput : undefined,
-      ledgerIds: newLedgerIds(latest.current, next),
-      addedIds: newIds(latest.current, next),
-    };
+    captureSnapshot.current = captureUndoSnapshot(
+      beforeBoard,
+      beforeTombstones,
+      next,
+      tombstones.current,
+      { text: fromCapture ? draft.rawInput : undefined, captureId: fromCapture?.captureId },
+    );
     releaseHeldImages();
     setNoticeUndoable(false);
     setCanUndo(true);
-    await commit(next);
     setDraft(null);
     setPendingSource(null);
     setTab("intentions");
@@ -3368,7 +3348,7 @@ export function useBoard(now: number) {
     if (!d?.rawInput.trim()) return;
     const expectedPending = pendingIntentionSource.current;
     const opened = intentionLedger.current;
-    const source = pendingDraftAction(latest.current, expectedPending, pendingSource);
+    let source = pendingDraftAction(latest.current, expectedPending, pendingSource);
     setPendingSource(null);
     intentionLedger.current = null;
     pendingIntentionSource.current = null;
@@ -3377,6 +3357,17 @@ export function useBoard(now: number) {
     const lesson = opened && answeredKindCorrection(d.rawInput, "intention", "thread");
     if (lesson) await commit(noteCorrection(latest.current, lesson));
     if (source) {
+      if ((source.src || source.text) !== d.rawInput.trim()) {
+        const edited = editUnsortedCapture(latest.current, source.id, d.rawInput);
+        if (!edited || !await commit(edited)) return;
+        const pending = pendingEntry(latest.current, source.id);
+        if (
+          pending &&
+          captureSnapshot.current?.captureId === (pending.captureId ?? pending.id)
+        ) captureSnapshot.current.text = d.rawInput.trim();
+        source = latest.current.actions.find((action) => action.id === source!.id);
+        if (!source) return;
+      }
       await resort(source, "thread");
       return;
     }
@@ -3387,32 +3378,33 @@ export function useBoard(now: number) {
     const d = draft;
     const fromAction = pendingSource;
     const opened = intentionLedger.current;
-    setPendingSource(null);
-    intentionLedger.current = null;
-    pendingIntentionSource.current = null;
-    setDraft(null);
 
     /* Discard goes only to the Record, marked undone so the words remain
        recoverable without creating a board item. An action-born draft writes
        nothing: the existing action already holds its words and stays put. */
+    if (!fromAction && d?.rawInput.trim()) {
+      if (!await commit(
+        withLedger(latest.current, {
+          id: uid(),
+          captureId: opened?.captureId,
+          at: stamp(),
+          raw: opened?.raw ?? d.rawInput,
+          clean: d.rawInput,
+          kind: "intention",
+          source: opened?.source ?? sourceOf(d.rawInput, false, false),
+          transcript: opened?.transcript,
+          /* Nothing was created, so there is nothing to point at — the same
+             state an undone capture reaches once its object is removed. */
+          targetId: "",
+          undone: true,
+        })
+      )) return;
+    }
+    setPendingSource(null);
+    intentionLedger.current = null;
+    pendingIntentionSource.current = null;
+    setDraft(null);
     if (fromAction || !d?.rawInput.trim()) return;
-
-    await commit(
-      withLedger(latest.current, {
-        id: uid(),
-        captureId: opened?.captureId,
-        at: stamp(),
-        raw: opened?.raw ?? d.rawInput,
-        clean: d.rawInput,
-        kind: "intention",
-        source: opened?.source ?? sourceOf(d.rawInput, false, false),
-        transcript: opened?.transcript,
-        /* Nothing was created, so there is nothing to point at — the same
-           state an undone capture reaches once its object is removed. */
-        targetId: "",
-        undone: true,
-      })
-    );
     setNotice("Discarded — it's in the record if you want it back");
     clearNoticeIn(6000);
   };
@@ -3426,10 +3418,10 @@ export function useBoard(now: number) {
     });
 
   const deleteIntention = async (id: string) => {
-    await commit({
+    if (!await commit({
       ...latest.current,
       intentions: latest.current.intentions.filter((i) => i.id !== id),
-    });
+    })) return;
     setOpenIntention(null);
   };
 
@@ -3597,7 +3589,7 @@ export function useBoard(now: number) {
       ), latest.current, Date.now());
       const added =
         result.actions + result.threads + result.intentions + result.principles;
-      await commit(result.board);
+      if (!await commit(result.board)) throw new Error("That snapshot could not be saved. Your board is unchanged.");
       setIoNote({
         text: added
           ? `Brought back ${count(result.actions, "action")}, ${count(result.threads, "thread")} and ${count(result.intentions, "intention")} from ${snapshotLabel(day)}.`
@@ -3683,7 +3675,7 @@ export function useBoard(now: number) {
     try {
       const result = importIntentBackup(await readJsonFile(file), latest.current);
       // An import that added anything records itself in the ledger.
-      await commit(
+      if (!await commit(
         result.added
           ? withLedger(result.board, {
               id: uid(),
@@ -3695,7 +3687,7 @@ export function useBoard(now: number) {
               targetId: "",
             })
           : result.board
-      );
+      )) throw new Error("That import could not be saved. Your board is unchanged.");
 
       const parts = [`Brought in ${count(result.added, "intention")}`];
       if (result.duplicates) parts.push(`${result.duplicates} already here`);
@@ -4029,7 +4021,7 @@ export function useBoard(now: number) {
           due,
           expires: expiryFor(span, due, at),
         }));
-        await commit(
+        if (!await commit(
           withLedger(
             { ...latest.current, actions: [...items, ...latest.current.actions] },
             {
@@ -4042,7 +4034,7 @@ export function useBoard(now: number) {
               modelVia: settled.via,
             }
           )
-        );
+        )) return;
         setNotice(
           `${count(items.length, "action")} distilled from the conversation.` +
             skipNote
@@ -4095,7 +4087,7 @@ export function useBoard(now: number) {
             modelVia: settled.via,
           }
         );
-        await commit(next);
+        if (!await commit(next)) return;
         setNotice("Distilled into a thread." + skipNote);
         clearNoticeIn(5000);
         await regenerate(next, thread.id);
@@ -4105,9 +4097,10 @@ export function useBoard(now: number) {
       }
     } catch (error) {
       setDistillErr(reasonOf(error) + " Nothing was saved.");
+    } finally {
+      setDistillBusy(false);
+      distillBusyRef.current = false;
     }
-    setDistillBusy(false);
-    distillBusyRef.current = false;
   };
 
   const discardSettled = () => setSettled(null);
@@ -4142,6 +4135,7 @@ export function useBoard(now: number) {
   const actionLists = useMemo(() => actionViews(data.actions), [data.actions]);
   const live = actionLists.live;
   const unsorted = actionLists.unsorted;
+  const finalizingUnsortedIds = useMemo(() => finalizingPendingTargetIds(data.ledger, finalizingCaptureIds), [data.ledger, finalizingCaptureIds]);
   const fadedList = actionLists.faded;
   const active = useMemo(
     () =>
@@ -4221,6 +4215,7 @@ export function useBoard(now: number) {
     busy,
     err,
     landed, landedLines,
+    pendingReceiptId,
     landedIds,
     summarising,
     suggestion,
@@ -4275,6 +4270,7 @@ export function useBoard(now: number) {
     setShowResting,
     live,
     unsorted,
+    finalizingUnsortedIds,
     fadedList,
     active,
     resting,
@@ -4285,6 +4281,8 @@ export function useBoard(now: number) {
     shareable,
     submit: guardMutation(submit),
     resort: guardMutation(resort),
+    manualSort: guardMutation(manualSort),
+    manualSplit: guardMutation(manualSplit),
     editUnsorted: guardMutation(editUnsorted),
     removeUnsorted: guardMutation(removeUnsorted),
     toggleAction: guardMutation(toggleAction),
@@ -4349,8 +4347,10 @@ export function useBoard(now: number) {
     sync: ownershipStatus === "offline" ? { ok: false, at: now, note: "Offline — local changes are not synced; AI unavailable" } : sync,
     syncNow,
     canUndo,
+    canUndoManual: !!manualUndo,
     noticeUndoable,
     undo: guardMutation(undo),
+    undoManual: guardMutation(undoManual),
     misfiled,
     sortAgainAs: guardMutation(sortAgainAs),
     sortAgainIntoThread: guardMutation(sortAgainIntoThread),

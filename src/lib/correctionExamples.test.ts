@@ -59,6 +59,19 @@ describe("deriveCorrectionExamples", () => {
     expect(deriveCorrectionExamples([disabled, stale, rejected], threads, ["correction:disabled"])).toEqual([]);
   });
 
+  it("omits corrections targeting a temporary Thread until it is renamed", () => {
+    const entry = correction("temporary", 10, "File this with the provisional Thread", {
+      kind: "thread", threadId: "temporary", threadName: "Temporary — File this",
+    });
+    const temporary = [{ id: "temporary", name: "Temporary — File this", temporaryName: true }];
+    expect(deriveCorrectionExamples([entry], temporary)).toEqual([]);
+    expect(deriveCorrectionExamples([entry], [{
+      id: "temporary", name: "Renamed Thread", temporaryName: undefined,
+    }])).toEqual([
+      expect.objectContaining({ threadId: "temporary", threadName: "Renamed Thread" }),
+    ]);
+  });
+
   it("is newest-first and hard bounded", () => {
     const entries = Array.from({ length: CORRECTION_EXAMPLES_CAP + 3 }, (_, index) =>
       correction(`c${index}`, index, `Example ${index}`, { kind: "action" }),

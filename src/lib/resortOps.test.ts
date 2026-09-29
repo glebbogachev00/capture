@@ -82,6 +82,7 @@ describe("resort operations", () => {
       waiting,
       board.ledger[0],
       () => `ledger-${++id}`,
+      withoutEnvelope,
     );
 
     expect(recorded.board.actions).toHaveLength(2);
@@ -117,6 +118,7 @@ describe("resort operations", () => {
       waiting,
       board.ledger[0],
       () => `ledger-${++id}`,
+      splitBoard,
     );
 
     expect(new Set(recorded.summaryTargets)).toEqual(new Set(["home", "other"]));

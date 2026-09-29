@@ -915,7 +915,7 @@ export function SettingsScreen({
   onLogout: () => void;
   ioNote: IoNote;
   ioBusy?: string | null;
-  sync: { ok: boolean; at: number; note?: string } | null;
+  sync: { ok: boolean; at: number; note?: string; imageSync?: "failed" } | null;
   onSyncNow: () => void;
   /** The signpost to The record — the screen itself lives off the masthead,
       but Settings is where people go looking, especially on phones where
@@ -976,7 +976,9 @@ export function SettingsScreen({
               : sync
                 ? sync.ok
                   ? "synced"
-                  : "offline"
+                  : sync.imageSync
+                    ? "images pending"
+                    : "offline"
                 : "not synced"
           }
           open={openSection === "data"}

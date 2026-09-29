@@ -19,6 +19,37 @@ async function load() {
 }
 
 describe("when every provider refuses", () => {
+  it("honors a shared route abort before starting another provider attempt", async () => {
+    const { withFallback } = await load();
+    const controller = new AbortController();
+    controller.abort(new DOMException("route deadline elapsed", "AbortError"));
+    let calls = 0;
+
+    await expect(withFallback(async () => {
+      calls += 1;
+      return "too late";
+    }, undefined, { abortSignal: controller.signal })).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(calls).toBe(0);
+  });
+
+  it("aborts a rate-limit wait without starting a second provider round", async () => {
+    vi.useFakeTimers();
+    const { withFallback } = await load();
+    const controller = new AbortController();
+    let calls = 0;
+    const pending = withFallback(async () => {
+      calls += 1;
+      throw limit("Rate limit reached … Please try again in 20s");
+    }, undefined, { abortSignal: controller.signal });
+
+    await vi.advanceTimersByTimeAsync(1);
+    controller.abort(new DOMException("route deadline elapsed", "AbortError"));
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(calls).toBe(2);
+    vi.useRealTimers();
+  });
+
   it("waits and tries again if it was a rate limit", async () => {
     vi.useFakeTimers();
     const { withFallback } = await load();

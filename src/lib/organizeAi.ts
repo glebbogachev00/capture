@@ -17,6 +17,7 @@
  */
 
 import type { Board } from "./model";
+import { semanticThreads } from "./threadBrief";
 import {
   HIGH_CAP,
   MEDIUM_CAP,
@@ -76,7 +77,7 @@ export function compactBoard(board: Board): TidySnapshot {
            note even when the model's rewrite differs. */
         src: a.src ? CLIP(a.src, 240) : undefined,
       })),
-    threads: board.threads
+    threads: semanticThreads(board.threads)
       .slice(0, SNAPSHOT_CAPS.threads)
       .map((t) => ({
         id: t.id,

@@ -39,7 +39,11 @@ export type Settlement = {
 export function settleUnsortedCapture(
   board: Board,
   input: {
+    /** Immutable wording retained in the Record, including any explicit
+        command prefix. */
     raw: string;
+    /** Operational source after deterministic command parsing. */
+    payload?: string;
     imgIds: string[];
     at: number;
     dictated: boolean;
@@ -48,15 +52,17 @@ export function settleUnsortedCapture(
     /** The thread the person has OPEN — their choice, so valid input.
         Undefined means no destination was chosen by anyone. */
     openThreadId?: string;
+    /** Exact version a delayed result must still find before settlement. */
+    pendingRevision?: number;
   },
   ids: { itemId: string; ledgerId: string; captureId?: string }
 ): Settlement {
-  const body = input.raw || "(image only)";
+  const body = (input.payload ?? input.raw) || "(image only)";
   const openThread = input.openThreadId
     ? board.threads.find((t) => t.id === input.openThreadId)
     : undefined;
   const source: CaptureSource = sourceOf(
-    input.raw,
+    input.payload ?? input.raw,
     input.dictated,
     input.imgIds.length > 0
   );
@@ -77,6 +83,7 @@ export function settleUnsortedCapture(
     shelf: "keep",
     expires: null,
     unsorted: true,
+    pendingRevision: input.pendingRevision,
     ...(openThread ? { threadId: openThread.id } : {}),
   };
   const next = withLedger(
@@ -86,12 +93,15 @@ export function settleUnsortedCapture(
       captureId: ids.captureId,
       at: input.at,
       raw: input.raw,
-      transcript: input.transcript,
+      ...(input.transcript ? { transcript: input.transcript } : {}),
       clean: body,
       kind: "pending",
+      pendingRevision: input.pendingRevision,
+      pendingSource: body,
       source,
       targetId: action.id,
       imgs: input.imgIds.length ? input.imgIds : undefined,
+      ...(openThread ? { openThreadId: openThread.id } : {}),
     }
   );
   return {
@@ -163,7 +173,7 @@ export function recordSortedCapture(
     targetId: f.primary.targetId,
     targetFragId: f.primary.fragId,
     modelVia: f.via,
-    transcript: f.transcript?.trim() || undefined,
+    transcript: f.transcript || undefined,
     imgs: f.imgIds.length ? f.imgIds : undefined,
   });
   for (const piece of f.also) {

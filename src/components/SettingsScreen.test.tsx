@@ -14,7 +14,13 @@ const principle: Principle = {
 
 afterEach(cleanup);
 
-function renderSettings(ioBusy: string | null = null) {
+function renderSettings(
+  ioBusy: string | null = null,
+  sync: { ok: boolean; at: number; note?: string; imageSync?: "failed" } = {
+    ok: true,
+    at: 1_788_288_000_000,
+  },
+) {
   const onToggle = vi.fn();
   const onProfileChange = vi.fn();
   render(
@@ -34,7 +40,7 @@ function renderSettings(ioBusy: string | null = null) {
       onLogout={() => {}}
       ioNote={null}
       ioBusy={ioBusy}
-      sync={{ ok: true, at: 1_788_288_000_000 }}
+      sync={sync}
       onSyncNow={() => {}}
       onOpenRecord={() => {}}
       ledgerCount={12}
@@ -79,6 +85,20 @@ describe("SettingsScreen disclosures", () => {
     const blockedTransfers = screen.getAllByRole("button", { name: "Fetching 2 of 6 pictures…" });
     expect(blockedTransfers).toHaveLength(2);
     expect(blockedTransfers.every((button) => button.hasAttribute("disabled"))).toBe(true);
+  });
+
+  it("shows incomplete image sync truthfully instead of calling the device offline or synced", () => {
+    renderSettings(null, {
+      ok: false,
+      at: 1_788_288_000_000,
+      imageSync: "failed",
+      note: "An image is too large to sync — kept locally",
+    });
+
+    expect(screen.getByText("images pending")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show Your data" }));
+    expect(screen.getByText("An image is too large to sync — kept locally.")).toBeTruthy();
+    expect(screen.queryByText("offline")).toBeNull();
   });
 
   it("offers the approved support contact without removing bug reporting or logout", () => {

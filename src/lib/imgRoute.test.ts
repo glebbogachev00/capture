@@ -11,7 +11,8 @@ vi.mock("@/lib/hubStore", () => ({
   hubStore: () => ({ exists: state.exists, write: state.write }),
 }));
 
-import { HEAD, imageRequestPolicy } from "@/app/api/img/[id]/route";
+import { HEAD, PUT, imageRequestPolicy } from "@/app/api/img/[id]/route";
+import { MAX_SYNC_IMAGE_SOURCE_LENGTH } from "./imageLimits";
 
 it("gives explicit backup transfer its own bounded lane above 120 images", () => {
   expect(imageRequestPolicy(new Request("https://capture.test/api/img/photo?backup=1")))
@@ -51,7 +52,6 @@ describe("PUT /api/img/[id]", () => {
     state.write.mockResolvedValue(false);
     const src = "data:image/webp;base64,dGlueQ==";
 
-    const { PUT } = await import("@/app/api/img/[id]/route");
     const response = await PUT(
       new Request("https://capture.test/api/img/photo-2", {
         method: "PUT",
@@ -66,5 +66,23 @@ describe("PUT /api/img/[id]", () => {
     expect(state.write).toHaveBeenCalledWith("img/photo-2", src, {
       version: null,
     });
+  });
+
+  it("shares the Cloud source envelope without widening it for oversized originals", async () => {
+    state.write.mockResolvedValue(true);
+    const atLimit = "data:" + "A".repeat(MAX_SYNC_IMAGE_SOURCE_LENGTH - "data:".length);
+    const accepted = await PUT(new Request("https://capture.test/api/img/at-limit", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ src: atLimit }),
+    }), { params: Promise.resolve({ id: "at-limit" }) });
+    const rejected = await PUT(new Request("https://capture.test/api/img/over-limit", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ src: atLimit + "A" }),
+    }), { params: Promise.resolve({ id: "over-limit" }) });
+
+    expect(accepted.status).toBe(200);
+    expect(rejected.status).toBe(413);
   });
 });

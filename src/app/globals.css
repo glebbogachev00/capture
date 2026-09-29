@@ -281,43 +281,76 @@ body {
   margin-bottom: 14px;
 }
 .unsorted-captures {
+  width: 100%;
+  max-width: 620px;
+  min-width: 0;
   margin: 0 0 14px;
+  margin-inline: auto;
 }
-.unsorted-title {
+.unsorted-summary {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 0 8px;
+  width: fit-content;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--muted);
-  font-family: var(--mono);
+  font: inherit;
+  font-family: var(--font-mono), monospace;
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
 }
-.unsorted-title b {
+.unsorted-summary:hover,
+.unsorted-summary[aria-expanded="true"] {
+  color: var(--ink);
+}
+.unsorted-count {
   color: var(--accent);
   font-weight: 500;
 }
+.unsorted-indicator {
+  color: var(--muted);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.unsorted-panel {
+  min-width: 0;
+  margin-top: -2px;
+}
+.unsorted-status {
+  margin: 0 1px 9px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
 .unsorted-track {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(240px, 82%);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 9px;
-  overflow-x: auto;
+  width: 100%;
+  min-width: 0;
   padding: 1px 1px 7px;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
 }
 .unsorted-card {
   display: flex;
-  min-height: 108px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
   flex-direction: column;
-  padding: 12px;
+  padding: 16px;
   border: 1px solid var(--rule);
   border-radius: 11px;
   background: var(--card);
-  scroll-snap-align: start;
 }
 .unsorted-card details {
   min-width: 0;
@@ -352,7 +385,6 @@ body {
   color: var(--muted);
   font-size: 12px;
 }
-
 .unsorted-images {
   display: flex;
   gap: 6px;
@@ -367,21 +399,437 @@ body {
 }
 .unsorted-edit textarea {
   width: 100%;
-  min-height: 120px;
+  min-height: 104px;
   margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
   resize: vertical;
 }
-.unsorted-actions,
-.unsorted-detail-actions {
+.unsorted-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 12px;
   margin-top: 8px;
 }
-.unsorted-sort {
-  align-self: flex-start;
+.unsorted-actions button {
+  position: relative;
+  min-height: 32px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.unsorted-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0;
+  padding-top: 18px;
+}
+.unsorted-primary {
+  position: relative;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.unsorted-primary:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+.unsorted-more {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.unsorted-primary::after,
+.unsorted-more::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.unsorted-more:hover:not(:disabled),
+.unsorted-more[aria-expanded="true"] {
+  background: var(--paper);
+  color: var(--ink);
+}
+.unsorted-primary:disabled,
+.unsorted-more:disabled,
+.unsorted-more-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.unsorted-more-menu {
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 4px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: 0 4px 14px rgba(25, 29, 25, 0.08);
+}
+.unsorted-more-menu button {
+  position: relative;
+  width: auto;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: center;
+  cursor: pointer;
+}
+.unsorted-more-menu button:hover:not(:disabled),
+.unsorted-more-menu button:focus-visible {
+  background: var(--accent-soft);
+}
+.unsorted-more-menu button.warn {
+  color: #a33b23;
+}
+.destination-picker-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: var(--ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.destination-picker-scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgba(29, 45, 37, 0.24);
+  cursor: default;
+}
+.destination-picker {
+  position: relative;
+  display: flex;
+  width: min(400px, calc(100vw - 32px));
+  max-height: min(640px, calc(100dvh - 40px));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: 0 18px 50px rgba(28, 45, 36, 0.16);
+}
+.destination-picker-header {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 18px 10px;
+}
+.destination-picker-header > div {
+  min-width: 0;
+}
+.destination-picker-header h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 650;
+}
+.destination-picker-header p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+.destination-picker-close {
+  width: 44px;
+  display: grid;
+  place-items: center;
+  height: 44px;
+  flex: none;
+  margin: -8px -8px 0 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font: 24px/1 var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
+.destination-picker-close:hover,
+.destination-picker-close:focus-visible {
+  background: var(--paper);
+  color: var(--ink);
+}
+.destination-picker-sticky {
+  position: sticky;
+  flex: none;
+  top: 0;
+  z-index: 1;
+  padding: 0 18px 12px;
+  background: var(--card);
+}
+.destination-picker input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: 11px;
+  outline: none;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+.destination-picker input:focus {
+  border-color: var(--accent);
+  box-shadow: none;
+}
+.destination-picker-results {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 18px 18px;
+  scrollbar-width: thin;
+}
+.destination-picker-results section + section {
+  margin-top: 15px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+.destination-picker-results h3,
+.destination-picker-name label {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.destination-picker button {
+  min-height: 44px;
+  font: inherit;
+  cursor: pointer;
+}
+.destination-picker button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.destination-picker button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.destination-picker-results button:hover:not(:disabled),
+.destination-picker-results button:focus-visible {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.destination-picker-quick {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.destination-picker-quick button {
+  border: 0;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+}
+.destination-picker-create > button,
+.destination-picker-threads button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font-size: 15px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.destination-picker-create > button {
+  color: var(--accent);
+  font-weight: 600;
+}
+.destination-picker-threads button {
+  border-bottom: 1px solid var(--rule);
+}
+.destination-picker-threads p {
+  margin: 8px 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.destination-picker-name {
+  margin-top: 8px;
+}
+.destination-picker-name > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.destination-picker-name button {
+  padding: 0 13px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+}
+.landed.pending-receipt {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+}
+.pending-receipt .receipt-place-btn {
   min-height: 36px;
-  margin-top: auto;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.landed.pending-receipt .undo-btn {
+  margin-left: 0;
+  border-color: var(--rule);
+  color: var(--accent);
+}
+.capture-receipt {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.capture-receipt > span {
+  min-width: 0;
+  flex: 1 1 180px;
+  overflow-wrap: anywhere;
+}
+.capture-receipt .undo-btn {
+  min-height: 44px;
+}
+.capture-receipt .undo-btn:focus-visible {
+  outline-color: currentColor;
+}
+@media (max-width: 640px) {
+  .destination-picker-layer {
+    align-items: end;
+    padding: 0;
+  }
+  .destination-picker {
+    width: 100%;
+    max-height: min(86dvh, 720px);
+    border-width: 1px 0 0;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+  .destination-picker-header {
+    padding: 17px 16px 9px;
+  }
+  .destination-picker-sticky {
+    padding: 0 16px 12px;
+  }
+  .destination-picker-results {
+    padding: 0 16px 12px;
+  }
+  .destination-picker input {
+    min-height: 48px;
+    font-size: 16px;
+  }
+  .destination-picker button {
+    min-height: 48px;
+  }
+  .pending-receipt {
+    flex-wrap: wrap;
+  }
+  .pending-receipt > span {
+    width: 100%;
+  }
+  .pending-receipt .receipt-place-btn {
+    min-height: 44px;
+    margin-left: 0;
+  }
+  .unsorted-track {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .unsorted-card {
+    min-height: 0;
+    padding: 16px;
+  }
+  .unsorted-preview {
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .unsorted-card-actions {
+    gap: 8px;
+    padding-top: 18px;
+  }
+  .unsorted-primary {
+    min-height: 48px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+  .unsorted-more {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+  }
+  .unsorted-primary::after,
+  .unsorted-more::after {
+    inset: 0;
+  }
+  .unsorted-actions button {
+    min-height: 44px;
+    padding-inline: 5px;
+    font-size: 13px;
+  }
 }
 .intention-images {
   display: flex;

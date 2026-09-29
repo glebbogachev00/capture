@@ -56,10 +56,12 @@ export function confusedPairs(
   board: Board,
   min: number = MIN_CONFUSIONS
 ): ConfusedPair[] {
-  const names = new Map(board.threads.map((t) => [t.id, t.name]));
-  /* Where each fragment lives now — the person's own final answer. */
+  const semanticThreads = board.threads.filter((thread) => !thread.temporaryName);
+  const names = new Map(semanticThreads.map((t) => [t.id, t.name]));
+  /* Where each fragment lives now — the person's own final answer. Temporary
+     display-only Threads and their contents are not semantic evidence. */
   const homeOf = new Map<string, string>();
-  for (const t of board.threads)
+  for (const t of semanticThreads)
     for (const f of t.frags ?? []) homeOf.set(f.id, t.id);
 
   const seen = new Map<string, ConfusedPair>();

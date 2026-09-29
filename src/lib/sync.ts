@@ -19,7 +19,7 @@
  *    copy lives.
  */
 
-import type { Board, Frag, Thread } from "./model";
+import type { Board, Frag, RoutingRetirement, RoutingSettlement, Thread } from "./model";
 import { mergeCorrections, mergeLedgers } from "./ledger";
 import { mergeWraps, mergeCompletions } from "./wrap";
 
@@ -47,6 +47,39 @@ const ts = (x: { updatedAt?: number; at?: number }) => x.updatedAt ?? x.at ?? 0;
     a horizon, every deletion ever made rides every sync forever — measured
     at nearly half the payload on a small board. */
 export const TOMBSTONE_TTL = 30 * 24 * 60 * 60 * 1000;
+/** Manual routing retirement follows the same supported stale-device horizon
+ * as ordinary deletion tombstones, and refreshes only when authority or an
+ * actual stale loser is observed. */
+export const ROUTING_RETIREMENT_TTL = TOMBSTONE_TTL;
+
+const routingSlot = (value: Pick<RoutingRetirement, "captureId" | "pendingId" | "revision">) =>
+  JSON.stringify([value.captureId, value.pendingId, value.revision]);
+
+function safeRoutingRetirement(value: unknown): value is RoutingRetirement {
+  if (!value || typeof value !== "object") return false;
+  const retirement = value as Partial<RoutingRetirement>;
+  return safeAuthorityCoordinate(retirement.captureId) &&
+    safeAuthorityCoordinate(retirement.pendingId) &&
+    Number.isSafeInteger(retirement.revision) && retirement.revision! > 0 &&
+    typeof retirement.retiredAt === "number" && Number.isFinite(retirement.retiredAt) &&
+    retirement.retiredAt >= 0;
+}
+
+function mergeRoutingRetirements(
+  a: readonly RoutingRetirement[],
+  b: readonly RoutingRetirement[],
+  now?: number,
+): RoutingRetirement[] {
+  const bySlot = new Map<string, RoutingRetirement>();
+  for (const retirement of [...a, ...b]) {
+    if (!safeRoutingRetirement(retirement)) continue;
+    if (now !== undefined && now - retirement.retiredAt > ROUTING_RETIREMENT_TTL) continue;
+    const key = routingSlot(retirement);
+    const current = bySlot.get(key);
+    if (!current || retirement.retiredAt > current.retiredAt) bySlot.set(key, retirement);
+  }
+  return [...bySlot.values()];
+}
 
 /** Tombstones merge to the newest deletedAt per kind+id; ancient ones age
     out (see TOMBSTONE_TTL). `now` is injectable for tests. */
@@ -107,28 +140,283 @@ function mergeThreads(a: Thread[], b: Thread[]): Thread[] {
   }
 
   /* A frag moved on one device (updatedAt bumped on the move) lands in its
-     newest home; a frag untouched on both sides simply keeps the newer copy. */
-  const frags = new Map<string, { frag: Frag; home: string }>();
+     newest home. Equal-timestamp conflicts have no LWW winner, so keep every
+     distinct maximal copy: collapsing one here would manufacture a unique
+     home for Action-shot repair and would discard conflict evidence on the
+     next sync. Exact duplicate copies still coalesce. */
+  type FragCandidate = { frag: Frag; home: string };
+  const conflictKey = ({ frag, home }: FragCandidate) =>
+    JSON.stringify([
+      home,
+      frag.id,
+      frag.at,
+      frag.text,
+      frag.imgs ?? null,
+      frag.unsorted ?? null,
+      frag.resolvedAt ?? null,
+      frag.updatedAt ?? null,
+    ]);
+  const frags = new Map<
+    string,
+    { timestamp: number; candidates: Map<string, FragCandidate> }
+  >();
   const consider = (threads: Thread[]) => {
     for (const t of threads) {
       for (const f of t.frags) {
+        const candidate = { frag: f, home: t.id };
+        const timestamp = ts(f);
         const cur = frags.get(f.id);
-        if (!cur || ts(f) > ts(cur.frag)) frags.set(f.id, { frag: f, home: t.id });
+        if (!cur || timestamp > cur.timestamp) {
+          frags.set(f.id, {
+            timestamp,
+            candidates: new Map([[conflictKey(candidate), candidate]]),
+          });
+        } else if (timestamp === cur.timestamp) {
+          cur.candidates.set(conflictKey(candidate), candidate);
+        }
       }
     }
   };
   consider(a);
   consider(b);
 
+  const candidates = [...frags.values()].flatMap((entry) =>
+    [...entry.candidates.values()]
+  );
   const out: Thread[] = [];
   for (const t of byId.values()) {
-    const own = [...frags.values()]
+    const own = candidates
       .filter((x) => x.home === t.id)
       .map((x) => x.frag)
-      .sort((x, y) => x.at - y.at);
+      .sort((x, y) => x.at - y.at || conflictKey({ frag: x, home: t.id })
+        .localeCompare(conflictKey({ frag: y, home: t.id })));
     out.push({ ...t, frags: own });
   }
   return out;
+}
+
+/**
+ * Repair only the denormalized home in an Action's image pointer. A fragment
+ * id is the durable identity; its Thread is mutable when notes move, split, or
+ * are folded together. Action rows still merge whole-item by LWW, so a newer
+ * edit from a stale device can otherwise restore an obsolete Thread id after
+ * the fragment itself has already converged in its new home.
+ *
+ * Missing and multiple maximal homes fail closed: keep the original pointer
+ * rather than inventing a home. The repair changes neither Action freshness
+ * nor fragment/history/image data.
+ */
+export function reconcileActionShotHomes(board: Board): Board {
+  const homes = collectFragHomes(board.threads);
+  let changed = false;
+  const actions = board.actions.map((action) => {
+    if (action.done || !action.shot) return action;
+    const candidates = homes.get(action.shot.fragId);
+    if (!candidates || candidates.size !== 1) return action;
+    const [home] = candidates;
+    if (home === action.shot.threadId) return action;
+    changed = true;
+    return {
+      ...action,
+      shot: { ...action.shot, threadId: home },
+    };
+  });
+  return changed ? { ...board, actions } : board;
+}
+
+function settlementArtifactCount(
+  board: Pick<Board, "actions" | "threads" | "intentions">,
+  artifact: RoutingSettlement["artifacts"][number],
+) {
+  return artifact.kind === "action"
+    ? board.actions.filter((action) => action.id === artifact.id).length
+    : artifact.kind === "thread"
+      ? board.threads.filter((thread) => thread.id === artifact.id).length
+      : artifact.kind === "frag"
+        ? board.threads.reduce(
+            (count, thread) => count + thread.frags.filter((frag) => frag.id === artifact.id).length,
+            0,
+          )
+        : board.intentions.filter((intention) => intention.id === artifact.id).length;
+}
+
+function settlementArtifactExists(
+  board: Pick<Board, "actions" | "threads" | "intentions">,
+  artifact: RoutingSettlement["artifacts"][number],
+) {
+  return settlementArtifactCount(board, artifact) > 0;
+}
+
+const safeAuthorityCoordinate = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0 &&
+  !/[\u0000-\u001f\u007f]/.test(value);
+
+function provenRoutingSettlement(board: Board, value: unknown): value is RoutingSettlement {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Partial<RoutingSettlement>;
+  if (
+    !safeAuthorityCoordinate(record.id) ||
+    !safeAuthorityCoordinate(record.captureId) ||
+    !safeAuthorityCoordinate(record.pendingId) ||
+    !Number.isSafeInteger(record.revision) || record.revision! <= 0 ||
+    (record.settledBy !== "manual" && record.settledBy !== "automatic") ||
+    !Array.isArray(record.artifacts) || record.artifacts.length === 0
+  ) return false;
+  const seen = new Set<string>();
+  let live = 0;
+  for (const artifact of record.artifacts) {
+    if (
+      !artifact ||
+      !["action", "thread", "frag", "intention"].includes(artifact.kind) ||
+      !safeAuthorityCoordinate(artifact.id)
+    ) return false;
+    const coordinate = JSON.stringify([artifact.kind, artifact.id]);
+    if (seen.has(coordinate)) return false;
+    seen.add(coordinate);
+    const count = settlementArtifactCount(board, artifact);
+    if (count > 1) return false;
+    if (count === 1) live += 1;
+  }
+  return live > 0;
+}
+
+const routingSettlementContentKey = (record: RoutingSettlement) => JSON.stringify([
+  record.id,
+  record.captureId,
+  record.pendingId,
+  record.revision,
+  record.settledBy,
+  record.artifacts.map((artifact) => [artifact.kind, artifact.id]),
+]);
+
+/** A manual settlement is authoritative for one exact pending row/revision.
+ * Two offline devices can both settle that row before either sees the other;
+ * once their Boards meet, remove only artifacts declared by the stale
+ * automatic settlement in that same slot. Earlier automatic output from a
+ * different partial row remains untouched. */
+export function reconcileManualSettlementAuthority(board: Board, now = Date.now()): Board {
+  const candidates: RoutingSettlement[] = [...(board.routingSettlements ?? [])];
+  /* Migration bridge for P5 boards written before durable active-settlement
+     metadata. Their still-present ledger rows seed the new boundary once. */
+  for (const entry of board.ledger) {
+    if (
+      entry.undone || !entry.settledBy || !entry.settlementPendingId ||
+      entry.settlementRevision === undefined || !entry.settlementArtifacts
+    ) continue;
+    candidates.push({
+      id: entry.id,
+      captureId: entry.captureId ?? entry.id,
+      pendingId: entry.settlementPendingId,
+      revision: entry.settlementRevision,
+      settledBy: entry.settledBy,
+      artifacts: entry.settlementArtifacts,
+    });
+  }
+  const byContent = new Map<string, RoutingSettlement>();
+  for (const record of candidates) byContent.set(routingSettlementContentKey(record), record);
+  const idContents = new Map<string, Set<string>>();
+  for (const [content, record] of byContent) {
+    const existing = idContents.get(record.id) ?? new Set<string>();
+    existing.add(content);
+    idContents.set(record.id, existing);
+  }
+  const all = [...byContent.entries()]
+    .filter(([, record]) => idContents.get(record.id)?.size === 1)
+    .map(([, record]) => record)
+    .filter((record) => provenRoutingSettlement(board, record));
+  const manualRecords = all.filter((record) => record.settledBy === "manual");
+  const retirementMap = new Map(
+    mergeRoutingRetirements(board.routingRetirements ?? [], [], now)
+      .map((retirement) => [routingSlot(retirement), retirement]),
+  );
+  for (const record of manualRecords) {
+    retirementMap.set(routingSlot(record), {
+      captureId: record.captureId,
+      pendingId: record.pendingId,
+      revision: record.revision,
+      retiredAt: now,
+    });
+  }
+  const manualSlots = new Set(retirementMap.keys());
+  const losing = all.filter((record) =>
+    record.settledBy === "automatic" && manualSlots.has(routingSlot(record))
+  );
+  for (const record of losing) {
+    retirementMap.set(routingSlot(record), {
+      captureId: record.captureId,
+      pendingId: record.pendingId,
+      revision: record.revision,
+      retiredAt: now,
+    });
+  }
+
+  const protectedArtifacts = new Set(all
+    .filter((record) => !losing.includes(record))
+    .flatMap((record) => record.artifacts)
+    .map((artifact) => JSON.stringify([artifact.kind, artifact.id])));
+  const retired = new Set(losing
+    .flatMap((record) => record.artifacts)
+    .filter((artifact) => !protectedArtifacts.has(JSON.stringify([artifact.kind, artifact.id])))
+    .map((artifact) => JSON.stringify([artifact.kind, artifact.id])));
+  const gone = (kind: "action" | "thread" | "frag" | "intention", id: string) =>
+    retired.has(JSON.stringify([kind, id]));
+  const actions = board.actions.filter((action) => !gone("action", action.id));
+  const referencedThreads = new Set(actions.flatMap((action) =>
+    [action.threadId, action.shot?.threadId].filter((id): id is string => !!id)
+  ));
+  const next = {
+    ...board,
+    actions,
+    // A created Thread is only a container, not ownership of everything later
+    // filed there. Legacy manifests without fragment ids must fail safe: keep
+    // unknown content rather than infer ownership from the container or time.
+    threads: board.threads
+      .map((thread) => ({
+        ...thread,
+        frags: thread.frags.filter((frag) => !gone("frag", frag.id)),
+      }))
+      .filter((thread) => !gone("thread", thread.id) || thread.frags.length > 0 ||
+        referencedThreads.has(thread.id)),
+    intentions: board.intentions.filter((intention) => !gone("intention", intention.id)),
+    ledger: board.ledger.map((entry) =>
+      entry.settledBy === "automatic" && entry.settlementPendingId &&
+      entry.settlementRevision !== undefined && manualSlots.has(
+        JSON.stringify([
+          entry.captureId ?? entry.id,
+          entry.settlementPendingId,
+          entry.settlementRevision,
+        ])
+      ) ? {
+        ...entry,
+        undone: true,
+        ...(entry.kind === "pending" ? { imgs: undefined } : {}),
+      } : entry
+    ),
+  };
+  return {
+    ...next,
+    routingSettlements: all.filter((record) =>
+      !losing.includes(record) &&
+      record.artifacts.some((artifact) => settlementArtifactExists(next, artifact))
+    ),
+    routingRetirements: [...retirementMap.values()],
+  };
+}
+
+function collectFragHomes(threads: Thread[]): Map<string, Set<string>> {
+  const homes = new Map<string, { timestamp: number; ids: Set<string> }>();
+  for (const thread of threads) {
+    for (const frag of thread.frags) {
+      const timestamp = ts(frag);
+      const current = homes.get(frag.id);
+      if (!current || timestamp > current.timestamp) {
+        homes.set(frag.id, { timestamp, ids: new Set([thread.id]) });
+      } else if (timestamp === current.timestamp) {
+        current.ids.add(thread.id);
+      }
+    }
+  }
+  return new Map([...homes].map(([id, value]) => [id, value.ids]));
 }
 
 /** Merge two boards. Pure and deterministic. */
@@ -174,6 +462,14 @@ export function mergeBoards(a: Board, b: Board): Board {
     ledger: mergeLedgers(ha.ledger ?? [], hb.ledger ?? []),
     /* Same for corrections — append-only records, union by id. */
     corrections: mergeCorrections(ha.corrections ?? [], hb.corrections ?? []),
+    routingSettlements: [...new Map([
+      ...(a.routingSettlements ?? []),
+      ...(b.routingSettlements ?? []),
+    ].map((record) => [routingSettlementContentKey(record), record])).values()],
+    routingRetirements: mergeRoutingRetirements(
+      a.routingRetirements ?? [],
+      b.routingRetirements ?? [],
+    ),
     /* Wraps are union by day; a dismissal on one device carries. */
     wraps: mergeWraps(ha.wraps ?? [], hb.wraps ?? []),
     /* Ticks are union by action id — recorded once, never changed. */
@@ -248,7 +544,11 @@ function idsOf(items: { id: string }[]): string {
 
 export function boardSignature(board: Board, tombstones: Tombstone[]): string {
   const parts: string[] = [];
-  for (const a of board.actions) parts.push(`a:${a.id}:${ts(a)}`);
+  for (const a of board.actions) {
+    parts.push(
+      `a:${a.id}:${ts(a)}:${a.shot?.threadId ?? ""}:${a.shot?.fragId ?? ""}`
+    );
+  }
   for (const t of board.threads) {
     parts.push(`t:${t.id}:${t.updatedAt ?? 0}`);
     /* The thread id rides along, so moving a fragment between threads is a
@@ -293,6 +593,11 @@ export function boardSignature(board: Board, tombstones: Tombstone[]): string {
   parts.push(`C:${cor.length}:${idsOf(cor)}`);
   const done = board.completions ?? [];
   parts.push(`K:${done.length}:${idsOf(done)}`);
+  const settlements = board.routingSettlements ?? [];
+  parts.push(`S:${settlements.length}:${idsOf(settlements)}`);
+  for (const retirement of board.routingRetirements ?? []) {
+    parts.push(`R:${routingSlot(retirement)}:${retirement.retiredAt}`);
+  }
   /* A wrap needs its CONTENT here, not just its day. Two devices offline
      overnight each write their own reading of the same day; the merge picks
      a winner deterministically, and if the signature only said "there is a
@@ -309,11 +614,17 @@ export function boardSignature(board: Board, tombstones: Tombstone[]): string {
   return parts.sort().join("|");
 }
 
-/** The full merge: tombstones, then boards, then deletions applied.
+/** The full merge: merge tombstones, remove their claims from both candidate
+    topologies, merge the survivors, apply the deletion set once more, and only
+    then reconcile denormalized Action-shot homes against that final topology.
     `now` feeds the tombstone horizon and is injectable for tests. */
 export function mergeSync(a: SyncState, b: SyncState, now = Date.now()): SyncState {
   const tombstones = mergeTombstones(a.tombstones, b.tombstones, now);
-  const board = applyTombstones(mergeBoards(a.board, b.board), tombstones);
+  const liveA = applyTombstones(a.board, tombstones);
+  const liveB = applyTombstones(b.board, tombstones);
+  const finalBoard = applyTombstones(mergeBoards(liveA, liveB), tombstones);
+  const manualAuthority = reconcileManualSettlementAuthority(finalBoard, now);
+  const board = reconcileActionShotHomes(manualAuthority);
   return { board, tombstones };
 }
 
@@ -413,13 +724,16 @@ export function stampChanges(
       changed = true;
     const frags = t.frags.map((f) => {
       const pf = p?.frags.find((x) => x.id === f.id);
+      if (
+        prevFragHome.has(f.id) &&
+        prevFragHome.get(f.id) !== nextFragHome.get(f.id)
+      ) {
+        changed = true;
+        return stamp(f);
+      }
       if (!pf) {
         changed = true;
         return fresh(f);
-      }
-      if (prevFragHome.get(f.id) !== nextFragHome.get(f.id)) {
-        changed = true;
-        return stamp(f);
       }
       if (same(pf, f)) return f;
       changed = true;
@@ -445,6 +759,36 @@ export function stampChanges(
   for (const f of prevFragHome.keys())
     if (!nextFragHome.has(f))
       tombstones.push({ kind: "frag", id: f, deletedAt: now });
+  const routingTopology = { actions, threads, intentions };
+  const existingRetirements = mergeRoutingRetirements(
+    prev.routingRetirements ?? [],
+    next.routingRetirements ?? [],
+    now,
+  );
+  const existingRetirementSlots = new Set(existingRetirements.map(routingSlot));
+  const manualRetirements = [
+    ...(prev.routingSettlements ?? []),
+    ...(next.routingSettlements ?? []),
+  ].filter((record) =>
+    record.settledBy === "manual" &&
+    safeAuthorityCoordinate(record.captureId) &&
+    safeAuthorityCoordinate(record.pendingId) &&
+    Number.isSafeInteger(record.revision) && record.revision > 0 &&
+    (
+      !existingRetirementSlots.has(routingSlot(record)) ||
+      !record.artifacts.some((artifact) => settlementArtifactExists(routingTopology, artifact))
+    )
+  ).map((record) => ({
+    captureId: record.captureId,
+    pendingId: record.pendingId,
+    revision: record.revision,
+    retiredAt: now,
+  }));
+  const routingRetirements = mergeRoutingRetirements(
+    existingRetirements,
+    manualRetirements,
+    now,
+  );
 
   return {
     board: {
@@ -457,6 +801,10 @@ export function stampChanges(
       corrections: next.corrections,
       wraps: next.wraps,
       completions: next.completions,
+      routingSettlements: (next.routingSettlements ?? []).filter((record) =>
+        record.artifacts.some((artifact) => settlementArtifactExists(routingTopology, artifact))
+      ),
+      routingRetirements,
       profile,
     },
     tombstones,

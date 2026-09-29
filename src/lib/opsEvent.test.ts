@@ -8,6 +8,8 @@ import {
   countBucket,
   latencyBucket,
   opsEvent,
+  routingStageEvent,
+  routingValidationEvent,
 } from "./opsEvent.server";
 
 describe("fixed-schema operational events", () => {
@@ -113,5 +115,94 @@ describe("fixed-schema operational events", () => {
       count: "not_measured",
     });
     expect(JSON.stringify(info.mock.calls)).not.toContain(secret);
+  });
+
+  it("emits routing validation diagnostics only from fixed codes and counts", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    routingValidationEvent({
+      attempt: 2,
+      failureCodes: ["SOURCE_NOT_ACCOUNTED", "NON_THOUGHT_DESTINATION"],
+      itemCount: 3,
+      destinationCount: 3,
+      newThreadCount: 0,
+      sourceCharacterCount: 259,
+      accountedSourceCharacterCount: 257,
+      matchingPrefixCharacterCount: 71,
+      matchingSuffixCharacterCount: 96,
+    });
+
+    expect(info).toHaveBeenCalledExactlyOnceWith("[capture-routing-validation]", {
+      attempt: 2,
+      failureCodes: ["SOURCE_NOT_ACCOUNTED", "NON_THOUGHT_DESTINATION"],
+      itemCount: 3,
+      destinationCount: 3,
+      newThreadCount: 0,
+      sourceCharacterCount: 259,
+      accountedSourceCharacterCount: 257,
+      matchingPrefixCharacterCount: 71,
+      matchingSuffixCharacterCount: 96,
+    });
+  });
+
+  it("drops routing diagnostics containing unapproved prose or counts", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const secret = "private provider prose";
+    const valid = {
+      attempt: 1,
+      failureCodes: ["MALFORMED_PLAN"],
+      itemCount: null,
+      destinationCount: null,
+      newThreadCount: null,
+      sourceCharacterCount: 20,
+      accountedSourceCharacterCount: null,
+      matchingPrefixCharacterCount: null,
+      matchingSuffixCharacterCount: null,
+    };
+
+    routingValidationEvent({ ...valid, failureCodes: [secret] } as never);
+    routingValidationEvent({ ...valid, itemCount: secret } as never);
+
+    expect(info).not.toHaveBeenCalled();
+  });
+
+  it("emits only allowlisted routing stage, provider tier, result, and fixed code", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    routingStageEvent({
+      stage: "destination_adjudication",
+      providerTier: "groq-2",
+      result: "rejected",
+      code: "SOURCE_PARTITION_INVALID",
+      itemCount: 5,
+      decisionCount: 1,
+    });
+
+    expect(info).toHaveBeenCalledExactlyOnceWith("[capture-routing-stage]", {
+      stage: "destination_adjudication",
+      providerTier: "groq-2",
+      result: "rejected",
+      code: "SOURCE_PARTITION_INVALID",
+      itemCount: 5,
+      decisionCount: 1,
+    });
+  });
+
+  it("drops routing stage diagnostics containing prose or unknown dimensions", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const valid = {
+      stage: "action_identity",
+      providerTier: "cerebras",
+      result: "rejected",
+      code: "COVERAGE_INVALID",
+      itemCount: 2,
+      decisionCount: 1,
+    };
+
+    routingStageEvent({ ...valid, providerTier: "private provider prose" } as never);
+    routingStageEvent({ ...valid, code: "private rejection prose" } as never);
+    routingStageEvent({ ...valid, itemCount: "private count" } as never);
+
+    expect(info).not.toHaveBeenCalled();
   });
 });

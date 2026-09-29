@@ -65,16 +65,57 @@ function response(body) {
   });
 }
 
-test("the checked-in oracle is fixed, synthetic, sequential, and covers the R1 matrix", async () => {
+test("the checked-in planned oracle is fixed, synthetic, sequential, and complete", async () => {
   const pack = JSON.parse(await readFile(new URL("./routing-baseline-cases.json", import.meta.url), "utf8"));
-  assert.equal(pack.cases.length, 11);
+  assert.equal(pack.cases.length, 12);
   assert.equal(pack.initialBoard.threads.length, 31);
   assert.doesNotThrow(() => assertCasePack(pack, { requireFullCoverage: true }));
-  assert.deepEqual(pack.cases.find((item) => item.id === "two-existing-techtutor-retake").expected.destinations,
+  assert.deepEqual(pack.cases.find((item) => item.id === "two-existing-techtutor-retake").expected.requiredThreadIds,
     ["thread-techtutor", "thread-retake"]);
-  assert.deepEqual(pack.cases.find((item) => item.id === "three-existing-capture-ovid-rest").expected.destinations,
+  assert.deepEqual(pack.cases.find((item) => item.id === "three-existing-capture-ovid-rest").expected.requiredThreadIds,
     ["thread-capture", "thread-ovid", "thread-rest-day"]);
+  for (const item of pack.cases) {
+    assert.ok(Array.isArray(item.expected.requiredThreadIds));
+    assert.ok(Array.isArray(item.expected.forbiddenThreadIds));
+    assert.ok(Array.isArray(item.expected.newThreads));
+    assert.ok(Array.isArray(item.expected.expectedActions));
+    assert.ok(Array.isArray(item.expected.structuredDeadlines));
+    assert.ok(Array.isArray(item.expected.forbiddenDuplicates));
+  }
+  assert.equal(pack.cases.at(-1).execution, "malformed-provider-fixture");
+  assert.equal(pack.cases.at(-1).expected.fallback, "pending");
   assert.equal(JSON.stringify(pack).includes("/Users/"), false);
+});
+
+test("the owner-accepted R1 recovery matrix remains mandatory beside planned routing", async () => {
+  const pack = JSON.parse(await readFile(new URL("./routing-recovery-cases.json", import.meta.url), "utf8"));
+  assert.equal(pack.revision, "r1-owner-accepted-recovery-v2");
+  assert.equal(pack.mode, "recovery");
+  assert.equal(pack.cases.length, 11);
+  assert.deepEqual(pack.cases.map((item) => item.id), [
+    "single-existing-techtutor",
+    "two-existing-techtutor-retake",
+    "three-existing-capture-ovid-rest",
+    "existing-capture-plus-new-garden",
+    "unrelated-atlas-name-trap",
+    "garden-paraphrase-reuse",
+    "short-retake-reuse",
+    "long-multi-topic-existing",
+    "capture-thinking-with-actions",
+    "clear-intention",
+    "garden-duplicate-resistance",
+  ]);
+  assert.doesNotThrow(() => assertCasePack(pack, { requireRecoveryCoverage: true }));
+});
+
+test("the full pack rejects deadlines without a declared Action expectation", async () => {
+  const pack = JSON.parse(await readFile(new URL("./routing-baseline-cases.json", import.meta.url), "utf8"));
+  const changed = structuredClone(pack);
+  changed.cases[8].expected.structuredDeadlines[0].actionId = "missing-action";
+  assert.throws(
+    () => assertCasePack(changed, { requireFullCoverage: true }),
+    /structured deadline/i,
+  );
 });
 
 test("request context exactly reuses production thread briefs at 31 threads", () => {
@@ -87,6 +128,17 @@ test("request context exactly reuses production thread briefs at 31 threads", ()
   }));
   const board = { ...seedBoard(), threads };
   assert.deepEqual(requestFor(board, cases[0]).threads, threadBriefs(threads));
+});
+
+test("recovery requests keep the accepted legacy route while planned requests opt into plans", () => {
+  const item = cases[0];
+  const recovery = requestFor(seedBoard(), item, { planned: false });
+  assert.equal("routingPlanVersion" in recovery, false);
+  assert.equal("captureId" in recovery, false);
+  assert.equal("actions" in recovery, false);
+  const planned = requestFor(seedBoard(), item);
+  assert.equal(planned.routingPlanVersion, 1);
+  assert.equal(planned.captureId, "acceptance:reuse-alpha");
 });
 
 test("a semantically wrong new destination cannot satisfy a created token positionally", async () => {
@@ -119,6 +171,95 @@ test("a wrong new share cannot satisfy a plausible new Thread name", async () =>
     }),
   });
   assert.deepEqual(result.runs[0].reasonCodes, ["NEW_DESTINATION_SHARE_MISMATCH"]);
+});
+
+test("semantic term matching accepts ordinary plurals without matching lexical neighbors", async () => {
+  const pluralItem = {
+    id: "plural-subject",
+    covers: [],
+    raw: "Lanterns guide the winter walks.",
+    expected: { destinations: ["thread-alpha"], kinds: ["thread"], actions: { min: 0, max: 0 } },
+    destinationExpectations: {
+      "thread-alpha": { shareIncludesAll: [["lantern"]], shareExcludes: ["article"] },
+    },
+  };
+  const plural = await runSequentialBaseline({
+    target: parseTarget([]),
+    casePack: { revision: "plural-regression", initialBoard: seedBoard(), cases: [pluralItem] },
+    fetchImpl: async () => response({
+      kind: "thread",
+      actions: [],
+      threadId: "thread-alpha",
+      threadName: null,
+      primaryText: "Lanterns guide the winter walks.",
+      also: [],
+    }),
+  });
+  assert.deepEqual(plural.runs[0].reasonCodes, ["PASS"]);
+
+  const neighborItem = {
+    ...pluralItem,
+    id: "lexical-neighbor",
+    raw: "An article describes archival methods.",
+    destinationExpectations: {
+      "thread-alpha": { shareIncludesAll: [["article"]], shareExcludes: ["art"] },
+    },
+  };
+  const neighbor = await runSequentialBaseline({
+    target: parseTarget([]),
+    casePack: { revision: "neighbor-regression", initialBoard: seedBoard(), cases: [neighborItem] },
+    fetchImpl: async () => response({
+      kind: "thread",
+      actions: [],
+      threadId: "thread-alpha",
+      threadName: null,
+      primaryText: "An article describes archival methods.",
+      also: [],
+    }),
+  });
+  assert.deepEqual(neighbor.runs[0].reasonCodes, ["PASS"]);
+});
+
+test("the exact existing-plus-new fixture oracle accepts owned shares and rejects boundary bleed", async () => {
+  const pack = JSON.parse(await readFile(new URL("./routing-baseline-cases.json", import.meta.url), "utf8"));
+  const item = pack.cases.find((candidate) => candidate.id === "existing-capture-plus-new-garden");
+  assert.ok(item);
+  const fixturePack = { revision: "existing-plus-new-regression", initialBoard: pack.initialBoard, cases: [item] };
+  const correct = await runSequentialBaseline({
+    target: parseTarget([]),
+    casePack: fixturePack,
+    fetchImpl: async () => response({
+      kind: "thread",
+      actions: [],
+      threadId: "thread-capture",
+      threadName: null,
+      primaryText: "Capture search should keep local matches visible while it finds a supported answer.",
+      also: [{
+        text: "A separate idea to develop is a small rooftop pollinator garden with wind-tolerant herbs and native flowers in lightweight planters.",
+        threadId: null,
+        threadName: "Rooftop pollinator garden",
+      }],
+    }),
+  });
+  assert.deepEqual(correct.runs[0].reasonCodes, ["PASS"]);
+
+  const bleeding = await runSequentialBaseline({
+    target: parseTarget([]),
+    casePack: fixturePack,
+    fetchImpl: async () => response({
+      kind: "thread",
+      actions: [],
+      threadId: "thread-capture",
+      threadName: null,
+      primaryText: "Capture search should keep local matches visible while it finds a supported answer.",
+      also: [{
+        text: "Capture search should keep local matches visible. A separate rooftop pollinator garden.",
+        threadId: null,
+        threadName: "Rooftop pollinator garden",
+      }],
+    }),
+  });
+  assert.deepEqual(bleeding.runs[0].reasonCodes, ["NEW_DESTINATION_SHARE_MISMATCH"]);
 });
 
 test("swapped shares between correct existing Thread ids fail", async () => {
@@ -299,6 +440,173 @@ test("oracle compares exact destination sets, kinds, action counts, and duplicat
   ]);
 });
 
+test("oracle enforces expected Action meaning and per-Action structured deadlines", async () => {
+  const item = {
+    id: "dated-action",
+    covers: [],
+    raw: "Send the synthetic note tomorrow.",
+    expected: {
+      destinations: [],
+      kinds: ["action"],
+      actions: { min: 1, max: 1 },
+      requiredThreadIds: [], forbiddenThreadIds: [], newThreads: [], forbiddenDuplicates: [],
+      expectedActions: [{ id: "send-note", includesAll: [["send"], ["synthetic", "note"], ["tomorrow"]] }],
+      structuredDeadlines: [{ actionId: "send-note", relative: "tomorrow" }],
+    },
+    destinationExpectations: {},
+  };
+  const fixedNow = new Date("2026-09-26T12:00:00Z").getTime();
+  const run = async (body) => runSequentialBaseline({
+    target: parseTarget([]),
+    casePack: { revision: "test", initialBoard: seedBoard(), cases: [item] },
+    fetchImpl: async () => response(body),
+    now: () => fixedNow,
+  });
+
+  const wrongMeaning = await run({
+    kind: "action",
+    actions: ["Inspect the synthetic note tomorrow"],
+    actionDetails: [{
+      text: "Inspect the synthetic note tomorrow",
+      due: "2026-09-27",
+      source: "Send the synthetic note tomorrow.",
+    }],
+  });
+  assert.deepEqual(wrongMeaning.runs[0].reasonCodes.sort(), ["EXPECTED_ACTION_MISSING", "STRUCTURED_DEADLINE_MISMATCH"]);
+
+  const wrongDue = await run({
+    kind: "action", actions: ["Send the synthetic note tomorrow"], actionDetails: [{ text: "Send the synthetic note tomorrow", due: "2026-09-28" }],
+  });
+  assert.deepEqual(wrongDue.runs[0].reasonCodes, ["STRUCTURED_DEADLINE_MISMATCH"]);
+
+  const valid = await run({
+    kind: "action", actions: ["Send the synthetic note tomorrow"], actionDetails: [{ text: "Send the synthetic note tomorrow", due: "2026-09-27" }],
+  });
+  assert.equal(valid.runs[0].pass, true);
+});
+
+test("planned oracle judges owned Action source, deadlines, and Thread shares independently", async () => {
+  const item = {
+    id: "bread-and-meteors",
+    covers: [],
+    raw: "The bread notebook should compare cold-proof aroma. The meteor log needs clearer cloud-cover marks. Photograph the next sourdough loaf tomorrow. Export the meteor chart next Friday.",
+    expected: {
+      destinations: ["thread-bread", "thread-meteors"],
+      kinds: ["both"],
+      actions: { min: 1, max: 2 },
+      requiredThreadIds: ["thread-bread", "thread-meteors"],
+      forbiddenThreadIds: [], newThreads: [], forbiddenDuplicates: [],
+      expectedActions: [
+        { id: "photo-loaf", includesAll: [["photograph"], ["sourdough"], ["loaf"]] },
+        { id: "export-chart", includesAll: [["export"], ["meteor"], ["chart"]] },
+      ],
+      structuredDeadlines: [
+        { actionId: "photo-loaf", relative: "tomorrow" },
+        { actionId: "export-chart", relative: "next-friday" },
+      ],
+    },
+    destinationExpectations: {
+      "thread-bread": {
+        shareIncludesAll: [["bread"], ["cold-proof", "aroma"]],
+        shareExcludes: ["meteor", "photograph", "tomorrow"],
+      },
+      "thread-meteors": {
+        shareIncludesAll: [["meteor"], ["cloud-cover", "marks"]],
+        shareExcludes: ["bread", "export", "friday"],
+      },
+    },
+  };
+  const board = {
+    ...seedBoard(),
+    threads: [
+      { id: "thread-bread", name: "Bread notebook", summary: "Bread fermentation experiments.", frags: [] },
+      { id: "thread-meteors", name: "Meteor log", summary: "Meteor observation design.", frags: [] },
+    ],
+  };
+  const fixedNow = new Date("2026-09-26T12:00:00Z").getTime();
+  const base = {
+    planned: true,
+    kind: "both",
+    actions: ["Photograph loaf", "Export chart"],
+    actionDetails: [
+      {
+        text: "Photograph loaf",
+        due: "2026-09-27",
+        source: "Photograph the next sourdough loaf tomorrow. ",
+      },
+      {
+        text: "Export chart",
+        due: "2026-10-02",
+        source: "Export the meteor chart next Friday.",
+      },
+    ],
+    threadId: "thread-bread",
+    threadName: null,
+    primaryText: "The bread notebook should compare cold-proof aroma.",
+    also: [{
+      text: "The meteor log needs clearer cloud-cover marks.",
+      threadId: "thread-meteors",
+      threadName: null,
+    }],
+  };
+  const run = async (body) => runSequentialBaseline({
+    target: parseTarget([]),
+    casePack: { revision: "planned-owned-source", initialBoard: board, cases: [item] },
+    fetchImpl: async () => response(body),
+    now: () => fixedNow,
+  });
+
+  const valid = await run(base);
+  assert.deepEqual(valid.runs[0].reasonCodes, ["PASS"]);
+
+  const missingAction = await run({
+    ...base,
+    actions: base.actions.slice(0, 1),
+    actionDetails: base.actionDetails.slice(0, 1),
+    also: [{
+      ...base.also[0],
+      text: `${base.also[0].text} Export the meteor chart next Friday.`,
+    }],
+  });
+  assert.ok(missingAction.runs[0].reasonCodes.includes("EXPECTED_ACTION_MISSING"));
+  assert.ok(missingAction.runs[0].reasonCodes.includes("STRUCTURED_DEADLINE_MISMATCH"));
+  assert.ok(missingAction.runs[0].reasonCodes.includes("DESTINATION_SHARE_MISMATCH"));
+
+  const missingDeadline = await run({
+    ...base,
+    actionDetails: base.actionDetails.map((detail, index) =>
+      index === 0 ? { ...detail, due: null } : detail
+    ),
+  });
+  assert.deepEqual(missingDeadline.runs[0].reasonCodes, ["STRUCTURED_DEADLINE_MISMATCH"]);
+
+  const topicLeak = await run({
+    ...base,
+    primaryText: `${base.primaryText} ${base.also[0].text}`,
+  });
+  assert.deepEqual(topicLeak.runs[0].reasonCodes, ["DESTINATION_SHARE_MISMATCH"]);
+});
+
+test("fixture-only malformed response case cannot be mistaken for a live semantic pass", async () => {
+  let calls = 0;
+  const item = {
+    id: "malformed",
+    covers: [],
+    execution: "malformed-provider-fixture",
+    raw: "Synthetic malformed input.",
+    expected: { destinations: [], kinds: ["pending"], actions: { min: 0, max: 0 } },
+    destinationExpectations: {},
+  };
+  const result = await runSequentialBaseline({
+    target: parseTarget([]),
+    casePack: { revision: "test", initialBoard: seedBoard(), cases: [item] },
+    fetchImpl: async () => { calls++; return response({}); },
+  });
+  assert.equal(calls, 0);
+  assert.equal(result.runs[0].pass, false);
+  assert.deepEqual(result.runs[0].reasonCodes, ["SOURCE_FIXTURE_REQUIRED"]);
+});
+
 test("artifact sanitizer preserves fixed raw inputs but excludes response prose and errors", () => {
   const artifact = buildArtifact({
     target: parseTarget([]),
@@ -328,7 +636,7 @@ test("artifact sanitizer preserves fixed raw inputs but excludes response prose 
   assert.match(serialized, /fixture-provider/);
   assert.doesNotMatch(serialized, /PRIVATE_RESPONSE|SECRET_ERROR/);
   assert.equal(artifact.cases[0].observed.shares[0].text, "A synthetic note for Alpha.");
-  assert.equal(artifact.schemaVersion, 2);
+  assert.equal(artifact.schemaVersion, 3);
 });
 
 test("baseline comparison detects a previously passing case regression", () => {

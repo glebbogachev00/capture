@@ -24,16 +24,13 @@ const view = fs.readFileSync(
 
 describe("landing an intention", () => {
   it("a new capture retires the previous receipt", () => {
-    /* Persistence cuts both ways: the receipt must survive long enough to
-       read, and must NOT survive the next capture starting — a stale
-       "Landed in X" over words still being sorted misreports the board,
-       and anything waiting on .landed as a finished-signal fires early. */
-    const sortStarts = [...hook.matchAll(/setBusy\("Sorting"\)/g)];
-    expect(sortStarts.length).toBeGreaterThanOrEqual(2);
-    for (const m of sortStarts) {
-      const before = hook.slice(Math.max(0, m.index - 700), m.index);
-      expect(before).toMatch(/receiptWindow\.current!\.retire\(\)/);
-    }
+    /* Local persistence starts the capture now; inference no longer owns an
+       app-wide busy state. The old receipt must still retire before staging. */
+    const intake = hook.indexOf("const staged = stagePlannedRoutingIntake");
+    expect(intake).toBeGreaterThan(0);
+    const before = hook.slice(Math.max(0, intake - 1200), intake);
+    expect(before).toMatch(/receiptWindow\.current!\.retire\(\)/);
+    expect(before).not.toMatch(/setBusy\("Sorting"\)/);
   });
 
   it("the receipt's clock lives in ONE place, and every site goes through it", () => {

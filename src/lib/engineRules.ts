@@ -18,11 +18,18 @@ export function todayLine(): string {
   return `Today is ${day}, ${date}.\n`;
 }
 
+export const RELATIVE_DUE_RULE =
+  'For relative dates, "tomorrow" means the next local calendar day, including across month or year boundaries. ' +
+  'A relative weekday phrase means the next calendar occurrence of that weekday strictly after today. ' +
+  'If today is that weekday, use the date seven days later. Before returning a weekday deadline, ' +
+  'verify that the resolved ISO date falls on the named weekday.\n';
+
 export const DUE_RULE =
   '\nIf the capture names a deadline of its own — "before Friday", "by the 28th", ' +
   '"tomorrow morning" — resolve it against today\'s date and return it in "due" ' +
-  'as an ISO date (add a time only when one was actually said). Return null when ' +
-  'no date is stated. Do NOT invent a deadline for something merely urgent-sounding, ' +
+  'as an ISO date (add a time only when one was actually said). ' +
+  RELATIVE_DUE_RULE +
+  'Return null when no date is stated. Do NOT invent a deadline for something merely urgent-sounding, ' +
   'and do not treat a date that is part of the subject ("the 1998 recording") as a ' +
   "deadline.\n";
 

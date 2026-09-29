@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Board } from "./model";
+import { semanticThreads } from "./threadBrief";
 
 export const RECALL_MAX_SOURCES = 12;
 export const RECALL_MAX_SOURCE_CHARS = 1500;
@@ -146,7 +147,7 @@ export function recallSources(board: Board, question: string): RecallSource[] {
     if (!clipped.text) return;
     sources.push({ ...source, id, title: source.title.trim().slice(0, 160), ...clipped });
   };
-  for (const thread of board.threads) {
+  for (const thread of semanticThreads(board.threads)) {
     for (const frag of thread.frags) {
       if (frag.unsorted) continue;
       add({ kind: "thread", title: thread.name, text: frag.text, at: frag.at,

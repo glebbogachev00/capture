@@ -1,0 +1,193 @@
+import { describe, expect, it, vi } from "vitest";
+import type { SortResult } from "./boardOps";
+import {
+  CorrectionRelevanceAdjudicationError,
+  adjudicatePlannedCorrectionRelevance,
+  generatePlannedCorrectionRelevanceCandidate,
+  requiresPlannedCorrectionRelevance,
+  type CorrectionRelevanceAdjudication,
+  type PlannedCorrectionEvidence,
+} from "./plannedCorrectionRelevance";
+import type { PlannedRoutingPlan, RoutingPlanContext } from "./plannedRouting";
+
+const recovery: SortResult = {
+  clean: "synthetic", kind: "thread", title: "Synthetic", actions: [], primaryActions: [],
+  shelfLife: "keep", due: null, threadId: "capture", threadName: null,
+  primaryText: null, also: [],
+};
+const threads = [
+  { id: "capture", name: "Capture filing", about: "Capture filing, ownership, and retrieval." },
+  { id: "retake", name: "Retake workflow", about: "Video review, playback, markers, and editing." },
+  { id: "atlas-deploy", name: "Atlas deployment", about: "Software release operations for Atlas." },
+  { id: "orchids", name: "Orchid notebook", about: "Orchid roots, bark mixes, and flowering observations." },
+];
+const context = (raw: string): RoutingPlanContext => ({
+  captureId: "correction-relevance", raw, threads, actions: [],
+  recovery: { ...recovery, clean: raw }, now: 1,
+});
+const thought = (id: string, source: string, threadId = "retake") => ({
+  id, source, kind: "developing_thought" as const, action: null, due: null, ownerId: null,
+  destinations: [{ type: "existing" as const, threadId }], duplicateActionId: null,
+  unresolved: false, ambiguity: null,
+});
+const action = (id: string, source: string) => ({
+  id, source, kind: "action" as const, action: source, due: null, ownerId: null,
+  destinations: [], duplicateActionId: null, unresolved: false, ambiguity: null,
+});
+const plan = (...items: PlannedRoutingPlan["items"]): PlannedRoutingPlan => ({ items, newThreads: [] });
+const corrections: PlannedCorrectionEvidence[] = [
+  {
+    correctionId: "correction:capture-handoff",
+    capture: "The ship handoff needs a clearer owner before Capture goes out.",
+    destinationThreadId: "capture",
+  },
+  {
+    correctionId: "correction:retake-markers",
+    capture: "Marker loading should not interrupt Retake playback review.",
+    destinationThreadId: "retake",
+  },
+];
+const output = (...decisions: CorrectionRelevanceAdjudication["decisions"]): CorrectionRelevanceAdjudication => ({ decisions });
+const none = (itemId: string) => ({ itemId, outcome: "none" as const, applicableCorrectionIds: [], destinationThreadId: null });
+const apply = (itemId: string, ids: string[], destinationThreadId: string) => ({
+  itemId, outcome: "apply" as const, applicableCorrectionIds: ids, destinationThreadId,
+});
+const unresolved = (itemId: string, ids: string[]) => ({
+  itemId, outcome: "unresolved" as const, applicableCorrectionIds: ids, destinationThreadId: null,
+});
+
+describe("model-owned correction relevance", () => {
+  it.each([
+    [
+      "the exact unseen P6 paraphrase",
+      "The final release passage should make the ownership transfer obvious without adding another control.",
+    ],
+    [
+      "a cross-domain paraphrase",
+      "Before the greenhouse trial is published, the transfer from observer to recorder should name one unmistakable owner.",
+    ],
+  ])("applies a model-declared applicable correction for %s", async (_label, raw) => {
+    const proposed = plan(thought("subject", raw, "atlas-deploy"));
+    const result = await adjudicatePlannedCorrectionRelevance({
+      plan: proposed, context: context(raw), corrections,
+      generate: vi.fn().mockResolvedValue(output(apply("subject", ["correction:capture-handoff"], "capture"))),
+    });
+    expect(result.items[0].destinations).toEqual([{ type: "existing", threadId: "capture" }]);
+  });
+
+  it.each([
+    ["token overlap", "The Retake release handoff feels slow while marker caches rebuild."],
+    ["unrelated same-name trap", "Atlas the rescue puppy relaxes after one calm training success."],
+  ])("honors a model-declared nonmatch for %s", async (_label, raw) => {
+    const proposed = plan(thought("subject", raw, "retake"));
+    await expect(adjudicatePlannedCorrectionRelevance({
+      plan: proposed, context: context(raw), corrections,
+      generate: vi.fn().mockResolvedValue(output(none("subject"))),
+    })).resolves.toEqual(proposed);
+  });
+
+  it("requires an explicit unresolved no-override decision for applicable conflicting corrections", async () => {
+    const raw = "The final handoff should make ownership unmistakable.";
+    const conflicting = [
+      corrections[0],
+      { ...corrections[0], correctionId: "correction:other-owner", destinationThreadId: "retake" },
+    ];
+    const proposed = plan(thought("subject", raw, "atlas-deploy"));
+    const result = await adjudicatePlannedCorrectionRelevance({
+      plan: proposed, context: context(raw), corrections: conflicting,
+      generate: vi.fn().mockResolvedValue(output(unresolved("subject", conflicting.map((item) => item.correctionId)))),
+    });
+    expect(result).toEqual(proposed);
+  });
+
+  it("handles multiple thoughts and multiple corrections exhaustively", async () => {
+    const first = "The transfer paragraph needs one clear owner. ";
+    const second = "Retake marker loading should preserve smooth playback.";
+    const proposed = plan(thought("handoff", first), thought("markers", second, "capture"));
+    const result = await adjudicatePlannedCorrectionRelevance({
+      plan: proposed, context: context(first + second), corrections,
+      generate: vi.fn().mockResolvedValue(output(
+        apply("handoff", [corrections[0].correctionId], "capture"),
+        apply("markers", [corrections[1].correctionId], "retake"),
+      )),
+    });
+    expect(result.items.map((item) => item.destinations)).toEqual([
+      [{ type: "existing", threadId: "capture" }],
+      [{ type: "existing", threadId: "retake" }],
+    ]);
+  });
+
+  it.each([
+    ["missing item", output()],
+    ["unknown item", output(none("missing"))],
+    ["duplicate item", output(none("subject"), none("subject"))],
+    ["unknown correction", output(apply("subject", ["correction:missing"], "capture"))],
+    ["unknown destination", output(apply("subject", [corrections[0].correctionId], "missing"))],
+    ["destination disagrees with correction", output(apply("subject", [corrections[0].correctionId], "retake"))],
+    ["conflicting applicable corrections forced to apply", output(apply("subject", [corrections[0].correctionId, corrections[1].correctionId], "capture"))],
+    ["unresolved without a destination conflict", output(unresolved("subject", [corrections[0].correctionId]))],
+  ])("fails closed on %s", async (_label, generated) => {
+    const raw = "One exact thought.";
+    await expect(adjudicatePlannedCorrectionRelevance({
+      plan: plan(thought("subject", raw)), context: context(raw), corrections,
+      generate: vi.fn().mockResolvedValue(generated),
+    })).rejects.toBeInstanceOf(CorrectionRelevanceAdjudicationError);
+  });
+
+  it("changes only the declared thought destination and preserves every source and field byte-for-byte", async () => {
+    const first = "The handoff needs an obvious owner. ";
+    const second = "Send the release note.";
+    const proposed = plan(thought("subject", first, "atlas-deploy"), action("send", second));
+    const snapshot = structuredClone(proposed);
+    const result = await adjudicatePlannedCorrectionRelevance({
+      plan: proposed, context: context(first + second), corrections,
+      generate: vi.fn().mockResolvedValue(output(apply("subject", [corrections[0].correctionId], "capture"))),
+    });
+    expect(result.items[0]).toEqual({ ...snapshot.items[0], destinations: [{ type: "existing", threadId: "capture" }] });
+    expect(result.items[1]).toEqual(snapshot.items[1]);
+    expect(result.items.map((item) => item.source).join("")).toBe(first + second);
+    expect(proposed).toEqual(snapshot);
+  });
+
+  it("preserves provider and timeout failures for route-owned fallback", async () => {
+    const raw = "One exact thought.";
+    for (const failure of [new Error("provider failed"), new DOMException("timed out", "AbortError")]) {
+      await expect(adjudicatePlannedCorrectionRelevance({
+        plan: plan(thought("subject", raw)), context: context(raw), corrections,
+        generate: () => Promise.reject(failure),
+      })).rejects.toBe(failure);
+    }
+  });
+
+  it("is stable under repeated invocation", async () => {
+    const raw = "The transfer paragraph needs one clear owner.";
+    const initial = plan(thought("subject", raw, "atlas-deploy"));
+    const first = await adjudicatePlannedCorrectionRelevance({
+      plan: initial, context: context(raw), corrections,
+      generate: vi.fn().mockResolvedValue(output(apply("subject", [corrections[0].correctionId], "capture"))),
+    });
+    const second = await adjudicatePlannedCorrectionRelevance({
+      plan: first, context: context(raw), corrections,
+      generate: vi.fn().mockResolvedValue(output(apply("subject", [corrections[0].correctionId], "capture"))),
+    });
+    expect(second).toEqual(first);
+  });
+
+  it("runs only when both valid corrections and resolved developing thoughts exist", () => {
+    const raw = "One exact thought.";
+    expect(requiresPlannedCorrectionRelevance(plan(thought("subject", raw)), corrections)).toBe(true);
+    expect(requiresPlannedCorrectionRelevance(plan(thought("subject", raw)), [])).toBe(false);
+    expect(requiresPlannedCorrectionRelevance(plan(action("act", raw)), corrections)).toBe(false);
+    expect(requiresPlannedCorrectionRelevance(plan({ ...thought("pending", raw), unresolved: true, destinations: [] }), corrections)).toBe(false);
+  });
+
+  it.each(["cerebras", "openrouter"])("uses provider-compatible json_object generation for %s", async (name) => {
+    const generateObject = vi.fn();
+    vi.doMock("ai", () => ({ generateObject }));
+    generateObject.mockResolvedValue({ object: output(none("subject")) });
+    await generatePlannedCorrectionRelevanceCandidate({
+      tier: { name, model: "mock-model" as never }, prompt: "synthetic", abortSignal: new AbortController().signal,
+    });
+    expect(generateObject).toHaveBeenCalledWith(expect.objectContaining({ output: "no-schema", maxRetries: 0 }));
+  });
+});

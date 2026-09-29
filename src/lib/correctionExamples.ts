@@ -13,7 +13,7 @@ export type CorrectionExample = {
   lastAt: number;
 };
 
-type ThreadChoice = { id: string; name: string };
+type ThreadChoice = { id: string; name: string; temporaryName?: boolean };
 
 /**
  * Turn explicit routing corrections into bounded model context.
@@ -28,7 +28,10 @@ export function deriveCorrectionExamples(
   disabledKeys: string[] = [],
 ): CorrectionExample[] {
   const disabled = new Set(disabledKeys);
-  const existingThreads = new Map(threads.map((thread) => [thread.id, thread.name]));
+  const existingThreads = new Map(
+    threads.filter((thread) => !thread.temporaryName)
+      .map((thread) => [thread.id, thread.name]),
+  );
 
   const visible = corrections
     .filter((correction) => correction.accepted && correction.routing)

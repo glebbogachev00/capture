@@ -6,8 +6,13 @@
 
 /* The ledger types live in their own module; model re-exports them so the
    whole board can be described from one import. */
-import type { CaptureEntry, CorrectionEntry } from "./ledger";
-export type { CaptureEntry, CorrectionEntry };
+import type {
+  CaptureEntry,
+  CorrectionEntry,
+  RoutingRetirement,
+  RoutingSettlement,
+} from "./ledger";
+export type { CaptureEntry, CorrectionEntry, RoutingRetirement, RoutingSettlement };
 import type { DayWrap } from "./wrap";
 export type { DayWrap };
 import {  } from "./storage";
@@ -63,6 +68,11 @@ export type Action = {
   fadedAt?: number | null;
   /** Landed here raw because no model would answer. Can be sorted later. */
   unsorted?: boolean;
+  /** Monotonic version of a pending envelope. Delayed model results must name
+      the exact revision they observed before they may settle it. */
+  pendingRevision?: number;
+  /** Explicit user command retained while this envelope awaits sorting. */
+  pendingForce?: "action" | "thread" | "intention";
   /** The thread this action arrived with — a "both" capture, a taken next
       step, an extraction. The seam between the two halves of one moment,
       kept so the thread can show what it gave rise to. */
@@ -94,6 +104,9 @@ export type Frag = {
 export type Thread = {
   id: string;
   name: string;
+  /** A mechanical offline placeholder. It is visible for rename but must not
+      become semantic routing context. */
+  temporaryName?: boolean;
   summary: string;
   frags: Frag[];
   /** A little identity for a thread being built out: "tone:sage" or
@@ -208,6 +221,13 @@ export type Board = {
       user accepted, dismissed, renamed, or corrected — the signal a bounded
       personal model will learn from. Same sync semantics as the ledger. */
   corrections: CorrectionEntry[];
+  /** Conflict authority retained for as long as one of its governed routing
+      artifacts remains live, independently of the rolling history ledger. */
+  routingSettlements?: RoutingSettlement[];
+  /** Time-bounded manual-winner tombstones for exact routing slots. These
+      survive deletion of the last manual artifact so a stale automatic result
+      cannot resurrect merely because live authority was pruned. */
+  routingRetirements?: RoutingRetirement[];
   /** One frozen entry per day that was worth wrapping. Written once and
       never rewritten, so a past day cannot change under you; same
       append-only sync semantics as the ledgers. Optional because boards
@@ -261,6 +281,8 @@ export const EMPTY: Board = {
   principles: SEED_PRINCIPLES,
   ledger: [],
   corrections: [],
+  routingSettlements: [],
+  routingRetirements: [],
 };
 
 type PendingMigration = Pick<Board, "actions" | "threads" | "ledger">;
@@ -408,6 +430,8 @@ export function hydrate(raw: Partial<Board> | null | undefined): Board {
         typeof e.proposalKind === "string" &&
         typeof e.accepted === "boolean"
     ),
+    routingSettlements: raw?.routingSettlements ?? [],
+    routingRetirements: raw?.routingRetirements ?? [],
     /* Same shape of guard as the ledgers. Anything hydrate does not name is
        dropped from every board that passes through it — including the hub
        round trip — so a new Board field that is not listed here silently

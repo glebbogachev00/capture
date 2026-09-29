@@ -2,15 +2,54 @@ import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { preferredFor } from "@/lib/routing";
 import { explain } from "@/lib/aiError";
-import { captionPrompt, mergeCaption, tidyCaption } from "@/lib/caption";
+import { captionPrompt, mergeCaptions, tidyCaption } from "@/lib/caption";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
-import { sanitizeProviderError, visionChain, withFallback } from "@/lib/providers";
-import { opsEvent } from "@/lib/opsEvent.server";
-import { DUE_RULE, ROUTING_RULE, todayLine } from "@/lib/engineRules";
+import {
+  sanitizeProviderError,
+  visionChain,
+  withFallback,
+} from "@/lib/providers";
+import {
+  opsEvent,
+  routingStageEvent,
+  routingValidationEvent,
+  type RoutingProviderTier,
+  type RoutingStageCode,
+} from "@/lib/opsEvent.server";
+import { DUE_RULE, RELATIVE_DUE_RULE, ROUTING_RULE, todayLine } from "@/lib/engineRules";
 import { enforceStandingDecision, reconcileSorted } from "@/lib/sort";
 import { scheduleJevThreadRerankShadow } from "@/lib/jevThreadRerank";
+import {
+  PlannedRoutingPlanSchema,
+  RoutingPlanCandidateValidationError,
+  compileRoutingPlan,
+  planRoutingWithRetry,
+  type PlannedSortResult,
+  type RoutingPlanFailure,
+} from "@/lib/plannedRouting";
+import { generatePlannedRoutingCandidate } from "@/lib/plannedRoutingGeneration";
+import {
+  DeadlineAdjudicationError,
+  adjudicatePlannedDeadlines,
+  generatePlannedDeadlineAdjudicationCandidate,
+  requiresPlannedDeadlineAdjudication,
+} from "@/lib/plannedDeadlineAdjudication";
+import {
+  DestinationOwnershipAdjudicationError,
+  adjudicatePlannedDestinationOwnership,
+  generatePlannedDestinationOwnershipCandidate,
+  requiresPlannedDestinationOwnership,
+} from "@/lib/plannedDestinationOwnership";
+import {
+  ActionIdentityAdjudicationError,
+  adjudicatePlannedActionIdentity,
+  generatePlannedActionIdentityCandidate,
+  requiresPlannedActionIdentity,
+} from "@/lib/plannedActionIdentity";
+import { SEMANTIC_KIND_BOUNDARY } from "@/lib/semanticKindBoundary";
+import { parseSortImageDataUrl } from "@/lib/sortImageDataUrl";
 
 /**
  * The sorting engine.
@@ -22,6 +61,20 @@ import { scheduleJevThreadRerankShadow } from "@/lib/jevThreadRerank";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+const PLANNING_DEADLINE_MS = 55_000;
+
+function routingStageCode(error: unknown, signal: AbortSignal): RoutingStageCode {
+  if (signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+    return "ABORTED";
+  }
+  if (error instanceof DeadlineAdjudicationError) return error.code;
+  if (error instanceof DestinationOwnershipAdjudicationError) return error.code;
+  if (error instanceof ActionIdentityAdjudicationError) return error.code;
+  if (error instanceof RoutingPlanCandidateValidationError) {
+    return error.failures[0]?.code ?? "FINAL_PLAN_INVALID";
+  }
+  return "PROVIDER_OR_OUTPUT_FAILURE";
+}
 
 const Sorted = z.object({
   clean: z
@@ -29,12 +82,16 @@ const Sorted = z.object({
     .describe(
       "the capture in the person's own words, tidied — an EDIT, never a rewrite. Fix punctuation, casing and obvious transcription garble; drop pure filler (um, uh, false starts). APPLY spoken self-corrections instead of transcribing them: when the speaker corrects themselves — 'not AI, just Retake', 'I mean Tuesday' — keep only the corrected reading. Collapse restarts: a clause said twice while the speaker found their footing appears once. 'For Retake AI, I need to check, not AI, just Retake. I need to check how it works right now' becomes 'For Retake, I need to check how it works right now.' The exact words are always preserved in the person's record, so removing dictation noise loses nothing — but the line between noise and content is sacred: never swap in synonyms, never summarise, never drop an idea, never change a number, a name or a claim, and when unsure whether something is a correction or a new thought, keep both. Break it into short paragraphs separated by a blank line, one per distinct idea. Use '- ' bullets on their own lines wherever they are listing things. Never return one unbroken block."
     ),
-  kind: z.enum(["action", "thread", "intention", "both"]),
+  kind: z.enum(["action", "thread", "intention", "both"]).describe(
+    "semantic role of the capture. " + SEMANTIC_KIND_BOUNDARY +
+    "An Intention is a chosen way of being or living; a Thread is for observation or inquiry—one or more observations or inquiries that develop thought; an Action is a concrete commitment with a source-stated finish line. " +
+    "Use thread for developing thought, action for one or more Actions, and both only when developing thought and a concrete Action coexist. Destination topology does not decide the semantic role."
+  ),
   title: z.string().describe("max 6 words"),
   actions: z
     .array(z.string())
     .describe(
-      "imperative one-line items, each readable on its own a week later with none of the capture around it — the subject goes IN the line, never left behind as \"this\" or \"that\""
+      "imperative one-line items for discrete requested or committed acts with a source-stated finish line. Apply the completion test: after doing it once, could the person mark it done from the result named in the capture? If not, it is not an Action. An ongoing scope for noticing, tracking, documenting, learning, or understanding belongs in a Thread even when the person says they want to keep doing it. Each item must be readable on its own a week later with none of the capture around it — the subject goes IN the line, never left behind as \"this\" or \"that\""
     ),
   primaryActions: z.array(z.string()).describe(
     "Exact strings from actions that are genuinely about the PRIMARY thread subject; empty for unrelated tasks. Co-occurrence in one capture is NOT a relationship. With annual pricing thinking plus a Stripe webhook retry bug and call mom this weekend, primaryActions is empty. Select only a pricing task if one is also present. Never include tasks about an also subject."
@@ -131,10 +188,18 @@ function ago(at: number | undefined, now: number): string {
 }
 
 const Body = z.object({
+  /** Planned clients assign this before any model call. */
+  captureId: z.string().min(1).max(100).optional(),
   raw: z.string(),
   threads: z.array(
     z.object({ id: z.string(), name: z.string(), about: z.string() })
   ),
+  /** Versioned planning seam used only after the client durably saves intake. */
+  routingPlanVersion: z.literal(1).optional(),
+  /** Existing open Actions are candidates only for dedicated identity adjudication. */
+  actions: z.array(
+    z.object({ id: z.string().min(1).max(100), text: z.string().min(1).max(500) })
+  ).max(400).optional(),
   /** How this person has filed their recent captures — pattern context. */
   recent: z.array(Recent).max(40).optional(),
   /** The set this capture plausibly continues, decided by the client from
@@ -147,17 +212,44 @@ const Body = z.object({
   correctionExamples: z.array(CorrectionExample).max(5).optional(),
   /** The destination is already decided; only the wording is in question. */
   force: z.enum(["action", "thread", "intention"]).optional(),
-  /** One attached photo (data URL), captioned by a vision tier before the
-      sort so an image capture files by what it actually shows. Bounded to
-      the size a shrunk photo actually reaches — a hand-built multi-megabyte
-      payload has no business in a sort request. */
-  imgs: z.array(z.string().max(2_000_000)).max(1).optional(),
+  /** Up to four attached photos (data URLs), each captioned independently by
+      a one-image vision request before the sort. Bounded to the size a shrunk
+      photo actually reaches — a hand-built multi-megabyte payload has no
+      business in a sort request. */
+  imgs: z.array(z.string()).max(4).optional(),
 });
 
 /**
+ * Revalidate correction evidence against the request's current destination
+ * inventory and project it onto the semantic fields only. Display metadata
+ * such as the visible `text` label never becomes model context, and stale or
+ * malformed Thread choices quietly stop influencing a sort.
+ */
+function boundedCorrectionEvidence(
+  body: z.infer<typeof Body>,
+): NonNullable<z.infer<typeof Body>["correctionExamples"]> {
+  const liveThreads = new Map(body.threads.map((thread) => [thread.id, thread.name]));
+  const evidence: NonNullable<z.infer<typeof Body>["correctionExamples"]> = [];
+  for (const example of body.correctionExamples ?? []) {
+    if (example.kind !== "thread") {
+      evidence.push({ capture: example.capture, kind: example.kind });
+      continue;
+    }
+    if (!example.threadId || !liveThreads.has(example.threadId)) continue;
+    evidence.push({
+      capture: example.capture,
+      kind: "thread",
+      threadId: example.threadId,
+      threadName: liveThreads.get(example.threadId),
+    });
+  }
+  return evidence;
+}
+
+/**
  * Ask a vision-capable tier what a photo shows, in one sentence. Returns null
- * when no vision tier is configured or the call fails — the caption is a
- * bonus layer and the sort must never depend on it.
+ * when no vision tier is configured or the call fails; callers treat that as
+ * incomplete image evidence and leave the capture pending.
  */
 async function captionImage(dataUrl: string): Promise<string | null> {
   if (!visionChain().length) return null;
@@ -181,7 +273,7 @@ async function captionImage(dataUrl: string): Promise<string | null> {
     });
     return tidyCaption(value.text);
   } catch {
-    /* Vision is a bonus; a spent tier never blocks a capture. */
+    /* Missing image meaning is represented as null and fails the sort closed. */
     return null;
   }
 }
@@ -267,6 +359,8 @@ function seriesContext(series: z.infer<typeof Body>["series"]) {
 const SUBJECT_CHECK = `
 Final subject check:
 - Identify each independent subject before choosing its destination. Shared timing, an attachment, or a general label such as "improvements" does not make subjects related.
+- Destination shape does not change semantic kind. If every independent claim is developing thought, set the top-level kind to thread whether the shares reuse existing Threads, need new Thread names, or mix both.
+- Distinguish what the speaker wants an external subject or project to become from how the speaker chooses to live. The former is developing thought; only the latter is an Intention.
 - For kind "thread" or "both", separate subjects that have different goals and would be read in different places. A website's navbar and a posting strategy are separate subjects. Navbar spacing and its mobile menu are parts of one navigation goal.
 - The absence of existing threads does not change the subject count. Reuse a fitting thread for each share. Otherwise give that share its own short threadName. Never invent an umbrella name to avoid a split.
 - For a split, put the primary subject's words in primaryText and each other subject's words in also. Each share needs a valid threadId or a specific threadName. Name the primary thread only for its share, not the whole capture.
@@ -348,23 +442,26 @@ function prompt(
     '\nRaw capture:\n"""' +
     (raw || "(image only)") +
     '"""\n\n' +
+    SEMANTIC_KIND_BOUNDARY +
     'There are four kinds. The reference examples below are your guide for telling them apart.\n' +
-    'kind = "action" when this is a task, errand, reminder, or decision that gets closed out — there is a concrete thing to do. Fill "actions" with every distinct, explicit task actually being asked for as an imperative one-line item, and leave the thread fields null. Never pad the list: if only one thing is genuinely doable, return one.\n' +
-    'kind = "thread" when this is thinking, worldbuilding, an idea being developed, or material that accumulates — a subject to keep adding to, with no single thing to do. Set threadId if one clearly fits, otherwise invent a short threadName. Leave "actions" empty.\n' +
-    'kind = "intention" only when they are declaring something they are calling into being about themselves or their life — a state they want to be living in, spoken as a wish, a resolve, or an aspiration. "I want to wake at 6 and actually feel rested", "I live somewhere with light", "I stop taking on work I resent". These are about how they want to be, not tasks to close or subjects to think about. Set "actions" and "primaryActions" to []. Leave the thread fields null.\n' +
+    'kind = "action" when this is a task, errand, reminder, or decision that gets closed out — there is a concrete thing to do and a source-stated finish line. Before returning any Action, apply the completion test: after doing it once, could the person mark it done from the result named in the capture? A discrete requested act such as an errand, delivery, booking, message, or purchase is still an action when phrased as a want. Fill "actions" with every distinct, explicit task actually being asked for as an imperative one-line item, and leave the thread fields null. Never pad the list: if only one thing is genuinely doable, return one.\n' +
+    'kind = "thread" when this is thinking, worldbuilding, an idea being developed, or material that accumulates — a subject to keep adding to, with no single thing to do. A desire to keep noticing, tracking, documenting, learning about, or understanding a subject is developing thought, not a task, unless the person separately requests a discrete act that can be completed. The words "I want to" do not decide the kind; distinguish what they want to keep exploring from what they have actually asked to do. Set threadId if one clearly fits, otherwise invent a short threadName. Leave "actions" empty.\n' +
+    'kind = "intention" only when they are declaring a chosen way of being or living — what they are calling into being about themselves or their life. A concise present-tense declaration can be an Intention without wish, hope, or future-tense language. Decide by semantic role rather than sentence form: values, permissions, personal stances, and self-directed resolves choose how to live; reporting or questioning what is true is developing thought for a Thread. A concrete commitment with a source-stated finish line is an Action. For an Intention, set "actions" and "primaryActions" to [] and leave every Thread destination null.\n' +
     'An intention is the ESSENCE of a state — a sentence or two. A detailed PLAN is not one, however much it is spoken in "I will": the moment the words carry schedules, counts, quantities, exercise lists, or step-by-step structure ("I will run twice a week for 30 to 40 minutes, do push-ups, dips and pull-ups, walk 10,000 steps, keep to 500-600 calories, and organize my schedule around it"), the person is DESIGNING a routine, not declaring a state — that is thinking that accumulates, so it is a thread. Filing a plan as an intention throws the plan away: the intention keeps only a condensed sentence, and paragraphs of specifics the person dictated are lost. When a capture holds both a true declaration AND its detailed plan, the plan is the primary thing — file it as the thread, and let the person declare the one-line intention separately if they want it. Length is the cheapest tell: multiple paragraphs are almost never an intention.\n' +
     'kind = "both" when the capture carries a line of thinking the person is still turning over AND a concrete task to close — typically a deadline or a commitment to someone. Filing it as only an action throws the thinking away; filing it as only a thread buries the task. So do both: fill "actions" with the task(s), set threadId (route to an existing thread when one fits) or threadName for the thinking, and "primaryText" holds only the thinking for the thread fragment while "clean" retains the whole capture, including every task. The tell is a capture where one part is a decision/idea/deliberation and another part is a dated or promised thing to do. Do not use "both" for pure thinking with no committed task (that is a thread), or for a plain task with no real deliberation around it (that is an action).\nA capture can hold MORE than two kinds — a task, a question being turned over, and a rule the person is setting for themselves, all in one breath. There is no shape for three, and the failure to avoid is quietly picking one and dropping the rest: a capture that plainly contains something to do must never come back as a bare thread with an empty actions list. When a capture holds a task and anything else at all, use "both", put every task in "actions", and let "primaryText" carry the primary thinking and any standing rule about that subject. Keep every subject and task in "clean", with other thinking subjects in "also", so nothing the person said loses its place.\n' +
     'Every action must stand on its own. A week from now it will be read as a single line on a list, with none of the words around it — so it has to carry its own subject. Take the context from the capture and put it IN the action: not "Have engineering handle this" but "Have engineering handle the verification workflow"; not "Create workflows" but "Create workflows so agents ship without me reviewing"; not "Fix this bug" but "Fix the mis-sorting into the wrong threads". If you cannot tell what an action refers to when you read it alone, it is not finished.\n' +
     'This is the most common way the list goes wrong: a sentence gets chopped at its clauses and each fragment becomes an item. "Stop over building. Create workflows and have engineering handle this. Do all the verification and checks." is ONE thought about how to work — at most one action, carrying the whole of what it asks. Three stubs from three clauses is a worse answer than one complete line.\n' +
     'Do NOT choose "intention" for an ordinary errand phrased as a want ("I want to get milk" is an action), or for thinking about a topic ("been reading about sleep cycles" is a thread).\n' +
     'Before you answer "thread", run one check: did they commit to something? A person named, a day or date, a thing owed or promised — "I told Marc I would demo it on Friday", "I said I would send Jen the outline by Monday". The sentence around it can be pure deliberation and the commitment still stands: it does not stop being a promise because they were thinking out loud when they made it. If the capture holds one, the answer is "both", never "thread" — filing it as a thread loses the promise, which is the one part with a deadline on it. A date that belongs to the SUBJECT rather than to them ("the deadline for the grant is in March", "their launch is next week") is not a commitment and does not make it "both".\n' +
-    'The check runs on what they SAID, never on what you would advise. An observation is not a decision: "the 4am waking seems worse after late screens" notices a pattern, it does not commit anyone to cutting screens, and turning it into "Try cutting screens before bed" invents a task they never set. Noticing what might help is thinking. If the only action you can produce is one you thought of, there is no action and the answer is "thread".\n' +
-    'Be conservative, not eager. Only make an action when the capture actually asks for something to be done; never invent a task that is not there. When genuinely torn between thread and intention, choose "thread". When a capture is only thinking, choose "thread" — but when it clearly holds both a keepable line of thinking and a concrete task, "both" is right, so nothing is lost on either side.\n\n' +
+    'The check runs on what they SAID, never on what you would advise. An observation is not a decision: "the 4am waking seems worse after late screens" notices a pattern, it does not commit anyone to cutting screens, and turning it into "Try cutting screens before bed" invents a task they never set. Noticing what might help is thinking. An ongoing investigation, note-keeping scope, or hoped-for understanding has no finish line and stays thinking; never turn what the person wants to keep learning, observing, or documenting over time into a fabricated task. A grammatically imperative rewrite does not make it completable. If the only action you can produce is one you thought of, there is no action and the answer is "thread".\n' +
+    'Be conservative, not eager. Only make an action when the capture actually asks for something to be done; never invent a task that is not there. Do not treat a concise declaration as ambiguous merely because it is present tense; decide whether it chooses a way of living or reports something to explore. Only when that semantic role remains genuinely ambiguous choose "thread". When a capture is only thinking, choose "thread" — but when it clearly holds both a keepable line of thinking and a concrete task, "both" is right, so nothing is lost on either side.\n\n' +
     'Reference examples:\n' +
     '- "gotta call the dentist tomorrow and remember to buy milk on the way home" → kind "action", actions: ["Call the dentist tomorrow", "Buy milk on the way home"]\n' +
     '- "booked the flights, remember to sort out travel insurance" → kind "action", actions: ["Sort out travel insurance"]\n' +
     '- "was thinking about whether this project is worth continuing, weighing pros and cons" → kind "thread", threadName: "Is this project worth continuing"\n' +
     '- "been reading about sleep cycles and how they affect productivity" → kind "thread", threadName: "Sleep cycles and productivity"\n' +
+    '- "the seedlings recover faster after shade; I want to keep notes on which corners stay coolest through summer" → kind "thread", actions: [], threadName: "Seedling shade observations". Keeping an open-ended record defines what accumulates in the Thread; it is not a finishable Action.\n' +
+    '- "I want to write down today\'s nursery temperatures and send the list to Mina" → kind "action", actions: ["Write down today\'s nursery temperatures", "Send Mina the nursery temperature list"]. These have stated one-time results and can be completed.\n' +
     '- "still turning over whether to leave the agency, the dread every sunday is real — anyway I need to tell them my decision on the raise by friday" → kind "both", actions: ["Tell the agency my decision on the raise by Friday"], threadName: "Whether to leave the agency"\n' +
     '- "not sure the podcast idea is worth it, keep circling it, anyway I promised jen I\'d send her the draft outline by monday" → kind "both", actions: ["Send Jen the draft outline by Monday"], threadName: "Is the podcast idea worth it"\n' +
     '- "I want to wake up at 6 and actually feel rested" → kind "intention"\n' +
@@ -379,7 +476,88 @@ function prompt(
   );
 }
 
+function immutableIndexedSourceLedger(raw: string): string {
+  const characters = [...raw];
+  const chunks: string[] = [];
+  const chunkSize = 48;
+  for (let start = 0; start < characters.length; start += chunkSize) {
+    const end = Math.min(start + chunkSize, characters.length);
+    chunks.push(`[${start},${end}) ${JSON.stringify(characters.slice(start, end).join(""))}`);
+  }
+  const exactCharacters = characters.flatMap((character, characterOffset) => {
+    if (/^[\p{L}\p{N} ]$/u.test(character)) return [];
+    const codePoint = character.codePointAt(0)!;
+    return [
+      `[${characterOffset}] U+${codePoint.toString(16).toUpperCase().padStart(4, "0")} ${JSON.stringify(character)}`,
+    ];
+  });
+  return (
+    "Immutable indexed source ledger (Unicode code-point offsets; this is the copying authority):\n" +
+    "Contiguous exact chunks:\n" + chunks.join("\n") + "\n" +
+    "Exact punctuation, controls, marks, and symbols:\n" +
+    (exactCharacters.length ? exactCharacters.join("\n") : "(none)") + "\n"
+  );
+}
+
+function routingPlanPrompt(
+  raw: string,
+  body: z.infer<typeof Body>,
+  failures: RoutingPlanFailure[],
+  initialInterpretation: z.infer<typeof Sorted>,
+): string {
+  const retryGuidance = [
+    failures.some((failure) => failure.code === "NON_THOUGHT_DESTINATION")
+      ? "\nNON_THOUGHT_DESTINATION repair: Re-evaluate each affected item's semantic kind from the original source before changing its fields. Do not mechanically clear destinations just to satisfy validation: if the destinations reflect genuine developing thought, correct the kind; if the source truly requests or commits a discrete act, keep action and clear destinations. The model still owns that semantic decision.\n"
+      : "",
+    failures.some((failure) => failure.code === "DEADLINE_NOT_ATOMIC")
+      ? "\nDEADLINE_NOT_ATOMIC repair: A due-bearing Action must be represented by two adjacent owned items, not by putting due on the Action. Action.due must be null. Give the Action item only its exact non-deadline source slice. Add one deadline item whose ownerId is that Action id, whose due is the resolved ISO date, and whose source is the exact complete due-bearing source—including the relative phrase, punctuation, and adjacent separator whitespace—represented once. Do not change the Action meaning, invent timing, merge sibling deadlines, or attach one deadline to several Actions.\n"
+      : "",
+    failures.some((failure) => failure.code === "SOURCE_NOT_ACCOUNTED")
+      ? "\nSOURCE_NOT_ACCOUNTED repair: Rebuild the ordered source boundaries against the original string. Concatenating item.source must reproduce it exactly. Each sourceMismatch identifies the first differing Unicode character: at characterOffset, copy expected exactly instead of received; null means that side ended. Then audit the complete remainder, not only that character. Preserve every non-whitespace character unchanged and in order; never paraphrase, normalize punctuation, infer, overlap, or reorder. Preserve separator whitespace exactly once, assigning whitespace between adjacent items to the end of the preceding item.source.\n"
+      : "",
+  ].join("");
+  const feedback = failures.length
+    ? `\nThe previous plan was rejected for these exact integrity failures:\n${JSON.stringify(failures)}\n${retryGuidance}Return a corrected complete plan.\n`
+    : "";
+  return (
+    todayLine() +
+    RELATIVE_DUE_RULE +
+    "PLANNED ROUTING STAGE\n" +
+    "Convert the initial interpretation into one complete source-owned plan. Check it against the original source and stable Thread/correction context. It is advisory, not authoritative: correct an interpretation only when the original source supports the change. Do not write to the board.\n\n" +
+    `Initial interpretation (advisory):\n${JSON.stringify(initialInterpretation)}\n\n` +
+    `Original source (preserve it exactly):\n${JSON.stringify(raw)}\n\n` +
+    immutableIndexedSourceLedger(raw) +
+    "Copy item.source only from the indexed ledger. Do not substitute typographic punctuation, normalize Unicode, or retype from memory. Use the chunk ranges and exact-character checkpoints to audit every boundary before returning.\n\n" +
+    SEMANTIC_KIND_BOUNDARY +
+    `Every existing Thread, with its complete bounded routing brief:\n${JSON.stringify(body.threads)}\n\n` +
+    "Existing open Actions are intentionally withheld from this mixed-purpose stage. Extract every explicit Action and decide every item kind from the source itself. A later dedicated stage receives the open Actions and may decide only whether each proposed Action is new or names an existing Action id.\n\n" +
+    `Bounded full-capture correction examples:\n${JSON.stringify(body.correctionExamples ?? [])}\n` +
+    "\nComplete JSON contract (return exactly one JSON object; no prose, Markdown, code fences, or extra keys):\n" +
+    "- Root: { items, newThreads }. items is an array of 1..30 AtomicItem objects. newThreads is an array of 0..8 NewThread objects.\n" +
+    "- AtomicItem has exactly: id, source, kind, action, due, ownerId, destinations, duplicateActionId, unresolved, ambiguity.\n" +
+    "- id: non-empty string, max 80 characters. source: non-empty string, max 8000 characters.\n" +
+    "- kind is exactly one of: action, developing_thought, intention, supporting_context, deadline. An action is a direct instruction or commitment to a discrete task. An imperative addresses the person implicitly and does not need a named actor or date. An ordinary review or check can finish once. A developing_thought is an observation, question, explanation, design idea, option under consideration, or problem the person is trying to understand. Thinking about what might work does not adopt a personal stance. An intention is an explicitly adopted lasting personal principle, identity, or way of living; it is not an ordinary intention to investigate, compare, decide, or change a project. Classify the whole semantic thought before dividing its source for bookkeeping. Keep its reasoning and qualifying clauses with that thought unless the source actually changes subject or speech act. Use supporting_context and deadline only for source owned by another item.\n" +
+    "- action: null or non-empty string max 500. due: null or non-empty string max 40. ownerId: null or non-empty string max 80. Action.due must always be null. Only a separate deadline item may carry due, as a resolved ISO date, and its ownerId must name exactly one Action item.\n" +
+    "- destinations: array of 0..4 Destination objects. Each Destination is exactly either { type: \"existing\", threadId: <non-empty string max 100> } or { type: \"new\", newThreadKey: <non-empty string max 80> }. Only developing_thought items may carry destinations; all other kinds must use an empty destinations array. Preserve the semantic kind and clear destinations when the source is not developing thought; use developing_thought only when that is what the source means.\n" +
+    "- duplicateActionId is reserved for a later dedicated Action identity adjudicator. Always return null. unresolved: boolean. ambiguity: null or non-empty string max 240.\n" +
+    "- NewThread has exactly: key, name, closestExistingThreadId, whyNew. key: non-empty string max 80. name: non-empty string max 100. closestExistingThreadId: null or non-empty string max 100. Use null only when the supplied Threads list is empty. Otherwise, choose the closest supplied Thread id, even if it is unrelated, and explain the difference. whyNew: non-empty string max 300.\n" +
+    (body.force
+      ? `Explicit user destination command: ${body.force}. This is authoritative, not an advisory classification. All primary items must use ${body.force === "thread" ? "developing_thought" : body.force}; supporting_context may only support that kind, and deadline items are allowed only for an Action command. Preserve the exact source; do not substitute another kind.\n`
+      : "") +
+    feedback +
+    "\nBuild the plan in this order:\n" +
+    "1. Partition the original source into meaningful items in original order. Keep one idea and its explanation, uncertainty, purpose, or qualifications together. Do not turn each sentence or subordinate clause into a separate item. Split when the source changes subject or speech act, or when a deadline must name its Action owner. An indivisible shared thought may have several destinations. Copy exact source slices, including punctuation and separator whitespace, so concatenating every item.source equals the original byte for byte. Never omit, overlap, reorder, paraphrase, or invent source.\n" +
+    "2. Independently decide the final item kinds and explicit Actions from the original source. Every explicit Action must appear exactly once and no source may be turned into an invented Action. Do not suppress or reclassify an explicit Action because it may duplicate an open Action; Action identity is decided only after this plan is validated. For every due-bearing Action, create an Action item with due null plus one separate deadline item. The deadline ownerId names that Action; deadline.due carries the resolved ISO date; deadline.source owns the exact complete deadline wording from the original, including a relative phrase such as a day reference, its punctuation, and its one share of adjacent whitespace. Do not leave deadline wording inside the Action source, copy it into two sources, combine deadlines for different Actions, or put due on the Action. Supporting context points to the item it supports.\n" +
+    "3. Route each developing thought to every Thread where it genuinely belongs. Multiple destinations are normal. Use all Thread briefs above; do not choose by word overlap. If no existing Thread fits, declare one newThreads entry with the closest existing Thread and a concrete semantic reason it is different. Never propose a paraphrase of an existing Thread.\n" +
+    "4. If an affected source part is genuinely ambiguous, set unresolved true, give a short ambiguity reason, and leave its destinations empty. Never force ambiguity into a Thread. Do not create supporting Actions for an Intention; only explicit Action source may become an Action.\n" +
+    "5. Keep exact existing ids. New Thread keys are request-local. Do not return explanations outside the schema.\n" +
+    "6. Before returning, perform two independent ownership audits. Destination ownership: inspect each developing_thought item by itself. Give it only destinations that own that exact item.source. Another subject elsewhere in the same capture is never evidence for another destination; for independent thoughts, do not copy or union destination sets across items. Action/deadline ownership: inspect each deadline together with its owning Action. Confirm that ownerId names only the intended Action and that due exactly resolves that deadline.source under today's calendar rules. Recompute relative weekdays as the next occurrence strictly after today; do not copy or union dates or owners across sibling Actions."
+  );
+}
+
 export async function POST(request: Request) {
+  const planningDeadlineAt = Date.now() + PLANNING_DEADLINE_MS;
+  const planningAbortSignal = AbortSignal.timeout(PLANNING_DEADLINE_MS);
   const authorization = await authorizeManagedAiRequest(request);
   if (authorization instanceof Response) return authorization;
   return withManagedAiAdmission(authorization, async () => {
@@ -398,42 +576,87 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "bad request" }, { status: 400 });
   }
+  body = { ...body, correctionExamples: boundedCorrectionEvidence(body) };
 
   if (!body.raw.trim()) {
     return Response.json({ error: "nothing to sort" }, { status: 400 });
   }
+  if (body.routingPlanVersion === 1 && !body.captureId) {
+    return Response.json({ error: "bad request" }, { status: 400 });
+  }
+  if (body.imgs?.some((source) => !parseSortImageDataUrl(source))) {
+    return Response.json({ error: "bad request" }, { status: 400 });
+  }
+  if (
+    body.routingPlanVersion === 1 &&
+    (body.imgs?.length ||
+      body.raw.length > 20_000 ||
+      body.threads.length > 60 ||
+      body.threads.some((thread) =>
+        thread.id.length > 100 || thread.name.length > 200 || thread.about.length > 1_200
+      ))
+  ) {
+    return Response.json({ error: "bad request" }, { status: 400 });
+  }
 
-  /* A capture that carries a photo is sorted by what it shows, not as an
-     opaque "(image only)". The caption merges into the raw text; when no
-     vision tier is available it stays as it was sent. */
+  /* Providers accept one image at this seam. Interpret each attachment in its
+     own bounded call and preserve attachment order in the sort evidence;
+     never drop extras or ask one caption to invent a combined meaning. */
   let raw = body.raw;
-  if (body.imgs?.[0]) {
-    const caption = await captionImage(body.imgs[0]);
-    if (caption) raw = mergeCaption(body.raw, caption);
+  if (body.imgs?.length) {
+    if (!visionChain().length) {
+      return Response.json({ error: "The sort didn't go through." }, { status: 503 });
+    }
+    const captions = await Promise.all(body.imgs.map(captionImage));
+    if (captions.some((caption) => !caption)) {
+      return Response.json({ error: "The sort didn't go through." }, { status: 503 });
+    }
+    raw = mergeCaptions(body.raw, captions as string[]);
   }
 
   try {
     const { value, via, preferred, fallback, fallbackReason } = await withFallback(async (tier) => {
-      const { object } = await generateObject({
-        model: tier.model,
-        // A spent free tier reports "retry in 26s"; fail fast so the chain
-        // can fall through to the next provider instead of making the user
-        // wait out the backoff.
-        maxRetries: 0,
-        schema: Sorted,
-        temperature: 0,
-        prompt: prompt(
-          raw,
-          body.threads,
-          body.force,
-          body.recent,
-          body.correctionExamples,
-          body.series
-        ),
-        providerOptions: tier.providerOptions,
-      });
-      return object;
-    }, preferredFor("sort"));
+      try {
+        const { object } = await generateObject({
+          model: tier.model,
+          // A spent free tier reports "retry in 26s"; fail fast so the chain
+          // can fall through to the next provider instead of making the user
+          // wait out the backoff.
+          maxRetries: 0,
+          abortSignal: planningAbortSignal,
+          schema: Sorted,
+          temperature: 0,
+          prompt: prompt(
+            raw,
+            body.threads,
+            body.force,
+            body.recent,
+            body.correctionExamples,
+            body.series
+          ),
+          providerOptions: tier.providerOptions,
+        });
+        routingStageEvent({
+          stage: "recovery",
+          providerTier: tier.name as RoutingProviderTier,
+          result: "accepted",
+          code: "SUCCESS",
+          itemCount: null,
+          decisionCount: null,
+        });
+        return object;
+      } catch (error) {
+        routingStageEvent({
+          stage: "recovery",
+          providerTier: tier.name as RoutingProviderTier,
+          result: "rejected",
+          code: routingStageCode(error, planningAbortSignal),
+          itemCount: null,
+          decisionCount: null,
+        });
+        throw error;
+      }
+    }, preferredFor("sort"), { abortSignal: planningAbortSignal });
     /* The user's command outranks the model: when a destination was forced,
        the answer must obey it even if the model drifted. For a thread, the
        model still picks the best existing thread; only the kind and the
@@ -479,7 +702,7 @@ export async function POST(request: Request) {
        Thread because the prompt's uncertainty rule is deliberately
        conservative. Clear durable commitments get one deterministic final
        check; typed commands still outrank it. */
-    const reconciled = reconcileSorted({
+    const recovery = reconcileSorted({
       ...value,
       ...standing,
       // A series override can change the thinking destination. The
@@ -487,6 +710,242 @@ export async function POST(request: Request) {
       primaryActions: standing.threadId === value.threadId && standing.threadName === value.threadName
         ? value.primaryActions : [],
     });
+    /* P3 opts in only after durable local intake. The raw validated plan is
+       returned for pending-only client settlement; the compiled preview stays
+       for evaluation compatibility. Images remain client-owned throughout. */
+    let reconciled: typeof recovery | PlannedSortResult = recovery;
+    let finalVia = via;
+    let finalRouting = { preferred, fallback, fallbackReason };
+    let routingPlan: z.infer<typeof PlannedRoutingPlanSchema> | undefined;
+    if (body.routingPlanVersion === 1) {
+      const planningContext = {
+        captureId: body.captureId!,
+        raw: body.raw,
+        force: body.force,
+        threads: body.threads,
+        actions: body.actions ?? [],
+        recovery,
+        now: Date.now(),
+      };
+      let plannedVia = via;
+      let plannedRouting = finalRouting;
+      const validated = await planRoutingWithRetry(
+        planningContext,
+        async (failures, validateCandidate) => {
+          const remainingMs = planningDeadlineAt - Date.now();
+          if (remainingMs <= 0) throw new Error("planned routing deadline elapsed");
+          const generated = await withFallback(async (tier) => {
+            try {
+              const untrusted = await generatePlannedRoutingCandidate({
+                tier,
+                abortSignal: planningAbortSignal,
+                prompt: routingPlanPrompt(body.raw, body, failures, recovery),
+              });
+              const candidate = validateCandidate!(untrusted);
+              routingStageEvent({
+                stage: "planner",
+                providerTier: tier.name as RoutingProviderTier,
+                result: "accepted",
+                code: "SUCCESS",
+                itemCount: candidate.items.length,
+                decisionCount: null,
+              });
+              return candidate;
+            } catch (error) {
+              routingStageEvent({
+                stage: "planner",
+                providerTier: tier.name as RoutingProviderTier,
+                result: "rejected",
+                code: routingStageCode(error, planningAbortSignal),
+                itemCount: error instanceof RoutingPlanCandidateValidationError &&
+                  error.failures.every((failure) => failure.itemId)
+                  ? new Set(error.failures.map((failure) => failure.itemId)).size
+                  : null,
+                decisionCount: null,
+              });
+              throw error;
+            }
+          }, preferredFor("sort"), { abortSignal: planningAbortSignal });
+          plannedVia = generated.via;
+          plannedRouting = {
+            preferred: generated.preferred,
+            fallback: generated.fallback,
+            fallbackReason: generated.fallbackReason,
+          };
+          return generated.value;
+        },
+        (observation) => {
+          routingValidationEvent(observation);
+        },
+        { validateInsideGenerate: true },
+      );
+      let stagedPlan = validated.plan;
+      if (requiresPlannedDestinationOwnership(stagedPlan)) {
+        const stageInput = stagedPlan;
+        const destinationCount = stageInput.items.filter((item) =>
+          item.kind === "developing_thought" && !item.unresolved
+        ).length;
+        const destinationGenerated = await withFallback(async (tier) => {
+          try {
+            const adjudicated = await adjudicatePlannedDestinationOwnership({
+              plan: stageInput,
+              context: planningContext,
+              correctionExamples: (body.correctionExamples ?? []).flatMap((example) =>
+                example.kind === "thread" && example.threadId
+                  ? [{
+                      capture: example.capture,
+                      threadId: example.threadId,
+                      ...(example.threadName ? { threadName: example.threadName } : {}),
+                    }]
+                  : []
+              ),
+              generate: async (destinationPrompt) => {
+                const remainingMs = planningDeadlineAt - Date.now();
+                if (remainingMs <= 0) throw new Error("planned routing deadline elapsed");
+                return generatePlannedDestinationOwnershipCandidate({
+                  tier,
+                  abortSignal: planningAbortSignal,
+                  prompt: destinationPrompt,
+                });
+              },
+            });
+            routingStageEvent({
+              stage: "destination_adjudication",
+              providerTier: tier.name as RoutingProviderTier,
+              result: "accepted",
+              code: "SUCCESS",
+              itemCount: adjudicated.items.length,
+              decisionCount: destinationCount,
+            });
+            return adjudicated;
+          } catch (error) {
+            routingStageEvent({
+              stage: "destination_adjudication",
+              providerTier: tier.name as RoutingProviderTier,
+              result: "rejected",
+              code: routingStageCode(error, planningAbortSignal),
+              itemCount: stageInput.items.length,
+              decisionCount: destinationCount,
+            });
+            throw error;
+          }
+        }, preferredFor("sort"), { abortSignal: planningAbortSignal });
+        if (destinationGenerated.fallback || !plannedRouting.fallback) {
+          plannedVia = destinationGenerated.via;
+          plannedRouting = {
+            preferred: destinationGenerated.preferred,
+            fallback: destinationGenerated.fallback,
+            fallbackReason: destinationGenerated.fallbackReason,
+          };
+        }
+        stagedPlan = destinationGenerated.value;
+      }
+      if (requiresPlannedActionIdentity(stagedPlan, planningContext)) {
+        const stageInput = stagedPlan;
+        const actionCount = stageInput.items.filter((item) =>
+          item.kind === "action" && item.action && !item.unresolved
+        ).length;
+        const actionGenerated = await withFallback(async (tier) => {
+          try {
+            const adjudicated = await adjudicatePlannedActionIdentity({
+              plan: stageInput,
+              context: planningContext,
+              generate: async (actionPrompt) => {
+                const remainingMs = planningDeadlineAt - Date.now();
+                if (remainingMs <= 0) throw new Error("planned routing deadline elapsed");
+                return generatePlannedActionIdentityCandidate({
+                  tier,
+                  abortSignal: planningAbortSignal,
+                  prompt: actionPrompt,
+                });
+              },
+            });
+            routingStageEvent({
+              stage: "action_identity",
+              providerTier: tier.name as RoutingProviderTier,
+              result: "accepted",
+              code: "SUCCESS",
+              itemCount: adjudicated.items.length,
+              decisionCount: actionCount,
+            });
+            return adjudicated;
+          } catch (error) {
+            routingStageEvent({
+              stage: "action_identity",
+              providerTier: tier.name as RoutingProviderTier,
+              result: "rejected",
+              code: routingStageCode(error, planningAbortSignal),
+              itemCount: stageInput.items.length,
+              decisionCount: actionCount,
+            });
+            throw error;
+          }
+        }, preferredFor("sort"), { abortSignal: planningAbortSignal });
+        if (actionGenerated.fallback || !plannedRouting.fallback) {
+          plannedVia = actionGenerated.via;
+          plannedRouting = {
+            preferred: actionGenerated.preferred,
+            fallback: actionGenerated.fallback,
+            fallbackReason: actionGenerated.fallbackReason,
+          };
+        }
+        stagedPlan = actionGenerated.value;
+      }
+      if (requiresPlannedDeadlineAdjudication(stagedPlan)) {
+        const planningTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const stageInput = stagedPlan;
+        const deadlineGenerated = await withFallback(async (tier) => {
+          try {
+            const adjudicated = await adjudicatePlannedDeadlines({
+              plan: stageInput,
+              context: planningContext,
+              timeZone: planningTimeZone,
+              generate: async (deadlinePrompt) => {
+                const remainingMs = planningDeadlineAt - Date.now();
+                if (remainingMs <= 0) throw new Error("planned routing deadline elapsed");
+                return generatePlannedDeadlineAdjudicationCandidate({
+                  tier,
+                  abortSignal: planningAbortSignal,
+                  prompt: deadlinePrompt,
+                });
+              },
+            });
+            routingStageEvent({
+              stage: "deadline_adjudication",
+              providerTier: tier.name as RoutingProviderTier,
+              result: "accepted",
+              code: "SUCCESS",
+              itemCount: adjudicated.items.length,
+              decisionCount: adjudicated.items.filter((item) => item.kind === "deadline").length,
+            });
+            return adjudicated;
+          } catch (error) {
+            routingStageEvent({
+              stage: "deadline_adjudication",
+              providerTier: tier.name as RoutingProviderTier,
+              result: "rejected",
+              code: routingStageCode(error, planningAbortSignal),
+              itemCount: stageInput.items.length,
+              decisionCount: stageInput.items.filter((item) => item.kind === "deadline").length,
+            });
+            throw error;
+          }
+        }, preferredFor("sort"), { abortSignal: planningAbortSignal });
+        if (deadlineGenerated.fallback || !plannedRouting.fallback) {
+          plannedVia = deadlineGenerated.via;
+          plannedRouting = {
+            preferred: deadlineGenerated.preferred,
+            fallback: deadlineGenerated.fallback,
+            fallbackReason: deadlineGenerated.fallbackReason,
+          };
+        }
+        stagedPlan = deadlineGenerated.value;
+      }
+      routingPlan = stagedPlan;
+      reconciled = compileRoutingPlan(stagedPlan, planningContext);
+      finalVia = plannedVia;
+      finalRouting = plannedRouting;
+    }
     /* Jev is an opt-in shadow only. It receives the already-isolated thinking
        share, never images/history/rules, runs after this response, and cannot
        change the destination. A failed shadow therefore leaves both the
@@ -498,6 +957,7 @@ export async function POST(request: Request) {
           ? reconciled.primaryText?.trim()
           : undefined;
     if (
+      body.routingPlanVersion !== 1 &&
       (reconciled.kind === "thread" || reconciled.kind === "both") &&
       jevCapture
     ) {
@@ -511,8 +971,9 @@ export async function POST(request: Request) {
     return Response.json({
       ...value,
       ...reconciled,
-      via,
-      routing: { preferred, fallback, fallbackReason },
+      ...(routingPlan ? { routingPlan, recovery } : {}),
+      via: finalVia,
+      routing: finalRouting,
     });
   } catch (error) {
     /* AI SDK errors can carry the full request body, including the person's

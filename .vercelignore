@@ -7,6 +7,7 @@
 .next
 .next-*
 outputs
+.integration
 coverage
 
 # Local state and secrets. .env* is already excluded by Vercel, but the lab

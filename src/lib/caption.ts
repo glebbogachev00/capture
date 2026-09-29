@@ -7,9 +7,9 @@
  * sorts the capture with that description in hand — so a photo of a coffee
  * machine files under the coffee thread instead of becoming a mystery.
  *
- * The caption is a bonus layer, never a gate: if no vision tier is
- * configured, or the caption call fails, the sort proceeds exactly as
- * before. Images only ever reach a model when the user attached one.
+ * Image meaning is a gate: if any attached image cannot be interpreted, the
+ * exact capture stays pending rather than being classified from incomplete
+ * evidence. Images only ever reach a model when the user attached one.
  */
 
 /** The one-sentence ask. Kept deliberately small and terse — the cheap tiers
@@ -32,11 +32,72 @@ export function mergeCaption(raw: string, caption: string): string {
   return `${raw}\n\n(Attached photo: ${clean})`;
 }
 
+/** Keep a bounded group of image interpretations separate. Each caption came
+ * from a one-image provider request, so preserving its index avoids pretending
+ * that the vision provider inferred a relationship between attachments. */
+export function mergeCaptions(raw: string, captions: string[]): string {
+  const clean = captions.map((caption) => caption.trim().replace(/\s+/g, " "));
+  if (!clean.length || clean.some((caption) => !caption)) return raw;
+  if (clean.length === 1) return mergeCaption(raw, clean[0]);
+  if (!raw.trim() || raw.trim() === "(image only)") {
+    return `Photos:\n${clean.map((caption, index) =>
+      `- Photo ${index + 1}: ${caption}`).join("\n")}`;
+  }
+  return `${raw}\n\n${clean.map((caption, index) =>
+    `(Attached photo ${index + 1}: ${caption})`).join("\n\n")}`;
+}
+
+const CAPTION_SENTINELS = new Set([
+  "image only",
+  "no caption",
+  "no description",
+  "no caption available",
+  "no description available",
+  "caption unavailable",
+  "description unavailable",
+]);
+
+const WHOLE_RESPONSE_WRAPPERS: ReadonlyArray<readonly [string, string]> = [
+  ["(", ")"],
+  ["[", "]"],
+  ["{", "}"],
+  ["<", ">"],
+  ['"', '"'],
+  ["'", "'"],
+  ["“", "”"],
+  ["‘", "’"],
+  ["*", "*"],
+  ["_", "_"],
+  ["`", "`"],
+];
+
+/** Normalize only mechanical whole-response decoration. This deliberately
+ * does not search inside a real caption: sentinel wording is rejected only
+ * when it is the complete provider response after wrappers and terminal
+ * punctuation are removed. */
+function normalizedCaptionSentinel(text: string): string {
+  let value = text.toLowerCase().trim().replace(/\s+/g, " ");
+  let previous = "";
+  while (value && value !== previous) {
+    previous = value;
+    value = value.replace(/[.!?…,;:—–-]+$/u, "").trim();
+    const wrapper = WHOLE_RESPONSE_WRAPPERS.find(([open, close]) =>
+      value.length >= open.length + close.length &&
+      value.startsWith(open) &&
+      value.endsWith(close)
+    );
+    if (wrapper) {
+      value = value.slice(wrapper[0].length, -wrapper[1].length).trim();
+    }
+  }
+  return value;
+}
+
 /** Trim a model's caption to something the sorter can carry without padding
     the prompt — a sentence, not an essay. */
 export function tidyCaption(text: string): string | null {
   const t = (text || "").trim().replace(/\s+/g, " ");
-  if (!t) return null;
+  if (!t || CAPTION_SENTINELS.has(normalizedCaptionSentinel(t))) return null;
   return t.slice(0, 300);
 }
 
@@ -57,6 +118,6 @@ export function tidyCaption(text: string): string | null {
  */
 export function spokenText(s: string): string {
   return (s || "")
-    .replace(/\n*\(Attached photo:[^)]*\)/g, "")
+    .replace(/\n*\(Attached photo(?: \d+)?:[^)]*\)/g, "")
     .trim();
 }

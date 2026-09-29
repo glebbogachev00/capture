@@ -1,6 +1,20 @@
 import { threadBriefs } from "../src/lib/threadBrief.ts";
 
 const REQUIRED_COVERAGE = new Set([
+  "two-existing",
+  "three-existing",
+  "existing-plus-new",
+  "multiple-threads-plus-actions",
+  "techtutor-retake-regression",
+  "capture-ovid-rest-regression",
+  "paraphrased-duplicate-thread",
+  "paraphrased-duplicate-action",
+  "relative-deadlines",
+  "correction-paraphrase",
+  "correction-word-nonredirect",
+  "malformed-provider-fallback",
+]);
+const RECOVERY_REQUIRED_COVERAGE = new Set([
   "single-existing-reuse",
   "two-existing",
   "three-existing",
@@ -22,15 +36,36 @@ const normalized = (value) => String(value ?? "")
   .toLowerCase()
   .replace(/[^a-z0-9]+/g, " ")
   .trim();
-const includesTerm = (text, term) => normalized(text).includes(normalized(term));
 const regexEscape = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const includesAffirmedTerm = (text, term) => {
-  const source = String(text ?? "").toLowerCase();
+const termPattern = (term) => {
   const words = normalized(term).split(" ").filter(Boolean);
-  if (!words.length) return false;
-  const phrase = words.map(regexEscape).join("[^a-z0-9]+");
-  const match = new RegExp(`\\b${phrase}\\b`, "i").exec(source);
-  if (!match) return false;
+  if (!words.length) return null;
+  const inflected = words.map((word) => {
+    const escaped = regexEscape(word);
+    if (word.length < 3) return escaped;
+    if (/[^aeiou]y$/.test(word)) {
+      return `${regexEscape(word.slice(0, -1))}(?:y|ies)`;
+    }
+    if (/(?:s|x|z|ch|sh)$/.test(word)) return `${escaped}(?:es)?`;
+    return `${escaped}(?:s|es)?`;
+  });
+  return new RegExp(`\\b${inflected.join("[^a-z0-9]+")}\\b`, "i");
+};
+const termMatch = (text, term) => {
+  const pattern = termPattern(term);
+  if (!pattern) return null;
+  const source = String(text ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const match = pattern.exec(source);
+  return match ? { match, source } : null;
+};
+const includesTerm = (text, term) => termMatch(text, term) !== null;
+const includesAffirmedTerm = (text, term) => {
+  const found = termMatch(text, term);
+  if (!found) return false;
+  const { match, source } = found;
   const clause = source.slice(Math.max(
     source.lastIndexOf(".", match.index),
     source.lastIndexOf("!", match.index),
@@ -108,14 +143,20 @@ function validateBoard(board) {
   }
 }
 
-export function assertCasePack(pack, { requireFullCoverage = false } = {}) {
+export function assertCasePack(
+  pack,
+  { requireFullCoverage = false, requireRecoveryCoverage = false } = {},
+) {
   if (!isObject(pack) || typeof pack.revision !== "string" || !pack.revision) {
     throw new Error("case pack needs a revision");
   }
   validateBoard(pack.initialBoard);
   if (!Array.isArray(pack.cases) || pack.cases.length === 0) throw new Error("case pack needs cases");
-  if (requireFullCoverage && (pack.cases.length < 10 || pack.cases.length > 12)) {
-    throw new Error("routing baseline must contain 10–12 cases");
+  if (requireFullCoverage && pack.cases.length !== 12) {
+    throw new Error("planned routing baseline must contain exactly 12 exercises");
+  }
+  if (requireRecoveryCoverage && (pack.mode !== "recovery" || pack.cases.length !== 11)) {
+    throw new Error("owner-accepted recovery baseline must contain its exact 11 cases");
   }
 
   const ids = new Set();
@@ -130,7 +171,11 @@ export function assertCasePack(pack, { requireFullCoverage = false } = {}) {
     if (!Array.isArray(item.covers)) throw new Error(`${item.id}: covers must be an array`);
     item.covers.forEach((label) => coverage.add(label));
     const expected = item.expected;
-    if (!isObject(expected) || !Array.isArray(expected.destinations) || expected.destinations.length === 0 && !expected.kinds?.includes("action") && !expected.kinds?.includes("intention")) {
+    const fixtureOnly = item.execution === "malformed-provider-fixture";
+    if (!isObject(expected) || !Array.isArray(expected.destinations) ||
+      expected.destinations.length === 0 && !expected.kinds?.includes("action") &&
+      !expected.kinds?.includes("intention") && !fixtureOnly &&
+      !(expected.kinds?.includes("pending") && expected.fallback === "pending")) {
       throw new Error(`${item.id}: expected destination set is required for thinking cases`);
     }
     if (new Set(expected.destinations).size !== expected.destinations.length) {
@@ -140,6 +185,41 @@ export function assertCasePack(pack, { requireFullCoverage = false } = {}) {
     if (!isObject(expected.actions) || !Number.isInteger(expected.actions.min) || !Number.isInteger(expected.actions.max)
       || expected.actions.min < 0 || expected.actions.max < expected.actions.min) {
       throw new Error(`${item.id}: expected action bounds are invalid`);
+    }
+    if (requireFullCoverage) {
+      for (const field of [
+        "requiredThreadIds",
+        "forbiddenThreadIds",
+        "newThreads",
+        "expectedActions",
+        "structuredDeadlines",
+        "forbiddenDuplicates",
+      ]) {
+        if (!Array.isArray(expected[field])) throw new Error(`${item.id}: expected.${field} must be an array`);
+      }
+      if (JSON.stringify(sortedUnique(expected.requiredThreadIds)) !==
+        JSON.stringify(sortedUnique(expected.destinations.filter((value) => !value.startsWith("created:"))))) {
+        throw new Error(`${item.id}: requiredThreadIds must name the expected existing destinations`);
+      }
+      const expectedActionIds = new Set();
+      for (const action of expected.expectedActions) {
+        if (!isObject(action) || typeof action.id !== "string" || !action.id || expectedActionIds.has(action.id)
+          || !Array.isArray(action.includesAll) || action.includesAll.length === 0
+          || action.includesAll.some((group) => !Array.isArray(group) || group.length === 0
+            || group.some((term) => typeof term !== "string" || !term.trim()))) {
+          throw new Error(`${item.id}: expected Action expectations are invalid`);
+        }
+        expectedActionIds.add(action.id);
+      }
+      for (const deadline of expected.structuredDeadlines) {
+        if (!isObject(deadline) || !expectedActionIds.has(deadline.actionId)
+          || !["today", "tomorrow", "next-friday"].includes(deadline.relative)) {
+          throw new Error(`${item.id}: structured deadline must reference an expected Action`);
+        }
+      }
+      if (fixtureOnly && expected.fallback !== "pending") {
+        throw new Error(`${item.id}: malformed-provider fixture must expect pending fallback`);
+      }
     }
     const creations = isObject(item.createdDestinations) ? item.createdDestinations : {};
     const destinationExpectations = isObject(item.destinationExpectations) ? item.destinationExpectations : {};
@@ -181,6 +261,10 @@ export function assertCasePack(pack, { requireFullCoverage = false } = {}) {
   if (requireFullCoverage) {
     const missing = [...REQUIRED_COVERAGE].filter((label) => !coverage.has(label));
     if (missing.length) throw new Error(`case pack is missing coverage: ${missing.join(", ")}`);
+  }
+  if (requireRecoveryCoverage) {
+    const missing = [...RECOVERY_REQUIRED_COVERAGE].filter((label) => !coverage.has(label));
+    if (missing.length) throw new Error(`recovery case pack is missing coverage: ${missing.join(", ")}`);
   }
   return true;
 }
@@ -240,14 +324,80 @@ function interpretDestinations(item, result, knownThreadIds) {
   return { canonical, rawDestinations, oracleReasons };
 }
 
-function judge(item, result, interpreted) {
+function judge(item, result, interpreted, at = Date.now()) {
   const reasons = [...new Set(interpreted.oracleReasons ?? [])];
   if (!isObject(result) || typeof result.kind !== "string" || !Array.isArray(result.actions)) {
     return ["INVALID_RESPONSE"];
   }
+  if (item.expected.fallback === "pending") {
+    const items = result.routingPlan?.items;
+    const intact = result.planned === true && Array.isArray(items) && items.length > 0
+      && items.every((part) => part.unresolved === true && part.destinations?.length === 0 && !part.action)
+      && items.map((part) => part.source).join("") === item.raw
+      && Array.isArray(result.unresolved) && result.unresolved.join("") === item.raw
+      && result.actions.length === 0 && interpreted.canonical.length === 0;
+    return intact ? ["PASS"] : ["PENDING_SOURCE_MISMATCH"];
+  }
   if (!item.expected.kinds.includes(result.kind)) reasons.push("KIND_MISMATCH");
   const count = result.actions.length;
   if (count < item.expected.actions.min || count > item.expected.actions.max) reasons.push("ACTION_COUNT_MISMATCH");
+
+  const actionDetail = (index) => {
+    if (!Array.isArray(result.actionDetails)) return undefined;
+    const positional = result.actionDetails[index];
+    if (positional?.text === result.actions[index]) return positional;
+    return result.actionDetails.find((candidate) => candidate?.text === result.actions[index]);
+  };
+  const actionMatches = new Map();
+  for (const expectation of item.expected.expectedActions ?? []) {
+    const index = result.actions.findIndex((action, candidateIndex) => {
+      if ([...actionMatches.values()].includes(candidateIndex)) return false;
+      const detail = actionDetail(candidateIndex);
+      const evidence = result.planned === true
+        ? `${action}\n${typeof detail?.source === "string" ? detail.source : ""}`
+        : action;
+      return expectation.includesAll.every((group) =>
+        group.some((term) => includesAffirmedTerm(evidence, term))
+      );
+    });
+    if (index < 0) reasons.push("EXPECTED_ACTION_MISSING");
+    else actionMatches.set(expectation.id, index);
+  }
+
+  const localDate = (offsetDays) => {
+    const date = new Date(at);
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() + offsetDays);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  };
+  const expectedRelativeDate = (relative) => {
+    if (relative === "today") return localDate(0);
+    if (relative === "tomorrow") return localDate(1);
+    if (relative === "next-friday") {
+      const day = new Date(at).getDay();
+      const offset = (5 - day + 7) % 7 || 7;
+      return localDate(offset);
+    }
+    return null;
+  };
+  for (const deadline of item.expected.structuredDeadlines ?? []) {
+    const actionIndex = actionMatches.get(deadline.actionId);
+    const detail = Number.isInteger(actionIndex) ? actionDetail(actionIndex) : undefined;
+    const expectedDue = expectedRelativeDate(deadline.relative);
+    if (!detail?.due || !expectedDue || !String(detail.due).startsWith(expectedDue)) {
+      reasons.push("STRUCTURED_DEADLINE_MISMATCH");
+    }
+  }
+
+  if ((item.expected.forbiddenThreadIds ?? []).some((id) => interpreted.canonical.includes(id))) {
+    reasons.push("FORBIDDEN_DESTINATION");
+  }
+  for (const duplicate of item.expected.forbiddenDuplicates ?? []) {
+    if (duplicate.kind === "action" && result.actions.length > 0) reasons.push("FORBIDDEN_DUPLICATE");
+    if (duplicate.kind === "thread" && interpreted.canonical.some((value) => value.startsWith("created:"))) {
+      reasons.push("FORBIDDEN_DUPLICATE");
+    }
+  }
   if (new Set(interpreted.canonical).size !== interpreted.canonical.length) reasons.push("DUPLICATE_DESTINATION");
   if ((interpreted.oracleReasons?.length ?? 0) === 0
     && JSON.stringify(sortedUnique(interpreted.canonical)) !== JSON.stringify(sortedUnique(item.expected.destinations))) {
@@ -297,10 +447,18 @@ function applySyntheticResult(board, item, result, interpreted, at) {
   return next;
 }
 
-export function requestFor(board, item) {
+export function requestFor(board, item, { planned = true } = {}) {
   return {
     raw: item.raw,
     threads: threadBriefs(board.threads),
+    ...(planned ? {
+      captureId: `acceptance:${item.id}`,
+      routingPlanVersion: 1,
+      actions: board.actions
+        .filter((action) => !action.done && !action.unsorted && !action.faded)
+        .map((action) => ({ id: action.id, text: action.text })),
+      correctionExamples: item.correctionExamples ?? [],
+    } : {}),
     recent: board.ledger.slice(-20).reverse().map((entry) => ({
       raw: entry.raw,
       kind: entry.kind,
@@ -315,7 +473,26 @@ export async function runSequentialBaseline({ target, casePack, fetchImpl = fetc
   let board = cloneBoard(casePack.initialBoard);
   const runs = [];
   for (const item of casePack.cases) {
-    const requestBody = requestFor(board, item);
+    const requestBody = requestFor(board, item, { planned: casePack.mode !== "recovery" });
+    if (item.execution === "malformed-provider-fixture") {
+      runs.push({
+        id: item.id,
+        inputRaw: item.raw,
+        expected: cloneBoard(item.expected),
+        request: {
+          threads: cloneBoard(requestBody.threads),
+          actions: cloneBoard(requestBody.actions),
+          correctionExamples: cloneBoard(requestBody.correctionExamples),
+        },
+        observed: { destinations: [], shares: [], kind: null, actionsCount: null, actions: [], actionDetails: [] },
+        latencyMs: 0,
+        providerVia: null,
+        httpStatus: null,
+        reasonCodes: ["SOURCE_FIXTURE_REQUIRED"],
+        pass: false,
+      });
+      continue;
+    }
     const started = now();
     let result;
     let status = null;
@@ -340,12 +517,17 @@ export async function runSequentialBaseline({ target, casePack, fetchImpl = fetc
     const latencyMs = Math.max(0, now() - started);
     const knownThreadIds = new Set(board.threads.map((thread) => thread.id));
     const interpreted = result ? interpretDestinations(item, result, knownThreadIds) : { canonical: [], rawDestinations: [] };
-    if (!reasonCodes) reasonCodes = judge(item, result, interpreted);
+    if (!reasonCodes) reasonCodes = judge(item, result, interpreted, started);
     const actionsCount = Array.isArray(result?.actions) ? result.actions.length : null;
     const run = {
       id: item.id,
       inputRaw: item.raw,
       expected: cloneBoard(item.expected),
+      request: {
+        threads: cloneBoard(requestBody.threads),
+        actions: cloneBoard(requestBody.actions),
+        correctionExamples: cloneBoard(requestBody.correctionExamples),
+      },
       observed: {
         destinations: sortedUnique(interpreted.canonical),
         shares: interpreted.canonical.map((destination, index) => ({
@@ -354,6 +536,14 @@ export async function runSequentialBaseline({ target, casePack, fetchImpl = fetc
         })),
         kind: typeof result?.kind === "string" ? result.kind : null,
         actionsCount,
+        actions: Array.isArray(result?.actions) ? result.actions.map(String) : [],
+        actionDetails: Array.isArray(result?.actionDetails)
+          ? result.actionDetails.map((detail) => ({
+              text: String(detail?.text ?? ""),
+              due: typeof detail?.due === "string" ? detail.due : null,
+              source: typeof detail?.source === "string" ? detail.source : "",
+            }))
+          : [],
       },
       latencyMs,
       providerVia: safeVia(result?.via),
@@ -375,6 +565,18 @@ export function buildArtifact({ target, casePack, startedAt, finishedAt, runs, r
       destinations: [...run.expected.destinations],
       kinds: [...run.expected.kinds],
       actions: { min: run.expected.actions.min, max: run.expected.actions.max },
+      requiredThreadIds: [...(run.expected.requiredThreadIds ?? [])],
+      forbiddenThreadIds: [...(run.expected.forbiddenThreadIds ?? [])],
+      newThreads: cloneBoard(run.expected.newThreads ?? []),
+      expectedActions: cloneBoard(run.expected.expectedActions ?? []),
+      structuredDeadlines: cloneBoard(run.expected.structuredDeadlines ?? []),
+      forbiddenDuplicates: cloneBoard(run.expected.forbiddenDuplicates ?? []),
+      ...(run.expected.fallback ? { fallback: run.expected.fallback } : {}),
+    },
+    request: {
+      threads: cloneBoard(run.request?.threads ?? []),
+      actions: cloneBoard(run.request?.actions ?? []),
+      correctionExamples: cloneBoard(run.request?.correctionExamples ?? []),
     },
     observed: {
       destinations: [...run.observed.destinations],
@@ -384,6 +586,8 @@ export function buildArtifact({ target, casePack, startedAt, finishedAt, runs, r
       })),
       kind: run.observed.kind,
       actionsCount: run.observed.actionsCount,
+      actions: [...(run.observed.actions ?? [])],
+      actionDetails: cloneBoard(run.observed.actionDetails ?? []),
     },
     latencyMs: run.latencyMs,
     providerVia: safeVia(run.providerVia),
@@ -392,7 +596,7 @@ export function buildArtifact({ target, casePack, startedAt, finishedAt, runs, r
     pass: run.pass === true,
   }));
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     packRevision: casePack.revision,
     target: { mode: target.mode, origin: target.origin },
     startedAt,

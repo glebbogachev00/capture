@@ -17,6 +17,33 @@ import type { Board } from "./model";
 
 export type CaptureSource = "typed" | "dictated" | "distill" | "image" | "import";
 
+export type SettlementArtifact = {
+  kind: "action" | "thread" | "frag" | "intention";
+  id: string;
+};
+
+/** Active conflict metadata for one exact pending slot. Unlike the rolling
+ * ledger, this record remains beside the artifacts it governs and is retired
+ * when none of those artifacts remain. */
+export type RoutingSettlement = {
+  id: string;
+  captureId: string;
+  pendingId: string;
+  revision: number;
+  settledBy: "manual" | "automatic";
+  artifacts: SettlementArtifact[];
+};
+
+/** Bounded durable memory that a manual choice retired one exact automatic
+ * settlement slot. It outlives live artifact authority long enough to defeat
+ * stale devices, then compacts on the same horizon as deletion tombstones. */
+export type RoutingRetirement = {
+  captureId: string;
+  pendingId: string;
+  revision: number;
+  retiredAt: number;
+};
+
 export type CaptureEntry = {
   id: string;
   /** Explicit device import. Keep these records beyond the rolling live cap. */
@@ -30,11 +57,31 @@ export type CaptureEntry = {
       Pending entries never leave the device through model context or shares;
       a later successful settlement appends the real classified entry. */
   kind: "pending" | "action" | "thread" | "intention" | "both";
+  /** This active pending row is the unresolved remainder of a partially
+      classified capture. It stays outside the rolling history cap even though
+      classified rows share its captureId. */
+  partial?: boolean;
+  /** Monotonic version of an active pending envelope. */
+  pendingRevision?: number;
+  /** Exact source revision sent to sorting when provenance `raw` differs. */
+  pendingSource?: string;
   source: CaptureSource;
   /** The item the capture became (or the thread it folded into). */
   targetId: string;
   /** For a thread capture, the fragment inside it. */
   targetFragId?: string;
+  /** Which authority settled a pending capture. Older settled entries predate
+      this explicit marker; new manual choices always carry it. */
+  settledBy?: "manual" | "automatic";
+  /** Exact pending slot this classified settlement retired. New retry-aware
+      settlements carry it so sync can make a manual result defeat an
+      independently landed stale automatic result without touching an earlier
+      valid partial settlement from the same capture. */
+  settlementPendingId?: string;
+  settlementRevision?: number;
+  /** Artifacts created by this one settlement. Mechanical sync cleanup only;
+      never interpreted as semantic ownership. */
+  settlementArtifacts?: SettlementArtifact[];
   /** Which model tier answered — the `via` the routes already report. */
   modelVia?: string;
   /** For a dictated capture: what the recogniser actually heard, before the
@@ -42,6 +89,8 @@ export type CaptureEntry = {
       the evidence, so a bad transcription can never be the only record. */
   transcript?: string;
   imgs?: string[];
+  /** Explicit Thread context selected when the capture was saved. */
+  openThreadId?: string;
   /** Shared by every entry one capture wrote.
    *
    * A split capture files in more than one thread and records each
@@ -141,7 +190,11 @@ function limitLedgerRecent(entries: CaptureEntry[]): CaptureEntry[] {
   return entries.filter((entry) => {
     if (entry.importBatch) return true;
     const identity = entry.captureId ?? entry.id;
-    if (entry.kind === "pending" && !entry.undone && !classified.has(identity)) return true;
+    if (
+      entry.kind === "pending" &&
+      !entry.undone &&
+      (entry.partial || !classified.has(identity))
+    ) return true;
     return recent++ < LEDGER_CAP;
   });
 }
@@ -175,7 +228,13 @@ export function mergeLedgers(
     /* Undone is a fact once true: whichever copy arrives later, the flag
        is kept, so the hub's older copy cannot quietly un-undo it. */
     const prev = byId.get(e.id);
-    byId.set(e.id, prev?.undone && !e.undone ? { ...e, undone: true } : e);
+    const undone = !!(prev?.undone || e.undone);
+    byId.set(e.id, {
+      ...e,
+      ...(undone ? { undone: true } : {}),
+      ...(prev?.partial && !e.partial ? { partial: true } : {}),
+      ...(undone && e.kind === "pending" ? { imgs: undefined } : {}),
+    });
   }
   return limitLedgerRecent([...byId.values()]
     .sort((x, y) => y.at - x.at || (x.id < y.id ? 1 : -1)));

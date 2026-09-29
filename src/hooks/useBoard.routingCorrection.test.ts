@@ -12,21 +12,46 @@ const wrong = { id: "operations", name: "Operations", summary: "", frags: [{ id:
 
 beforeEach(async () => {
   await set(KEY, JSON.stringify({ ...EMPTY, principles: [], threads: [chosen, wrong] }));
-  vi.stubGlobal("fetch", vi.fn(async (input) => {
+  vi.stubGlobal("fetch", vi.fn(async (input, init) => {
     const url = String(input);
-    if (url === "/api/sort") return Response.json({
-      clean: raw,
-      kind: "thread",
-      title: "Release handoff",
-      actions: [],
-      primaryActions: [],
-      primaryText: null,
-      shelfLife: "keep",
-      due: null,
-      threadId: "operations",
-      threadName: null,
-      also: [],
-    });
+    if (url === "/api/sort") {
+      const request = JSON.parse(String(init?.body));
+      const recovery = {
+        clean: raw,
+        kind: "thread",
+        title: "Release handoff",
+        actions: [],
+        primaryActions: [],
+        primaryText: null,
+        shelfLife: "keep",
+        due: null,
+        threadId: "operations",
+        threadName: null,
+        also: [],
+      };
+      if (!request.routingPlanVersion) return Response.json(recovery);
+      return Response.json({
+        ...recovery,
+        planned: true,
+        captureId: request.captureId,
+        recovery,
+        routingPlan: {
+          items: [{
+            id: "handoff",
+            source: raw,
+            kind: "developing_thought",
+            action: null,
+            due: null,
+            ownerId: null,
+            destinations: [{ type: "existing", threadId: "operations" }],
+            duplicateActionId: null,
+            unresolved: false,
+            ambiguity: null,
+          }],
+          newThreads: [],
+        },
+      });
+    }
     if (url === "/api/summarize") return Response.json({ summary: "Synthetic" });
     return new Response(null, { status: 503 });
   }));
@@ -42,7 +67,9 @@ it("keeps the explicitly selected correction destination authoritative for the c
   await waitFor(() => expect(hook.result.current.loaded).toBe(true));
 
   await act(async () => { await hook.result.current.submit(false, undefined, raw); });
-  expect(hook.result.current.data.threads.find((thread) => thread.id === "operations")?.frags.at(-1)?.text).toBe(raw);
+  await waitFor(() => expect(
+    hook.result.current.data.threads.find((thread) => thread.id === "operations")?.frags.at(-1)?.text
+  ).toBe(raw));
 
   await act(async () => { await hook.result.current.undo(); });
   expect(hook.result.current.misfiled?.thread?.id).toBe("operations");

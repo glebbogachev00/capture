@@ -24,7 +24,37 @@ let hook: ReturnType<typeof renderHook<ReturnType<typeof useBoard>, unknown>>;
 const providerResult = { clean: raw, kind: "thread", title: "Training schedule", actions: [], primaryActions: [], primaryText: null, threadId: "training", threadName: null, also: [], shelfLife: "keep", due: null };
 beforeEach(async () => {
   calls.length = 0; responseKinds.length = 0;
-  ai.generateObject.mockImplementation(async ({ schema }) => ({ object: schema.parse(providerResult) }));
+  ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
+    const recovery = schema.safeParse(providerResult);
+    if (recovery.success) return { object: recovery.data };
+    if (String(prompt).includes("DESTINATION AND SUBJECT-BOUNDARY ADJUDICATION")) {
+      return { object: schema.parse({
+        decisions: [{
+          itemId: "thought",
+          parts: [{
+            source: raw,
+            destinations: [{ type: "existing", threadId: "training" }],
+          }],
+        }],
+      }) };
+    }
+    const intention = calls.at(-1)?.force !== "thread";
+    return { object: schema.parse({
+      items: [{
+        id: intention ? "intention" : "thought",
+        source: raw,
+        kind: intention ? "intention" : "developing_thought",
+        action: null,
+        due: null,
+        ownerId: null,
+        destinations: intention ? [] : [{ type: "existing", threadId: "training" }],
+        duplicateActionId: null,
+        unresolved: false,
+        ambiguity: null,
+      }],
+      newThreads: [],
+    }) };
+  });
   vi.stubGlobal("fetch", vi.fn(async (input, init) => {
     if (String(input) === "/api/sort") {
       const body = JSON.parse(init.body); calls.push(body);
@@ -44,7 +74,7 @@ it("persists and sends a bounded semantic correction after reload", async () => 
   hook = renderHook(() => useBoard(Date.now()));
   await waitFor(() => expect(hook.result.current.loaded).toBe(true));
   await submit();
-  expect(hook.result.current.draft?.rawInput).toBe(raw);
+  await waitFor(() => expect(hook.result.current.draft?.rawInput).toBe(raw));
   await act(async () => { await hook.result.current.draftToThread(); });
   expect(hook.result.current.draft).toBeNull();
   expect(hook.result.current.data.threads.find(t => t.id === "training")?.frags.at(-1)?.text).toBe(raw);
@@ -65,7 +95,7 @@ it("persists and sends a bounded semantic correction after reload", async () => 
     capture: raw,
     kind: "thread",
   }));
-  expect(hook.result.current.draft?.rawInput).toBe(raw);
+  await waitFor(() => expect(hook.result.current.draft?.rawInput).toBe(raw));
   expect(responseKinds).toEqual(["intention", "thread", "intention"]);
 });
 it("a legacy phrase lesson cannot override the model response", async () => {
@@ -79,6 +109,7 @@ it("Undo restores the words after correcting an intention draft", async () => {
   hook = renderHook(() => useBoard(Date.now()));
   await waitFor(() => expect(hook.result.current.loaded).toBe(true));
   await submit();
+  await waitFor(() => expect(hook.result.current.draft?.rawInput).toBe(raw));
   await act(async () => { await hook.result.current.draftToThread(); });
   await act(async () => { await hook.result.current.undo(); });
   expect(hook.result.current.text).toBe(raw);

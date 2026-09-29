@@ -73,6 +73,27 @@ describe("threads that keep being confused", () => {
     expect(pairs[1]).toMatchObject({ fromName: "Bugs", toName: "Capture.", times: 1 });
   });
 
+  it("excludes temporary Thread ids, names, content, and correction history until rename", () => {
+    const hidden = leaky();
+    hidden.threads = hidden.threads.map((thread) => thread.id === "a"
+      ? {
+          ...thread,
+          name: "Temporary — private display label",
+          temporaryName: true,
+          frags: [{ id: "private-frag", at: 1, text: "Private temporary content" }],
+        }
+      : thread);
+
+    expect(confusedPairs(hidden, 1)).toEqual([]);
+
+    hidden.threads = hidden.threads.map((thread) => thread.id === "a"
+      ? { ...thread, name: "Capture filing", temporaryName: undefined }
+      : thread);
+    expect(confusedPairs(hidden, 1)).toEqual([
+      expect.objectContaining({ fromId: "a", fromName: "Capture filing", toId: "b" }),
+    ]);
+  });
+
   it("ignores captures that stayed where they were put", () => {
     const b = board(
       [{ id: "a", name: "Capture.", fragIds: ["f1", "f2", "f3"] }],

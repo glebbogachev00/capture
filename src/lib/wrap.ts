@@ -77,7 +77,24 @@ export { dayKey };
 
 /** The ledger entries that count for a day: what was said, and still stands. */
 function entriesFor(board: Board, day: string): CaptureEntry[] {
+  const temporaryThreads = new Set(
+    board.threads.filter((thread) => thread.temporaryName).map((thread) => thread.id),
+  );
+  const temporaryFragments = new Set(
+    board.threads
+      .filter((thread) => thread.temporaryName)
+      .flatMap((thread) => thread.frags.map((frag) => frag.id)),
+  );
+  const excludedCaptures = new Set(
+    (board.ledger ?? [])
+      .filter((entry) =>
+        temporaryThreads.has(entry.targetId) ||
+        (!!entry.targetFragId && temporaryFragments.has(entry.targetFragId))
+      )
+      .map((entry) => entry.captureId ?? entry.id),
+  );
   return settledLedgerEntries(board)
+    .filter((entry) => !excludedCaptures.has(entry.captureId ?? entry.id))
     .filter((e) => !e.undone && dayKey(e.at) === day)
     .sort((a, b) => a.at - b.at);
 }

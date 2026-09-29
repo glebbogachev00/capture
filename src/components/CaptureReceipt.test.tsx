@@ -1,10 +1,31 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CaptureReceipt } from "@/components/CaptureReceipt";
 
+afterEach(cleanup);
+
 describe("CaptureReceipt", () => {
+  it("keeps pending and manual split acknowledgments distinct from AI sorting", () => {
+    const { rerender } = render(<CaptureReceipt receipt="Saved. Awaiting sorting or placement"
+      pendingReceipt canUndo={false} onUndo={() => undefined} />);
+    expect(screen.getByRole("status").textContent).toBe("Saved. Awaiting sorting or placement");
+    expect(screen.queryByText("Capture sorted this into:")).toBeNull();
+    rerender(<CaptureReceipt receipt="Split filed" canUndo={false} onUndo={() => undefined} />);
+    expect(screen.getByRole("status").textContent).toBe("Split filed");
+  });
+
+  it("prioritizes the manual inverse over capture Undo without claiming AI sorted it", () => {
+    const onUndo = vi.fn(), onUndoManual = vi.fn();
+    render(<CaptureReceipt receipt="Actions" canUndo canUndoManual
+      onUndo={onUndo} onUndoManual={onUndoManual} />);
+    expect(screen.getByRole("status").textContent).toContain("Landed in Actions.");
+    expect(screen.queryByText("Capture sorted this into:")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(onUndoManual).toHaveBeenCalledOnce();
+    expect(onUndo).not.toHaveBeenCalled();
+  });
   it("shows each sorted destination as a readable list", () => {
     render(
       <CaptureReceipt

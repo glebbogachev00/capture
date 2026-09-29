@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// R1 only: call /api/sort sequentially with a checked-in synthetic board.
+// Planned routing by default; --recovery runs the owner-accepted R1 matrix.
 // This script never reads environment files, cookies, credentials, or board APIs.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -16,9 +16,12 @@ import {
 function outputOptions(args) {
   let out = "outputs/routing-baseline/latest.json";
   let compare = null;
+  let recovery = false;
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
-    if (arg === "--out" || arg === "--compare") {
+    if (arg === "--recovery") {
+      recovery = true;
+    } else if (arg === "--out" || arg === "--compare") {
       const value = args[++index];
       if (!value || value.startsWith("--")) throw new Error(`${arg} requires a JSON path`);
       if (arg === "--out") out = value;
@@ -27,14 +30,19 @@ function outputOptions(args) {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
-  return { out: resolve(out), compare: compare ? resolve(compare) : null };
+  return { out: resolve(out), compare: compare ? resolve(compare) : null, recovery };
 }
 
 async function main() {
   const target = parseTarget(process.argv.slice(2));
-  const { out, compare } = outputOptions(target.remainingArgs);
-  const casePack = JSON.parse(await readFile(new URL("./routing-baseline-cases.json", import.meta.url), "utf8"));
-  assertCasePack(casePack, { requireFullCoverage: true });
+  const { out, compare, recovery } = outputOptions(target.remainingArgs);
+  const casePack = JSON.parse(await readFile(new URL(
+    recovery ? "./routing-recovery-cases.json" : "./routing-baseline-cases.json",
+    import.meta.url,
+  ), "utf8"));
+  assertCasePack(casePack, recovery
+    ? { requireRecoveryCoverage: true }
+    : { requireFullCoverage: true });
 
   const startedAt = new Date().toISOString();
   const execution = await runSequentialBaseline({ target, casePack });

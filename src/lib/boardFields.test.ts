@@ -49,6 +49,13 @@ function fullBoard(): Board {
                source: "typed", targetId: "t1" }],
     corrections: [{ id: "c1", at: 5, proposalKind: "rename_thread",
                     accepted: true, context: "" }],
+    routingSettlements: [{
+      id: "settlement", captureId: "capture", pendingId: "pending", revision: 1,
+      settledBy: "manual", artifacts: [{ kind: "action", id: "a1" }],
+    }],
+    routingRetirements: [{
+      captureId: "capture", pendingId: "retired-pending", revision: 1, retiredAt: 5,
+    }],
     wraps: [wrap],
     completions: [{ id: "a9", text: "did it", at: 6 }],
     historyEpoch: 7,
