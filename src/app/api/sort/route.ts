@@ -356,6 +356,17 @@ function seriesContext(series: z.infer<typeof Body>["series"]) {
 }
 
 
+const FILING_REQUEST_RULE = `
+Present filing requests to Capture:
+- Identify who should act: Capture now, or the person later.
+- When someone asks Capture to file a passage in a supplied existing Thread, honor that destination for that passage.
+- For that request, use kind thread for classification or developing_thought in a plan. Its chosen destination overrides the inferred kind only for its scoped content.
+- Do not make the filing instruction an Action. Keep the instruction and its scoped content together for exact source accounting.
+- Do not apply that destination to unrelated passages.
+- Quoted instructions, hypothetical examples, and reminders to file later are not immediate filing requests.
+- A Thread name alone is not a filing instruction. Keep ordinary classification and new-Thread rules unchanged.
+`;
+
 const SUBJECT_CHECK = `
 Final subject check:
 - Identify each independent subject before choosing its destination. Shared timing, an attachment, or a general label such as "improvements" does not make subjects related.
@@ -472,7 +483,7 @@ function prompt(
     '- "weeks" for real work that takes a while: drafting, building, contacting someone properly.\n' +
     '- "keep" for commitments to other people, money, deadlines, or anything with consequences if it silently vanished. When unsure, choose "keep".' +
     DUE_RULE +
-    SUBJECT_CHECK
+    SUBJECT_CHECK + FILING_REQUEST_RULE
   );
 }
 
@@ -551,7 +562,8 @@ function routingPlanPrompt(
     "3. Route each developing thought to every Thread where it genuinely belongs. Multiple destinations are normal. Use all Thread briefs above; do not choose by word overlap. If no existing Thread fits, declare one newThreads entry with the closest existing Thread and a concrete semantic reason it is different. Never propose a paraphrase of an existing Thread.\n" +
     "4. If an affected source part is genuinely ambiguous, set unresolved true, give a short ambiguity reason, and leave its destinations empty. Never force ambiguity into a Thread. Do not create supporting Actions for an Intention; only explicit Action source may become an Action.\n" +
     "5. Keep exact existing ids. New Thread keys are request-local. Do not return explanations outside the schema.\n" +
-    "6. Before returning, perform two independent ownership audits. Destination ownership: inspect each developing_thought item by itself. Give it only destinations that own that exact item.source. Another subject elsewhere in the same capture is never evidence for another destination; for independent thoughts, do not copy or union destination sets across items. Action/deadline ownership: inspect each deadline together with every explicitly owning Action. Confirm that ownerId plus additionalOwnerIds names exactly the intended scope, excluding Actions with differing local dates, and that due exactly resolves that deadline.source under today's calendar rules. Recompute relative weekdays as the next occurrence strictly after today; do not copy or union dates or owners across sibling Actions unless the original phrase actually shares that deadline across those exact Actions."
+    "6. Before returning, perform two independent ownership audits. Destination ownership: inspect each developing_thought item by itself. Give it only destinations that own that exact item.source. Another subject elsewhere in the same capture is never evidence for another destination; for independent thoughts, do not copy or union destination sets across items. Action/deadline ownership: inspect each deadline together with every explicitly owning Action. Confirm that ownerId plus additionalOwnerIds names exactly the intended scope, excluding Actions with differing local dates, and that due exactly resolves that deadline.source under today's calendar rules. Recompute relative weekdays as the next occurrence strictly after today; do not copy or union dates or owners across sibling Actions unless the original phrase actually shares that deadline across those exact Actions." +
+    (body.force ? "" : FILING_REQUEST_RULE)
   );
 }
 
