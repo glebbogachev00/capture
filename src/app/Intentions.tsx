@@ -234,6 +234,10 @@ export function IntentionDraft({
   );
 }
 
+function intentionWording(text: string): string {
+  return text.replace(/^\s*An intention for how I live:\s*(?=\S)/i, "");
+}
+
 export function IntentionCard({
   intention,
   onOpen,
@@ -246,7 +250,7 @@ export function IntentionCard({
   return (
     <button className="tcard" onClick={onOpen}>
       <div className="int-number">({pad(intention.number)})</div>
-      <div className="int-card-text">{intention.expandedIntention}</div>
+      <div className="int-card-text">{intentionWording(intention.expandedIntention)}</div>
       <div className="act-meta" style={{ marginTop: 9 }}>
         {intention.recommendedActions.length} action
         {intention.recommendedActions.length === 1 ? "" : "s"} ·{" "}
@@ -309,7 +313,7 @@ export function IntentionDetail({
           autoFocus
         />
       ) : (
-        <p className="int-expanded">{intention.expandedIntention}</p>
+        <p className="int-expanded">{intentionWording(intention.expandedIntention)}</p>
       )}
 
       <div style={{ marginBottom: 18 }}>

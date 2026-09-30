@@ -98,6 +98,53 @@ async function mount() {
 }
 
 describe("local-first planned capture", () => {
+  it.each(["complete", "edited", "deleted", "failed"])("fills mixed-capture Intention details without changing routing (%s)", async (outcome) => {
+    const thought = "For Ovid, the tower needs rain. ";
+    const intention = "I allow myself to rest.";
+    const raw = thought + intention;
+    const expansion = deferred<Response>();
+    const requested: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) === "/api/intention") {
+        requested.push(JSON.parse(String(init?.body)).rawInput);
+        return expansion.promise;
+      }
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      const base = { action: null, due: null, ownerId: null, duplicateActionId: null, unresolved: false, ambiguity: null };
+      return Response.json({
+        planned: true, captureId: JSON.parse(String(init?.body)).captureId,
+        routingPlan: { items: [
+          { ...base, id: "thought", source: thought, kind: "developing_thought", destinations: [{ type: "existing", threadId: "destination" }] },
+          { ...base, id: "intention", source: intention, kind: "intention", destinations: [] },
+        ], newThreads: [] },
+        recovery: { clean: raw, kind: "thread", title: "Notes", actions: [], primaryActions: [], shelfLife: "keep", due: null, threadId: "destination", threadName: null },
+      });
+    }));
+    const hook = await mount();
+    act(() => hook.result.current.setText(raw));
+    await act(async () => { await hook.result.current.submit(); });
+    await waitFor(() => expect(hook.result.current.data.intentions).toHaveLength(1));
+    await waitFor(() => expect(requested).toEqual([intention]));
+    const saved = hook.result.current.data.intentions[0];
+    if (outcome === "edited") await act(async () => { await hook.result.current.updateIntention({ ...saved, expandedIntention: "My own wording" }); });
+    if (outcome === "deleted") await act(async () => { await hook.result.current.deleteIntention(saved.id); });
+    await act(async () => {
+      expansion.resolve(outcome === "failed" ? new Response(null, { status: 503 }) : Response.json({
+        expandedIntention: "A model rewrite that must not replace the saved wording",
+        recommendedActions: ["I take a walk.", "I play a game.", "I leave work alone."],
+        counterIntentions: ["I turn rest into another target."],
+      }));
+    });
+    if (outcome === "complete") {
+      await waitFor(() => expect(hook.result.current.data.intentions[0].recommendedActions).toHaveLength(3));
+      expect(hook.result.current.data.intentions[0]).toMatchObject({ rawInput: intention, expandedIntention: intention, counterIntentions: ["I turn rest into another target."] });
+      expect(JSON.parse((await storage.get(KEY))!).intentions[0].recommendedActions).toHaveLength(3);
+    } else if (outcome === "deleted") expect(hook.result.current.data.intentions).toEqual([]);
+    else expect(hook.result.current.data.intentions[0]).toMatchObject({ expandedIntention: outcome === "edited" ? "My own wording" : intention, recommendedActions: [], counterIntentions: [] });
+    expect(hook.result.current.data.threads[0].frags[0].text).toBe(thought);
+    expect(hook.result.current.data.actions).toEqual([]);
+    expect(hook.result.current.data.ledger.some(entry => entry.raw === raw)).toBe(true);
+  });
   it("automatically files a planned 502 through one legacy recovery without a click", async () => {
     const raw = "Call the dentist";
     const requests: Array<{ captureId?: string }> = [];

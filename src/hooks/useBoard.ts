@@ -125,6 +125,7 @@ import { suggestionOutcome } from "@/lib/suggestionRecord";
 import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { applySaveDraft, type CaptureOrigin } from "@/lib/intentionOps";
+import { completeIntentionDetails } from "@/lib/completeIntentionDetails";
 import { editUnsortedCapture, removeUnsortedCapture } from "@/lib/unsortedOps";
 import { pendingDraftAction, pendingEntry, prepareResortedCapture, requestBoardSort,
   requestIntentionExpansion, resortIntentionOrigin } from "@/lib/resortOps";
@@ -1574,6 +1575,13 @@ export function useBoard(now: number) {
         durable.value.status !== "applied"
       ) return;
       const settled = durable.value;
+      void completeIntentionDetails(settled.intentionIds, () => latest.current,
+        build => transactDurable(current => { const next = build(current); return next ? { next, value: null } : { skip: null }; }),
+        () => lifetime.active && sortMounted.current,
+      ).catch(() => {
+        if (lifetime.active && captureSnapshot.current?.captureId === input.captureId)
+          setNotice("Intention saved. Details are unavailable right now.");
+      });
       for (const id of settled.summaryThreadIds) scheduleSummary(id);
       playgroundUsage.captureSorted(response.via);
       if (captureSnapshot.current?.captureId !== input.captureId) return;
