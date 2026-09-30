@@ -790,6 +790,7 @@ body {
     flex-wrap: wrap;
   }
   .pending-receipt > span {
+    flex: 0 0 100%;
     width: 100%;
   }
   .pending-receipt .receipt-place-btn {

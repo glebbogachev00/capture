@@ -200,7 +200,8 @@ export function Capture() {
     showResting,
     setShowResting,
     live,
-    unsorted,
+    unsorted: pendingCaptures,
+    autoSortingIds = [],
     fadedList,
     active,
     resting,
@@ -281,6 +282,7 @@ export function Capture() {
     learnedRules,
     toggleLearnedRule,
   } = useBoard(now);
+  const unsorted = pendingCaptures.filter((capture) => !autoSortingIds.includes(capture.id));
   const { openPlacePicker, picker } = useDestinationPicker(data.threads, finalizingUnsortedIds, manualSort);
   const updateQuery = (next: string) => { if (next !== query) {
     setAnswerSession((value) => ({ ...value, revision: value.revision + 1 }));

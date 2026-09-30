@@ -272,6 +272,7 @@ export function useBoard(now: number) {
   const [landed, setLanded] = useState<string | null>(null);
   const [landedLines, setLandedLines] = useState<string[]>([]);
   const [pendingReceiptId, setPendingReceiptId] = useState<string | null>(null);
+  const [autoSortingIds, setAutoSortingIds] = useState<string[]>([]);
   const pendingReceiptRef = useRef<string | null>(null);
   /* How long a receipt stays, and why a second one is never blanked by the
      first one's clock — lib/receiptWindow owns the timing. Everything that
@@ -1337,17 +1338,23 @@ export function useBoard(now: number) {
     }
   };
 
-  const resort = async (a: Action, pinned?: SortKind) => {
+  const sortMounted = useRef(true);
+  useEffect(() => {
+    sortMounted.current = true;
+    return () => { sortMounted.current = false; };
+  }, []);
+
+  const resort = async (a: Action, pinned?: SortKind, automaticBudget?: number) => {
     const sentRecovery = exactPendingSnapshot(latest.current, a.id);
     const force = pinned ?? sentRecovery?.force;
     const sentPending = sentRecovery ? latest.current.ledger.find((entry) =>
       entry.id === sentRecovery.pendingId) : undefined;
     const sentCaptureId = sentPending && (sentPending.captureId ?? sentPending.id);
     const attempt = sentCaptureId
-      ? plannedSortAuthority.current.begin(sentCaptureId, 55_000)
+      ? plannedSortAuthority.current.begin(sentCaptureId, automaticBudget ?? 55_000)
       : null;
     setErr("");
-    receiptWindow.current!.retire();
+    if (automaticBudget === undefined) receiptWindow.current!.retire();
     if (!attempt) setBusy("Sorting");
     try {
       const work = async () => {
@@ -1367,6 +1374,10 @@ export function useBoard(now: number) {
           attempt?.signal,
         );
         if (attempt && !attempt.authoritative()) return;
+        if (automaticBudget !== undefined && ("planned" in sorted ||
+            typeof sorted.clean !== "string" || !["action", "thread", "both", "intention"].includes(sorted.kind))) {
+          throw new Error("invalid legacy recovery response");
+        }
         if (force && sorted.kind !== force) throw new Error("command kind conflict");
         const prepared = prepareResortedCapture(latest.current, a, sorted, uid);
         if (!prepared) return;
@@ -1440,7 +1451,8 @@ export function useBoard(now: number) {
       if (attempt) await attempt.run(work());
       else await work();
     } catch (error) {
-      if (!sentCaptureId || !plannedSortAuthority.current.claimed(sentCaptureId)) {
+      if (automaticBudget === undefined &&
+          (!sentCaptureId || !plannedSortAuthority.current.claimed(sentCaptureId))) {
         setErr(attempt?.signal.aborted
           ? "Saved here. Sorting is unavailable right now."
           : reasonOf(error) + " It is still here, untouched.");
@@ -1468,8 +1480,18 @@ export function useBoard(now: number) {
 
   const runPlannedSort = async (input: PendingRecoverySnapshot) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    if (!sortMounted.current || !lifetime.active || !snapshotMatchesPending(input, latest.current)) return;
+    const deadline = Date.now() + 55_000;
     const attempt = plannedSortAuthority.current.begin(input.captureId, 55_000);
+    setAutoSortingIds((ids) => [...new Set([...ids, input.targetId])]);
+    if (pendingReceiptRef.current === input.targetId) showReceipt("Saved. Sorting…", input.targetId);
     try {
+      if (input.imageIds.length) {
+        const pending = latest.current.actions.find((action) => action.id === input.targetId);
+        attempt.finish();
+        if (pending) await resort(pending, input.force, deadline - Date.now());
+        return;
+      }
       const work = async () => {
         const value = await requestSort(
           input.source || "(image only)",
@@ -1589,6 +1611,17 @@ export function useBoard(now: number) {
       };
       await attempt.run(work());
     } catch {
+      const remaining = deadline - Date.now();
+      if (remaining > 0 && attempt.authoritative() && lifetime.active && sortMounted.current &&
+          (typeof navigator === "undefined" || navigator.onLine) &&
+          snapshotMatchesPending(input, latest.current)) {
+        const pending = latest.current.actions.find((action) => action.id === input.targetId);
+        if (pending) {
+          attempt.finish();
+          await resort(pending, input.force, remaining);
+          return;
+        }
+      }
       const stillPending = latest.current.ledger.some((entry) =>
         entry.kind === "pending" &&
         !entry.undone &&
@@ -1604,6 +1637,11 @@ export function useBoard(now: number) {
         setErr("Saved here. Sorting is unavailable right now.");
     } finally {
       attempt.finish();
+      setAutoSortingIds((ids) => ids.filter((id) => id !== input.targetId));
+      if (sortMounted.current && pendingReceiptRef.current === input.targetId &&
+          snapshotMatchesPending(input, latest.current)) {
+        showReceipt("Saved. Awaiting sorting or placement", input.targetId);
+      }
     }
   };
 
@@ -1675,10 +1713,7 @@ export function useBoard(now: number) {
         }
         const recoverySnapshot = exactPendingSnapshot(pendingBoard, staged.target.id);
         if (!recoverySnapshot) throw new Error("pending recovery snapshot mismatch");
-        const immediateAttempt = online && (
-          !recoverySnapshot.imageIds.length ||
-          !!pinned || !!pinnedThread || !!existingCaptureId || !!origin
-        );
+        const immediateAttempt = online;
         const recoveryStore = pendingRecovery.current.nextForIntake(
           current,
           recoverySnapshot,
@@ -1748,13 +1783,7 @@ export function useBoard(now: number) {
       await resort(expected, force);
       return;
     }
-    /* The planned schema does not assign image meaning or ownership to atomic
-       outputs. Sending text alone (or the placeholder for an image-only
-       capture) would let an incomplete plan settle and retire the bytes. Keep
-       the exact durable envelope pending until an image-aware route is used. */
-    if (expected?.imgs?.length) {
-      return;
-    }
+    // Image captures use the existing byte-complete legacy path, not text planning.
     const recovery = recoveryStore.records.find((record) => record.targetId === staged.target.id);
     if (recovery) void runPlannedSort(recovery);
   };
@@ -1764,9 +1793,7 @@ export function useBoard(now: number) {
     exclusive: <T,>(work: () => Promise<T>) => durableBoardCommits.current.run(work) });
   usePendingRecoveryWake({ loaded, board: data, orchestrator: pendingRecovery.current,
     access: pendingRecoveryAccess, now: stamp, run: async (snapshot) => {
-      if (!snapshot.imageIds.length) return runPlannedSort(snapshot);
-      const action = latest.current.actions.find((item) => item.id === snapshot.targetId);
-      if (action && snapshotMatchesPending(snapshot, latest.current)) await resort(action);
+      return runPlannedSort(snapshot);
     } });
 
   /* ----------------------- capture suggestion ----------------------- */
@@ -4216,6 +4243,7 @@ export function useBoard(now: number) {
     err,
     landed, landedLines,
     pendingReceiptId,
+    autoSortingIds,
     landedIds,
     summarising,
     suggestion,

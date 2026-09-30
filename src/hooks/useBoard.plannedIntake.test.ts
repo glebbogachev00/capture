@@ -98,6 +98,107 @@ async function mount() {
 }
 
 describe("local-first planned capture", () => {
+  it("automatically files a planned 502 through one legacy recovery without a click", async () => {
+    const raw = "Call the dentist";
+    const requests: Array<{ captureId?: string }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      const request = JSON.parse(String(init?.body));
+      requests.push(request);
+      return request.captureId
+        ? Response.json({ error: "SOURCE_NOT_ACCOUNTED" }, { status: 502 })
+        : sortedResponse(raw);
+    }));
+    const hook = await mount();
+    act(() => hook.result.current.setText(raw));
+    await act(async () => { await hook.result.current.submit(); });
+    await waitFor(() => expect(hook.result.current.unsorted).toHaveLength(0));
+    expect(requests).toHaveLength(2);
+    expect(requests[0].captureId).toBeTruthy();
+    expect(requests[1].captureId).toBeUndefined();
+    expect(hook.result.current.data.actions).toEqual([expect.objectContaining({ text: raw })]);
+    expect(JSON.parse((await storage.get(KEY))!).actions).toEqual([expect.objectContaining({ text: raw })]);
+  });
+
+  it.each([54_000, 55_000])("bounds automatic legacy recovery by the original 55 second deadline after %sms", async (elapsed) => {
+    const first = deferred<Response>();
+    const signals: AbortSignal[] = [];
+    let requestedAt = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      signals.push(init!.signal!);
+      if (signals.length === 1) { requestedAt = Date.now(); return first.promise; }
+      return new Promise<Response>(() => {});
+    }));
+    const hook = await mount();
+    act(() => hook.result.current.setText("Bound the total deadline"));
+    await act(async () => { await hook.result.current.submit(); });
+    await waitFor(() => expect(signals).toHaveLength(1));
+    expect(hook.result.current.autoSortingIds).toEqual([hook.result.current.unsorted[0].id]);
+    expect(hook.result.current.landed).toBe("Saved. Sorting…");
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(requestedAt + elapsed);
+      await act(async () => { first.resolve(new Response(null, { status: 502 })); });
+      expect(signals).toHaveLength(elapsed < 55_000 ? 2 : 1);
+      if (elapsed < 55_000) {
+        expect(hook.result.current.autoSortingIds).toEqual([hook.result.current.unsorted[0].id]);
+      }
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_001); });
+      if (elapsed < 55_000) expect(signals[1].aborted).toBe(true);
+      expect(hook.result.current.autoSortingIds).toEqual([]);
+      expect(hook.result.current.unsorted).toHaveLength(1);
+      expect(signals).toHaveLength(elapsed < 55_000 ? 2 : 1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("retains one exact commanded pending capture after both automatic calls fail", async () => {
+    const first = deferred<Response>();
+    const requests: Array<{ force?: string }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      requests.push(JSON.parse(String(init?.body)));
+      return requests.length === 1 ? first.promise : new Response(null, { status: 502 });
+    }));
+    const hook = await mount();
+    const raw = "  /action Keep Unicode — exactly. \n";
+    act(() => hook.result.current.setText(raw));
+    await act(async () => { await hook.result.current.submit(); });
+    await waitFor(() => expect(requests).toHaveLength(1));
+    const before = hook.result.current.unsorted[0];
+    await act(async () => { first.resolve(new Response(null, { status: 502 })); });
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(hook.result.current.unsorted).toEqual([before]);
+    expect(requests.map((request) => request.force)).toEqual(["action", "action"]);
+    expect(hook.result.current.data.ledger.filter((entry) => !entry.undone))
+      .toEqual([expect.objectContaining({ kind: "pending", raw })]);
+    expect(hook.result.current.err).toBe("");
+    expect(hook.result.current.landed).toBe("Saved. Awaiting sorting or placement");
+  });
+
+  it.each(["manual", "edit", "offline", "unmount"] as const)(
+    "suppresses automatic legacy recovery after %s while planned request fails", async (mode) => {
+      let online = true;
+      vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
+      const first = deferred<Response>();
+      const network = vi.fn(async (url: unknown) => String(url) === "/api/sort"
+        ? first.promise : new Response(null, { status: 503 }));
+      vi.stubGlobal("fetch", network);
+      const hook = await mount();
+      act(() => hook.result.current.setText("Manual placement wins"));
+      await act(async () => { await hook.result.current.submit(); });
+      await waitFor(() => expect(network.mock.calls.filter(([url]) => url === "/api/sort")).toHaveLength(1));
+      await act(async () => {
+        if (mode === "manual") await hook.result.current.manualSort(hook.result.current.unsorted[0], { kind: "action" });
+        if (mode === "edit") await hook.result.current.editUnsorted(hook.result.current.unsorted[0].id, "Edited source wins");
+        if (mode === "offline") online = false;
+        if (mode === "unmount") hook.unmount();
+        first.resolve(new Response(null, { status: 502 }));
+      });
+      expect(network.mock.calls.filter(([url]) => url === "/api/sort")).toHaveLength(1);
+    },
+  );
+
   it.each(["action-thread", "threads", "action-intention", "unresolved"] as const)(
     "reports only actual settled destinations in the %s receipt",
     async (kind) => {
@@ -307,7 +408,7 @@ describe("local-first planned capture", () => {
       online = true;
       await act(async () => { window.dispatchEvent(new Event("online")); });
     }
-    await waitFor(() => expect(requests).toHaveLength(1));
+    await waitFor(() => expect(requests).toHaveLength(2));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(requests[0]).toMatchObject({ raw: payload, force });
     expect(hook.result.current.unsorted).toEqual([expect.objectContaining({ src: payload, pendingForce: force })]);
@@ -1191,11 +1292,36 @@ describe("local-first planned capture", () => {
       .toMatchObject({ text: ordinary, src: ordinary });
   });
 
+  it("automatically sorts online images with their complete durable bytes", async () => {
+    const reply = deferred<Response>();
+    const requests: Array<{ captureId?: string; imgs?: string[] }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      requests.push(JSON.parse(String(init?.body)));
+      return reply.promise;
+    }));
+    const hook = await mount();
+    act(() => {
+      hook.result.current.setText("Image task");
+      hook.result.current.setPics([{ id: "automatic-image", src: "data:image/png;base64,image" }]);
+    });
+    await act(async () => { await hook.result.current.submit(); });
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({ imgs: ["data:image/png;base64,image"] });
+    expect(requests[0].captureId).toBeUndefined();
+    expect(JSON.parse((await storage.get(PENDING_RECOVERY_KEY))!)[0].automaticAttempts).toBe(1);
+    expect(hook.result.current.autoSortingIds).toEqual([hook.result.current.unsorted[0].id]);
+    await act(async () => { reply.resolve(sortedResponse("Image task")); });
+    await waitFor(() => expect(hook.result.current.unsorted).toHaveLength(0));
+    expect(hook.result.current.autoSortingIds).toEqual([]);
+    expect(await storage.get(IMG("automatic-image"))).toBe("data:image/png;base64,image");
+  });
+
   it.each([
     ["image-only", ""],
     ["image-dependent", "Use the attached whiteboard diagram for this capture"],
-  ])("keeps an %s capture pending instead of planning without image semantics", async (_case, source) => {
-    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+  ])("keeps an offline %s capture pending with exact bytes", async (_case, source) => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     const network = vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       const request = JSON.parse(String(init?.body));
@@ -1728,7 +1854,7 @@ describe("local-first planned capture", () => {
 
     const recovered = await mount();
     await waitFor(() => expect(network.mock.calls.filter(([url]) =>
-      String(url) === "/api/sort")).toHaveLength(2));
+      String(url) === "/api/sort")).toHaveLength(4));
     await waitFor(async () => {
       records = parsePendingRecoveryRecords(await storage.get(PENDING_RECOVERY_KEY));
       expect(records[0]?.automaticAttempts).toBe(2);
@@ -1740,13 +1866,13 @@ describe("local-first planned capture", () => {
 
     const third = await mount();
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(network.mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(2);
+    expect(network.mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(4);
     expect(third.result.current.unsorted).toHaveLength(1);
     expect(third.result.current.busy).toBeNull();
 
     malformed = false;
     await act(async () => { await third.result.current.resort(third.result.current.unsorted[0]); });
-    expect(network.mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(3);
+    expect(network.mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(5);
     expect(third.result.current.unsorted).toHaveLength(0);
     expect(third.result.current.data.actions.filter((action) =>
       action.text === "Malformed responses stay bounded" && !action.unsorted
