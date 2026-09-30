@@ -32,6 +32,9 @@ const AtomicItem = z.object({
   ownerId: z.string().min(1).max(80).nullable().describe(
     "the owning Action id for a deadline; null unless kind is deadline or supporting_context"
   ),
+  additionalOwnerIds: z.array(z.string().min(1).max(80)).max(28).optional().describe(
+    "deadline only: exact additional Action ids sharing this one source phrase and due; omit or [] otherwise; exclude Actions with their own local deadline"
+  ),
   destinations: z.array(Destination).max(4),
   duplicateActionId: z.string().min(1).max(100).nullable().describe(
     "exact supplied open Action id when this Action has the same intended outcome and finish line despite different wording; null when it produces a genuinely distinct result or follow-up"
@@ -364,6 +367,7 @@ export function validateRoutingPlan(
     if (
       (item.kind === "action" ? !item.action : !!item.action) ||
       (!ownedKind && !!item.ownerId) ||
+      (item.kind !== "deadline" && !!item.additionalOwnerIds?.length) ||
       (item.kind !== "action" && !!item.duplicateActionId)
     ) {
       failures.push({ code: "INVALID_ITEM_FIELDS", itemId: item.id });
@@ -419,11 +423,14 @@ export function validateRoutingPlan(
     }
 
     if (item.kind === "deadline") {
-      if (item.ownerId) {
-        if (deadlineOwners.has(item.ownerId)) {
+      for (const ownerId of routingOwnerIds(item)) {
+        const owner = itemsById.get(ownerId);
+        if (!owner) failures.push({ code: "UNKNOWN_OWNER", itemId: item.id });
+        else if (owner.kind !== "action") failures.push({ code: "INVALID_OWNER_KIND", itemId: item.id });
+        if (deadlineOwners.has(ownerId)) {
           failures.push({ code: "DUPLICATE_DEADLINE_OWNER", itemId: item.id });
         }
-        deadlineOwners.add(item.ownerId);
+        deadlineOwners.add(ownerId);
       }
       if (!item.due) {
         failures.push({ code: "DEADLINE_NOT_STRUCTURED", itemId: item.id });
@@ -450,6 +457,10 @@ export function validateRoutingPlan(
   );
 }
 
+/** Explicit ownership only; supporting context remains single-owner. */
+export const routingOwnerIds = (item: PlannedAtomicItem): string[] =>
+  [...(item.ownerId ? [item.ownerId] : []), ...(item.kind === "deadline" ? item.additionalOwnerIds ?? [] : [])];
+
 const sourceForOwner = (
   owner: PlannedAtomicItem,
   items: PlannedAtomicItem[],
@@ -459,7 +470,7 @@ const sourceForOwner = (
     .filter(
       (item) =>
         item.id === owner.id ||
-        (item.ownerId === owner.id && includedKinds.includes(item.kind))
+        (routingOwnerIds(item).includes(owner.id) && includedKinds.includes(item.kind))
     )
     .map((item) => item.source)
     .join("");
@@ -480,7 +491,8 @@ export function compileRoutingPlan(
     plan.items.filter((item) => item.unresolved).map((item) => item.id)
   );
   for (const item of plan.items) {
-    if (item.ownerId && unresolvedIds.has(item.ownerId)) unresolvedIds.add(item.id);
+    const owners = routingOwnerIds(item);
+    if (owners.length && owners.every((id) => unresolvedIds.has(id))) unresolvedIds.add(item.id);
   }
   const unresolved = plan.items
     .filter((item) => unresolvedIds.has(item.id) && !item.ownerId)
@@ -491,7 +503,7 @@ export function compileRoutingPlan(
   const deadlines = new Map(
     plan.items
       .filter((item) => item.kind === "deadline" && !unresolvedIds.has(item.id))
-      .map((item) => [item.ownerId!, item.due!])
+      .flatMap((item) => routingOwnerIds(item).map((ownerId) => [ownerId, item.due!] as const))
   );
   const actionItems = plan.items.filter(
     (item) =>
