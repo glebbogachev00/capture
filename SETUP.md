@@ -87,15 +87,10 @@ never substitutes the complete mixed capture.
 `CAPTURE_JEV_JUDGE_SHADOW=1` separately compares one Jev Noul score per Tidy
 judge candidate after the existing generative judge has already returned its
 full verdict list and user-facing reasons.
-`CAPTURE_JEV_RECALL_SHADOW=1` separately observes query intent, opaque source
-ranking (including `none`), and evidence sufficiency in one Decisions request
-after the existing cited Recall answer is complete. It does not reorder
-sources, gate the prose model, write prose/citations, or change the response.
-All three flags default off, require `OPENROUTER_API_KEY`, use locked
+Both flags default off, require `OPENROUTER_API_KEY`, use locked
 ZDR/no-collection/no-fallback routing, and never alter the board or response.
-No judge or Recall generative calls are eliminated; calibration is blocked as
-documented in `research/jev-judge-calibration.md` and
-`research/jev-recall-calibration.md`.
+No judge generative calls are eliminated; calibration is blocked as documented
+in `research/jev-judge-calibration.md`.
 
 Before any private-data shadow is enabled, exclude its OpenRouter key from
 Input & Output Logging and verify the Jev endpoint accepts the required privacy

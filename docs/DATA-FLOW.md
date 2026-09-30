@@ -24,7 +24,8 @@ provider your keys select (Groq, Cerebras, Mistral, Google, OpenRouter):
 | Thread summaries | that thread's fragments (background, after a capture lands) |
 | Daily wrap | the day's capture texts (background, once a day) |
 | Tidy / untangle / judge | the texts being compared (only when you open Tidy) |
-| Recall / answer a Search question | a precision-detected question and bounded selected excerpts (automatically after the query is stable and the on-screen disclosure is committed) |
+| Tidy → Review one-liners | the short notes and tasks under review, every thread's name and summary, a few neighbouring notes per thread, and the open actions (only when you tap Review) |
+| Ask (the Ask button in Search) | the question and the whole board as text — every thread's summary and notes (newest first, about 48,000 characters at most), open and faded actions, recent ticked-off actions, and intentions. Never unsorted captures, photos, or history. Only when you tap Ask or press Enter; typing a search sends nothing |
 | Text to speech | the reply being spoken, when a remote TTS fallback is configured |
 
 Failure logs never contain this text. Generative-provider failures log only the
@@ -48,27 +49,8 @@ OpenRouter Decisions endpoint only when its dedicated flag is exactly `1` and
   its verdicts/reasons. It sends at most 14 candidates with bounded kind,
   source, target, and target-context fields (80/400/400/700 characters), using
   one independent Noul question per candidate.
-- `CAPTURE_JEV_RECALL_SHADOW=1` runs only after `/api/recall` has authenticated,
-  validated the existing bounded source snapshot, and completed its
-  authoritative cited answer. One post-response Decisions request receives the
-  question (500-character cap) and at most 12 excerpts (1,000-character cap
-  each) under `source_N` labels. In parallel it classifies query intent, ranks
-  every opaque source label plus `none`, and scores evidence sufficiency. It
-  never writes answer prose or citations, changes source order, or skips the
-  existing Recall model.
-
-All three adapters replace structured local IDs with opaque
-`thread_N`/`candidate_N`/`source_N` labels. The Recall adapter also omits the
-structured source title/name, kind, timestamp/date, lifecycle state, navigation
-target, target/fragment IDs, authoritative answer prose, and citations. Its
-request body has no dedicated account-ID, session-ID, trace-metadata, or API-key
-field and does not add images, board history, or learned rules.
-
-Those are structured-field omissions only, not value-level redaction. The
-bounded Recall question and excerpts are **not redacted**; after trimming and
-clipping, they are sent as the person wrote them. Either string may contain
-identifier-, title-, date-, state-, navigation-, account-, or session-like
-values written as prose. The adapter does not detect or remove those values.
+Both adapters replace structured local IDs with opaque
+`thread_N`/`candidate_N` labels.
 
 The shared server-only transport fixes the endpoint and timeout, makes one
 no-retry request, and always injects this non-overridable provider policy:
@@ -86,19 +68,15 @@ Output Logging setting can retain content independently of this request. An
 operator must exclude the key from that logging before enabling any shadow.
 If privacy-eligible routing is unavailable, a request times out, or a response
 is missing/malformed, that shadow is discarded. Thread filing, judge output,
-and cited Recall behavior remain unchanged. There is no production Jev judge
-prefilter, Recall source reorder, Recall model gate, or generative-call skip;
-the calibration blockers are recorded in
-`research/jev-judge-calibration.md` and
-`research/jev-recall-calibration.md`.
+and judge output remain unchanged. There is no production Jev judge
+prefilter or generative-call skip; the calibration blockers are recorded in
+`research/jev-judge-calibration.md`. (The Recall shadow went with the
+word-matched Recall it observed; Ask replaced both.)
 
 Successful judge-shadow logs contain non-content aggregates only: candidate
 counts, token count, and probability histograms. Thread-shadow logs add only
-selection class/index, confidence, and sorter agreement. Recall-shadow logs
-contain only source/citation counts, opaque source ranks/indexes, intent class,
-probability buckets, authoritative status, token count, and comparison flags.
-None contains question/note/candidate text, local IDs, keys, answer prose,
-citations, or response bodies.
+selection class/index, confidence, and sorter agreement. Neither contains
+note/candidate text, local IDs, keys, or response bodies.
 
 ## Capture Cloud sync and complete backups
 

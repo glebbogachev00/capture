@@ -229,8 +229,16 @@ export function mergeLedgers(
        is kept, so the hub's older copy cannot quietly un-undo it. */
     const prev = byId.get(e.id);
     const undone = !!(prev?.undone || e.undone);
+    /* An entry's photos are written once and only ever taken away (Tidy's
+       photo clean-up), so two copies that disagree agree on the smaller
+       list — otherwise the hub's older copy would re-reference a removed
+       photo and keep its bytes alive on every device. */
+    const imgs = prev && (prev.imgs?.length ?? 0) !== (e.imgs?.length ?? 0)
+      ? (e.imgs ?? []).filter((id) => prev.imgs?.includes(id))
+      : e.imgs;
     byId.set(e.id, {
       ...e,
+      ...(imgs !== e.imgs ? { imgs } : {}),
       ...(undone ? { undone: true } : {}),
       ...(prev?.partial && !e.partial ? { partial: true } : {}),
       ...(undone && e.kind === "pending" ? { imgs: undefined } : {}),

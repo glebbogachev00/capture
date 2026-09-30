@@ -15,7 +15,6 @@ const operationalAdapters = [
   "lib/providers.ts",
   "lib/openRouterDecisions.server.ts",
   "lib/jevJudgeShadow.ts",
-  "lib/jevRecallShadow.ts",
   "lib/jevThreadRerank.ts",
   "lib/cloudBoard.ts",
   "lib/cloudImage.ts",

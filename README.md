@@ -89,6 +89,17 @@ really tasks, the same idea worded twice — the model's semantic pass catches
 what word-matching can't. Every claim is one yes/no (or Approve all), and the
 app's Undo puts a capture back exactly, words included.
 
+Tidy also clears two kinds of clutter on request. **Old photos** go in one
+batch, chosen by age: tap any you want to keep, confirm, and the words they
+came with stay. **One-liners** — the short scraps a sort can leave behind —
+are read by the model against the rest of the board, which proposes deleting
+the noise or filing a note where it belongs. One Undo takes back either batch.
+
+**Ask** answers a question from your board. Type it in the search box and tap
+Ask: the model reads the whole board — every thread, action and intention —
+rather than notes picked by matching words, and answers in a few lines with
+links to the threads it drew on. Typing alone only searches, locally.
+
 ## Quickstart
 
 Needs Node 20 or newer. Two minutes, one key:

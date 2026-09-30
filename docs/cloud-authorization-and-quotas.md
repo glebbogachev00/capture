@@ -6,7 +6,7 @@ Internal operations note. This is not public product, pricing, privacy, or legal
 
 When `CAPTURE_CLOUD=1`, every managed model/provider route runs the shared server-only guard before reading a request body, applying the secondary in-memory IP limiter, or calling a provider. The guarded inventory is pinned by `src/lib/managedAiAuthorization.test.ts`:
 
-- Sort, Distill, Group, Intention, Judge, Organize, Recall, Summarize, Untangle, and Wrap
+- Sort, Distill, Group, Intention, Judge, Organize, Ask, Clean up, Summarize, Untangle, and Wrap
 - Transcription, including its local/Groq and cleanup paths
 - TTS availability and synthesis, including local Kokoro and Edge fallback
 
