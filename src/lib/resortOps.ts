@@ -25,6 +25,8 @@ export async function requestBoardSort<T = SortResult>(options: {
   force?: SortKind;
   imageSources?: string[];
   captureId?: string;
+  /** Ask the one-call sorter instead of the planned pipeline. */
+  simple?: boolean;
   signal?: AbortSignal;
   noteVia: (via?: string | null, routing?: RoutingStatus) => void;
   errorFor: (message?: string) => Error;
@@ -38,7 +40,7 @@ export async function requestBoardSort<T = SortResult>(options: {
     body: JSON.stringify({
       raw: options.raw,
       threads: context.threads,
-      ...(options.captureId ? {
+      ...(options.simple ? { sortVersion: 2, captureId: options.captureId, tzOffset: new Date().getTimezoneOffset() } : options.captureId ? {
         captureId: options.captureId,
         routingPlanVersion: 1,
         actions: options.board.actions

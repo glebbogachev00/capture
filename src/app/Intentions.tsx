@@ -270,14 +270,17 @@ export function IntentionCard({
   );
   if (!profile?.intentionShowcaseEnabled || !onTogglePin)
     return <button className="tcard" onClick={onOpen}>{content}</button>;
+  /* The card still opens; only the pin mark pins. When the whole card was
+     the pin toggle, a pinned-mode intention could not be opened at all. */
   const pinned = !!profile.pinnedIntentionIds?.includes(intention.id);
   return (
-    <button className={"tcard intention-select-card intention-pin-target" + (pinned ? " is-pinned" : "")}
-        onClick={onTogglePin} aria-pressed={pinned}
+    <div className={"intention-select-card intention-pin-target" + (pinned ? " is-pinned" : "")}>
+      <button className="tcard" onClick={onOpen}>{content}</button>
+      <button type="button" className="intention-pin-state" onClick={onTogglePin} aria-pressed={pinned}
         aria-label={`${pinned ? "Unpin" : "Pin"} intention ${pad(displayNumber)}: ${intentionWording(intention.expandedIntention)}`}>
-        <span className="intention-pin-state"><Pin size={14} aria-hidden="true" />{pinned ? "Pinned" : "Pin"}</span>
-        {content}
-    </button>
+        <Pin size={14} aria-hidden="true" />{pinned ? "Pinned" : "Pin"}
+      </button>
+    </div>
   );
 }
 

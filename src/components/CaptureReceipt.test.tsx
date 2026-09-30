@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CaptureReceipt } from "@/components/CaptureReceipt";
-import { createReceiptWindow } from "@/lib/receiptWindow";
+import { createReceiptWindow, RECEIPT_MS } from "@/lib/receiptWindow";
 
 afterEach(() => {
   cleanup();
@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe("CaptureReceipt", () => {
-  it.each([false, true])("hides the receipt and its Undo after fifteen seconds (manual=%s)", (canUndoManual) => {
+  it.each([false, true])("hides the receipt and its Undo when its window ends (manual=%s)", (canUndoManual) => {
     vi.useFakeTimers();
     const onUndo = vi.fn(), onUndoManual = vi.fn();
     const props = { canUndo: true, canUndoManual, onUndo, onUndoManual };
@@ -22,7 +22,7 @@ describe("CaptureReceipt", () => {
     });
     window.open();
 
-    act(() => vi.advanceTimersByTime(14_999));
+    act(() => vi.advanceTimersByTime(RECEIPT_MS - 1));
     expect(screen.getByRole("status")).toBeTruthy();
     act(() => vi.advanceTimersByTime(1));
     expect(screen.queryByRole("status")).toBeNull();

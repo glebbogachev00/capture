@@ -1,13 +1,28 @@
 /**
- * Confirmation stays for fifteen seconds, or until the next capture retires it.
- * Opening again cancels the previous clock so each receipt gets its full window.
+ * How long the "Landed in X" receipt stays on screen — the little clock
+ * with two complaints behind it.
  *
- * Closing clears the banner, highlights, and suggestion through one `onClose`
- * channel in the hook. Capture Undo availability has a separate lifetime and
- * must not keep a success receipt visible.
+ * The first version cleared at 4.5 seconds: gone before the slowest flow
+ * could be read, taking the Undo button with it ("where is the undo
+ * button"). The second never cleared ("it doesn't have to stay there
+ * forever... maybe thirty seconds"). Thirty-five seconds is the number
+ * that survived both, and it is a CEILING, not a lifetime — the next
+ * capture starting retires the receipt early, because a stale "Landed in
+ * X" over words still being sorted misreports the board.
+ *
+ * The machine exists for one further reason: with a bare setTimeout, the
+ * first receipt's timer outlives it and closes the SECOND receipt early —
+ * open at t=0, open again at t=20s, and the screen goes blank at t=35s
+ * with fifteen seconds stolen. Opening here always cancels the previous
+ * clock, so every receipt gets its full window.
+ *
+ * Closing goes through one channel (`onClose`) whether the clock ran out
+ * or the next capture retired it, so everything that must leave with the
+ * banner — the banner text, the row highlights, the suggestion under it —
+ * leaves together, wired once in the hook.
  */
 
-export const RECEIPT_MS = 15_000;
+export const RECEIPT_MS = 35_000;
 
 export type ReceiptWindow = {
   /** A receipt is on screen: give it a full window from now. */

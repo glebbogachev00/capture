@@ -112,6 +112,7 @@ export const ROUTING_FAILURE_CODES = [
   "NEW_THREAD_WITHOUT_CLOSEST_EXISTING",
   "UNUSED_NEW_THREAD",
   "UNRESOLVED_WITHOUT_AMBIGUITY",
+  "INTENTION_NOT_DECLARED_ALONE",
   "MALFORMED_PLAN",
 ] as const;
 
@@ -256,12 +257,52 @@ function commandKindFailures(
   ).map((item) => ({ code: "COMMAND_KIND_CONFLICT", itemId: item.id }));
 }
 
+/** An Intention is declared on its own. When one capture says several
+ * things, a part of it is an Intention only if the person calls it one
+ * ("my intention", "an intention for how I live"). Otherwise a sentence of
+ * resolve inside a longer thought is part of that thought. */
+function undeclaredIntentions(plan: PlannedRoutingPlan): PlannedAtomicItem[] {
+  const primary = plan.items.filter((item) =>
+    item.kind !== "supporting_context" && item.kind !== "deadline"
+  );
+  if (primary.length < 2) return [];
+  const named = (item: PlannedAtomicItem) => /\bintentions?\b/i.test(
+    [item, ...plan.items.filter((other) => other.ownerId === item.id)]
+      .map((part) => part.source).join(" ")
+  );
+  return primary.filter((item) => item.kind === "intention" && !named(item));
+}
+
+/** The last-attempt answer to an undeclared Intention: leave that part
+ * pending for the person to place, never file it as an Intention. */
+function holdUndeclaredIntentions(plan: PlannedRoutingPlan): PlannedRoutingPlan {
+  const held = new Set(undeclaredIntentions(plan).map((item) => item.id));
+  if (!held.size) return plan;
+  return {
+    ...plan,
+    items: plan.items.map((item) => held.has(item.id)
+      ? {
+          ...item,
+          kind: "developing_thought" as const,
+          destinations: [],
+          unresolved: true,
+          ambiguity: "Part of a longer capture, not declared as an intention.",
+        }
+      : item),
+  };
+}
+
 /** Integrity only: source, references, and explicit user authority. */
 export function validateRoutingPlan(
   plan: PlannedRoutingPlan,
   context: RoutingPlanContext
 ): RoutingPlanFailure[] {
   const failures: RoutingPlanFailure[] = commandKindFailures(plan, context.force);
+  if (!context.force) {
+    for (const item of undeclaredIntentions(plan)) {
+      failures.push({ code: "INTENTION_NOT_DECLARED_ALONE", itemId: item.id });
+    }
+  }
   const itemIds = new Set<string>();
   for (const item of plan.items) {
     if (itemIds.has(item.id)) failures.push({ code: "DUPLICATE_ITEM_ID", itemId: item.id });
@@ -681,7 +722,9 @@ export async function planRoutingWithRetry(
           PlannedRoutingProposalSchema.parse(untrusted),
           context.raw
         );
-        candidate = attempt === 2 ? clearNonThoughtDestinations(parsed) : parsed;
+        candidate = attempt === 2
+          ? holdUndeclaredIntentions(clearNonThoughtDestinations(parsed))
+          : parsed;
       } catch {
         observeMalformed();
         throw new RoutingPlanCandidateValidationError([{ code: "MALFORMED_PLAN" }]);

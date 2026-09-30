@@ -15,7 +15,7 @@ it("uses a current display number in cards and details without changing the stor
   expect([...container.querySelectorAll(".int-number")].map(node => node.textContent)).toEqual(["(02)", "(02)"]);
   expect(old.number).toBe(51);
 });
-it("keeps the original single-card design and taps pin/unpin without an extra details button", () => {
+it("pins from its own button while the card still opens the intention", () => {
   const onTogglePin = vi.fn(), onOpen = vi.fn();
   const profile: ProfileIdentity = { name: "", intentionShowcaseEnabled: true, pinnedIntentionIds: [] };
   const { rerender } = render(<IntentionCard intention={intention} profile={profile} onTogglePin={onTogglePin} onOpen={onOpen} />);
@@ -29,9 +29,11 @@ it("keeps the original single-card design and taps pin/unpin without an extra de
   expect(unpin.getAttribute("aria-pressed")).toBe("true");
   fireEvent.click(unpin);
   expect(onTogglePin).toHaveBeenCalledTimes(2);
-  expect(screen.queryByRole("button", { name: "Open intention details" })).toBeNull();
-  expect(screen.getAllByRole("button")).toHaveLength(1);
   expect(onOpen).not.toHaveBeenCalled();
+  const card = screen.getAllByRole("button").find(button => button !== unpin)!;
+  fireEvent.click(card);
+  expect(onOpen).toHaveBeenCalledTimes(1);
+  expect(onTogglePin).toHaveBeenCalledTimes(2);
 });
 it.each([undefined, { name: "", intentionShowcaseEnabled: false }])("preserves normal tap-to-open when the feature is off", profile => {
   const onOpen = vi.fn(), onTogglePin = vi.fn();

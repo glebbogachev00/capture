@@ -66,17 +66,17 @@ export type PlannedSettlementResult =
 /** Stable for every JavaScript string, including hostile lone surrogates that
  * make encodeURIComponent throw. The escape marker itself is always escaped,
  * so distinct plan identities cannot collapse onto the same item id. */
-const enc = (value: string) => value.replace(/[^A-Za-z0-9.-]/g, (char) =>
+export const enc = (value: string) => value.replace(/[^A-Za-z0-9.-]/g, (char) =>
   `~${char.charCodeAt(0).toString(16).padStart(4, "0")}~`
 );
-const settlementLedgerId = (captureId: string) =>
+export const settlementLedgerId = (captureId: string) =>
   `planned:${enc(captureId)}:settlement`;
-const plannedId = (captureId: string, kind: string, identity: string) =>
+export const plannedId = (captureId: string, kind: string, identity: string) =>
   `planned:${enc(captureId)}:${kind}:${enc(identity)}`;
 
-const captureIdentity = (entry: CaptureEntry) => entry.captureId ?? entry.id;
+export const captureIdentity = (entry: CaptureEntry) => entry.captureId ?? entry.id;
 
-function conflict(
+export function conflict(
   board: Board,
   captureId: string,
   reason: PlannedSettlementConflictReason,
@@ -124,7 +124,7 @@ function unresolvedRuns(items: PlannedAtomicItem[], unresolvedIds: Set<string>) 
   }));
 }
 
-function activePendingFor(board: Board, captureId: string) {
+export function activePendingFor(board: Board, captureId: string) {
   return board.ledger.filter((entry) =>
     entry.kind === "pending" &&
     !entry.undone &&
@@ -353,6 +353,14 @@ export function settlePlannedRouting(
     const text = ownedSource(item, plan.items, unresolvedIds, ["supporting_context"]);
     item.destinations.forEach((_, index) => {
       const threadId = destinationThreadId(item, index);
+      /* One capture, one thread, one fragment. Parts the planner split for
+         bookkeeping but sent to the same thread are joined back in source
+         order, so a thread never fills with one-line shards of one thought. */
+      const sameThread = createdFrags.find((created) => created.threadId === threadId);
+      if (sameThread) {
+        sameThread.frag.text = `${sameThread.frag.text.trimEnd()} ${text.trimStart()}`;
+        return;
+      }
       const frag: Frag = {
         id: plannedId(captureId, "frag", `${item.id}:${index}:${
           item.destinations[index].type === "existing"

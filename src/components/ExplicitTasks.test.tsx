@@ -7,6 +7,7 @@ import { EMPTY, KEY, hydrate } from "@/lib/model";
 import { get, set } from "@/lib/storage";
 import { explicitTasks, explicitTasksRaw, releaseIdea } from "@/lib/explicitTasks.fixture";
 import type { PlannedRoutingPlan } from "@/lib/plannedRouting";
+import { stubSortFetch } from "../../test/simpleSortFetch";
 
 // Supply the App Router boundary without a checkout or Cloud account.
 vi.mock("next/navigation", () => ({
@@ -32,7 +33,7 @@ describe("explicit tasks survive the visible board and reload", () => {
   ])("$name", async ({ kind, raw, actions }) => {
     const hasThread = kind !== "action";
     const sortRequests: string[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/sort") {
         const request = JSON.parse(String(init?.body));
         sortRequests.push(request.raw);

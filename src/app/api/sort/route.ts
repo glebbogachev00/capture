@@ -49,6 +49,7 @@ import {
   requiresPlannedActionIdentity,
 } from "@/lib/plannedActionIdentity";
 import { SEMANTIC_KIND_BOUNDARY } from "@/lib/semanticKindBoundary";
+import { SIMPLE_SORT_VERSION, generateSimpleSort, normalizeSimpleSort, simpleSortPrompt } from "@/lib/simpleSort";
 import { parseSortImageDataUrl } from "@/lib/sortImageDataUrl";
 
 /**
@@ -196,6 +197,10 @@ const Body = z.object({
   ),
   /** Versioned planning seam used only after the client durably saves intake. */
   routingPlanVersion: z.literal(1).optional(),
+  /** The one-call sorter (lib/simpleSort). */
+  sortVersion: z.literal(SIMPLE_SORT_VERSION).optional(),
+  /** The person's Date#getTimezoneOffset(), so "Friday" means their Friday. */
+  tzOffset: z.number().int().min(-900).max(900).optional(),
   /** Existing open Actions are candidates only for dedicated identity adjudication. */
   actions: z.array(
     z.object({ id: z.string().min(1).max(100), text: z.string().min(1).max(500) })
@@ -517,6 +522,9 @@ function routingPlanPrompt(
   initialInterpretation: z.infer<typeof Sorted>,
 ): string {
   const retryGuidance = [
+    failures.some((failure) => failure.code === "INTENTION_NOT_DECLARED_ALONE")
+      ? "\nINTENTION_NOT_DECLARED_ALONE repair: This capture says several things, and the affected item is not named as an intention by the person. Intentions are declared on their own, not pulled out of a longer capture. Re-decide the affected item from the source as a developing_thought (with its Thread destination) or an Action, or keep it with the thought it belongs to.\n"
+      : "",
     failures.some((failure) => failure.code === "NON_THOUGHT_DESTINATION")
       ? "\nNON_THOUGHT_DESTINATION repair: Re-evaluate each affected item's semantic kind from the original source before changing its fields. Do not mechanically clear destinations just to satisfy validation: if the destinations reflect genuine developing thought, correct the kind; if the source truly requests or commits a discrete act, keep action and clear destinations. The model still owns that semantic decision.\n"
       : "",
@@ -547,7 +555,7 @@ function routingPlanPrompt(
     "- Root: { items, newThreads }. items is an array of 1..30 AtomicItem objects. newThreads is an array of 0..8 NewThread objects.\n" +
     "- AtomicItem has: id, source, kind, action, due, ownerId, destinations, duplicateActionId, unresolved, ambiguity, and optional additionalOwnerIds.\n" +
     "- id: non-empty string, max 80 characters. source: non-empty string, max 8000 characters.\n" +
-    "- kind is exactly one of: action, developing_thought, intention, supporting_context, deadline. An action is a direct instruction or commitment to a discrete task. An imperative addresses the person implicitly and does not need a named actor or date. An ordinary review or check can finish once. A developing_thought is an observation, question, explanation, design idea, option under consideration, or problem the person is trying to understand. Thinking about what might work does not adopt a personal stance. An intention is an explicitly adopted lasting personal principle, identity, or way of living; it is not an ordinary intention to investigate, compare, decide, or change a project. Classify the whole semantic thought before dividing its source for bookkeeping. Keep its reasoning and qualifying clauses with that thought unless the source actually changes subject or speech act. Use supporting_context and deadline only for source owned by another item.\n" +
+    "- kind is exactly one of: action, developing_thought, intention, supporting_context, deadline. An action is a direct instruction or commitment to a discrete task. An imperative addresses the person implicitly and does not need a named actor or date. An ordinary review or check can finish once. A developing_thought is an observation, question, explanation, design idea, option under consideration, or problem the person is trying to understand. Thinking about what might work does not adopt a personal stance. An intention is an explicitly adopted lasting personal principle, identity, or way of living; it is not an ordinary intention to investigate, compare, decide, or change a project. Intentions are declared on their own: when the capture says several things, use intention only for a part the person explicitly calls an intention; any other sentence of resolve belongs with the thought or Action around it. Classify the whole semantic thought before dividing its source for bookkeeping. Keep its reasoning and qualifying clauses with that thought unless the source actually changes subject or speech act. Use supporting_context and deadline only for source owned by another item.\n" +
     "- action: null or non-empty string max 500. due: null or non-empty string max 40. ownerId: null or non-empty string max 80. Action.due must always be null. Only a separate deadline item may carry due, as a resolved ISO date, and its ownerId must name one Action item. Optional additionalOwnerIds is an array of 0..28 unique additional Action ids, each max 80 characters, allowed only on deadline items (omit or [] otherwise). Declare every Action in the exact semantic scope of a genuinely shared deadline phrase; do not repeat ownerId in this array. Exclude Actions with different local dates; represent their local deadlines separately. Each Action may own at most one deadline.\n" +
     "- destinations: array of 0..4 Destination objects. Each Destination is exactly either { type: \"existing\", threadId: <non-empty string max 100> } or { type: \"new\", newThreadKey: <non-empty string max 80> }. Only developing_thought items may carry destinations; all other kinds must use an empty destinations array. Preserve the semantic kind and clear destinations when the source is not developing thought; use developing_thought only when that is what the source means.\n" +
     "- duplicateActionId is reserved for a later dedicated Action identity adjudicator. Always return null. unresolved: boolean. ambiguity: null or non-empty string max 240.\n" +
@@ -609,6 +617,26 @@ export async function POST(request: Request) {
       ))
   ) {
     return Response.json({ error: "bad request" }, { status: 400 });
+  }
+
+  if (body.sortVersion === SIMPLE_SORT_VERSION) {
+    if (body.imgs?.length || body.raw.length > 20_000) {
+      return Response.json({ error: "bad request" }, { status: 400 });
+    }
+    try {
+      const prompt = simpleSortPrompt({
+        raw: body.raw, threads: body.threads, corrections: body.correctionExamples, force: body.force, tzOffset: body.tzOffset,
+      });
+      const { value, via } = await withFallback(async (tier) =>
+        normalizeSimpleSort(
+          await generateSimpleSort({ tier, prompt, abortSignal: planningAbortSignal }),
+          { threads: body.threads, force: body.force, raw: body.raw },
+        ), preferredFor("sort"), { abortSignal: planningAbortSignal });
+      return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items: value }, via });
+    } catch (e) {
+      const { message, status } = explain(e);
+      return Response.json({ error: message }, { status });
+    }
   }
 
   /* Providers accept one image at this seam. Interpret each attachment in its

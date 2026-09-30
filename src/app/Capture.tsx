@@ -759,12 +759,12 @@ export function Capture() {
                     ))}
                   {/* Undo can remove a newly created wrong Thread, so count
                       actual alternatives rather than remaining Threads. */}
-                  {!!misfiled.thread && hasAlternativeThread(data.threads, misfiled.thread.id) && (
+                  {hasAlternativeThread(data.threads, misfiled.thread?.id) && (
                     <button
                       className="misfiled-btn"
                       onClick={() => setPickingThread(true)}
                     >
-                      Another thread
+                      {misfiled.thread ? "Another thread" : "Pick a thread"}
                     </button>
                   )}
                   <button
@@ -1180,8 +1180,6 @@ export function Capture() {
 
             {tab === "intentions" && (
               <div>
-                {!!data.intentions.length && data.profile?.intentionShowcaseEnabled &&
-                  <p className="intention-pin-hint">Tap a card to pin it. Tap it again to unpin.</p>}
                 {!data.intentions.length && loaded && (
                   <div className="empty">
                     <p className="big">Nothing declared yet.</p>

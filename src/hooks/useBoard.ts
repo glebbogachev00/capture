@@ -84,6 +84,9 @@ import {
   computeSuggestion,
   type Suggestion,
 } from "@/lib/boardOps";
+import { repeatedThought } from "@/lib/repeatedThought";
+import { settleSimpleSort } from "@/lib/simpleSortSettlement";
+import type { SimpleSortItem } from "@/lib/simpleSort";
 import { resolveCapture } from "@/lib/command";
 import {
   answeredKindCorrection,
@@ -171,13 +174,8 @@ import {
   type RawAiProposal,
 } from "@/lib/organizeAi";
 import { playgroundUsage } from "@/lib/playgroundUsageClient";
-import {
-  parsePlannedRoutingResponse,
-  reconcilePersistedComposerImages,
-  stagePlannedRoutingIntake,
-} from "@/lib/plannedRoutingIntake";
-import { validateRoutingPlan } from "@/lib/plannedRouting";
-import { settlePlannedRouting, type PlannedSettlementResult } from "@/lib/plannedRoutingSettlement";
+import { reconcilePersistedComposerImages, stagePlannedRoutingIntake } from "@/lib/plannedRoutingIntake";
+import type { PlannedSettlementResult } from "@/lib/plannedRoutingSettlement";
 import { useManualFiling } from "./useManualFiling";
 import { MANUAL_ROUTING_UNDO_KEY } from "@/lib/manualRoutingUndo";
 import { finalizingPendingTargetIds, PlannedSortAuthority } from "@/lib/plannedSortAuthority";
@@ -492,7 +490,7 @@ export function useBoard(now: number) {
      been. Cleared by answering, by dismissing, or by the next capture. */
   const [misfiled, setMisfiled] = useState<{
     text: string;
-    wrong: SortKind;
+    wrong?: SortKind; // absent when mixed or manual: nothing to learn, still asked
     captureId: string;
     /* The thread it landed in, when it landed in one. Right kind, wrong
        home is a different mistake from the wrong kind, and the strip can
@@ -787,14 +785,11 @@ export function useBoard(now: number) {
     /* The durable restore brought back whatever held these image ids. */
     heldImages.current!.cancel();
     const { wrongKind, undoneEntry, landedIn } = durable.value;
-    if (wrongKind && undoneEntry) {
-      setMisfiled({
-        text: undoneEntry.raw || undoneEntry.clean,
-        wrong: wrongKind,
-        captureId: undoneEntry.captureId ?? undoneEntry.id,
-        thread: landedIn,
-      });
-    }
+    /* Always ask where it goes: split, manual, or pending captures stay placeable by hand. */
+    const undoneText = undoneEntry ? undoneEntry.raw || undoneEntry.clean : snap.text ?? "";
+    const undoneCaptureId = undoneEntry ? undoneEntry.captureId ?? undoneEntry.id : snap.captureId;
+    if (undoneText.trim() && undoneCaptureId)
+      setMisfiled({ text: undoneText, wrong: wrongKind ?? undefined, captureId: undoneCaptureId, thread: landedIn });
     receiptWindow.current!.retire();
     /* The capture box gets its words back too — Undo returns the draft as
        it was, not just the board. A brand-new draft already being typed is
@@ -1490,33 +1485,18 @@ export function useBoard(now: number) {
         return;
       }
       const work = async () => {
-        const value = await requestSort(
-          input.source || "(image only)",
-          input.force,
-          undefined,
-          input.captureId,
-          attempt.signal,
-        );
+        const response = await requestBoardSort<{ sort?: { items?: SimpleSortItem[] }; via?: string }>({
+          request: fetch, board: latest.current, raw: input.source, forgottenRules, force: input.force,
+          simple: true, captureId: input.captureId, signal: attempt.signal, noteVia, errorFor: (message) => new SortError(message),
+        });
       if (!attempt.authoritative()) return;
-      const response = parsePlannedRoutingResponse(value, input.captureId);
-      if (!response) throw new Error("invalid planned response");
+      const items = response.sort?.items;
+      if (!items?.length) throw new Error("invalid sort response");
+      const commanded = input.force === "thread" ? "thought" : input.force;
+      if (commanded && items.some((item) => item.kind !== commanded)) throw new Error("sort ignored the command");
       if (!snapshotMatchesPending(input, latest.current)) return;
-      const failures = validateRoutingPlan(response.routingPlan, {
-        captureId: input.captureId,
-        raw: input.source,
-        force: input.force,
-        recovery: response.recovery,
-        threads: latest.current.threads.map((thread) => ({
-          id: thread.id, name: thread.name, about: thread.summary,
-        })),
-        actions: latest.current.actions.filter((action) => !action.unsorted && !action.done),
-        now: stamp(),
-      });
-      if (failures.length) throw new Error("invalid final routing plan");
-      const pureIntention = response.routingPlan.items.some((item) => item.kind === "intention") &&
-        response.routingPlan.items.every((item) => !item.unresolved &&
-          (item.kind === "intention" || item.kind === "supporting_context"));
-      if (pureIntention) {
+      /* A capture that is only an intention opens the intention preview. */
+      if (items.every((item) => item.kind === "intention")) {
         const pendingEntryForCapture = latest.current.ledger.find((entry) =>
           entry.kind === "pending" &&
           !entry.undone &&
@@ -1529,19 +1509,8 @@ export function useBoard(now: number) {
             )
           : undefined;
         if (!expected || !attempt.authoritative()) return;
-        const origin = resortIntentionOrigin(
-          expected,
-          pendingEntryForCapture,
-          response.via,
-        );
-        if (await expandIntention(
-          input.source,
-          origin,
-          expected,
-          true,
-          attempt.signal,
-          attempt.authoritative,
-        )) {
+        const origin = resortIntentionOrigin(expected, pendingEntryForCapture, response.via);
+        if (await expandIntention(input.source, origin, expected, true, attempt.signal, attempt.authoritative)) {
           setPendingSource(expected.id);
         }
         return;
@@ -1549,11 +1518,10 @@ export function useBoard(now: number) {
       const durable = await transactDurable<PlannedSettlementResult | null>((current) => {
         if (!attempt.authoritative()) return { skip: null };
         if (!snapshotMatchesPending(input, current)) return { skip: null };
-        const settled = settlePlannedRouting(current, {
+        const settled = settleSimpleSort(current, {
           captureId: input.captureId,
           revision: input.revision,
-          plan: response.routingPlan,
-          recovery: response.recovery,
+          items,
           now: stamp(),
           via: response.via,
         });
@@ -1612,6 +1580,7 @@ export function useBoard(now: number) {
         setTab(settled.actionIds.length && !settled.threadIds.length ? "actions" : "threads");
         showReceipt(lines.join(" · "), null, lines);
       }
+      setSuggestion(repeatedThought(beforeUndo.board, durable.board, settled.summaryThreadIds));
       };
       await attempt.run(work());
     } catch (error) {

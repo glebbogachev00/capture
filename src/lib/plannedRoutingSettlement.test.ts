@@ -257,7 +257,7 @@ describe("atomic planned-routing settlement", () => {
     expect(result.board.actions.some((action) => action.id === waiting.id)).toBe(false);
 
     expect(result.board.threads.find((thread) => thread.id === "capture")?.frags.map((frag) => frag.text))
-      .toEqual(["Capture needs quieter filing. ", "Retake playback stalls. "]);
+      .toEqual(["Capture needs quieter filing. Retake playback stalls. "]);
     expect(result.board.threads.find((thread) => thread.id === "retake")?.frags.map((frag) => frag.text))
       .toEqual(["Retake playback stalls. "]);
 
@@ -299,7 +299,7 @@ describe("atomic planned-routing settlement", () => {
 
   it("represents a mixed Intention, Action, and new Thread without inventing intention details", () => {
     const mixedRaw =
-      "I protect room for rest. Capture planning needs a home. Email Mia tomorrow.";
+      "My intention: I protect room for rest. Capture planning needs a home. Email Mia tomorrow.";
     const mixedWaiting: Action = {
       ...waiting,
       id: "mixed-waiting",
@@ -338,7 +338,7 @@ describe("atomic planned-routing settlement", () => {
       items: [
         {
           id: "rest-intention",
-          source: "I protect room for rest. ",
+          source: "My intention: I protect room for rest. ",
           kind: "intention",
           action: null,
           due: null,
@@ -404,8 +404,8 @@ describe("atomic planned-routing settlement", () => {
     if (result.status !== "applied") return;
     expect(result.board.intentions).toEqual([
       expect.objectContaining({
-        rawInput: "I protect room for rest. ",
-        expandedIntention: "I protect room for rest. ",
+        rawInput: "My intention: I protect room for rest. ",
+        expandedIntention: "My intention: I protect room for rest. ",
         recommendedActions: [],
         counterIntentions: [],
       }),
