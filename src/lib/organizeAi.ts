@@ -127,10 +127,8 @@ export function renderBoardForPrompt(s: TidySnapshot): string {
     lines.push("Intentions:");
     for (const i of s.intentions) lines.push(`- [${i.id}] ${i.expanded}`);
   }
-  if (s.completions?.length) {
-    lines.push("Ticked off (finished tasks, newest first):");
-    for (const c of s.completions) lines.push(`- ${c.text}`);
-  }
+  /* Finished tasks are not shown: scanResolved owns receipts exactly, and a
+     model given the list resolved notes with unrelated ones. */
   return lines.join("\n");
 }
 

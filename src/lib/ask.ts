@@ -25,6 +25,8 @@ import type { Board, Frag, Thread } from "./model";
 
 /** About 12k tokens of board: comfortably inside every model in the chain. */
 export const ASK_BUDGET = 48_000;
+/** The most the Ask route accepts. The built context never exceeds it. */
+export const ASK_MAX_CONTEXT = ASK_BUDGET + 12_000;
 export const ASK_MAX_QUESTION = 600;
 const NOTE_CHARS = 1_200;
 const SUMMARY_CHARS = 700;
@@ -86,21 +88,27 @@ export function askContext(board: Board, now: number): AskContext {
     return `- [${ref}] ${oneLine(a.text, 300)}${due} · added ${day(a.at)}${home}`;
   };
 
+  /* Summaries and intentions get a share of the budget, split across however
+     many there are, so notes always keep room: 40 full summaries and 52
+     intentions once filled it alone. */
+  const share = (part: number, count: number, floor: number, ceil: number) =>
+    Math.max(floor, Math.min(ceil, Math.floor((ASK_BUDGET * part) / Math.max(1, count))));
+  const summaryChars = share(0.35, threads.length, 200, SUMMARY_CHARS);
   const intentions = [...board.intentions].sort((a, b) => a.number - b.number);
+  const intentionChars = share(0.15, intentions.length, 120, 300);
   const intentionBlock = intentions.map((it, i) => {
     const ref = `I${i + 1}`;
     refs[ref] = { kind: "intention", id: it.id, name: oneLine(it.expandedIntention || it.rawInput, 80) };
-    const lines = [`- [${ref}] ${oneLine(it.expandedIntention || it.rawInput, 600)} (declared ${day(it.at)})`];
-    if (it.recommendedActions.length) lines.push(`  Lived by: ${it.recommendedActions.map((x) => oneLine(x, 160)).join("; ")}`);
-    if (it.counterIntentions.length) lines.push(`  Pulling against it: ${it.counterIntentions.map((x) => oneLine(x, 160)).join("; ")}`);
-    return lines.join("\n");
+    /* One line each: with dozens of intentions, their action lists alone
+       filled the budget and pushed every note out. */
+    return `- [${ref}] ${oneLine(it.expandedIntention || it.rawInput, intentionChars)} (declared ${day(it.at)})`;
   });
 
   const receipts = [...(board.completions ?? [])].sort((a, b) => b.at - a.at).slice(0, MAX_RECEIPTS);
 
   /* Notes compete for what is left, newest first across the whole board. */
   const fixedParts = [
-    ...threads.map((t) => `${t.name} ${t.summary ?? ""} ${t.next ?? ""}`.slice(0, SUMMARY_CHARS + 200)),
+    ...threads.map((t) => `${t.name} ${t.summary ?? ""} ${t.next ?? ""}`.slice(0, summaryChars + 200)),
     ...open.map((a) => a.text.slice(0, 340)),
     ...faded.map((a) => a.text.slice(0, 340)),
     ...intentionBlock,
@@ -116,8 +124,19 @@ export function askContext(board: Board, now: number): AskContext {
     room -= cost;
     kept.add(f);
   }
-  const omitted = all.length - kept.size;
+  /* The estimate above leaves out headers and labels, so check the real text
+     and drop the oldest notes until it fits what the route accepts. */
+  let text = render(kept);
+  const byAge = all.map(({ f }) => f).filter((f) => kept.has(f)).reverse();
+  while (text.length > ASK_MAX_CONTEXT && byAge.length) {
+    for (const f of byAge.splice(0, Math.max(1, Math.ceil(byAge.length / 10)))) kept.delete(f);
+    text = render(kept);
+  }
+  if (text.length > ASK_MAX_CONTEXT) text = text.slice(0, ASK_MAX_CONTEXT - 1) + "…";
+  return { text, refs, omitted: all.length - kept.size };
 
+  function render(kept: Set<Frag>): string {
+  const omitted = all.length - kept.size;
   const out: string[] = [];
   const today = new Date(now);
   out.push(`Today is ${WEEKDAY[today.getDay()]} ${day(now)}.`);
@@ -130,7 +149,7 @@ export function askContext(board: Board, now: number): AskContext {
     const frags = sortedFrags(t);
     const shown = frags.filter((f) => kept.has(f)).sort((a, b) => a.at - b.at);
     out.push(`\n### [${label.get(t.id)}] ${oneLine(t.name, 120)} · ${frags.length} ${frags.length === 1 ? "note" : "notes"} · last ${day(lastAt(t))}`);
-    if (t.summary?.trim()) out.push(`Where this stands: ${clip(t.summary, SUMMARY_CHARS)}`);
+    if (t.summary?.trim()) out.push(`Where this stands: ${clip(t.summary, summaryChars)}`);
     if (t.next?.trim()) out.push(`Next step: ${oneLine(t.next, 200)}`);
     if (frags.length > shown.length) out.push(`(${frags.length - shown.length} older notes not shown)`);
     for (const f of shown) {
@@ -150,8 +169,8 @@ export function askContext(board: Board, now: number): AskContext {
   out.push(receipts.length ? receipts.map((r) => `- ${day(r.at)}: ${oneLine(r.text, 200)}`).join("\n") : "(none recorded)");
   out.push(`\n## Intentions (${intentions.length}) — states declared as already true`);
   out.push(intentionBlock.length ? intentionBlock.join("\n") : "(none)");
-
-  return { text: out.join("\n"), refs, omitted };
+  return out.join("\n");
+  }
 }
 
 /* ------------------------------ the answer ------------------------------ */

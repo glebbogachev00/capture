@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ASK_BUDGET, answerBlocks, askContext, readAnswer } from "./ask";
+import { ASK_BUDGET, ASK_MAX_CONTEXT, answerBlocks, askContext, readAnswer } from "./ask";
 import { EMPTY, type Board, type Thread } from "./model";
 
 const NOW = new Date(2026, 8, 30, 12).getTime();
@@ -29,7 +29,6 @@ describe("askContext", () => {
     expect(text).toContain("Where this stands: Settled on annual.");
     expect(text).toContain("[A1] Email Maya the invoice");
     expect(text).toContain("[I1] I sleep eight hours.");
-    expect(text).toContain("Pulling against it: Scrolling in bed");
     expect(text).toContain("Today is Wednesday 2026-09-30.");
     expect(omitted).toBe(0);
     // Most recently active thread is T1.
@@ -62,6 +61,24 @@ describe("askContext", () => {
     expect(text).toContain("### [T2] Old");
     expect(text).toContain("Where this stands: the whole story");
     expect(text).toMatch(/older notes not shown/);
+  });
+
+  it("stays inside what the route accepts and still shows notes when intentions are many", () => {
+    /* The real board: 52 intentions with long action lists, 40 thread
+       summaries, and every note pushed out at 66,864 characters. */
+    const intentions = Array.from({ length: 60 }, (_, i) => ({
+      id: `i${i}`, number: i + 1, rawInput: "x", expandedIntention: `I live intention ${i} ${"y".repeat(500)}`,
+      recommendedActions: Array.from({ length: 4 }, () => "z".repeat(200)), counterIntentions: Array.from({ length: 4 }, () => "w".repeat(200)),
+      at: NOW - i * DAY, updatedAt: NOW,
+    }));
+    const threads = Array.from({ length: 40 }, (_, i) => thread(`t${i}`, `Thread ${i}`,
+      Array.from({ length: 12 }, (_, n): [string, number] => [`note ${i}-${n} ${"v".repeat(300)}`, NOW - (i + n) * DAY]),
+      { summary: "s".repeat(900) }));
+    const { text, omitted } = askContext(board({ threads, intentions }), NOW);
+    expect(text.length).toBeLessThanOrEqual(ASK_MAX_CONTEXT);
+    expect(omitted).toBeLessThan(480);
+    expect(text).toContain("note 0-0 ");
+    expect(text).toContain("[I60] I live intention 59");
   });
 });
 

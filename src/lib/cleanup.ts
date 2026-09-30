@@ -240,6 +240,17 @@ export function readVerdicts(value: unknown, ctx: OneLinerContext): OneLinerProp
     }
     seen.add(item.key);
   }
+  /* Repeats are removed down to one, never to none. Three copies of a note
+     each "repeat" the others, and the model marked all three. */
+  const words = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const groups = new Map<string, OneLiner[]>();
+  for (const item of Object.values(ctx.items)) groups.set(words(item.text), [...(groups.get(words(item.text)) ?? []), item]);
+  for (const copies of groups.values()) {
+    const removed = copies.filter((copy) => out.some((p) => p.verdict === "remove" && p.item.key === copy.key));
+    if (copies.length < 2 || removed.length < copies.length) continue;
+    const oldest = copies.reduce((a, b) => (b.at < a.at ? b : a));
+    out.splice(out.findIndex((p) => p.item.key === oldest.key), 1);
+  }
   return out;
 }
 

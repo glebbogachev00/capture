@@ -143,6 +143,15 @@ describe("readVerdicts", () => {
     expect(readVerdicts({ nope: true }, ctx)).toBeNull();
   });
 
+  it("removes identical one-liners down to one copy, never to none", () => {
+    const same = (id: string, at: number) => ({ id, at, text: "For Ovid, the tower still needs to match", imgs: [] });
+    const board3: Board = { ...EMPTY, threads: [{ id: "ovid", name: "Ovid", summary: "", frags: [same("o1", 1), same("o2", 2), same("o3", 3)] }] };
+    const c = oneLinerContext(board3, oneLiners(board3), NOW);
+    const refOf = (key: string) => Object.entries(c.items).find(([, item]) => item.key === key)![0];
+    const out = readVerdicts({ changes: ["n:o1", "n:o2", "n:o3"].map((key) => ({ ref: refOf(key), verdict: "remove", to: null, reason: "Repeats the note next to it." })) }, c)!;
+    expect(out.map((p) => p.item.key).sort()).toEqual(["n:o2", "n:o3"]);
+  });
+
   it("fits a very wide board inside the route's limit, scraps intact", () => {
     const wide: Board = { ...b, threads: [...b.threads, ...Array.from({ length: 600 }, (_, i) => ({
       id: `w${i}`, name: `Thread ${i}`, summary: "x".repeat(300), frags: [] }))] };

@@ -23,16 +23,16 @@ export function simpleAnswer(plan: PlannedRoutingPlan): SimpleSortItem[] {
       }
       continue;
     }
-    const destination = item.destinations[0];
     const next: SimpleSortItem = item.kind === "action"
       ? { kind: "action", text: item.action ?? item.source.trim() }
       : item.kind === "intention"
         ? { kind: "intention", text: item.source }
         : {
             kind: "thought", text: item.source,
-            thread: destination?.type === "existing"
+            threads: item.destinations.length ? item.destinations.map((destination) => destination.type === "existing"
               ? { id: destination.threadId }
-              : { name: plan.newThreads.find((thread) => thread.key === destination?.newThreadKey)?.name ?? "New thread" },
+              : { name: plan.newThreads.find((thread) => thread.key === destination.newThreadKey)?.name ?? "New thread" })
+              : [{ name: "New thread" }],
           };
     byId.set(item.id, next);
     items.push(next);

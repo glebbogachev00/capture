@@ -625,12 +625,12 @@ export async function POST(request: Request) {
     }
     try {
       const prompt = simpleSortPrompt({
-        raw: body.raw, threads: body.threads, corrections: body.correctionExamples, force: body.force, tzOffset: body.tzOffset,
+        raw: body.raw, threads: body.threads, actions: body.actions, corrections: body.correctionExamples, force: body.force, tzOffset: body.tzOffset,
       });
       const { value, via } = await withFallback(async (tier) =>
         normalizeSimpleSort(
           await generateSimpleSort({ tier, prompt, abortSignal: planningAbortSignal }),
-          { threads: body.threads, force: body.force, raw: body.raw },
+          { threads: body.threads, actions: body.actions, force: body.force, raw: body.raw },
         ), preferredFor("sort"), { abortSignal: planningAbortSignal });
       return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items: value }, via });
     } catch (e) {

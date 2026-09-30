@@ -6,7 +6,7 @@ import { modelRateLimit } from "@/lib/limiter";
 import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { sanitizeProviderError, withFallback } from "@/lib/providers";
 import { opsEvent } from "@/lib/opsEvent.server";
-import { ASK_BUDGET, ASK_MAX_QUESTION, AskAnswerSchema } from "@/lib/ask";
+import { ASK_MAX_CONTEXT, ASK_MAX_QUESTION, AskAnswerSchema } from "@/lib/ask";
 
 /**
  * Ask — a question answered from the person's own board.
@@ -24,7 +24,7 @@ const DEADLINE_MS = 50_000;
 const Body = z.object({
   question: z.string().trim().min(2).max(ASK_MAX_QUESTION),
   /* Budget plus headroom for the headings; a client cannot send more. */
-  board: z.string().max(ASK_BUDGET + 12_000),
+  board: z.string().max(ASK_MAX_CONTEXT),
 });
 
 const INSTRUCTIONS = `You are the Ask feature of Capture, a personal thinking app. The person has asked a question about their own notes. Their whole board is below the question. Answer from it the way a sharp friend who has read every note would: directly, specifically, in their words.

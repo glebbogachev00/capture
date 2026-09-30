@@ -28,7 +28,7 @@ beforeEach(async () => {
   ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
     if (String(prompt).startsWith("You sort one capture")) {
       const thread = calls.at(-1)?.force === "thread";
-      return { object: schema.parse({ items: [{ kind: thread ? "thought" : "intention", text: raw, threadId: thread ? "training" : null, newThread: null, due: null }] }) };
+      return { object: schema.parse({ items: [{ kind: thread ? "thought" : "intention", text: raw, threadIds: thread ? ["training"] : [], newThread: null, due: null, sameAsAction: null }] }) };
     }
     const recovery = schema.safeParse(providerResult);
     if (recovery.success) return { object: recovery.data };

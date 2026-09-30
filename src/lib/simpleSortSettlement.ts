@@ -10,7 +10,7 @@ import {
   enc,
   type PlannedSettlementResult,
 } from "./plannedRoutingSettlement";
-import type { SimpleSortItem } from "./simpleSort";
+import type { SimpleSortItem, SimpleSortTarget } from "./simpleSort";
 
 const nameKey = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 
@@ -49,7 +49,7 @@ export function settleSimpleSort(board: Board, input: {
   if (envelope.imgs?.length || !items.length) return conflict(board, captureId, "invalid_plan");
 
   const createdThreads: Thread[] = [];
-  const threadFor = (target: NonNullable<SimpleSortItem["thread"]>): string | null => {
+  const threadFor = (target: SimpleSortTarget): string | null => {
     if ("id" in target) return board.threads.some((thread) => thread.id === target.id) ? target.id : null;
     const existing = [...createdThreads, ...board.threads].find((thread) => nameKey(thread.name) === nameKey(target.name));
     if (existing) return existing.id;
@@ -68,8 +68,17 @@ export function settleSimpleSort(board: Board, input: {
     targetId, ...(targetFragId ? { targetFragId } : {}), settledBy: "automatic", modelVia: input.via,
   });
   let number = nextNumber(board.intentions);
+  const repeatedActionIds: string[] = [];
+  let unplaced = false;
   items.forEach((item, index) => {
-    if (item.kind === "action") {
+    const repeated = item.kind === "action" && item.existingActionId
+      ? board.actions.find((action) => action.id === item.existingActionId && !action.done && !action.unsorted)
+      : undefined;
+    if (repeated) {
+      /* Already on the list: point at it. It is not new, so Undo leaves it. */
+      repeatedActionIds.push(repeated.id);
+      newLedger.push(entry("action", item.text, repeated.id));
+    } else if (item.kind === "action") {
       const due = parseDue(item.due, now);
       const action: Action = {
         id: plannedId(captureId, "action", String(index)), text: item.text, done: false,
@@ -87,14 +96,23 @@ export function settleSimpleSort(board: Board, input: {
       createdIntentions.push(intention);
       newLedger.push(entry("intention", item.text, intention.id));
     } else {
-      const threadId = item.thread && threadFor(item.thread);
-      if (!threadId) return;
-      const frag: Frag = { id: plannedId(captureId, "frag", `${index}:${threadId}`), at: envelope.at, updatedAt: now, text: item.text, imgs: [] };
-      createdFrags.push({ threadId, frag });
-      newLedger.push(entry("thread", item.text, threadId, frag.id));
+      const threadIds = (item.threads ?? []).map(threadFor);
+      if (!threadIds.length || threadIds.some((id) => !id)) unplaced = true;
+      for (const threadId of new Set(threadIds.filter((id): id is string => !!id))) {
+        /* One capture, one entry per Thread: parts sent to the same Thread join. */
+        const same = createdFrags.find((created) => created.threadId === threadId);
+        if (same) { same.frag.text = `${same.frag.text} ${item.text}`; continue; }
+        const frag: Frag = { id: plannedId(captureId, "frag", `${index}:${threadId}`), at: envelope.at, updatedAt: now, text: item.text, imgs: [] };
+        createdFrags.push({ threadId, frag });
+        newLedger.push(entry("thread", item.text, threadId, frag.id));
+      }
     }
   });
-  if (!newLedger.length || newLedger.length !== items.length) return conflict(board, captureId, "invalid_plan");
+  if (!newLedger.length || unplaced) return conflict(board, captureId, "invalid_plan");
+  for (const row of newLedger) {
+    const joined = createdFrags.find((created) => created.frag.id === row.targetFragId);
+    if (joined) row.clean = joined.frag.text;
+  }
 
   const artifacts: NonNullable<CaptureEntry["settlementArtifacts"]> = [
     ...createdActions.map((action) => ({ kind: "action" as const, id: action.id })),
@@ -124,12 +142,14 @@ export function settleSimpleSort(board: Board, input: {
       threads,
       intentions: [...createdIntentions, ...board.intentions],
       ledger,
-      routingSettlements: [{
+      /* A capture that only repeats an open action creates nothing, and a
+         settlement must own a live artifact to be a valid board. */
+      routingSettlements: artifacts.length ? [{
         id: settlementId, captureId, pendingId: pendingRow.id, revision, settledBy: "automatic", artifacts,
-      }, ...(board.routingSettlements ?? []).filter((record) => record.id !== settlementId)],
+      }, ...(board.routingSettlements ?? []).filter((record) => record.id !== settlementId)] : board.routingSettlements ?? [],
     },
     captureId,
-    actionIds: createdActions.map((action) => action.id),
+    actionIds: [...createdActions.map((action) => action.id), ...repeatedActionIds],
     threadIds: createdThreads.map((thread) => thread.id),
     intentionIds: createdIntentions.map((intention) => intention.id),
     pendingActionIds: [],
