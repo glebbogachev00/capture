@@ -93,7 +93,10 @@ Tidy also clears two kinds of clutter on request. **Old photos** go in one
 batch, chosen by age: tap any you want to keep, confirm, and the words they
 came with stay. **One-liners** — the short scraps a sort can leave behind —
 are read by the model against the rest of the board, which proposes deleting
-the noise or filing a note where it belongs. One Undo takes back either batch.
+the noise or filing a note where it belongs. **Similar notes** finds notes in
+one thread that say the same thing and shows the single note they would
+become — built from your own sentences, every name and number kept — before
+anything changes. One Undo takes back any batch.
 
 **Ask** answers a question from your board. Type it in the search box and tap
 Ask: the model reads the whole board — every thread, action and intention —

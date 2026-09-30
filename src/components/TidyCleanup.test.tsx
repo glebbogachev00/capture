@@ -85,3 +85,29 @@ it("changes nothing when the model does not answer", async () => {
   expect(onApply).not.toHaveBeenCalled();
   expect(localStorage.getItem("capture:cleanup-kept")).toBeNull();
 });
+
+it("shows each combination before it lands, and remembers groups kept apart", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+    const text = JSON.parse(init.body as string).board as string;
+    const label = (s: string) => text.match(new RegExp(`\\[(N\\d+)\\][^\\n]*${s}`))![1];
+    return Response.json({ groups: [
+      { notes: [label("ok that"), label("grout is grey")], combined: "ok that — grout is grey", reason: "Both about the grout." },
+      { notes: [label("old tap"), label("new tiles")], combined: "old tap; new tiles", reason: "Both kitchen photos." },
+    ] });
+  }));
+  const { onApply, changes } = await setup();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Find similar notes" })); });
+  expect(screen.getByText("Both about the grout.")).toBeTruthy();
+  expect(screen.getByText("ok that — grout is grey")).toBeTruthy();
+  const [first, second] = screen.getAllByRole("button", { name: "Keep apart" });
+  expect(second).toBeTruthy();
+  fireEvent.click(second);
+  expect(JSON.parse(localStorage.getItem("capture:combine-kept")!)).toEqual(["f1+f2"]);
+  expect(first).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Combine" })); });
+  expect(onApply).toHaveBeenCalledOnce();
+  const kitchen = changes[0]!.board.threads[0];
+  expect(kitchen.frags.map((f) => [f.id, f.text])).toEqual([
+    ["f1", "old tap"], ["f2", "new tiles"], ["f4", "ok that — grout is grey"],
+  ]);
+});

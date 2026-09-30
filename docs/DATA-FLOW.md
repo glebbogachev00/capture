@@ -24,6 +24,7 @@ provider your keys select (Groq, Cerebras, Mistral, Google, OpenRouter):
 | Thread summaries | that thread's fragments (background, after a capture lands) |
 | Daily wrap | the day's capture texts (background, once a day) |
 | Tidy / untangle / judge | the texts being compared (only when you open Tidy) |
+| Tidy → Find similar notes | the notes (up to 600 characters each, never resolved or unsorted ones) of every thread holding two or more, most recent threads first, about 50,000 characters at most (only when you tap Find) |
 | Tidy → Review one-liners | the short notes and tasks under review, every thread's name and summary, a few neighbouring notes per thread, and the open actions (only when you tap Review) |
 | Ask (the Ask button in Search) | the question and the whole board as text — every thread's summary and notes (newest first, about 48,000 characters at most), open and faded actions, recent ticked-off actions, and intentions. Never unsorted captures, photos, or history. Only when you tap Ask or press Enter; typing a search sends nothing |
 | Text to speech | the reply being spoken, when a remote TTS fallback is configured |

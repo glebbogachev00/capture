@@ -9,6 +9,7 @@ import {
   applyOneLiners, oldPhotos, oneLinerContext, oneLiners, readVerdicts, removePhotos,
   type CleanupChange, type OneLinerProposal,
 } from "@/lib/cleanup";
+import { applyCombine, combineContext, readCombine, type CombineProposal } from "@/lib/combine";
 import styles from "./TidyCleanup.module.css";
 
 type Apply = (change: (board: Board) => CleanupChange | null) => Promise<boolean>;
@@ -26,11 +27,26 @@ const showUndo = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
 /* Per-device convenience: a scrap the person (or the model) chose to keep is
    not offered again. Losing it only means one more look, never lost data. */
-function readKept(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(KEPT_KEY) || "[]")); } catch { return new Set(); }
+const COMBINE_KEPT_KEY = "capture:combine-kept";
+function readKept(key = KEPT_KEY): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); } catch { return new Set(); }
 }
-function saveKept(kept: Set<string>) {
-  try { localStorage.setItem(KEPT_KEY, JSON.stringify([...kept].slice(-2000))); } catch { /* per-device only */ }
+function saveKept(kept: Set<string>, key = KEPT_KEY) {
+  try { localStorage.setItem(key, JSON.stringify([...kept].slice(-2000))); } catch { /* per-device only */ }
+}
+
+/** POST a rendered board to a Tidy route; the route's own error text on failure. */
+async function review(route: string, board: string): Promise<unknown> {
+  const res = await ownedFetch(route, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ board }),
+    cache: "no-store",
+  });
+  const value: unknown = await res.json().catch(() => null);
+  if (res.ok) return value;
+  const message = (value as { error?: unknown } | null)?.error;
+  throw new Error(typeof message === "string" ? message : "");
 }
 
 function Thumb({ id, kept, onToggle }: { id: string; kept: boolean; onToggle: () => void }) {
@@ -161,23 +177,12 @@ function OneLiners({ board, now, onApply }: { board: Board; now: number; onApply
   });
   const drop = (done: OneLinerProposal[]) => setRows((r) => r.filter((x) => !done.includes(x)));
 
-  const review = async () => {
+  const run = async () => {
     const ctx = oneLinerContext(board, candidates, now);
     setPhase("reading");
     setError("");
     try {
-      const res = await ownedFetch("/api/cleanup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ board: ctx.text }),
-        cache: "no-store",
-      });
-      const value: unknown = await res.json().catch(() => null);
-      if (!res.ok) {
-        const message = (value as { error?: unknown } | null)?.error;
-        throw new Error(typeof message === "string" ? message : "");
-      }
-      const proposals = readVerdicts(value, ctx);
+      const proposals = readVerdicts(await review("/api/cleanup", ctx.text), ctx);
       if (!proposals) throw new Error("");
       /* Everything the model read and did not flag was judged worth keeping;
          the next review moves on to scraps it has not seen. */
@@ -219,7 +224,7 @@ function OneLiners({ board, now, onApply }: { board: Board; now: number; onApply
                 : `${candidates.length} short notes and tasks. The model checks which are leftover noise or filed in the wrong place — you approve each change.`}
           </p>
           {!!candidates.length && (
-            <button className="org-more" onClick={() => void review()}>
+            <button className="org-more" onClick={() => void run()}>
               Review {candidates.length} {candidates.length === 1 ? "one-liner" : "one-liners"}
             </button>
           )}
@@ -250,16 +255,102 @@ function OneLiners({ board, now, onApply }: { board: Board; now: number; onApply
   );
 }
 
+function SimilarNotes({ board, now, onApply }: { board: Board; now: number; onApply: Apply }) {
+  const [phase, setPhase] = useState<"idle" | "reading" | "done" | "error">("idle");
+  const [error, setError] = useState("");
+  const [rows, setRows] = useState<CombineProposal[]>([]);
+  const [confirm, setConfirm] = useState(false);
+  const ready = useMemo(() => Object.keys(combineContext(board, now).notes).length > 0, [board, now]);
+  if (!ready && phase === "idle") return null;
+  const drop = (done: CombineProposal[]) => setRows((r) => r.filter((x) => !done.includes(x)));
+
+  const run = async () => {
+    const ctx = combineContext(board, now);
+    setPhase("reading");
+    setError("");
+    try {
+      const proposals = readCombine(await review("/api/combine", ctx.text), ctx, readKept(COMBINE_KEPT_KEY));
+      if (!proposals) throw new Error("");
+      setRows(proposals);
+      setPhase("done");
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "");
+      setPhase("error");
+    }
+  };
+  const apply = (ps: CombineProposal[]) =>
+    void onApply((b) => applyCombine(b, ps, stamp())).then((ok) => { if (ok) { drop(ps); showUndo(); } });
+  const keep = (p: CombineProposal) => {
+    saveKept(new Set([...readKept(COMBINE_KEPT_KEY), p.key]), COMBINE_KEPT_KEY);
+    drop([p]);
+  };
+
+  return (
+    <section className={styles.section} aria-label="Similar notes">
+      <h3 className={styles.title}>Similar notes</h3>
+      {phase === "reading" ? (
+        <p className={styles.hint} role="status">Reading your threads for notes that say the same thing…</p>
+      ) : !rows.length ? (
+        <>
+          <p className={styles.hint} role="status">
+            {phase === "error"
+              ? `The model didn't answer, so nothing was changed.${error ? ` ${error}` : ""} Try again in a moment.`
+              : phase === "done"
+                ? "No notes worth combining — each one adds something."
+                : "Notes in one thread that say the same thing, combined into one in your own words. You see each result before it lands."}
+          </p>
+          {phase !== "done" && <button className="org-more" onClick={() => void run()}>Find similar notes</button>}
+        </>
+      ) : (
+        <>
+          <div className="org-group">
+            {rows.map((p) => (
+              <div className="org-row" key={p.key}>
+                <div className="org-body">
+                  <span className="org-line">Combine {p.frags.length} notes in <em>{p.threadName}</em></span>
+                  <span className="org-why">{p.reason}</span>
+                  <ul className={styles.before} aria-label="Now">
+                    {p.frags.map((f) => <li key={f.id}>{f.text}</li>)}
+                  </ul>
+                  <p className={styles.after}><span>Becomes</span>{p.combined}</p>
+                </div>
+                <div className="org-actions">
+                  <button className="suggest-btn suggest-ok" onClick={() => apply([p])}>Combine</button>
+                  <button className="suggest-btn" onClick={() => keep(p)}>Keep apart</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="org-approve">
+            <button className="suggest-btn suggest-ok" onClick={() => setConfirm(true)}>Combine all ({rows.length})</button>
+          </div>
+        </>
+      )}
+      {confirm && (
+        <Confirm
+          title={`Combine all ${rows.length}?`}
+          hint="Each group becomes the one note shown under it, with every photo it had — in one go, with one Undo."
+          yes="Combine all"
+          onNo={() => setConfirm(false)}
+          onYes={() => { setConfirm(false); apply(rows); }}
+        />
+      )}
+    </section>
+  );
+}
+
 /**
- * Clean up — inside Tidy, under its suggestions. Two explicit jobs the rest
- * of Tidy never does: clearing old photos in one batch, and having the model
- * weed the one-line scraps the sorter left behind. Nothing changes without a
+ * Clean up — inside Tidy, under its suggestions. Three explicit jobs the rest
+ * of Tidy never does: having the model weed the one-line scraps the sorter
+ * left behind, combining notes that say the same thing, and clearing old
+ * photos in one batch. Nothing changes without a
  * tap, and every batch has one Undo.
  */
 export function TidyCleanup({ board, now, onApply }: { board: Board; now: number; onApply: Apply }) {
   return (
     <div className={styles.cleanup}>
       <OneLiners board={board} now={now} onApply={onApply} />
+      <SimilarNotes board={board} now={now} onApply={onApply} />
       <OldPhotos board={board} now={now} onApply={onApply} />
     </div>
   );
