@@ -110,6 +110,7 @@ import { createReceiptWindow, type ReceiptWindow } from "@/lib/receiptWindow";
 import { receiptLines } from "@/lib/receiptCopy";
 import { createHeldImages, type HeldImages } from "@/lib/heldImages";
 import { organizeCorrection } from "@/lib/organizeOps";
+import type { CleanupChange } from "@/lib/cleanup";
 import {
   applyFragDelete,
   applyFragEdit,
@@ -135,7 +136,7 @@ import { pendingDraftAction, pendingEntry, prepareResortedCapture, requestBoardS
   requestIntentionExpansion, resortIntentionOrigin } from "@/lib/resortOps";
 import { CloudQuotaError } from "@/lib/cloudQuotaMessage";
 import { applyTangleAccept } from "@/lib/tangleOps";
-import { assemblePanel } from "@/lib/tidyPanel";
+import { approveAllNotice, assemblePanel } from "@/lib/tidyPanel";
 import { captureUndoOutcome, restoreCapture, tombstonesAfterUndo } from "@/lib/undoOps";
 import { unreferencedImageIds } from "@/lib/imgSync";
 import {
@@ -2617,20 +2618,33 @@ export function useBoard(now: number) {
     setNoticeUndoable(true);
   };
 
-  const acceptOrganize = async (id: string): Promise<boolean> => {
-    const p = organize?.find((x) => x.id === id);
-    if (!p) return false;
+  /* One tidy gesture, one Undo: the board as it was before the first change,
+     and the pictures the previous Undo protected released only if it lands. */
+  const tidyGesture = async (run: () => Promise<boolean>): Promise<boolean> => {
     const before = latest.current;
     const beforeTombstones = tombstones.current;
     const previouslyHeld = heldImages.current!.release();
-    const ok = await applyOrganizeProposal(p);
-    if (ok) {
-      if (previouslyHeld.length)
-        void backupGate.current.trackMutation(dropUnreferencedImages(previouslyHeld));
-      armOrganizeUndo(before, beforeTombstones);
-    } else holdImages(previouslyHeld);
-    return ok;
+    if (!await run()) { holdImages(previouslyHeld); return false; }
+    if (previouslyHeld.length) void backupGate.current.trackMutation(dropUnreferencedImages(previouslyHeld));
+    armOrganizeUndo(before, beforeTombstones);
+    return true;
   };
+
+  const acceptOrganize = async (id: string): Promise<boolean> => {
+    const p = organize?.find((x) => x.id === id);
+    return !!p && tidyGesture(() => applyOrganizeProposal(p));
+  };
+
+  /* A Clean up batch (lib/cleanup) — old photos or one-liners — lands as one
+     commit behind one Undo; the pictures it drops wait until that Undo expires. */
+  const applyCleanup = (change: (board: Board) => CleanupChange | null) => tidyGesture(async () => {
+    const out = change(latest.current);
+    if (!out || !await commit(out.board)) return false;
+    holdImages(out.imgs);
+    out.threads.forEach(scheduleSummary);
+    showTidyNotice(out.notice);
+    return true;
+  });
 
   /**
    * Approve every proposal on the board at once — the "Approve all" button.
@@ -2648,36 +2662,18 @@ export function useBoard(now: number) {
     /* ONE snapshot for the whole run, taken before the first row lands.
        Approve-all is the most destructive gesture in the app — a single tap
        can drop duplicates, move notes and merge threads' contents together
-       — so Undo has to take the whole run back, not just the last row. */
-    const before = latest.current;
-    const beforeTombstones = tombstones.current;
-    const previouslyHeld = heldImages.current!.release();
-    /* A row that throws must not brick the button for the rest of the
+       — so Undo has to take the whole run back, not just the last row.
+       A row that throws must not brick the button for the rest of the
        session — the guard is cleared even when a handler misbehaves. */
     try {
-      for (const p of list) {
-        if (await applyOrganizeProposal(p)) applied++;
-      }
+      await tidyGesture(async () => {
+        for (const p of list) if (await applyOrganizeProposal(p)) applied++;
+        return applied > 0;
+      });
     } finally {
       applyingOrganize.current = false;
     }
-    if (!applied) {
-      holdImages(previouslyHeld);
-      return;
-    }
-    if (previouslyHeld.length)
-      void backupGate.current.trackMutation(dropUnreferencedImages(previouslyHeld));
-    armOrganizeUndo(before, beforeTombstones);
-    const diff = list.length - applied;
-    showTidyNotice(
-      applied === list.length
-        ? `Applied all ${applied} ${applied === 1 ? "suggestion" : "suggestions"}.`
-        : `Applied ${applied} of ${list.length} — ${diff} ${
-            diff === 1
-              ? "couldn't be applied and is still listed"
-              : "couldn't be applied and are still listed"
-          }.`
-    );
+    if (applied) showTidyNotice(approveAllNotice(applied, list.length));
   };
 
   /** Wave an Organize proposal off — remembered by id so it never reappears,
@@ -4240,6 +4236,7 @@ export function useBoard(now: number) {
     tidyHint,
     acceptOrganize: guardMutation(acceptOrganize),
     acceptOrganizeAll: guardMutation(acceptOrganizeAll),
+    applyCleanup: guardMutation(applyCleanup),
     dismissOrganize: guardMutation(dismissOrganize),
     notice,
     swept,

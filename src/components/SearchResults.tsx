@@ -40,7 +40,7 @@ export function SearchResults({
     return (
       <div className="empty">
         <p className="big">Nothing by that shape.</p>
-        <p>Every word has to appear somewhere in the item.</p>
+        <p>Search needs every word in one item. For an answer from your whole board, tap Ask.</p>
       </div>
     );
   }

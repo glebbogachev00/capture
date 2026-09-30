@@ -247,7 +247,9 @@ export function restoreCapture(
     const fields = landedThread
       ? restoreOwnedFields(thread, beforeThread, landedThread, ["frags"])
       : thread;
-    return { ...fields, frags: [...restored, ...kept] };
+    /* Notes live oldest first; a restored note goes back where it was said,
+       not to the top of the thread. */
+    return { ...fields, frags: [...restored, ...kept].sort((a, b) => a.at - b.at) };
   });
 
   return {

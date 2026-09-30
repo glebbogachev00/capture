@@ -1,6 +1,13 @@
+/* eslint-disable */
+/**
+ * The word-matched Recall retrieval that Ask replaced, copied verbatim from
+ * src/lib/recall.ts at e76fc47 (only its imports and exports trimmed), so the
+ * help eval can measure what the old path could have shown the model. Not
+ * used by the app.
+ */
 import { z } from "zod";
-import type { Board } from "./model";
-import { semanticThreads } from "./threadBrief";
+import type { Board } from "@/lib/model";
+import { semanticThreads } from "@/lib/threadBrief";
 
 export const RECALL_MAX_SOURCES = 12;
 export const RECALL_MAX_SOURCE_CHARS = 1500;
@@ -44,58 +51,9 @@ export function isLikelyRecallQuestion(query: string): boolean {
   return false;
 }
 
-export function recallRequestFingerprint(question: string, sources: RecallSource[]): string {
-  return JSON.stringify([normalizeQuestion(question), sources]);
-}
-
-const nonblank = (max: number, min = 1) => z.string().min(min).max(max).refine((s) => /\S/u.test(s));
-const SourceIdSchema = nonblank(400);
 const MAX_DATE_MS = 8_640_000_000_000_000;
 const TimestampSchema = z.number().finite().min(-MAX_DATE_MS).max(MAX_DATE_MS);
-export const RecallSourceSchema = z.object({
-  id: SourceIdSchema,
-  kind: z.enum(["thread", "action", "intention"]),
-  title: z.string().max(160),
-  text: nonblank(RECALL_MAX_SOURCE_CHARS),
-  at: TimestampSchema,
-  targetId: SourceIdSchema,
-  fragId: SourceIdSchema.optional(),
-  state: z.enum(["active", "done", "faded", "resolved"]),
-  truncated: z.boolean(),
-}).strict();
-export type RecallSource = z.infer<typeof RecallSourceSchema>;
-
-const CitationSchema = z.object({ sourceId: SourceIdSchema, quote: nonblank(600, 8) }).strict();
-const ClaimSchema = z.object({
-  text: nonblank(700),
-  citations: z.array(CitationSchema).min(1).max(4),
-}).strict();
-export const RecallAnswerSchema = z.object({
-  status: z.enum(["answered", "insufficient"]),
-  claims: z.array(ClaimSchema).max(5),
-}).strict().refine((answer) => answer.status === "answered" ? answer.claims.length > 0 : answer.claims.length === 0,
-  { message: "Answered requires cited claims; insufficient requires no claims." });
-export type RecallAnswer = z.infer<typeof RecallAnswerSchema>;
-
-/**
- * Structural citation validation, NOT semantic entailment: a verbatim quote can
- * still be irrelevant to its claim. The caller/model must assess meaning. Never
- * salvage a partially supported response by silently dropping claims/citations.
- * Sources are the caller's trusted local snapshot, not proof of board ownership.
- */
-export function validateRecallAnswer(value: unknown, sources: RecallSource[]): RecallAnswer | null {
-  const parsedSources = z.array(RecallSourceSchema).max(RECALL_MAX_SOURCES).safeParse(sources);
-  const parsedAnswer = RecallAnswerSchema.safeParse(value);
-  if (!parsedSources.success || !parsedAnswer.success) return null;
-  const byId = new Map(parsedSources.data.map((source) => [source.id, source]));
-  if (byId.size !== parsedSources.data.length) return null;
-  for (const claim of parsedAnswer.data.claims) {
-    for (const citation of claim.citations) {
-      if (!byId.get(citation.sourceId)?.text.includes(citation.quote)) return null;
-    }
-  }
-  return parsedAnswer.data;
-}
+export type RecallSource = { id: string; kind: "thread" | "action" | "intention"; title: string; text: string; at: number; targetId: string; fragId?: string; state: "active" | "done" | "faded" | "resolved"; truncated: boolean };
 
 // Recall is lexical retrieval, not semantic search. Grammatical/query scaffolding
 // cannot turn a broad question into permission to send the whole board.

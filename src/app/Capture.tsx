@@ -8,7 +8,8 @@ import { Markup } from "./Markup";
 import { BusyLine, Row, TCard } from "@/components/cards";
 import { GroupedActionRows } from "@/components/GroupedActionRows";
 import { SearchResults } from "@/components/SearchResults";
-import { createQuestionAnswerSession, QuestionAnswer, type AnswerProgress } from "@/components/QuestionAnswer";
+import { AskBar } from "@/components/AskBar";
+import { TidyCleanup } from "@/components/TidyCleanup";
 import { ThreadView } from "@/components/ThreadView";
 import { ThreadChoices } from "@/components/ThreadChoices";
 import { degradedNote } from "@/lib/degraded";
@@ -56,7 +57,6 @@ import { CheckoutReturnNotice } from "@/components/CloudBilling";
 import { PLAYGROUND } from "@/lib/playground";
 import { groupActions } from "@/lib/group";
 import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
-import { isLikelyRecallQuestion } from "@/lib/recall";
 import { hasAlternativeThread } from "@/lib/threadCorrection";
 /** Where the grouped-view toggle is remembered, in the same kv store as the
     board — a view preference that survives reloads on this device. */
@@ -89,8 +89,7 @@ const TRY = {
 /** How long a ticked action shows itself done before it leaves. Long enough
     to read as a finish, short enough that nobody waits on it. */
 export function Capture() {
-  const [answerSession, setAnswerSession] = useState(createQuestionAnswerSession);
-  const [answerProgress, setAnswerProgress] = useState<AnswerProgress>({ question: "", phase: "inactive" });
+  const [answering, setAnswering] = useState(false);
   /* The ticking clock the countdowns and shelf lives derive from. */
   const now = useSyncExternalStore(
     subscribeToClock,
@@ -161,7 +160,7 @@ export function Capture() {
     dismissTangle,
     tidyHint,
     acceptOrganize,
-    acceptOrganizeAll,
+    acceptOrganizeAll, applyCleanup,
     dismissOrganize,
     notice,
     swept,
@@ -278,9 +277,6 @@ export function Capture() {
   const intentionNumbers = useMemo(() => intentionDisplayNumbers(data.intentions), [data.intentions]);
   const unsorted = pendingCaptures.filter((capture) => !autoSortingIds.includes(capture.id));
   const { openPlacePicker, picker } = useDestinationPicker(data.threads, finalizingUnsortedIds, manualSort);
-  const updateQuery = (next: string) => { if (next !== query) {
-    setAnswerSession((value) => ({ ...value, revision: value.revision + 1 }));
-    setAnswerProgress({ question: next, phase: isLikelyRecallQuestion(next) ? "loading" : "inactive" }); setQuery(next); } };
   /* The rollback days, read when Settings opens — a list this short is
      cheaper to re-read than to keep in sync with every write. */
   const [snapDays, setSnapDays] = useState<string[]>([]);
@@ -854,7 +850,7 @@ export function Capture() {
             onAccept={(id) => void acceptOrganize(id)}
             onDismiss={(id) => dismissOrganize(id)}
             onApproveAll={() => void acceptOrganizeAll()}
-          />
+          ><TidyCleanup board={data} now={now} onApply={applyCleanup} /></OrganizeScreen>
         ) : showRecord ? (
           <RecordScreen
             ledger={(data.ledger ?? []).filter((entry) => entry.kind !== "pending")}
@@ -980,31 +976,16 @@ export function Capture() {
             <UnsortedCaptures items={unsorted} pendingEntries={data.ledger} busy={!!busy} finalizingIds={finalizingUnsortedIds} threads={data.threads}
               onSort={(action) => void resort(action)} onManualSort={manualSort} onManualSplit={manualSplit}
               onChoosePlace={openPlacePicker} onEdit={editUnsorted} onDelete={removeUnsorted} />
-            <div className="searchbar">
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => updateQuery(e.target.value)}
-                placeholder="Search or ask a question"
-                aria-label="Search or ask a question"
-              />
-              {searching && (
-                <button className="ghost" onClick={() => updateQuery("")}>
-                  Clear
-                </button>
-              )}
-            </div>
-            <QuestionAnswer board={data} question={query} session={answerSession} onProgress={setAnswerProgress}
-              onOpenThread={(id, fragId) => {
-                setOpen(id); setOpenFrag(fragId || null);
-              }} onOpenIntention={(id) => setOpenIntention(id)} />
+            <AskBar board={data} now={now} query={query} onQuery={setQuery} onAnswering={setAnswering}
+              onOpenThread={(id) => { setOpen(id); setOpenFrag(null); }} onOpenIntention={setOpenIntention}
+              onOpenActions={() => { setQuery(""); setTab("actions"); }} />
 
             {searching ? (
               <SearchResults
                 intentionNumbers={intentionNumbers}
                 hits={hits}
                 now={now}
-                awaitingAnswer={answerProgress.question === query && answerProgress.phase === "loading"}
+                awaitingAnswer={answering}
                 onOpenThread={(id, fragId) => {
                   setOpen(id);
                   setOpenFrag(fragId || null);
