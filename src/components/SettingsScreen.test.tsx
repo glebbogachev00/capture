@@ -52,6 +52,18 @@ function renderSettings(
 }
 
 describe("SettingsScreen disclosures", () => {
+  it("enables the showcase without selecting any intentions and keeps pins when disabled", () => {
+    const { onProfileChange } = renderSettings();
+    fireEvent.click(screen.getByRole("button", { name: "Show Personalize" }));
+    const toggle = screen.getByRole("switch", { name: "Show intention showcase" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(toggle);
+    const update = onProfileChange.mock.calls[0][0];
+    expect(update({ name: "Gleb", showSignature: true }))
+      .toEqual({ name: "Gleb", showSignature: true, intentionShowcaseEnabled: true });
+    expect(update({ name: "Gleb", intentionShowcaseEnabled: true, pinnedIntentionIds: ["rest"] }))
+      .toEqual({ name: "Gleb", intentionShowcaseEnabled: false, pinnedIntentionIds: ["rest"] });
+  });
   it("groups related controls into a short, plain-language list", () => {
     renderSettings();
 

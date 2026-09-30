@@ -23,7 +23,7 @@ import {
   type Action,
   type Board,
   type Frag,
-  type Intention, type ProfileDraft, type ProfileUpdate,
+  type Intention, type ProfileUpdate,
   type ShelfLife,
   type Thread,
   DORMANT,
@@ -37,6 +37,7 @@ import {
   uid,
 } from "@/lib/model";
 import { actionViews } from "@/lib/actionViews";
+import { applyProfileUpdate } from "@/lib/intentionShowcasePrefs";
 import { hasCloudEntitlement } from "@/lib/cloudEntitlement";
 import { useDegradedProviderStatus } from "@/hooks/useDegradedProviderStatus";
 import { useBackupNavigationGuard } from "@/hooks/useBackupNavigationGuard";
@@ -129,6 +130,7 @@ import { completeIntentionDetails } from "@/lib/completeIntentionDetails";
 import { editUnsortedCapture, removeUnsortedCapture } from "@/lib/unsortedOps";
 import { pendingDraftAction, pendingEntry, prepareResortedCapture, requestBoardSort,
   requestIntentionExpansion, resortIntentionOrigin } from "@/lib/resortOps";
+import { CloudQuotaError } from "@/lib/cloudQuotaMessage";
 import { applyTangleAccept } from "@/lib/tangleOps";
 import { assemblePanel } from "@/lib/tidyPanel";
 import { captureUndoOutcome, restoreCapture, tombstonesAfterUndo } from "@/lib/undoOps";
@@ -228,15 +230,7 @@ function createHydrationGate() {
 }
 
 const reasonOf = (error: unknown) => {
-  /* The server names its own failures precisely — rate limit, spent quota,
-     billing, a rejected key — and those come back as a SortError carrying
-     the text. Anything else means no usable answer arrived at all: the
-     connection dropped, or the request died before it could reply.
- 
-     That distinction was invisible. Both showed "The sort didn't go
-     through", so a phone on a patchy signal and a rate-limited provider
-     looked identical — and the one thing the person could actually act on,
-     being offline, was the thing the message hid. */
+  if (error instanceof CloudQuotaError) return error.message;
   if (error instanceof SortError && error.message) {
     return playgroundError(error.message) as string;
   }
@@ -1456,6 +1450,8 @@ export function useBoard(now: number) {
           (!sentCaptureId || !plannedSortAuthority.current.claimed(sentCaptureId))) {
         setErr(attempt?.signal.aborted
           ? "Saved here. Sorting is unavailable right now."
+          : error instanceof CloudQuotaError
+          ? a.unsorted ? error.captureMessage : `${error.message} The item is unchanged.`
           : reasonOf(error) + " It is still here, untouched.");
       }
     } finally {
@@ -1618,7 +1614,12 @@ export function useBoard(now: number) {
       }
       };
       await attempt.run(work());
-    } catch {
+    } catch (error) {
+      if (error instanceof CloudQuotaError) {
+        if (attempt.authoritative() && snapshotMatchesPending(input, latest.current))
+          setErr(error.captureMessage);
+        return;
+      }
       const remaining = deadline - Date.now();
       if (remaining > 0 && attempt.authoritative() && lifetime.active && sortMounted.current &&
           (typeof navigator === "undefined" || navigator.onLine) &&
@@ -3371,10 +3372,9 @@ export function useBoard(now: number) {
     setDraft(null);
     setPendingSource(null);
     setTab("intentions");
-    showReceipt("Intention " + pad(intention.number));
+    showReceipt("Intention " + pad(latest.current.intentions.length - latest.current.intentions.findIndex(item => item.id === intention.id)));
     setLandedIds([]);
-    /* Keep the receipt until the next capture or Undo: it holds the only
-       Undo button, and reading an intention can take several minutes. */
+    /* The receipt expires separately from the saved capture and Undo state. */
   };
 
   /** Correct an intention classification without losing its source or Undo. */
@@ -4219,11 +4219,10 @@ export function useBoard(now: number) {
   };
 
   const updateProfile = async (update: ProfileUpdate): Promise<void> => {
-    const profile = latest.current.profile;
-    const current: ProfileDraft = { name: profile?.name ?? "", imageId: profile?.imageId,
-      showSignature: profile?.showSignature };
-    await commit({ ...latest.current,
-      profile: typeof update === "function" ? update(current) : update });
+    const durable = await transactDurable((current) => ({
+      next: applyProfileUpdate(current, update), value: undefined,
+    }));
+    if (durable.status === "failed") setErr("Couldn't save that profile change. Try again.");
   };
 
   const guardMutation = createBackupMutationGuard(backupGate.current, () =>

@@ -24,11 +24,8 @@ function clock() {
 }
 
 describe("the receipt window", () => {
-  it("stays about half a minute, then leaves on its own", () => {
-    /* The band both complaints drew: 4.5s was unreadable, forever was
-       furniture. */
-    expect(RECEIPT_MS).toBeGreaterThanOrEqual(25_000);
-    expect(RECEIPT_MS).toBeLessThanOrEqual(45_000);
+  it("stays fifteen seconds, then leaves on its own", () => {
+    expect(RECEIPT_MS).toBe(15_000);
 
     const c = clock();
     let closes = 0;
@@ -41,18 +38,18 @@ describe("the receipt window", () => {
   });
 
   it("a second receipt gets its FULL window — the first one's clock dies", () => {
-    /* The stolen-window bug a bare setTimeout ships: capture at t=0,
-       capture again at t=20s, and the first timer blanks the second
-       receipt at t=35s with fifteen seconds of its window left. */
+    /* A second capture before expiry must cancel the first timer. */
     const c = clock();
     let closes = 0;
     const w = createReceiptWindow(() => closes++, RECEIPT_MS, c.set, c.clear);
     w.open();
-    c.advance(20_000);
+    c.advance(5_000);
     w.open(); // the second capture's receipt
-    c.advance(RECEIPT_MS - 20_000); // t = 35s: the first clock would fire here
+    c.advance(RECEIPT_MS - 5_000); // when the first clock would fire
     expect(closes).toBe(0); // not stolen
-    c.advance(20_000); // t = 55s: the second receipt's own ceiling
+    c.advance(4_999);
+    expect(closes).toBe(0);
+    c.advance(1); // the second receipt's own ceiling
     expect(closes).toBe(1);
   });
 

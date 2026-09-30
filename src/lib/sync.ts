@@ -561,7 +561,9 @@ export function boardSignature(board: Board, tombstones: Tombstone[]): string {
     parts.push(
       `P:${board.profile.updatedAt ?? 0}:${hashOf(board.profile.name)}:${
         board.profile.imageId ?? ""
-      }:${board.profile.showSignature ? 1 : 0}`
+      }:${board.profile.showSignature ? 1 : 0}:${board.profile.intentionShowcaseEnabled ? 1 : 0}:${
+        hashOf(JSON.stringify(board.profile.pinnedIntentionIds ?? []))
+      }:${board.profile.intentionShowcaseCollapsed ? 1 : 0}`
     );
   for (const tb of tombstones) parts.push(`x:${tb.kind}:${tb.id}:${tb.deletedAt}`);
 

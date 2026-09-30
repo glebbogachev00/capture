@@ -1,6 +1,7 @@
 "use client";
 import { OfflineSettings } from "@/components/OfflineSettings";
 import { LegacyImportSettings } from "@/components/LegacyImport";
+import "@/components/IntentionPinCard.css";
 
 /* ============================================================
    INTENTIONS — carried over from the standalone intent app.
@@ -20,6 +21,7 @@ import {
   Copy,
   X,
   MoreHorizontal,
+  Pin,
 } from "lucide-react";
 import {
   type Intention,
@@ -242,14 +244,20 @@ export function IntentionCard({
   intention,
   onOpen,
   profile,
+  onTogglePin,
+  displayNumber = intention.number,
+  hideNumber = false,
 }: {
   intention: Intention;
   onOpen: () => void;
   profile?: ProfileIdentity;
+  onTogglePin?: () => void;
+  displayNumber?: number;
+  hideNumber?: boolean;
 }) {
-  return (
-    <button className="tcard" onClick={onOpen}>
-      <div className="int-number">({pad(intention.number)})</div>
+  const content = (
+    <>
+      {!hideNumber && <div className="int-number">({pad(displayNumber)})</div>}
       <div className="int-card-text">{intentionWording(intention.expandedIntention)}</div>
       <div className="act-meta" style={{ marginTop: 9 }}>
         {intention.recommendedActions.length} action
@@ -258,12 +266,24 @@ export function IntentionCard({
         {fmt(intention.at)}
       </div>
       <ProfileSignature profile={profile} />
+    </>
+  );
+  if (!profile?.intentionShowcaseEnabled || !onTogglePin)
+    return <button className="tcard" onClick={onOpen}>{content}</button>;
+  const pinned = !!profile.pinnedIntentionIds?.includes(intention.id);
+  return (
+    <button className={"tcard intention-select-card intention-pin-target" + (pinned ? " is-pinned" : "")}
+        onClick={onTogglePin} aria-pressed={pinned}
+        aria-label={`${pinned ? "Unpin" : "Pin"} intention ${pad(displayNumber)}: ${intentionWording(intention.expandedIntention)}`}>
+        <span className="intention-pin-state"><Pin size={14} aria-hidden="true" />{pinned ? "Pinned" : "Pin"}</span>
+        {content}
     </button>
   );
 }
 
 export function IntentionDetail({
   intention,
+  displayNumber = intention.number,
   onBack,
   onChange,
   onCopy,
@@ -272,6 +292,7 @@ export function IntentionDetail({
   intention: Intention;
   onBack: () => void;
   onChange: (next: Intention) => void;
+  displayNumber?: number;
   onCopy: () => void;
   onDelete: () => void;
 }) {
@@ -299,7 +320,7 @@ export function IntentionDetail({
         ← all intentions
       </button>
 
-      <div className="int-number">({pad(intention.number)})</div>
+      <div className="int-number">({pad(displayNumber)})</div>
 
       {editing ? (
         <textarea
@@ -351,7 +372,7 @@ export function IntentionDetail({
 
       {confirming && (
         <ConfirmDelete
-          title={`Delete intention ${pad(intention.number)}?`}
+          title={`Delete intention ${pad(displayNumber)}?`}
           onConfirm={onDelete}
           onCancel={() => setConfirming(false)}
         />
@@ -583,7 +604,7 @@ export function RecordScreen({
   const grid = heatGrid(ledger, now);
   const months = monthLabels(grid);
   const caught = caughtWords(ledger);
-  const selectedCaptures = dayCaptures(ledger, day);
+  const selectedCaptures = dayCaptures(ledger, day).reverse();
   const today = day === dayKey(now);
   const dayName = (day: string) =>
     new Date(day + "T12:00:00").toLocaleDateString(undefined, {
@@ -1086,6 +1107,25 @@ export function SettingsScreen({
           open={openSection === "personalize"}
           onToggle={() => toggleSection("personalize")}
         >
+          <div className="settings-group">
+            <h4 className="settings-group-title">Intention showcase</h4>
+            <ul className="settings-principles">
+              <li className={profile?.intentionShowcaseEnabled ? "" : "off"}>
+                <span className="settings-principle-copy">
+                  <span className="settings-principle-name">Show pinned intentions</span>
+                  <span className="settings-principle-description">
+                    Tap Intention cards to pin or unpin them. Your pins appear below the capture box.
+                  </span>
+                </span>
+                <button className={"rule-switch" + (profile?.intentionShowcaseEnabled ? " on" : "")}
+                  role="switch" aria-checked={!!profile?.intentionShowcaseEnabled}
+                  aria-label="Show intention showcase"
+                  onClick={() => void onProfileChange(current => ({ ...current,
+                    intentionShowcaseEnabled: !current.intentionShowcaseEnabled,
+                  }))}><span /></button>
+              </li>
+            </ul>
+          </div>
           <div className="settings-group">
             <h4 className="settings-group-title">Card signature</h4>
             <ul className="settings-principles">

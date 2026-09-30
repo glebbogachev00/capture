@@ -98,6 +98,31 @@ async function mount() {
 }
 
 describe("local-first planned capture", () => {
+  it.each(["automatic", "manual"])("shows the quota reset and keeps the original (%s)", async (mode) => {
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(mode === "automatic");
+    let calls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      calls++;
+      return Response.json({ error: "quota exceeded" }, { status: 429,
+        headers: { Date: "Wed, 30 Sep 2026 09:00:00 GMT", "Retry-After": "3600" } });
+    }));
+    const hook = await mount();
+    const raw = "Keep this complete thought for Capture.";
+    act(() => hook.result.current.setText(raw));
+    await act(async () => { await hook.result.current.submit(); });
+    if (mode === "manual") {
+      online.mockReturnValue(true);
+      await act(async () => { await hook.result.current.resort(hook.result.current.data.actions.find(a => a.unsorted)!); });
+    }
+    await waitFor(() => expect(hook.result.current.err).toContain("Your AI allowance resets"));
+    expect(hook.result.current.err).toContain("Saved in Unsorted.");
+    expect(hook.result.current.err).not.toContain("untouched");
+    expect(calls).toBe(1);
+    expect(hook.result.current.data.actions.filter(a => a.unsorted)).toHaveLength(1);
+    const saved = JSON.parse((await storage.get(KEY))!);
+    expect(saved.ledger.some((entry: { raw: string; kind: string }) => entry.raw === raw && entry.kind === "pending")).toBe(true);
+  });
   it.each(["complete", "edited", "deleted", "failed"])("fills mixed-capture Intention details without changing routing (%s)", async (outcome) => {
     const thought = "For Ovid, the tower needs rain. ";
     const intention = "I allow myself to rest.";
@@ -494,7 +519,9 @@ describe("local-first planned capture", () => {
       act(() => hook.result.current.setText(raw));
       await act(async () => { await hook.result.current.submit(); });
       await waitFor(() => expect(hook.result.current.unsorted).toHaveLength(0));
-      expect(network.mock.calls.filter(([url]) => String(url) === "/api/intention")).toHaveLength(0);
+      const detailRequests = network.mock.calls.filter(([url]) => String(url) === "/api/intention");
+      expect(detailRequests.map(([, init]) => JSON.parse(String(init?.body)).rawInput))
+        .toEqual(kind === "mixed" ? ["I protect quiet mornings."] : []);
       expect(hook.result.current.draft).toBeNull();
       expect(hook.result.current.data.actions.filter((item) => !item.unsorted))
         .toHaveLength(kind === "thread" ? 0 : 1);

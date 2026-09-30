@@ -24,6 +24,7 @@ export function SearchResults({
   onOpenThread,
   onOpenIntention,
   profile,
+  intentionNumbers,
   awaitingAnswer = false,
 }: {
   hits: Hits;
@@ -31,6 +32,7 @@ export function SearchResults({
   onOpenThread: (id: string, fragId?: string | null) => void;
   onOpenIntention: (id: string) => void;
   profile?: ProfileIdentity;
+  intentionNumbers?: ReadonlyMap<string, number>;
   awaitingAnswer?: boolean;
 }) {
   if (!hits.total) {
@@ -122,6 +124,7 @@ export function SearchResults({
             <IntentionCard
               key={i.id}
               intention={i}
+              displayNumber={intentionNumbers?.get(i.id)}
               onOpen={() => onOpenIntention(i.id)}
               profile={profile}
             />

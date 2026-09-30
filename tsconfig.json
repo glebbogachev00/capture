@@ -42,7 +42,15 @@
     ".next-eval/types/**/*.ts",
     ".next-eval/dev/types/**/*.ts",
     ".next-eval2/types/**/*.ts",
-    ".next-eval2/dev/types/**/*.ts"
+    ".next-eval2/dev/types/**/*.ts",
+    ".next-details-local/types/**/*.ts",
+    ".next-details-local/dev/types/**/*.ts",
+    ".next-quota-ui/types/**/*.ts",
+    ".next-quota-ui/dev/types/**/*.ts",
+    ".next-showcase-ui/types/**/*.ts",
+    ".next-showcase-ui/dev/types/**/*.ts",
+    ".next-compact-showcase-ui/types/**/*.ts",
+    ".next-compact-showcase-ui/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

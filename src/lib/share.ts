@@ -181,8 +181,8 @@ export function shareThreadList(threads: Thread[], board?: Board): Shareable {
 
 export function shareIntentionList(intentions: Intention[]): Shareable {
   const lines = [`# Intentions (${intentions.length})`, ""];
-  for (const i of intentions) {
-    lines.push(`- (${pad(i.number)}) ${i.expandedIntention}`);
+  for (const [index, i] of intentions.entries()) {
+    lines.push(`- (${pad(intentions.length - index)}) ${i.expandedIntention}`);
   }
   return {
     title: "Intentions",
@@ -211,7 +211,7 @@ export function shareableFor(
   }
   if (view.kind === "intention") {
     const i = board.intentions.find((x) => x.id === view.id);
-    return i ? shareIntention(i) : null;
+    return i ? shareIntention({ ...i, number: board.intentions.length - board.intentions.indexOf(i) }) : null;
   }
   if (view.tab === "actions") {
     const open = board.actions.filter((a) => !a.done && !a.faded && !a.unsorted);

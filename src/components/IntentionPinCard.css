@@ -1,0 +1,7 @@
+.tcard.intention-select-card { position: relative; touch-action: manipulation; }
+.intention-select-card.is-pinned { border-color: var(--accent); background: var(--accent-soft); }
+.intention-pin-target .int-number { padding-right: 76px; }
+.intention-pin-state { position: absolute; top: 16px; right: 16px; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; }
+.is-pinned .intention-pin-state { color: var(--accent); }
+.intention-pin-target:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 10px; }
+.intention-pin-hint { margin: 0 0 12px; color: var(--muted); font-size: 12px; }

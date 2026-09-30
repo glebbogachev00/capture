@@ -201,6 +201,9 @@ const PersistedProfileSchema = z.object({
   name: text,
   imageId: text.optional(),
   showSignature: z.boolean().optional(),
+  intentionShowcaseEnabled: z.boolean().optional(),
+  pinnedIntentionIds: z.array(text).optional(),
+  intentionShowcaseCollapsed: z.boolean().optional(),
   updatedAt: finite.optional(),
 }).passthrough();
 

@@ -35,6 +35,21 @@ const rule: RulePreference = {
 afterEach(cleanup);
 
 describe("RecordScreen disclosures", () => {
+  it("shows the selected day's newest capture first without changing the ledger", () => {
+    const ledger = [
+      { ...entry, id: "middle", at: now, raw: "Middle", clean: "Middle" },
+      { ...entry, id: "oldest", at: now - 1000, raw: "Oldest", clean: "Oldest" },
+      { ...entry, id: "newest", at: now + 1000, raw: "Newest", clean: "Newest" },
+    ];
+    const original = JSON.stringify(ledger);
+    const { container } = render(<RecordScreen ledger={ledger} now={now} day="2026-09-02"
+      onDayChange={() => {}} onBack={() => {}} rules={[]} onToggleRule={() => {}}
+      threads={[]} onOpenThread={() => {}} onRestore={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show today's history" }));
+    expect([...container.querySelectorAll(".record-filed")].map(node => node.textContent))
+      .toEqual(["Newest", "Middle", "Oldest"]);
+    expect(JSON.stringify(ledger)).toBe(original);
+  });
   it("keeps the word total without rendering a word-count comparison", () => {
     const longLedger = Array.from({ length: 120 }, (_, index) => ({
       ...entry,

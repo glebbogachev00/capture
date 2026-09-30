@@ -1,12 +1,44 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CaptureReceipt } from "@/components/CaptureReceipt";
+import { createReceiptWindow } from "@/lib/receiptWindow";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("CaptureReceipt", () => {
+  it.each([false, true])("hides the receipt and its Undo after fifteen seconds (manual=%s)", (canUndoManual) => {
+    vi.useFakeTimers();
+    const onUndo = vi.fn(), onUndoManual = vi.fn();
+    const props = { canUndo: true, canUndoManual, onUndo, onUndoManual };
+    const view = render(<CaptureReceipt {...props} receipt="Actions" />);
+    const window = createReceiptWindow(() => {
+      // Match useBoard's expiry: receipt clears, Undo availability does not.
+      view.rerender(<CaptureReceipt {...props} receipt={null} lines={[]} />);
+    });
+    window.open();
+
+    act(() => vi.advanceTimersByTime(14_999));
+    expect(screen.getByRole("status")).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(view.container.querySelector(".landed, .capture-receipt")).toBeNull();
+    expect(view.container.textContent).toBe("");
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(onUndo).not.toHaveBeenCalled();
+    expect(onUndoManual).not.toHaveBeenCalled();
+
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(view.container.textContent).toBe("");
+    view.rerender(<CaptureReceipt {...props} canUndo={false} canUndoManual={false} receipt={null} />);
+    expect(view.container.textContent).toBe("");
+  });
+
   it("keeps pending and manual split acknowledgments distinct from AI sorting", () => {
     const { rerender } = render(<CaptureReceipt receipt="Saved. Awaiting sorting or placement"
       pendingReceipt canUndo={false} onUndo={() => undefined} />);
