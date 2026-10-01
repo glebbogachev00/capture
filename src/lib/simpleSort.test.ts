@@ -173,3 +173,22 @@ describe("settleSimpleSort", () => {
     expect(parsePersistedBoard(JSON.parse(JSON.stringify(result.board)))).not.toBeNull();
   });
 });
+
+describe("long thoughts and their own tasks (step 2, pending eval:sort)", () => {
+  it("asks for the person's own task out of a longer thought, and one action per finishable task", () => {
+    const prompt = simpleSortPrompt({ raw: "x", threads: [] });
+    expect(prompt).toContain("keep the thought whole as one item AND add that task as its own action");
+    expect(prompt).toContain("Never for a wish about how to live");
+    expect(prompt).toContain("\"message a creator and offer to help\" is one action");
+  });
+
+  it("lands a thought with its own task: the thought keeps its words, the task is an action", () => {
+    expect(normalizeSimpleSort({ items: [
+      item({ kind: "thought", text: "Most of what I say ends up as threads. I need to send my history to my agent.", threadId: "retake" }),
+      item({ kind: "action", text: "Send my history to my agent" }),
+    ] }, { threads, raw: "Most of what I say ends up as threads. I need to send my history to my agent." })).toEqual([
+      { kind: "thought", text: "Most of what I say ends up as threads. I need to send my history to my agent.", threads: [{ id: "retake" }] },
+      { kind: "action", text: "Send my history to my agent" },
+    ]);
+  });
+});
