@@ -99,7 +99,7 @@ export function simpleSortPrompt(input: {
     "Use the person's own words for that item: fix obvious dictation slips and drop filler, but never summarize and keep every idea. For an action, a short imperative (\"Check the heater\"), without the date.",
     "",
     "THREADS",
-    "For a thought, threadIds names the one existing Thread it belongs in, judged by each Thread's description. A part that says something substantial about another Thread is its own thought, in that Thread; a passing mention of a project is not. Only if none fits, leave threadIds empty and set newThread to a short name.",
+    "For a thought, threadIds lists every existing Thread it belongs in, judged by each Thread's description. One thought about several projects belongs to each of them (\"Retake could record the TechTutor walkthroughs while Capture holds the lesson ideas\" → TechTutor, Retake and Capture). Only if none fits, leave threadIds empty and set newThread to a short name.",
     "\"Add this to X\", \"put this in X\", \"create a new thread called X\" are filing instructions, not items: put the rest of the capture in X (its existing id, or newThread exactly X).",
     "",
     "DUE",
