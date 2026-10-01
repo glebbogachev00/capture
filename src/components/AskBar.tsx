@@ -20,7 +20,8 @@ type Props = {
   now: number;
   query: string;
   onQuery: (next: string) => void;
-  onOpenThread: (id: string) => void;
+  /** With a note id, the thread opens on that note. */
+  onOpenThread: (id: string, fragId?: string) => void;
   onOpenIntention: (id: string) => void;
   onOpenActions: () => void;
   /** Whether an answer is showing (or on its way) for the current query. */
@@ -29,6 +30,13 @@ type Props = {
 
 const Text = ({ spans }: { spans: Span[] }) =>
   <>{spans.map((s, i) => s.bold ? <strong key={i}>{s.text}</strong> : <span key={i}>{s.text}</span>)}</>;
+
+/** The note's own date, by this device's clock — never the model's. */
+export function sourceDate(at: number, now: number): string {
+  const date = new Date(at);
+  const sameYear = date.getFullYear() === new Date(now).getFullYear();
+  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+}
 
 /**
  * The search box, and the question it can be asked.
@@ -75,7 +83,7 @@ export function AskBar({ board, now, query, onQuery, onOpenThread, onOpenIntenti
         const message = (value as { error?: unknown } | null)?.error;
         throw new Error(typeof message === "string" ? message : "");
       }
-      const result = readAnswer(value, context.refs);
+      const result = readAnswer(value, context.refs, context.notes);
       if (!result) throw new Error("");
       setAsked({ question, phase: "done", result, omitted: context.omitted });
     } catch (error) {
@@ -124,13 +132,28 @@ export function AskBar({ board, now, query, onQuery, onOpenThread, onOpenIntenti
     {result && (
       <section className={styles.panel} aria-label="Answer">
         <h3 className={styles.heading}>{result.found ? "From your board" : "Not on your board"}</h3>
-        <div className={styles.body}>
+        <div className={styles.body} aria-label="Capture's reading of your notes">
           {answerBlocks(result.answer).map((block, i) =>
             block.type === "p" ? <p key={i}><Text spans={block.spans} /></p>
               : block.type === "ul" ? <ul key={i}>{block.items.map((item, j) => <li key={j}><Text spans={item} /></li>)}</ul>
                 : <ol key={i}>{block.items.map((item, j) => <li key={j}><Text spans={item} /></li>)}</ol>
           )}
         </div>
+        {!!result.sources.length && (
+          <div className={styles.sources}>
+            <p className={styles.sourcesLabel}>What you recorded</p>
+            {result.sources.map((source) => (
+              <button type="button" key={source.fragId} className={styles.source}
+                aria-label={`Open the note from ${sourceDate(source.at, now)} in ${source.threadName}`}
+                onClick={() => onOpenThread(source.threadId, source.fragId)}>
+                <span className={styles.sourceMeta}>{sourceDate(source.at, now)} · {source.threadName}</span>
+                {source.quote ? <span className={styles.sourceText}>“{source.quote}”</span>
+                  : source.paraphrase ? <span className={styles.sourceText}><em>{source.paraphrase}</em> <span className={styles.sourceTag}>paraphrase</span></span>
+                    : <span className={styles.sourceText}>{source.excerpt}{source.excerpt.length >= 160 ? "…" : ""}</span>}
+              </button>
+            ))}
+          </div>
+        )}
         {!!result.refs.length && (
           <div className={styles.connections} aria-label="Drawn from">
             {result.refs.map((ref) => (

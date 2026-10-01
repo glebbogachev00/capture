@@ -154,3 +154,52 @@
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
+.sources {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.sourcesLabel {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.source {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.source:hover { border-color: var(--accent); }
+.source:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.sourceMeta {
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.sourceText {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.sourceTag {
+  color: var(--muted);
+  font-size: 12px;
+}

@@ -103,8 +103,39 @@ describe("readAnswer", () => {
     expect(out).toEqual({
       found: true,
       answer: "You chose **annual**.",
+      sources: [],
       refs: [{ kind: "thread", id: "p", name: "Pricing" }, { kind: "action", id: "a1", name: "Email Maya" }],
     });
+  });
+
+  it("takes a cited note's date and words from the board, never from the model", () => {
+    const notes = {
+      N1: { fragId: "f1", threadId: "c", threadName: "Capture.", at: Date.UTC(2026, 6, 31, 5), text: "Capture makes it effortless to think out loud. It is not a notes app." },
+      N2: { fragId: "f2", threadId: "c", threadName: "Capture.", at: Date.UTC(2026, 7, 2, 5), text: "Capture creates clarity — the board sorts itself." },
+    };
+    const out = readAnswer({
+      found: true,
+      answer: "You decided it is a thinking tool, not a notes app [N1].",
+      sources: [
+        { note: "N1", quote: "it is not a notes app" },
+        { note: "[N2]", quote: "Capture brings clarity to everything" },
+        { note: "N99", quote: "invented" },
+        { note: "N1", quote: null },
+      ],
+      refs: ["T1"],
+    }, refs, notes)!;
+    expect(out.answer).toBe("You decided it is a thinking tool, not a notes app.");
+    expect(out.sources.map((s) => [s.fragId, s.at, s.quote, s.paraphrase])).toEqual([
+      ["f1", notes.N1.at, "it is not a notes app", undefined],
+      ["f2", notes.N2.at, undefined, "Capture brings clarity to everything"],
+    ]);
+    expect(out.sources[1].excerpt).toBe("Capture creates clarity — the board sorts itself.");
+  });
+
+  it("accepts a quote that differs only in spacing, case or typographic marks", () => {
+    const notes = { N1: { fragId: "f1", threadId: "c", threadName: "Capture.", at: 1, text: "It’s not a notes app — it’s a place to think." } };
+    const out = readAnswer({ found: true, answer: "Not a notes app.", sources: [{ note: "N1", quote: "it's not a notes app - it's" }], refs: [] }, refs, notes)!;
+    expect(out.sources[0].quote).toBe("it's not a notes app - it's");
   });
 
   it("refuses a malformed or empty reply rather than showing it", () => {
