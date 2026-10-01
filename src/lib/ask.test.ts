@@ -125,6 +125,8 @@ describe("readAnswer", () => {
       refs: ["T1"],
     }, refs, notes)!;
     expect(out.answer).toBe("You decided it is a thinking tool, not a notes app.");
+    expect(readAnswer({ found: true, answer: "A supplement (N1), not a rival (N1, N2).", sources: [], refs: [] }, refs, notes)!.answer)
+      .toBe("A supplement, not a rival.");
     expect(out.sources.map((s) => [s.fragId, s.at, s.quote, s.paraphrase])).toEqual([
       ["f1", notes.N1.at, "it is not a notes app", undefined],
       ["f2", notes.N2.at, undefined, "Capture brings clarity to everything"],

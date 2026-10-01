@@ -222,7 +222,7 @@ export type AskSource = {
 
 export type AskResult = { found: boolean; answer: string; sources: AskSource[]; refs: AskRef[] };
 
-const LABEL = /\s*\[(?:[TAFIN]\d+)(?:\s*[,;]\s*[TAFIN]\d+)*\]/g;
+const LABEL = /\s*[[(](?:[TAFIN]\d+)(?:\s*[,;]\s*[TAFIN]\d+)*[\])]/g;
 
 /** Same words, ignoring spacing, case and typographic quotes and dashes. */
 const comparable = (text: string) => text.normalize("NFKC").toLowerCase()
