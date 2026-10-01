@@ -20,6 +20,7 @@
  */
 
 import fs from "node:fs";
+import { fromSimpleSort, oneCall } from "./simple-sort-adapter.mjs";
 
 const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith("--"));
@@ -152,7 +153,7 @@ async function sortOne(c, attempt = 0) {
   const res = await fetch(`${URL_BASE}/api/sort`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ raw: c.text, threads: c.threads, recent: c.recent }),
+    body: JSON.stringify({ raw: c.text, threads: c.threads, recent: c.recent, ...oneCall() }),
   });
   if (!res.ok) {
     const retriable = res.status === 429 || res.status >= 500;
@@ -162,7 +163,7 @@ async function sortOne(c, attempt = 0) {
     }
     return { ...c, error: `HTTP ${res.status}` };
   }
-  const out = await res.json();
+  const out = fromSimpleSort(await res.json());
   const got = out.threadId ?? null;
   return {
     ...c,

@@ -21,6 +21,7 @@
 
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { fromSimpleSort, oneCall } from "./simple-sort-adapter.mjs";
 
 const ENV_LOCAL = fileURLToPath(new URL("../.env.local", import.meta.url));
 const args = process.argv.slice(2).filter((a) => a !== "--json");
@@ -79,7 +80,7 @@ async function sort(raw) {
   const res = await fetch(`${BASE}/api/sort`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ raw, threads: [] }),
+    body: JSON.stringify({ raw, threads: [], ...oneCall() }),
   });
   if (res.status === 401) throw new Error("unauthorized — is APP_PASSWORD set?");
   if (res.status === 429) {
@@ -94,7 +95,7 @@ async function sort(raw) {
     const body = await res.json().catch(() => ({}));
     throw new Error(`sort ${res.status}: ${body.error || res.statusText}`);
   }
-  return res.json();
+  return fromSimpleSort(await res.json());
 }
 
 /* ---------------------------------------------------------------------

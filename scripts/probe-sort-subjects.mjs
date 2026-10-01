@@ -2,6 +2,7 @@
 // Live /api/sort only: spends provider quota, never reads credentials or writes boards.
 // node scripts/probe-sort-subjects.mjs [http://localhost:4998] [--repeat 1] [--out /tmp/sort-subjects.json]
 import { readFile, writeFile } from 'node:fs/promises';
+import { fromSimpleSort, oneCall } from './simple-sort-adapter.mjs';
 
 function options(args) {
   let base = 'http://localhost:4998', repeat = 1, out;
@@ -111,11 +112,11 @@ async function main() {
       try {
         const response = await fetch(url, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(test.request), signal: AbortSignal.timeout(60000), redirect: 'error',
+          body: JSON.stringify({ ...test.request, ...oneCall() }), signal: AbortSignal.timeout(60000), redirect: 'error',
         });
         run.status = response.status;
         run.responseText = await response.text();
-        try { run.result = JSON.parse(run.responseText); } catch { /* Keep raw evidence. */ }
+        try { run.result = fromSimpleSort(JSON.parse(run.responseText)); } catch { /* Keep raw evidence. */ }
         run.failures = response.ok ? judge(test, run.result) : [`HTTP ${response.status}: ${run.responseText}`];
       } catch (error) {
         run.error = { name: error.name, message: error.message, cause: error.cause?.message };

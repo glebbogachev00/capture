@@ -27,6 +27,7 @@
 
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { fromSimpleSort, oneCall } from "./simple-sort-adapter.mjs";
 
 const ENV_LOCAL = fileURLToPath(new URL("../.env.local", import.meta.url));
 const COOKIE_CACHE = fileURLToPath(
@@ -101,7 +102,7 @@ async function sortOnce(raw, threads) {
   let res = await fetch(`${BASE}/api/sort`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ raw, threads }),
+    body: JSON.stringify({ raw, threads, ...oneCall() }),
   });
   if (res.status === 401 && cookie) {
     /* A cached cookie from the other mode (dev and prod use different
@@ -114,7 +115,7 @@ async function sortOnce(raw, threads) {
     res = await fetch(`${BASE}/api/sort`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ raw, threads }),
+      body: JSON.stringify({ raw, threads, ...oneCall() }),
     });
   }
   if (res.status === 429) {
@@ -124,14 +125,14 @@ async function sortOnce(raw, threads) {
     res = await fetch(`${BASE}/api/sort`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ raw, threads }),
+      body: JSON.stringify({ raw, threads, ...oneCall() }),
     });
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(`sort ${res.status}: ${body.error || res.statusText}`);
   }
-  return res.json();
+  return fromSimpleSort(await res.json());
 }
 
 function judge(tc, out) {

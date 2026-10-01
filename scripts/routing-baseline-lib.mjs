@@ -1,4 +1,7 @@
 import { threadBriefs } from "../src/lib/threadBrief.ts";
+import { fromSimpleSort } from "./simple-sort-adapter.mjs";
+
+export { fromSimpleSort };
 
 const REQUIRED_COVERAGE = new Set([
   "two-existing",
@@ -447,36 +450,6 @@ function applySyntheticResult(board, item, result, interpreted, at) {
   return next;
 }
 
-/**
- * The one-call sorter answers with a list of items; the judge reads the
- * single-call shape (kind, actions, a primary destination plus `also`).
- * Translate, so every case and every judgement stays exactly as it was.
- */
-export function fromSimpleSort(response) {
-  const items = Array.isArray(response?.sort?.items) ? response.sort.items : [];
-  const thoughts = items.filter((item) => item?.kind === "thought");
-  const fresh = items.filter((item) => item?.kind === "action" && !item.existingActionId);
-  const destinations = thoughts.flatMap((item) => (item.threads ?? []).map((target) => ({
-    threadId: typeof target?.id === "string" ? target.id : null,
-    threadName: typeof target?.name === "string" ? target.name : null,
-    text: String(item.text ?? ""),
-  })));
-  const kind = thoughts.length && fresh.length ? "both"
-    : thoughts.length ? "thread"
-      : items.some((item) => item?.kind === "intention") && !fresh.length ? "intention" : "action";
-  const [first, ...rest] = destinations;
-  return {
-    via: response?.via,
-    kind,
-    actions: fresh.map((action) => String(action.text)),
-    actionDetails: fresh.map((action) => ({ text: String(action.text), due: action.due ?? null, source: "" })),
-    threadId: first?.threadId ?? null,
-    threadName: first?.threadName ?? null,
-    primaryText: first?.text,
-    clean: thoughts.map((thought) => String(thought.text)).join("\n\n"),
-    also: rest,
-  };
-}
 
 export function requestFor(board, item, { planned = true } = {}) {
   return {

@@ -155,6 +155,8 @@ test("the one-call sorter's items read as the judged single-call shape", () => {
     kind: "both",
     actions: ["Export chart"],
     actionDetails: [{ text: "Export chart", due: "2026-10-02", source: "" }],
+    due: "2026-10-02",
+    shelfLife: "weeks",
     threadId: "thread-bread",
     threadName: null,
     primaryText: "Bread needs a colder proof.",

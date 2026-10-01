@@ -1148,25 +1148,24 @@ export function useBoard(now: number) {
   /* --------------------------- sorting ----------------------------- */
   const plannedSortAuthority = useRef(new PlannedSortAuthority(setFinalizingCaptureIds));
   /**
-   * Ask the server to sort a capture. Throws SortError with the reason.
-   *
-   * `force` is for when the destination is already decided and only the
-   * wording needs working out — pulling an action out of a fragment, or a
-   * capture that started with /action, /thread or /intention.
+   * The actions in some words the person already chose to make actions
+   * (a note's tasks, a Thread's next step): the one-call sorter with the
+   * command, new actions only. Throws SortError with the reason.
    */
-  const requestSort = async (
-    raw: string,
-    force?: "action" | "thread" | "intention",
-    /* Every attached photo. Image-dependent sorting is authorized only when
-       all referenced bytes were loaded; callers fail closed before this seam. */
-    imgSrcs?: string[],
-    plannedCaptureId?: string,
-    plannedSignal?: AbortSignal,
-  ) => requestBoardSort({
-    request: fetch, board: latest.current, raw, forgottenRules, force,
-    imageSources: imgSrcs, captureId: plannedCaptureId, signal: plannedSignal,
-    noteVia, errorFor: (message) => new SortError(message),
-  });
+  const sortActions = async (raw: string, threadId: string): Promise<Action[]> => {
+    const response = await requestBoardSort<{ sort?: { items?: SimpleSortItem[] } }>({
+      request: fetch, board: latest.current, raw, forgottenRules, force: "action", simple: true,
+      captureId: uid(), noteVia, errorFor: (message) => new SortError(message),
+    });
+    const items = response.sort?.items?.filter((item) => item.kind === "action") ?? [];
+    if (!items.length) throw new SortError();
+    const at = stamp();
+    return items.filter((item) => !item.existingActionId).map((item) => {
+      const due = parseDue(item.due, at);
+      return { id: uid(), text: item.text, done: false, at, src: raw, imgs: [], shelf: "weeks" as ShelfLife,
+        due, expires: expiryFor(SHELF.weeks, due, at), threadId };
+    });
+  };
 
   /** Fold a sorted result into a board. Shared by first capture and re-sort. */
   /* applySorted moved to @/lib/boardOps (pure, unit-tested). */
@@ -3009,24 +3008,13 @@ export function useBoard(now: number) {
     setErr("");
     setBusy("Adding the step");
     try {
-      const out = await requestSort(step, "action");
-      const span = SHELF[(out.shelfLife || "keep") as ShelfLife] ?? null;
-      const action: Action = {
-        id: uid(),
-        text: out.actions?.[0] || out.title || step,
-        done: false,
-        at: stamp(),
-        src: step,
-        imgs: [],
-        shelf: (out.shelfLife || "keep") as ShelfLife,
-        expires: span ? stamp() + span : null,
-        threadId,
-      };
+      /* One step, one action; already on the list means nothing new. */
+      const action = (await sortActions(step, threadId))[0];
       if (!await commit(
         noteCorrection(
           {
             ...latest.current,
-            actions: [action, ...latest.current.actions],
+            actions: action ? [action, ...latest.current.actions] : latest.current.actions,
             threads: latest.current.threads.map((t) =>
               t.id === threadId ? { ...t, next: null, nextDismissed: step } : t
             ),
@@ -3038,7 +3026,7 @@ export function useBoard(now: number) {
           }
         )
       )) return;
-      setNotice("Added to your actions.");
+      setNotice(action ? "Added to your actions." : "Already in your actions.");
       clearNoticeIn(5000);
     } catch (error) {
       setErr(reasonOf(error) + " Nothing was added.");
@@ -3070,23 +3058,7 @@ export function useBoard(now: number) {
     setErr("");
     setBusy("Finding the action");
     try {
-      const out = await requestSort(frag.text, "action");
-      const items: Action[] = (out.actions?.length ? out.actions : [out.title]).map(
-        (t: string) => {
-          const span = SHELF[(out.shelfLife || "keep") as ShelfLife] ?? null;
-          return {
-            id: uid(),
-            text: t,
-            done: false,
-            at: stamp(),
-            src: frag.text,
-            imgs: [],
-            shelf: (out.shelfLife || "keep") as ShelfLife,
-            expires: span ? stamp() + span : null,
-            threadId,
-          };
-        }
-      );
+      const items = await sortActions(frag.text, threadId);
       if (!await commit(
         noteCorrection(
           {
@@ -3100,9 +3072,9 @@ export function useBoard(now: number) {
           }
         )
       )) return false;
-      setNotice(
-        `${count(items.length, "action")} taken from this note. The note stays here.`
-      );
+      setNotice(items.length
+        ? `${count(items.length, "action")} taken from this note. The note stays here.`
+        : "Already in your actions. The note stays here.");
       clearNoticeIn(5000);
       setBusy(null);
       return true;
