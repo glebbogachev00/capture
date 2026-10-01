@@ -1897,6 +1897,7 @@ body {
 }
 .misfiled-opts {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-left: auto;
 }

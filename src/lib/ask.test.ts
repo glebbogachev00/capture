@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ASK_BUDGET, ASK_MAX_CONTEXT, answerBlocks, askContext, readAnswer } from "./ask";
+import { ASK_MAX_CONTEXT, answerBlocks, askContext, readAnswer } from "./ask";
 import { EMPTY, type Board, type Thread } from "./model";
 
 const NOW = new Date(2026, 8, 30, 12).getTime();
@@ -49,18 +49,28 @@ describe("askContext", () => {
   });
 
   it("fits a huge board by dropping the oldest notes, never a subject", () => {
-    const notes: [string, number][] = Array.from({ length: 200 }, (_, i) => [`note ${i} ${"x".repeat(600)}`, NOW - i * DAY]);
+    const notes: [string, number][] = Array.from({ length: 1500 }, (_, i) => [`note ${i} ${"x".repeat(600)}`, NOW - i * DAY]);
     const b = board({
       threads: [thread("big", "Big", notes, { summary: "the whole story" }), thread("old", "Old", [["ancient", NOW - 900 * DAY]])],
     });
     const { text, omitted } = askContext(b, NOW);
-    expect(text.length).toBeLessThanOrEqual(ASK_BUDGET + 2_000);
+    expect(text.length).toBeLessThanOrEqual(ASK_MAX_CONTEXT);
     expect(omitted).toBeGreaterThan(0);
     expect(text).toContain("note 0 ");
-    expect(text).not.toContain("note 199 ");
+    expect(text).not.toContain("note 1499 ");
     expect(text).toContain("### [T2] Old");
     expect(text).toContain("Where this stands: the whole story");
     expect(text).toMatch(/older notes not shown/);
+  });
+
+  it("shows every note of a board like the owner's, clipped rather than dropped", () => {
+    const threads = Array.from({ length: 40 }, (_, i) => thread(`t${i}`, `Thread ${i}`,
+      Array.from({ length: 12 }, (_, n): [string, number] => [`note ${i}-${n} ${"v".repeat(500)}`, NOW - (i * 12 + n) * DAY]),
+      { summary: "s".repeat(700) }));
+    const { text, omitted } = askContext(board({ threads }), NOW);
+    expect(omitted).toBe(0);
+    expect(text.length).toBeLessThanOrEqual(ASK_MAX_CONTEXT);
+    expect(text).toContain("note 39-11 ");
   });
 
   it("stays inside what the route accepts and still shows notes when intentions are many", () => {

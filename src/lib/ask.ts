@@ -23,12 +23,15 @@ import type { Board, Frag, Thread } from "./model";
  * back here, and a label the board did not hand out is simply dropped.
  */
 
-/** About 12k tokens of board: comfortably inside every model in the chain. */
-export const ASK_BUDGET = 48_000;
+/** About 35k tokens of board: room for every note of a large board, and well
+    inside the models in the chain. */
+export const ASK_BUDGET = 130_000;
 /** The most the Ask route accepts. The built context never exceeds it. */
-export const ASK_MAX_CONTEXT = ASK_BUDGET + 12_000;
+export const ASK_MAX_CONTEXT = ASK_BUDGET + 20_000;
 export const ASK_MAX_QUESTION = 600;
+/** A note is shown whole up to this, and clipped no shorter than NOTE_MIN. */
 const NOTE_CHARS = 1_200;
+const NOTE_MIN = 200;
 const SUMMARY_CHARS = 700;
 const MAX_ACTIONS = 150;
 const MAX_RECEIPTS = 40;
@@ -106,7 +109,9 @@ export function askContext(board: Board, now: number): AskContext {
 
   const receipts = [...(board.completions ?? [])].sort((a, b) => b.at - a.at).slice(0, MAX_RECEIPTS);
 
-  /* Notes compete for what is left, newest first across the whole board. */
+  /* Every note is shown when it fits, clipped only as much as it takes:
+     answering from the newest notes alone said "not on your board" about
+     pricing notes three weeks old. Past the shortest clip, the oldest go. */
   const fixedParts = [
     ...threads.map((t) => `${t.name} ${t.summary ?? ""} ${t.next ?? ""}`.slice(0, summaryChars + 200)),
     ...open.map((a) => a.text.slice(0, 340)),
@@ -114,12 +119,15 @@ export function askContext(board: Board, now: number): AskContext {
     ...intentionBlock,
     ...receipts.map((r) => r.text.slice(0, 200)),
   ];
-  let room = ASK_BUDGET - fixedParts.reduce((n, s) => n + s.length + 40, 0);
+  let room = ASK_MAX_CONTEXT - 2_000 - fixedParts.reduce((n, s) => n + s.length + 40, 0);
   const all = threads.flatMap((t) => sortedFrags(t).map((f) => ({ t, f })))
     .sort((a, b) => b.f.at - a.f.at);
+  const costAt = (cap: number) => all.reduce((n, { f }) => n + Math.min(f.text.length, cap) + 24, 0);
+  let noteChars = NOTE_CHARS;
+  while (noteChars > NOTE_MIN && costAt(noteChars) > room) noteChars = Math.max(NOTE_MIN, Math.floor(noteChars * 0.85));
   const kept = new Set<Frag>();
   for (const { f } of all) {
-    const cost = Math.min(f.text.length, NOTE_CHARS) + 24;
+    const cost = Math.min(f.text.length, noteChars) + 24;
     if (cost > room) break;
     room -= cost;
     kept.add(f);
@@ -155,7 +163,7 @@ export function askContext(board: Board, now: number): AskContext {
     for (const f of shown) {
       const resolved = typeof f.resolvedAt === "number" ? ` [resolved ${day(f.resolvedAt)}]` : "";
       const photo = f.imgs?.length ? ` [${f.imgs.length === 1 ? "photo" : `${f.imgs.length} photos`}]` : "";
-      out.push(`- ${day(f.at)}${resolved}${photo}: ${clip(f.text, NOTE_CHARS).replace(/\n/g, "\n  ")}`);
+      out.push(`- ${day(f.at)}${resolved}${photo}: ${clip(f.text, noteChars).replace(/\n/g, "\n  ")}`);
     }
   }
 
