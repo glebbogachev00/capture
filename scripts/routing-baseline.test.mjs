@@ -6,6 +6,7 @@ import {
   assertCasePack,
   buildArtifact,
   detectBaselineRegressions,
+  fromSimpleSort,
   parseTarget,
   requestFor,
   runSequentialBaseline,
@@ -130,15 +131,37 @@ test("request context exactly reuses production thread briefs at 31 threads", ()
   assert.deepEqual(requestFor(board, cases[0]).threads, threadBriefs(threads));
 });
 
-test("recovery requests keep the accepted legacy route while planned requests opt into plans", () => {
+test("recovery requests keep the accepted legacy route while default requests use the one-call sorter", () => {
   const item = cases[0];
   const recovery = requestFor(seedBoard(), item, { planned: false });
-  assert.equal("routingPlanVersion" in recovery, false);
+  assert.equal("sortVersion" in recovery, false);
   assert.equal("captureId" in recovery, false);
   assert.equal("actions" in recovery, false);
   const planned = requestFor(seedBoard(), item);
-  assert.equal(planned.routingPlanVersion, 1);
+  assert.equal(planned.sortVersion, 2);
+  assert.equal("routingPlanVersion" in planned, false);
   assert.equal(planned.captureId, "acceptance:reuse-alpha");
+});
+
+test("the one-call sorter's items read as the judged single-call shape", () => {
+  const legacy = fromSimpleSort({ via: "groq", sort: { version: 2, items: [
+    { kind: "thought", text: "Bread needs a colder proof.", threads: [{ id: "thread-bread" }] },
+    { kind: "thought", text: "Meteor marks need cloud cover.", threads: [{ name: "Meteor log" }] },
+    { kind: "action", text: "Export chart", due: "2026-10-02" },
+    { kind: "action", text: "Make demos", existingActionId: "open-1" },
+  ] } });
+  assert.deepEqual(legacy, {
+    via: "groq",
+    kind: "both",
+    actions: ["Export chart"],
+    actionDetails: [{ text: "Export chart", due: "2026-10-02", source: "" }],
+    threadId: "thread-bread",
+    threadName: null,
+    primaryText: "Bread needs a colder proof.",
+    clean: "Bread needs a colder proof.\n\nMeteor marks need cloud cover.",
+    also: [{ threadId: null, threadName: "Meteor log", text: "Meteor marks need cloud cover." }],
+  });
+  assert.equal(fromSimpleSort({ sort: { items: [{ kind: "intention", text: "I rest." }] } }).kind, "intention");
 });
 
 test("a semantically wrong new destination cannot satisfy a created token positionally", async () => {

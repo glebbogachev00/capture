@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Planned routing by default; --recovery runs the owner-accepted R1 matrix.
+// The one-call sorter (lib/simpleSort) by default; --recovery runs the
+// owner-accepted R1 matrix against the older single-call path.
 // This script never reads environment files, cookies, credentials, or board APIs.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
