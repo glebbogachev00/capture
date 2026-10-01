@@ -226,7 +226,7 @@ const LABEL = /\s*\[(?:[TAFIN]\d+)(?:\s*[,;]\s*[TAFIN]\d+)*\]/g;
 
 /** Same words, ignoring spacing, case and typographic quotes and dashes. */
 const comparable = (text: string) => text.normalize("NFKC").toLowerCase()
-  .replace(/[\u2018\u2019\u02bc]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[\u2013\u2014]/g, "-")
+  .replace(/[\u2018\u2019\u02bc]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[\u2010-\u2015\u2212]/g, "-")
   .replace(/\s+/g, " ").trim();
 
 /** Map the model's reply back onto the board. Unknown labels are dropped,

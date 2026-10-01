@@ -419,6 +419,28 @@ export function FragView({
     }
   }, [focus]);
 
+  /* Photos in the notes around it load after the scroll and push the note
+     out of view. For a few seconds, keep it centred as the page settles,
+     and stop the moment the person scrolls themselves. */
+  useEffect(() => {
+    const el = root.current;
+    if (!focus || !el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => el.scrollIntoView({ behavior: "auto", block: "center" }));
+    const stop = () => observer.disconnect();
+    const timer = setTimeout(stop, 4000);
+    observer.observe(el.parentElement ?? document.body);
+    window.addEventListener("wheel", stop, { once: true, passive: true });
+    window.addEventListener("touchstart", stop, { once: true, passive: true });
+    window.addEventListener("keydown", stop, { once: true });
+    return () => {
+      stop();
+      clearTimeout(timer);
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchstart", stop);
+      window.removeEventListener("keydown", stop);
+    };
+  }, [focus]);
+
   /* Keyed on the image ids, not the frag object: every sync merge rebuilds
      the thread's frag objects, and keying on `f` re-read every image in the
      open thread from IndexedDB on each 10s poll. */
