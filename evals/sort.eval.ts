@@ -74,6 +74,9 @@ const cases: Case[] = [
     actions: 0, why: "a wish about life is not a task" },
   { step: "-", raw: "Message a creator on X and offer to help with AI.",
     actions: 1, why: "one task stays one action" },
+  { step: "-", raw: Array.from({ length: 60 }, (_, i) =>
+      `Retake research note ${i + 1}: demo recordings land better when the first ten seconds show the product working, the cursor moves slowly, and the trim removes the silence before the first click.`).join(" "),
+    threads: ["retake"], actions: 0, why: "a very long note (over 10,000 characters) still sorts, kept whole" },
   { step: "-", raw: "By Friday I need to email Mia the invoice and renew the domain.",
     actions: 2, actionLike: [/mia/i, /domain/i], why: "two tasks, one deadline" },
 ];

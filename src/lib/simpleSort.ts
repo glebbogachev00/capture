@@ -30,7 +30,7 @@ export const SimpleSortSchema = z.object({
 const Answer = z.object({
   items: z.array(z.object({
     kind: z.enum(["action", "thought", "intention"]),
-    text: z.string().trim().min(1).max(8000),
+    text: z.string().trim().min(1).max(20_000),
     threadIds: z.array(z.string().max(100)).max(4).nullish(),
     threadId: z.string().max(100).nullish(),
     newThread: z.string().trim().max(100).nullish(),
@@ -100,6 +100,7 @@ export function simpleSortPrompt(input: {
     "",
     "TEXT",
     "Use the person's own words for that item: fix obvious dictation slips and drop filler, but never summarize and keep every idea. For an action, a short imperative (\"Check the heater\"), without the date.",
+    "When the whole capture is one thought and nothing else, write its text as \"=\": the person's words are kept exactly as they are, so never copy a capture out whole.",
     "",
     "THREADS",
     "For a thought, threadId is the ONE existing Thread it is about, judged by each Thread's description. A passing mention of another project does not make the thought about that project: a note on rest that mentions Capture belongs in the rest Thread only. If a capture really holds two subjects, split it into one thought per subject, each with its own part of the words and its own threadId. Never put the same words in two Threads. Only if no Thread fits, set threadId to null and newThread to a short name.",
@@ -134,6 +135,12 @@ export function normalizeSimpleSort(
   const byId = new Map(context.threads.map((thread) => [thread.id, thread]));
   const byName = new Map(context.threads.map((thread) => [nameKey(thread.name), thread]));
   const openActions = new Set((context.actions ?? []).map((action) => action.id));
+  /* "=" stands for the whole capture, so a long one is never typed out
+     again (that ran past the output limit). It is only a whole capture
+     when it is the only item. */
+  if (items.some((item) => item.text === "=") && (items.length !== 1 || !context.raw?.trim())) {
+    throw new Error("'=' used for part of a capture");
+  }
   const out: SimpleSortItem[] = [];
   for (const item of items) {
     const kind = context.force === "thread" ? "thought" : context.force ?? item.kind;
@@ -172,6 +179,10 @@ export function normalizeSimpleSort(
   if (out.length === 1 && out[0].kind === "thought" && context.raw?.trim()) {
     out[0].text = context.raw.trim();
   }
+  if (out[0]?.text === "=") {
+    if (out[0].kind !== "intention") throw new Error("'=' for an action");
+    out[0].text = context.raw!.trim();
+  }
   return out;
 }
 
@@ -185,7 +196,7 @@ export async function generateSimpleSort({ tier, prompt, abortSignal }: {
   const common = {
     model: tier.model,
     maxRetries: 0 as const,
-    maxOutputTokens: 4_000,
+    maxOutputTokens: 8_000,
     abortSignal,
     temperature: 0,
     prompt,
