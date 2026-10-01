@@ -103,8 +103,59 @@ describe("readAnswer", () => {
     expect(out).toEqual({
       found: true,
       answer: "You chose **annual**.",
+      sources: [],
       refs: [{ kind: "thread", id: "p", name: "Pricing" }, { kind: "action", id: "a1", name: "Email Maya" }],
     });
+  });
+
+  it("takes a cited note's date and words from the board, never from the model", () => {
+    const notes = {
+      N1: { fragId: "f1", threadId: "c", threadName: "Capture.", at: Date.UTC(2026, 6, 31, 5), text: "Capture makes it effortless to think out loud. It is not a notes app." },
+      N2: { fragId: "f2", threadId: "c", threadName: "Capture.", at: Date.UTC(2026, 7, 2, 5), text: "Capture creates clarity — the board sorts itself." },
+    };
+    const out = readAnswer({
+      found: true,
+      answer: "You decided it is a thinking tool, not a notes app [N1].",
+      sources: [
+        { note: "N1", quote: "it is not a notes app" },
+        { note: "[N2]", quote: "Capture brings clarity to everything" },
+        { note: "N99", quote: "invented" },
+        { note: "N1", quote: null },
+      ],
+      refs: ["T1"],
+    }, refs, notes)!;
+    expect(out.answer).toBe("You decided it is a thinking tool, not a notes app.");
+    expect(readAnswer({ found: true, answer: "A supplement (N1), not a rival (N1, N2).", sources: [], refs: [] }, refs, notes)!.answer)
+      .toBe("A supplement, not a rival.");
+    expect(out.sources.map((s) => [s.fragId, s.at, s.quote, s.paraphrase])).toEqual([
+      ["f1", notes.N1.at, "it is not a notes app", undefined],
+      ["f2", notes.N2.at, undefined, "Capture brings clarity to everything"],
+    ]);
+    expect(out.sources[1].excerpt).toBe("Capture creates clarity — the board sorts itself.");
+  });
+
+  it("moves a citation to the note that actually holds the quoted words", () => {
+    const notes = {
+      N1: { fragId: "new", threadId: "c", threadName: "Capture.", at: 3, text: "Do not push to monetize yet." },
+      N9: { fragId: "old", threadId: "c", threadName: "Capture.", at: 1, text: "Capture is an open-source thinking companion." },
+    };
+    const out = readAnswer({ found: true, answer: "A companion (source: N1).", sources: [{ note: "N1", quote: "an open-source thinking companion" }], refs: [] }, refs, notes)!;
+    expect(out.answer).toBe("A companion.");
+    expect(out.sources.map((s) => [s.fragId, s.at, s.quote])).toEqual([["old", 1, "an open-source thinking companion"]]);
+  });
+
+  it("accepts a quote that differs only in spacing, case or typographic marks", () => {
+    const notes = { N1: { fragId: "f1", threadId: "c", threadName: "Capture.", at: 1, text: "It’s not a notes app — it’s a place to think." } };
+    const out = readAnswer({ found: true, answer: "Not a notes app.", sources: [{ note: "N1", quote: "it's not a notes app - it's" }], refs: [] }, refs, notes)!;
+    expect(out.sources[0].quote).toBe("it's not a notes app - it's");
+    // A quote cut off with an ellipsis is still the note's own words.
+    const cut = { N1: { fragId: "f1", threadId: "c", threadName: "Capture.", at: 1, text: "It supports thinking, rather than replacing it, and aims for flow." } };
+    expect(readAnswer({ found: true, answer: "Supports thinking.", sources: [{ note: "N1", quote: "It supports thinking, rather than replacing it…" }], refs: [] }, refs, cut)!.sources[0].quote)
+      .toBe("It supports thinking, rather than replacing it");
+    // Models often write a non-breaking hyphen (U+2011) where the note has "-".
+    const hyphen = { N1: { fragId: "f1", threadId: "c", threadName: "Capture.", at: 1, text: "Capture is an open-source thinking companion." } };
+    expect(readAnswer({ found: true, answer: "A companion.", sources: [{ note: "N1", quote: "an open\u2011source thinking companion" }], refs: [] }, refs, hyphen)!.sources[0].quote)
+      .toBe("an open\u2011source thinking companion");
   });
 
   it("refuses a malformed or empty reply rather than showing it", () => {

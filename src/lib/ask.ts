@@ -42,11 +42,17 @@ export type AskRef = {
   name: string;
 };
 
+/** A note the board holds, labelled [N#] for the model. Its text and time
+    stay here: the model only names which notes support an answer. */
+type AskNote = { fragId: string; threadId: string; threadName: string; at: number; text: string };
+
 export type AskContext = {
   /** The board as the model reads it. */
   text: string;
   /** Label → the item it names. Stays on the device. */
   refs: Record<string, AskRef>;
+  /** Note label → the saved note. Stays on the device. */
+  notes: Record<string, AskNote>;
   /** Notes left out to fit the budget. Zero means the model saw everything. */
   omitted: number;
 };
@@ -122,6 +128,12 @@ export function askContext(board: Board, now: number): AskContext {
   let room = ASK_MAX_CONTEXT - 2_000 - fixedParts.reduce((n, s) => n + s.length + 40, 0);
   const all = threads.flatMap((t) => sortedFrags(t).map((f) => ({ t, f })))
     .sort((a, b) => b.f.at - a.f.at);
+  const notes: Record<string, AskNote> = {};
+  const noteLabel = new Map<Frag, string>();
+  all.forEach(({ t, f }, i) => {
+    noteLabel.set(f, `N${i + 1}`);
+    notes[`N${i + 1}`] = { fragId: f.id, threadId: t.id, threadName: t.name, at: f.at, text: f.text };
+  });
   const costAt = (cap: number) => all.reduce((n, { f }) => n + Math.min(f.text.length, cap) + 24, 0);
   let noteChars = NOTE_CHARS;
   while (noteChars > NOTE_MIN && costAt(noteChars) > room) noteChars = Math.max(NOTE_MIN, Math.floor(noteChars * 0.85));
@@ -141,7 +153,7 @@ export function askContext(board: Board, now: number): AskContext {
     text = render(kept);
   }
   if (text.length > ASK_MAX_CONTEXT) text = text.slice(0, ASK_MAX_CONTEXT - 1) + "…";
-  return { text, refs, omitted: all.length - kept.size };
+  return { text, refs, notes, omitted: all.length - kept.size };
 
   function render(kept: Set<Frag>): string {
   const omitted = all.length - kept.size;
@@ -163,7 +175,7 @@ export function askContext(board: Board, now: number): AskContext {
     for (const f of shown) {
       const resolved = typeof f.resolvedAt === "number" ? ` [resolved ${day(f.resolvedAt)}]` : "";
       const photo = f.imgs?.length ? ` [${f.imgs.length === 1 ? "photo" : `${f.imgs.length} photos`}]` : "";
-      out.push(`- ${day(f.at)}${resolved}${photo}: ${clip(f.text, noteChars).replace(/\n/g, "\n  ")}`);
+      out.push(`- [${noteLabel.get(f)}] ${day(f.at)}${resolved}${photo}: ${clip(f.text, noteChars).replace(/\n/g, "\n  ")}`);
     }
   }
 
@@ -185,32 +197,85 @@ export function askContext(board: Board, now: number): AskContext {
 
 export const AskAnswerSchema = z.object({
   found: z.boolean().describe("false when the board does not hold what the question asks about"),
-  answer: z.string().describe("the formatted answer text"),
-  refs: z.array(z.string()).describe("labels like T3, A1 or I2 of the items the answer is drawn from, most important first; at most 6"),
+  answer: z.string().describe("the formatted answer text, with no dates, note labels or quotations in it"),
+  sources: z.array(z.object({
+    note: z.string().describe("the label of a note that supports the answer, like N12"),
+    quote: z.string().nullable().describe("a short phrase copied exactly from that note, or null"),
+  })).describe("the notes the answer rests on, most important first; at most 4"),
+  refs: z.array(z.string()).describe("labels like T3, A1 or I2 of other items the answer draws on; at most 4"),
 });
 export type AskAnswer = z.infer<typeof AskAnswerSchema>;
 
-export type AskResult = { found: boolean; answer: string; refs: AskRef[] };
+/** A cited note, as the app knows it: real text, real time, real thread. */
+export type AskSource = {
+  fragId: string;
+  threadId: string;
+  threadName: string;
+  at: number;
+  /** The model's quote when it appears in the saved note, word for word. */
+  quote?: string;
+  /** The model's wording when it does not: shown as a paraphrase. */
+  paraphrase?: string;
+  /** The note's own opening, shown when there is no quote. */
+  excerpt: string;
+};
 
-const LABEL = /\s*\[(?:[TAFI]\d+)(?:\s*[,;]\s*[TAFI]\d+)*\]/g;
+export type AskResult = { found: boolean; answer: string; sources: AskSource[]; refs: AskRef[] };
+
+const LABEL = /\s*[[(](?:(?:sources?|see|from|notes?)\s*:?\s*)?[TAFIN]\d+(?:\s*(?:[,;]|and)\s*[TAFIN]\d+)*[\])]/gi;
+
+/** Same words, ignoring spacing, case and typographic quotes and dashes. */
+const comparable = (text: string) => text.normalize("NFKC").toLowerCase()
+  .replace(/[\u2018\u2019\u02bc]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[\u2010-\u2015\u2212]/g, "-")
+  .replace(/\s+/g, " ").trim();
 
 /** Map the model's reply back onto the board. Unknown labels are dropped,
-    never guessed at; labels written into the prose are lifted out of it. */
-export function readAnswer(value: unknown, refs: Record<string, AskRef>): AskResult | null {
-  const parsed = AskAnswerSchema.safeParse(value);
+    never guessed at; labels written into the prose are lifted out of it.
+    Dates and wording of a cited note come from the board, never the model. */
+export function readAnswer(
+  value: unknown,
+  refs: Record<string, AskRef>,
+  notes: Record<string, AskNote> = {},
+): AskResult | null {
+  /* A reply without sources is still an answer, just an uncited one. */
+  const parsed = AskAnswerSchema.safeParse(
+    value && typeof value === "object" && !("sources" in value) ? { ...value, sources: [] } : value,
+  );
   if (!parsed.success) return null;
   const answer = parsed.data.answer.replace(LABEL, "").replace(/[ \t]+([.,;:!?])/g, "$1").trim();
   if (!answer) return null;
+  const label = (raw: string) => raw.replace(/[[\]\s]/g, "").toUpperCase();
+  const sources: AskSource[] = [];
+  const allNotes = Object.values(notes);
+  for (const cited of parsed.data.sources) {
+    /* Quote marks and a cut-off "…" at either end are not part of the words. */
+    const quote = cited.quote?.trim().replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, "")
+      .replace(/^(?:\.{3}|\u2026)\s*|\s*(?:\.{3}|\u2026)$/g, "").trim();
+    let note = notes[label(cited.note)];
+    /* Right words, wrong label: the saved words decide which note it is. */
+    if (quote && (!note || !comparable(note.text).includes(comparable(quote)))) {
+      note = allNotes.find((n) => comparable(n.text).includes(comparable(quote))) ?? note;
+    }
+    if (!note || sources.some((s) => s.fragId === note.fragId)) continue;
+    const exact = !!quote && comparable(note.text).includes(comparable(quote));
+    sources.push({
+      fragId: note.fragId, threadId: note.threadId, threadName: note.threadName, at: note.at,
+      ...(quote ? (exact ? { quote } : { paraphrase: quote }) : {}),
+      excerpt: note.text.replace(/\s+/g, " ").trim().slice(0, 160),
+    });
+    if (sources.length === 4) break;
+  }
   const seen = new Set<string>();
   const out: AskRef[] = [];
   for (const raw of parsed.data.refs) {
-    const ref = refs[raw.replace(/[[\]\s]/g, "").toUpperCase()];
+    const ref = refs[label(raw)];
     if (!ref || seen.has(`${ref.kind}:${ref.id}`)) continue;
+    if (ref.kind === "thread" && sources.some((s) => s.threadId === ref.id)) continue;
     seen.add(`${ref.kind}:${ref.id}`);
     out.push(ref);
-    if (out.length === 6) break;
+    if (out.length === 4) break;
   }
-  return { found: parsed.data.found, answer, refs: out };
+  return { found: parsed.data.found, answer, sources, refs: out };
 }
 
 /* ------------------------- rendering the answer ------------------------- */

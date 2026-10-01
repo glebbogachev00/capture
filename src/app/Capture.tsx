@@ -977,7 +977,7 @@ export function Capture() {
               onSort={(action) => void resort(action)} onManualSort={manualSort} onManualSplit={manualSplit}
               onChoosePlace={openPlacePicker} onEdit={editUnsorted} onDelete={removeUnsorted} />
             <AskBar board={data} now={now} query={query} onQuery={setQuery} onAnswering={setAnswering}
-              onOpenThread={(id) => { setOpen(id); setOpenFrag(null); }} onOpenIntention={setOpenIntention}
+              onOpenThread={(id, fragId) => { setOpen(id); setOpenFrag(fragId ?? null); }} onOpenIntention={setOpenIntention}
               onOpenActions={() => { setQuery(""); setTab("actions"); }} />
 
             {searching ? (

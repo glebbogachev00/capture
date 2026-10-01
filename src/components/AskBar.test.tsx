@@ -98,3 +98,15 @@ it("hides an answer once the question in the box changes", async () => {
   view.rerender(<AskBar {...props} query="what did I decide about tiles" />);
   expect(screen.queryByRole("region", { name: "Answer" })).toBeNull();
 });
+
+it("shows a cited note with its own date and words, and opens the thread on that note", async () => {
+  const { props } = await setup("what did I land on for pricing",
+    Response.json({ found: true, answer: "You went annual.", sources: [{ note: "N1", quote: "billed yearly" }], refs: [] }));
+  await ask();
+  const noteDate = new Date(NOW - 864e5).toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  const source = screen.getByRole("button", { name: `Open the note from ${noteDate} in Pricing` });
+  expect(source.textContent).toContain(`${noteDate} · Pricing`);
+  expect(source.textContent).toContain("“billed yearly”");
+  fireEvent.click(source);
+  expect(props.onOpenThread).toHaveBeenCalledWith("pricing", "f1");
+});

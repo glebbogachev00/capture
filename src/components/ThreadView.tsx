@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Copy, MoreHorizontal } from "lucide-react";
-import { imgLoad, imgNow, imgSave } from "@/lib/imgCache";
+import { imgLoad, imgNow, imgSave, onImageAvailable } from "@/lib/imgCache";
 import { TONES, TONE_NAMES, imgValue, toneValue } from "@/lib/cover";
 import { fmt, uid, type Action, type Frag, type Thread } from "@/lib/model";
 import { shrinkFile } from "@/lib/shrink";
@@ -419,10 +419,39 @@ export function FragView({
     }
   }, [focus]);
 
+  /* Photos in the notes around it load after the scroll and push the note
+     out of view. For a few seconds, keep it centred as the page settles,
+     and stop the moment the person scrolls themselves. */
+  useEffect(() => {
+    const el = root.current;
+    if (!focus || !el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => el.scrollIntoView({ behavior: "auto", block: "center" }));
+    const stop = () => observer.disconnect();
+    const timer = setTimeout(stop, 4000);
+    observer.observe(el.parentElement ?? document.body);
+    window.addEventListener("wheel", stop, { once: true, passive: true });
+    window.addEventListener("touchstart", stop, { once: true, passive: true });
+    window.addEventListener("keydown", stop, { once: true });
+    return () => {
+      stop();
+      clearTimeout(timer);
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchstart", stop);
+      window.removeEventListener("keydown", stop);
+    };
+  }, [focus]);
+
   /* Keyed on the image ids, not the frag object: every sync merge rebuilds
      the thread's frag objects, and keying on `f` re-read every image in the
      open thread from IndexedDB on each 10s poll. */
   const imgKey = (f.imgs || []).join(",");
+  /* Photos that arrive after the note was drawn (a new device syncing its
+     photos in the background) re-read here instead of staying blank. */
+  const [arrived, setArrived] = useState(0);
+  useEffect(() => {
+    const offs = (imgKey ? imgKey.split(",") : []).map((id) => onImageAvailable(id, () => setArrived((n) => n + 1)));
+    return () => offs.forEach((off) => off());
+  }, [imgKey]);
   useEffect(() => {
     (async () => {
       const ids = imgKey ? imgKey.split(",") : [];
@@ -440,7 +469,7 @@ export function FragView({
         root.current?.scrollIntoView({ behavior: "auto", block: "center" });
       }
     })();
-  }, [imgKey, focus]);
+  }, [imgKey, focus, arrived]);
 
   return (
     <div
