@@ -138,6 +138,20 @@ export function snapToNamedWeekday(due: string, raw: string, now: number, tzOffs
 }
 const nameKey = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 
+/** "Only save it in the friction thread": the Threads named after the last
+ * "only" in a filing sentence, best match by name words. Empty when the
+ * capture says no such thing. */
+export function onlyThreadIds(raw: string, threads: { id: string; name: string }[]): string[] {
+  const sentence = raw.split(/(?<=[.!?])\s+/).reverse()
+    .find((part) => /\bonly\b/i.test(part) && /\b(save|saved|go|goes|put|file|filed|keep|add)\b/i.test(part));
+  if (!sentence) return [];
+  const tail = sentence.slice(sentence.search(/\bonly\b/i)).toLowerCase();
+  const words = (name: string) => name.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [];
+  const scored = threads.map((thread) => ({ id: thread.id, score: words(thread.name).filter((word) => tail.includes(word)).length }));
+  const best = Math.max(0, ...scored.map((entry) => entry.score));
+  return best ? scored.filter((entry) => entry.score === best).map((entry) => entry.id) : [];
+}
+
 /** Check the model's answer against the board. Throws when it cannot be used. */
 export function normalizeSimpleSort(
   untrusted: unknown,
@@ -147,6 +161,7 @@ export function normalizeSimpleSort(
   const byId = new Map(context.threads.map((thread) => [thread.id, thread]));
   const byName = new Map(context.threads.map((thread) => [nameKey(thread.name), thread]));
   const openActions = new Set((context.actions ?? []).map((action) => action.id));
+  const only = context.raw ? onlyThreadIds(context.raw, context.threads) : [];
   const out: SimpleSortItem[] = [];
   for (const item of items) {
     const kind = context.force === "thread" ? "thought" : context.force ?? item.kind;
@@ -164,7 +179,9 @@ export function normalizeSimpleSort(
     const ids = [...(item.threadIds ?? []), ...(item.threadId ? [item.threadId] : [])].filter((id) => byId.has(id));
     const named = item.newThread ? byName.get(nameKey(item.newThread)) : undefined;
     if (named) ids.push(named.id);
-    const threads: SimpleSortTarget[] = [...new Set(ids)].map((id) => ({ id }));
+    /* "Only save it in X" wins over every other Thread the model added. */
+    const kept = only.length && ids.some((id) => only.includes(id)) ? ids.filter((id) => only.includes(id)) : ids;
+    const threads: SimpleSortTarget[] = [...new Set(kept)].map((id) => ({ id }));
     if (!threads.length && item.newThread) threads.push({ name: item.newThread });
     if (!threads.length) throw new Error("thought without a thread");
     out.push({ kind, text: item.text, threads });

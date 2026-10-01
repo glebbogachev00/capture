@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendar, normalizeSimpleSort, simpleSortPrompt, snapToNamedWeekday } from "./simpleSort";
+import { calendar, normalizeSimpleSort, onlyThreadIds, simpleSortPrompt, snapToNamedWeekday } from "./simpleSort";
 import { settleSimpleSort } from "./simpleSortSettlement";
 import { EMPTY, type Board } from "./model";
 import { parsePersistedBoard } from "./persistedBoard";
@@ -166,5 +166,27 @@ describe("settleSimpleSort", () => {
     expect(result.board.ledger.some((entry) => entry.targetId === "demos" && entry.captureId === "cap")).toBe(true);
     expect(result.board.routingSettlements).toEqual([]);
     expect(parsePersistedBoard(JSON.parse(JSON.stringify(result.board)))).not.toBeNull();
+  });
+});
+
+describe("onlyThreadIds", () => {
+  const board = [{ id: "friction", name: "Reducing friction strategy" }, { id: "retake", name: "Retake" }, { id: "capture", name: "Capture." }];
+  const said = "I've built retake, but I'm not using it. And for this capture, I want you to only save it in the friction, removing friction strategy, threat if possible.";
+
+  it("finds the Thread named after 'only'", () => {
+    expect(onlyThreadIds(said, board)).toEqual(["friction"]);
+    expect(onlyThreadIds("Obsession is the problem. This should only go to Retake.", board)).toEqual(["retake"]);
+  });
+
+  it("finds nothing when the capture gives no such instruction", () => {
+    expect(onlyThreadIds("Retake is the only tool I trust for demos.", board)).toEqual([]);
+    expect(onlyThreadIds("Only save it somewhere sensible.", board)).toEqual([]);
+  });
+
+  it("drops the other Threads the model added, and moves nothing it did not pick", () => {
+    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "t", threadIds: ["retake", "capture", "friction"] })] }, { threads: board, raw: said }))
+      .toEqual([{ kind: "thought", text: said, threads: [{ id: "friction" }] }]);
+    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "t", threadIds: ["retake"] })] }, { threads: board, raw: said }))
+      .toEqual([{ kind: "thought", text: said, threads: [{ id: "retake" }] }]);
   });
 });
