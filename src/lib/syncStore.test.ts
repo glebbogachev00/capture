@@ -105,6 +105,14 @@ describe("syncStore", () => {
     expect(out.rev).toBe(1);
   });
 
+  it("an unchanged push keeps the same rev, so other devices are not sent it again", async () => {
+    const first = await pushSync({ board: board(["Espresso"]), tombstones: [] });
+    const again = await pushSync({ board: first.board, tombstones: first.tombstones });
+    expect(again.rev).toBe(first.rev);
+    const changed = await pushSync({ board: board(["Espresso", "Marathon"]), tombstones: [] });
+    expect(changed.rev).toBe(first.rev + 1);
+  });
+
   it("a push that loses the race re-merges on top of the winner", async () => {
     // Another instance stored a board holding "Marathon" first. Ours must
     // not overwrite it — both threads have to survive.
@@ -124,7 +132,9 @@ describe("syncStore", () => {
   it("gives up loudly rather than pretending a push landed", async () => {
     // The old hub set its in-memory copy before the write it never made, so
     // a host with nowhere to write still looked healthy. It must throw.
-    fake.lose(99);
+    // Every write loses to a writer whose board is not ours, so ours is never
+    // stored. (A loser whose content already matches the hub is stored.)
+    fake.lose(99, JSON.stringify({ rev: 3, board: board(["Marathon"]), tombstones: [] }));
     await expect(
       pushSync({ board: board(["Espresso"]), tombstones: [] })
     ).rejects.toThrow();

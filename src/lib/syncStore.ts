@@ -137,6 +137,13 @@ export function pushSync(client: SyncState): Promise<SyncStore> {
         { board: state.board, tombstones: state.tombstones },
         client
       );
+      /* Nothing new: answer with what is stored, same rev. A rev bump for an
+         unchanged board sends every other device to download it again. */
+      if (JSON.stringify(merged.board) === JSON.stringify(state.board) &&
+          JSON.stringify(merged.tombstones) === JSON.stringify(state.tombstones)) {
+        memory = { state, version, at: Date.now() };
+        return state;
+      }
       const next: SyncStore = { ...merged, rev: state.rev + 1 };
       let written: { version: string | null } | false = false;
       try {

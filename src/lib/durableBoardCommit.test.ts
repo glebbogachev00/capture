@@ -50,6 +50,25 @@ describe("durable board commit queue", () => {
     });
   });
 
+  it("persists an adopted hub board exactly, without stamping its items as local edits", async () => {
+    const note = (updatedAt: number) => ({ id: "n1", at: 1, text: "Rain tower", updatedAt });
+    const local = { ...EMPTY, threads: [{ id: "t1", name: "Ovid", summary: "", updatedAt: 1, frags: [note(1)] }] };
+    const fromHub = { ...EMPTY, threads: [{ id: "t1", name: "Ovid", summary: "", updatedAt: 5, frags: [note(5)] }] };
+    const run = (asIs: boolean) => runDurableBoardMutation({
+      queue: new DurableBoardCommitQueue(), allowed: () => true,
+      read: () => ({ board: local, tombstones: [] }),
+      build: () => ({ next: fromHub, value: null, asIs }),
+      adopt: () => {}, committed: () => {},
+    });
+    const adopted = await run(true);
+    if (adopted.status !== "committed") throw new Error(adopted.status);
+    expect(adopted.board.threads[0].frags[0].updatedAt).toBe(5);
+    expect(adopted.board.threads[0].updatedAt).toBe(5);
+    const edited = await run(false);
+    if (edited.status !== "committed") throw new Error(edited.status);
+    expect(edited.board.threads[0].frags[0].updatedAt).toBeGreaterThan(5);
+  });
+
   it("serializes transactions and lets each transaction prepare from the state committed before it", async () => {
     const queue = new DurableBoardCommitQueue();
     const firstWrite = deferred<void>();
