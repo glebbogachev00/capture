@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Copy, MoreHorizontal } from "lucide-react";
-import { imgLoad, imgNow, imgSave } from "@/lib/imgCache";
+import { imgLoad, imgNow, imgSave, onImageAvailable } from "@/lib/imgCache";
 import { TONES, TONE_NAMES, imgValue, toneValue } from "@/lib/cover";
 import { fmt, uid, type Action, type Frag, type Thread } from "@/lib/model";
 import { shrinkFile } from "@/lib/shrink";
@@ -423,6 +423,13 @@ export function FragView({
      the thread's frag objects, and keying on `f` re-read every image in the
      open thread from IndexedDB on each 10s poll. */
   const imgKey = (f.imgs || []).join(",");
+  /* Photos that arrive after the note was drawn (a new device syncing its
+     photos in the background) re-read here instead of staying blank. */
+  const [arrived, setArrived] = useState(0);
+  useEffect(() => {
+    const offs = (imgKey ? imgKey.split(",") : []).map((id) => onImageAvailable(id, () => setArrived((n) => n + 1)));
+    return () => offs.forEach((off) => off());
+  }, [imgKey]);
   useEffect(() => {
     (async () => {
       const ids = imgKey ? imgKey.split(",") : [];
@@ -440,7 +447,7 @@ export function FragView({
         root.current?.scrollIntoView({ behavior: "auto", block: "center" });
       }
     })();
-  }, [imgKey, focus]);
+  }, [imgKey, focus, arrived]);
 
   return (
     <div

@@ -10,7 +10,7 @@
 
 import { memo, useEffect, useState } from "react";
 import { Check, MoreHorizontal } from "lucide-react";
-import { imgLoad, imgNow } from "@/lib/imgCache";
+import { useStoredImage } from "@/hooks/useStoredImage";
 import { parseCover, toneColour, type Cover } from "@/lib/cover";
 import { DAY, GRACE, fmt, fmtDue, left, type Action, type ProfileIdentity, type ShelfLife, type Thread } from "@/lib/model";
 import { ProfileSignature } from "./ProfileSignature";
@@ -291,25 +291,10 @@ export function BusyLine({ label }: { label: string }) {
 }
 
 export function CoverBand({ cover }: { cover: Cover }) {
-  /* Memory first: a cover seen once renders on the first frame of every
-     later mount, instead of blanking while IndexedDB answers — which it
-     does slowly mid-sort, when commits hold the store's write lock. */
-  const id = cover.kind === "img" ? cover.id : null;
-  const [src, setSrc] = useState<string | null>(() => (id ? imgNow(id) : null));
-  useEffect(() => {
-    if (!id) return;
-    let alive = true;
-    void imgLoad(id)
-      .then((v) => {
-        if (alive) setSrc(v);
-      })
-      .catch(() => {
-        /* not here yet — the next sync fetches it */
-      });
-    return () => {
-      alive = false;
-    };
-  }, [id]);
+  /* Memory first, and re-rendered when sync supplies the bytes later: a
+     cover read once at mount stayed blank on a device whose photos arrived
+     after the board did. */
+  const src = useStoredImage(cover.kind === "img" ? cover.id : undefined) || null;
 
   if (cover.kind === "tone") {
     return (
