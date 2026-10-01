@@ -55,3 +55,23 @@ it("states the grounding, correction, and output contracts independently of user
   expect(THREAD_SUMMARY_SYSTEM).toContain("NEXT: none");
   expect(THREAD_SUMMARY_SYSTEM).toContain("omit BELONGS");
 });
+
+it("asks for decided, still open and keeps-coming-up lists, grounded and capped", () => {
+  expect(THREAD_SUMMARY_SYSTEM).toContain("Decided:");
+  expect(THREAD_SUMMARY_SYSTEM).toContain("Still open:");
+  expect(THREAD_SUMMARY_SYSTEM).toContain("Keeps coming up:");
+  expect(THREAD_SUMMARY_SYSTEM).toContain("never a wish, idea or plan");
+  expect(THREAD_SUMMARY_SYSTEM).toContain("at least two fragments on different days");
+  expect(THREAD_SUMMARY_SYSTEM).toContain("Leave out any list with nothing in it");
+});
+
+it("stores the structured summary in one shape, with NEXT and BELONGS split off", async () => {
+  ai.generateText.mockResolvedValueOnce({ text: "Pricing is settled.\n\n**Decided:** annual at $96; no sync on free\nStill open: none\nNEXT: Email Priya the pricing page\nBELONGS: Pricing." });
+  const response = await POST(new Request("http://localhost/api/summarize", {
+    method: "POST", body: JSON.stringify({ name: "Pricing", frags: [{ at: 1, text: "annual at $96" }] }),
+  }));
+  expect(await response.json()).toEqual({
+    summary: "Pricing is settled.\n\nDecided:\n- annual at $96\n- no sync on free",
+    next: "Email Priya the pricing page", belongs: "Pricing.", via: "test",
+  });
+});

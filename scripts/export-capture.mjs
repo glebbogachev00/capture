@@ -125,7 +125,9 @@ const threadMd = (t) => {
   const lines = [`# ${t.name}`, ``];
   /* The stored summary sometimes already carries the label; don't double it. */
   const summary = (t.summary || "").replace(/^Where this stands:\s*/i, "");
-  if (summary) lines.push(`> Where this stands: ${summary}`, ``);
+  /* Every line quoted, so a summary's Decided / Still open lists stay inside
+     the block instead of spilling into the notes below it. */
+  if (summary) lines.push(`> **Where this stands**`, ...summary.split("\n").map((l) => (l ? `> ${l}` : ">")), ``);
   lines.push(`## Fragments`, ``);
   for (const f of t.frags) {
     lines.push(`### ${day(f.at)}`, ``);

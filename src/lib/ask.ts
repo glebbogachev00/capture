@@ -32,7 +32,9 @@ export const ASK_MAX_QUESTION = 600;
 /** A note is shown whole up to this, and clipped no shorter than NOTE_MIN. */
 const NOTE_CHARS = 1_200;
 const NOTE_MIN = 200;
-const SUMMARY_CHARS = 700;
+/* Room for the snapshot plus its Decided / Still open / Keeps coming up
+   lists (lib/threadState); a large board still shares it down. */
+const SUMMARY_CHARS = 1_400;
 const MAX_ACTIONS = 150;
 const MAX_RECEIPTS = 40;
 

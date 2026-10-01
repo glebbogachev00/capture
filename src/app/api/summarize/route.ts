@@ -8,6 +8,7 @@ import { sanitizeProviderError, withFallback } from "@/lib/providers";
 import { opsEvent } from "@/lib/opsEvent.server";
 import { THREAD_SUMMARY_SYSTEM } from "@/lib/threadSummaryPrompt";
 import { splitNext } from "@/lib/nextStep";
+import { normalizeState } from "@/lib/threadState";
 
 /**
  * Keeps a thread's "Where this stands" block current.
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
       return text;
     });
     const { summary, next, belongs } = splitNext(value);
-    return Response.json({ summary, next, belongs, via });
+    return Response.json({ summary: normalizeState(summary), next, belongs, via });
   } catch (error) {
     opsEvent({ event: "managed_ai_route", outcome: "failure", reason: sanitizeProviderError(error), count: "one" });
     const { message, status } = explain(error);

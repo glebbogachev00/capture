@@ -14,6 +14,7 @@ import { useStoredImage } from "@/hooks/useStoredImage";
 import { parseCover, toneColour, type Cover } from "@/lib/cover";
 import { DAY, GRACE, fmt, fmtDue, left, type Action, type ProfileIdentity, type ShelfLife, type Thread } from "@/lib/model";
 import { ProfileSignature } from "./ProfileSignature";
+import { snapshotOf } from "@/lib/threadState";
 
 const TICK_MS = 420;
 
@@ -345,7 +346,7 @@ export function TCard({
       {cover && <CoverBand cover={cover} />}
       <div className="tname">{t.name}</div>
       <div className="tsum">
-        {t.summary || (last?.text || "").slice(0, 120) + "…"}
+        {snapshotOf(t.summary) || (last?.text || "").slice(0, 120) + "…"}
       </div>
       <div className="sed">
         {bars.map((f, i, arr) => (

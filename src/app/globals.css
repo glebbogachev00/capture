@@ -1296,6 +1296,30 @@ body {
   font-size: 15px;
   line-height: 1.6;
 }
+/* Decided / Still open / Keeps coming up — quiet labels, the same voice as
+   "Where this stands" and "Next", so the block reads as one place. */
+.state-list {
+  margin-top: 12px;
+}
+.state-label {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--font-mono), monospace;
+  font-weight: 500;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.state-list ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.state-list li + li {
+  margin-top: 3px;
+}
 
 .frag {
   padding: 15px 0;

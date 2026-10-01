@@ -16,6 +16,29 @@ import { shrinkFile } from "@/lib/shrink";
 import type { DoneItem } from "@/lib/threadActions";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { ThreadChoices } from "./ThreadChoices";
+import { parseState } from "@/lib/threadState";
+
+/** The snapshot, then what is decided, still open, and keeps coming up —
+    each only when the thread has some (lib/threadState). */
+function StateLists({ summary }: { summary: string }) {
+  const state = parseState(summary);
+  const lists: [string, string[]][] = [
+    ["Decided", state.decided],
+    ["Still open", state.open],
+    ["Keeps coming up", state.recurring],
+  ];
+  return (
+    <>
+      {state.snapshot && <p>{state.snapshot}</p>}
+      {lists.filter(([, items]) => items.length).map(([label, items]) => (
+        <div className="state-list" key={label}>
+          <span className="state-label">{label}</span>
+          <ul>{items.map((item, i) => <li key={i}>{item}</li>)}</ul>
+        </div>
+      ))}
+    </>
+  );
+}
 
 export function ThreadView({
   thread,
@@ -282,7 +305,7 @@ export function ThreadView({
       {thread.summary && (
         <div className="state">
           <h4>Where this stands</h4>
-          <p>{thread.summary}</p>
+          <StateLists summary={thread.summary} />
           {/* The move, if the thread has one. One line, one tap: it
               becomes an action through the usual sorter. Waved away, it
               stays away until the summary names a different step. */}
