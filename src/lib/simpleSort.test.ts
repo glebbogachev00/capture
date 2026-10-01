@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendar, normalizeSimpleSort, onlyThreadIds, simpleSortPrompt, snapToNamedWeekday } from "./simpleSort";
+import { calendar, normalizeSimpleSort, onlyThreadIds, ownWords, simpleSortPrompt, snapToNamedWeekday } from "./simpleSort";
 import { settleSimpleSort } from "./simpleSortSettlement";
 import { EMPTY, type Board } from "./model";
 import { parsePersistedBoard } from "./persistedBoard";
@@ -20,9 +20,9 @@ describe("normalizeSimpleSort", () => {
     ]);
   });
 
-  it("keeps a thought about several projects in each of their threads", () => {
-    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Retake records it for Ovid.", threadIds: ["retake", "ovid", "gone", "ovid"] })] }, { threads }))
-      .toEqual([{ kind: "thought", text: "Retake records it for Ovid.", threads: [{ id: "retake" }, { id: "ovid" }] }]);
+  it("files a thought in one Thread, never a copy in a second", () => {
+    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Retake records it for Ovid.", threadIds: ["gone", "retake", "ovid"] })] }, { threads }))
+      .toEqual([{ kind: "thought", text: "Retake records it for Ovid.", threads: [{ id: "retake" }] }]);
   });
 
   it("points a repeated task at the open action instead of a new one", () => {
@@ -188,5 +188,32 @@ describe("onlyThreadIds", () => {
       .toEqual([{ kind: "thought", text: said, threads: [{ id: "friction" }] }]);
     expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "t", threadIds: ["retake"] })] }, { threads: board, raw: said }))
       .toEqual([{ kind: "thought", text: said, threads: [{ id: "retake" }] }]);
+  });
+});
+
+describe("ownWords", () => {
+  const raw = "I have two problems: obsession and desire. Reality creation can solve them.\n\nTomorrow I need to email Marcel about the limit.\n\nOur standing rule: keep things simple. Complex solutions need maintenance.\n\nJIM JANNARD / SCOPE\n\nHe founded Oakley in 1975.\n\nHe founded RED in 2005, see https://www.wired.com/2008/08/ff-redcamera/ for more.";
+  const thought = (text: string, id: string) => ({ kind: "thought" as const, text, threads: [{ id }] });
+
+  it("gives each sentence to one part, in the person's words, and keeps what the model cut", () => {
+    expect(ownWords(raw, [
+      thought("Two problems, obsession and desire, which reality creation can solve.", "reality"),
+      { kind: "action", text: "Email Marcel about the limit" },
+      // The model repeated the reality sentences here and summarised the research.
+      thought("I have two problems: obsession and desire. Reality creation can solve them. Standing rule: keep things simple; complex solutions need maintenance.", "friction"),
+      thought("JIM JANNARD / SCOPE. He founded Oakley.", "jim"),
+    ])).toEqual([
+      thought("I have two problems: obsession and desire. Reality creation can solve them.", "reality"),
+      { kind: "action", text: "Email Marcel about the limit" },
+      thought("Our standing rule: keep things simple. Complex solutions need maintenance.", "friction"),
+      thought("JIM JANNARD / SCOPE\n\nHe founded Oakley in 1975.\n\nHe founded RED in 2005, see https://www.wired.com/2008/08/ff-redcamera/ for more.", "jim"),
+    ]);
+  });
+
+  it("drops a part whose every sentence belongs to another", () => {
+    expect(ownWords("Ovid's rain loops. It needs a longer recording.", [
+      thought("Ovid's rain loops. It needs a longer recording.", "ovid"),
+      thought("Ovid's rain loops.", "retake"),
+    ])).toEqual([thought("Ovid's rain loops.", "retake"), thought("It needs a longer recording.", "ovid")].reverse());
   });
 });

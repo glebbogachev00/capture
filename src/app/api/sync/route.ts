@@ -41,8 +41,10 @@ export const dynamic = "force-dynamic";
 const SYNC_LIMIT = limitFromEnv("CAPTURE_SYNC_LIMIT", 60);
 const SYNC_WINDOW = 60_000;
 
-/** Keep a client pushing junk or a giant board from filling the disk. */
-const MAX_BODY = 2_000_000;
+/** Keep a client pushing junk from filling the disk. Every push carries the
+ * whole board, and a real board passed 1.5 MB on 1 Oct 2026: at 2 MB a few
+ * long captures stopped sync on every device with nothing on screen. */
+const MAX_BODY = 20_000_000;
 
 function gate(request: Request) {
   return rateLimit("sync:" + clientIp(request), SYNC_LIMIT, SYNC_WINDOW);
