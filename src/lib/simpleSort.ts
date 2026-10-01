@@ -30,7 +30,7 @@ export const SimpleSortSchema = z.object({
 const Answer = z.object({
   items: z.array(z.object({
     kind: z.enum(["action", "thought", "intention"]),
-    text: z.string().trim().min(1).max(8000),
+    text: z.string().trim().min(1).max(20_000),
     threadIds: z.array(z.string().max(100)).max(4).nullish(),
     threadId: z.string().max(100).nullish(),
     newThread: z.string().trim().max(100).nullish(),
@@ -116,22 +116,58 @@ export function simpleSortPrompt(input: {
 }
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?$/;
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/** The model sometimes lands one day off a weekday it was told to look up
+ * ("next Wednesday" → Thursday). When the capture names exactly one weekday
+ * and a due date sits one day beside that weekday, it is that weekday. */
+export function snapToNamedWeekday(due: string, raw: string, now: number, tzOffset = 0): string {
+  const named = WEEKDAYS.filter((day) => new RegExp(`\\b${day}\\b`, "i").test(raw));
+  if (named.length !== 1) return due;
+  const target = WEEKDAYS.indexOf(named[0]);
+  const at = Date.parse(due.slice(0, 10) + "T00:00:00Z");
+  if (Number.isNaN(at) || new Date(at).getUTCDay() === target) return due;
+  const today = Date.parse(new Date(now - tzOffset * 60_000).toISOString().slice(0, 10) + "T00:00:00Z");
+  for (const step of [-1, 1]) {
+    const beside = at + step * 86_400_000;
+    if (new Date(beside).getUTCDay() === target && beside >= today && beside <= today + 14 * 86_400_000) {
+      return new Date(beside).toISOString().slice(0, 10);
+    }
+  }
+  return due;
+}
 const nameKey = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+
+/** "Only save it in the friction thread": the Threads named after the last
+ * "only" in a filing sentence, best match by name words. Empty when the
+ * capture says no such thing. */
+export function onlyThreadIds(raw: string, threads: { id: string; name: string }[]): string[] {
+  const sentence = raw.split(/(?<=[.!?])\s+/).reverse()
+    .find((part) => /\bonly\b/i.test(part) && /\b(save|saved|go|goes|put|file|filed|keep|add)\b/i.test(part));
+  if (!sentence) return [];
+  const tail = sentence.slice(sentence.search(/\bonly\b/i)).toLowerCase();
+  const words = (name: string) => name.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [];
+  const scored = threads.map((thread) => ({ id: thread.id, score: words(thread.name).filter((word) => tail.includes(word)).length }));
+  const best = Math.max(0, ...scored.map((entry) => entry.score));
+  return best ? scored.filter((entry) => entry.score === best).map((entry) => entry.id) : [];
+}
 
 /** Check the model's answer against the board. Throws when it cannot be used. */
 export function normalizeSimpleSort(
   untrusted: unknown,
-  context: { threads: { id: string; name: string }[]; actions?: OpenAction[]; force?: Force; raw?: string },
+  context: { threads: { id: string; name: string }[]; actions?: OpenAction[]; force?: Force; raw?: string; now?: number; tzOffset?: number },
 ): SimpleSortItem[] {
   const { items } = Answer.parse(untrusted);
   const byId = new Map(context.threads.map((thread) => [thread.id, thread]));
   const byName = new Map(context.threads.map((thread) => [nameKey(thread.name), thread]));
   const openActions = new Set((context.actions ?? []).map((action) => action.id));
+  const only = context.raw ? onlyThreadIds(context.raw, context.threads) : [];
   const out: SimpleSortItem[] = [];
   for (const item of items) {
     const kind = context.force === "thread" ? "thought" : context.force ?? item.kind;
     if (kind === "action") {
-      const due = item.due && ISO_DAY.test(item.due) ? item.due : undefined;
+      const stated = item.due && ISO_DAY.test(item.due) ? item.due : undefined;
+      const due = stated && context.raw ? snapToNamedWeekday(stated, context.raw, context.now ?? Date.now(), context.tzOffset) : stated;
       const existing = item.sameAsAction && openActions.has(item.sameAsAction) ? item.sameAsAction : undefined;
       out.push({ kind, text: item.text, ...(due ? { due } : {}), ...(existing ? { existingActionId: existing } : {}) });
       continue;
@@ -143,7 +179,9 @@ export function normalizeSimpleSort(
     const ids = [...(item.threadIds ?? []), ...(item.threadId ? [item.threadId] : [])].filter((id) => byId.has(id));
     const named = item.newThread ? byName.get(nameKey(item.newThread)) : undefined;
     if (named) ids.push(named.id);
-    const threads: SimpleSortTarget[] = [...new Set(ids)].map((id) => ({ id }));
+    /* "Only save it in X" wins over every other Thread the model added. */
+    const kept = only.length && ids.some((id) => only.includes(id)) ? ids.filter((id) => only.includes(id)) : ids;
+    const threads: SimpleSortTarget[] = [...new Set(kept)].map((id) => ({ id }));
     if (!threads.length && item.newThread) threads.push({ name: item.newThread });
     if (!threads.length) throw new Error("thought without a thread");
     out.push({ kind, text: item.text, threads });
@@ -166,7 +204,9 @@ export async function generateSimpleSort({ tier, prompt, abortSignal }: {
   const common = {
     model: tier.model,
     maxRetries: 0 as const,
-    maxOutputTokens: 4_000,
+    /* A long one-thought capture is copied out whole: 20,000 characters is
+       about 5,000 tokens, plus reasoning. */
+    maxOutputTokens: 8_000,
     abortSignal,
     temperature: 0,
     prompt,
