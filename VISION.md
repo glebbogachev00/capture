@@ -1,7 +1,7 @@
 # Capture — Vision
 
-Capture is an open-source thinking companion that helps people capture, distill,
-organize, and share ideas with as little friction as possible. It supports
+Capture is an open-source thinking companion that helps people get thoughts in,
+keep them alive, find them again and act on them, with as little friction as possible. It supports
 thinking rather than replacing it, and aims for a smooth flow between human and AI.
 
 ## North Star
@@ -21,10 +21,28 @@ Remove friction from thinking.
 
 A thinking system, not a notes app.
 
-**Flow:** capture → distill → organize → share.
+## The four phases
 
-(The "decide" and "act" happen *inside* the objects below — they are not separate
-surfaces. Naming them as steps would invite building surfaces that don't exist.)
+Capture is built in phases, in this order. Every change should say which phase it
+serves; work that serves none of them waits. (From the Capture thread, 13 and 26
+Sep 2026.)
+
+1. **Get it in.** Capturing is effortless, and each thought lands where the person
+   meant it to: sorted in line with their intention, never lost, even offline or
+   when a model fails. "Done" is a score on the held-out sorting sets, not
+   perfection: sorting is never perfect, and chasing it starves the later phases.
+2. **Keep it alive.** Nothing quietly turns into junk. A thread says plainly what is
+   decided, what is still open, and what keeps coming up without being acted on;
+   finished work is labelled; stale things fade or are let go.
+3. **Find it.** Ask anything and get an answer from your own notes, in their words,
+   with a link to where it came from.
+4. **Decide and hand off.** What you decided and what is still open are on the board,
+   so you — or an agent you hand a thread to — can act without rereading everything.
+
+Deciding and acting happen *inside* the objects below, not on new surfaces: a
+thread's summary is where a decision becomes visible, and Distill is where an
+unclear thought gets worked out. Naming the phases is not an invitation to build
+screens for them.
 
 **Core objects:**
 
@@ -79,8 +97,10 @@ them locally, and lets you rotate or remove them anytime.
 - **No folders, tags, or taxonomy to maintain.** Organization emerges from the three
   object types.
 - **No AI auto-writing your thoughts.** It files, summarizes, and clarifies; you decide.
-- **No account, cloud, or lock-in.** Local-first. Your keys, your data. Sync,
-  when you use it, runs through your own machine — never a third-party cloud.
+- **No lock-in, and no account required.** Local-first: your keys, your data, the
+  full thinking system free. Capture Cloud (managed sync and backup) is an optional
+  convenience, never needed to think with Capture. If removing a paid service would
+  make the free product worse at thinking, it is the wrong thing to charge for.
 
 ## Sharing Philosophy
 
