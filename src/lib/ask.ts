@@ -248,7 +248,9 @@ export function readAnswer(
   const sources: AskSource[] = [];
   const allNotes = Object.values(notes);
   for (const cited of parsed.data.sources) {
-    const quote = cited.quote?.trim().replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, "").trim();
+    /* Quote marks and a cut-off "…" at either end are not part of the words. */
+    const quote = cited.quote?.trim().replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, "")
+      .replace(/^(?:\.{3}|\u2026)\s*|\s*(?:\.{3}|\u2026)$/g, "").trim();
     let note = notes[label(cited.note)];
     /* Right words, wrong label: the saved words decide which note it is. */
     if (quote && (!note || !comparable(note.text).includes(comparable(quote)))) {

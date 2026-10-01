@@ -148,6 +148,10 @@ describe("readAnswer", () => {
     const notes = { N1: { fragId: "f1", threadId: "c", threadName: "Capture.", at: 1, text: "It’s not a notes app — it’s a place to think." } };
     const out = readAnswer({ found: true, answer: "Not a notes app.", sources: [{ note: "N1", quote: "it's not a notes app - it's" }], refs: [] }, refs, notes)!;
     expect(out.sources[0].quote).toBe("it's not a notes app - it's");
+    // A quote cut off with an ellipsis is still the note's own words.
+    const cut = { N1: { fragId: "f1", threadId: "c", threadName: "Capture.", at: 1, text: "It supports thinking, rather than replacing it, and aims for flow." } };
+    expect(readAnswer({ found: true, answer: "Supports thinking.", sources: [{ note: "N1", quote: "It supports thinking, rather than replacing it…" }], refs: [] }, refs, cut)!.sources[0].quote)
+      .toBe("It supports thinking, rather than replacing it");
     // Models often write a non-breaking hyphen (U+2011) where the note has "-".
     const hyphen = { N1: { fragId: "f1", threadId: "c", threadName: "Capture.", at: 1, text: "Capture is an open-source thinking companion." } };
     expect(readAnswer({ found: true, answer: "A companion.", sources: [{ note: "N1", quote: "an open\u2011source thinking companion" }], refs: [] }, refs, hyphen)!.sources[0].quote)
