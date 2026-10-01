@@ -1975,7 +1975,8 @@ describe("planned and validated sort route", () => {
       .mockImplementationOnce(async ({ schema, prompt }) => {
         expect(prompt).toContain("Give it only destinations that own that exact item.source");
         expect(prompt).toContain("do not copy or union destination sets across items");
-        expect(prompt).toContain("Confirm that ownerId names only the intended Action");
+        expect(prompt).toContain("Confirm that ownerId plus additionalOwnerIds names exactly the intended scope");
+        expect(prompt).toContain("excluding Actions with differing local dates");
         expect(prompt).toContain("do not copy or union dates or owners across sibling Actions");
         return { object: schema.parse(routePlan) };
       });

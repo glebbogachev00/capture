@@ -5,6 +5,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { get, set } from "@/lib/storage";
 import { EMPTY, KEY } from "@/lib/model";
 import { useBoard } from "@/hooks/useBoard";
+import { stubSortFetch } from "../../test/simpleSortFetch";
 
 
 const ai = vi.hoisted(() => ({ generateObject: vi.fn(), generateText: vi.fn() }));
@@ -25,6 +26,10 @@ const providerResult = { clean: raw, kind: "thread", title: "Training schedule",
 beforeEach(async () => {
   calls.length = 0; responseKinds.length = 0;
   ai.generateObject.mockImplementation(async ({ schema, prompt }) => {
+    if (String(prompt).startsWith("You sort one capture")) {
+      const thread = calls.at(-1)?.force === "thread";
+      return { object: schema.parse({ items: [{ kind: thread ? "thought" : "intention", text: raw, threadIds: thread ? ["training"] : [], newThread: null, due: null, sameAsAction: null }] }) };
+    }
     const recovery = schema.safeParse(providerResult);
     if (recovery.success) return { object: recovery.data };
     if (String(prompt).includes("DESTINATION AND SUBJECT-BOUNDARY ADJUDICATION")) {
@@ -55,11 +60,13 @@ beforeEach(async () => {
       newThreads: [],
     }) };
   });
-  vi.stubGlobal("fetch", vi.fn(async (input, init) => {
+  stubSortFetch(vi.fn(async (input, init) => {
     if (String(input) === "/api/sort") {
       const body = JSON.parse(init.body); calls.push(body);
       const response = await POST(new Request("http://localhost/api/sort", { method: "POST", body: init.body }));
-      responseKinds.push((await response.clone().json()).kind);
+      const answer = await response.clone().json();
+      const first = answer.sort?.items?.[0]?.kind;
+      responseKinds.push(answer.kind ?? (first === "thought" ? "thread" : first));
       return response;
     }
     if (String(input) === "/api/intention") return Response.json({ expandedIntention: "Synthetic expansion", recommendedActions: [], counterIntentions: [] });

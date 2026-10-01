@@ -27,3 +27,11 @@ export function assemblePanel(opts: {
     scanStale(opts.board, opts.dismissed, opts.now)
   );
 }
+
+/** What Approve all says it did — every row, or how many are still listed. */
+export function approveAllNotice(applied: number, total: number): string {
+  const diff = total - applied;
+  return applied === total
+    ? `Applied all ${applied} ${applied === 1 ? "suggestion" : "suggestions"}.`
+    : `Applied ${applied} of ${total} — ${diff} couldn't be applied and ${diff === 1 ? "is" : "are"} still listed.`;
+}

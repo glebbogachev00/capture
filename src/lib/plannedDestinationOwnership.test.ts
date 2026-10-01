@@ -105,7 +105,7 @@ function withoutBoundaryFields(item: PlannedRoutingPlan["items"][number]) {
 }
 
 describe("model-owned planned destination and subject boundaries", () => {
-  it("applies model abstention to the exact thought and preserves source and all other fields", async () => {
+  it("keeps the planner's destination when the adjudicator only abstains", async () => {
     const raw = "🍞  That one’s approach needs changing.\n";
     const proposed: PlannedRoutingPlan = {
       items: [thought("uncertain", raw, [existing("bread")])], newThreads: [],
@@ -118,22 +118,12 @@ describe("model-owned planned destination and subject boundaries", () => {
         { itemId: "uncertain", mode: "unresolved", ambiguity },
       ] }),
     });
-    expect(result).toEqual({ ...proposed, items: [{
-      ...proposed.items[0], unresolved: true, ambiguity, destinations: [],
-    }] });
+    expect(result).toEqual(proposed);
     expect(proposed).toEqual(snapshot);
-    const generate = vi.fn();
     expect(validateRoutingPlan(result, context(raw))).toEqual([]);
-    expect(validateRoutingPlan({ ...result, items: [{
-      ...result.items[0], unresolved: false, ambiguity: null,
-    }] }, context(raw))).toContainEqual({ code: "TOPIC_WITHOUT_DESTINATION", itemId: "uncertain" });
-    expect(await adjudicatePlannedDestinationOwnership({
-      plan: result, context: context(raw), generate,
-    })).toEqual(result);
-    expect(generate).not.toHaveBeenCalled();
   });
 
-  it("prunes only new declarations orphaned by abstention while preserving mixed items and shared references", async () => {
+  it("leaves every item and new declaration in place when the adjudicator abstains", async () => {
     const fresh = (key: string) => ({ type: "new" as const, newThreadKey: key });
     const proposed: PlannedRoutingPlan = {
       items: [
@@ -142,7 +132,7 @@ describe("model-owned planned destination and subject boundaries", () => {
         thought("certain", "Keep the lunar drawings. ", [fresh("retained")]),
         action("photo", "Photograph the loaf", "Photograph the loaf tomorrow"),
         deadline("due", " tomorrow. ", "photo", "2026-09-30"),
-        { ...thought("intention", "I value patience. ", []), kind: "intention" },
+        { ...thought("intention", "My intention: I value patience. ", []), kind: "intention" },
         { ...thought("already-unresolved", "Something else?", []), unresolved: true, ambiguity: "Unknown subject." },
       ],
       newThreads: ["orphan", "retained"].map((key) => ({
@@ -159,18 +149,9 @@ describe("model-owned planned destination and subject boundaries", () => {
         indivisible("certain", [fresh("retained")]),
       ] }),
     });
-    expect(result.items.slice(2)).toEqual(snapshot.items.slice(2));
-    expect(result.items.slice(0, 2)).toEqual(snapshot.items.slice(0, 2).map((item, index) => ({
-      ...item, unresolved: true, destinations: [],
-      ambiguity: index === 0 ? "No justified destination." : "Referent is ambiguous.",
-    })));
-    expect(result.newThreads).toEqual([snapshot.newThreads[1]]);
+    expect(result).toEqual(snapshot);
     expect(result.items.map((item) => item.source).join("")).toBe(raw);
     expect(proposed).toEqual(snapshot);
-    expect(await adjudicatePlannedDestinationOwnership({
-      plan: result, context: context(raw),
-      generate: vi.fn().mockResolvedValue(adjudication(indivisible("certain", [fresh("retained")]))),
-    })).toEqual(result);
   });
 
   it("supplies advisory corrections without forcing a shared-word match instead of abstention", async () => {
@@ -183,7 +164,7 @@ describe("model-owned planned destination and subject boundaries", () => {
       plan: { items: [thought("uncertain", raw, [existing("bread")])], newThreads: [] },
       context: context(raw), correctionExamples, generate,
     });
-    expect(result.items[0].destinations).toEqual([]);
+    expect(result.items[0].destinations).toEqual([existing("bread")]);
     expect(generate).toHaveBeenCalledTimes(1);
     const prompt = generate.mock.calls[0][0];
     expect(prompt).toContain(JSON.stringify(correctionExamples));
@@ -385,7 +366,7 @@ describe("model-owned planned destination and subject boundaries", () => {
   });
 
   it("preserves new Threads, Intention boundaries, and unresolved content byte-for-byte", async () => {
-    const raw = "A lunar sketch archive needs its own home. I protect slow observation. This last fragment is unclear.";
+    const raw = "A lunar sketch archive needs its own home. My intention: I protect slow observation. This last fragment is unclear.";
     const newThread = {
       key: "lunar-sketches",
       name: "Lunar sketch archive",
@@ -397,7 +378,7 @@ describe("model-owned planned destination and subject boundaries", () => {
         thought("archive", "A lunar sketch archive needs its own home. ", [{ type: "new", newThreadKey: "lunar-sketches" }]),
         {
           id: "intention",
-          source: "I protect slow observation. ",
+          source: "My intention: I protect slow observation. ",
           kind: "intention",
           action: null,
           due: null,

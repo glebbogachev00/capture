@@ -1,8 +1,12 @@
 export const SEMANTIC_KIND_BOUNDARY = `
 Classify the speech act before the topic or the sentence's main verb.
 For each semantic claim, first ask whether the source assigns a discrete completable act. If it does, classify that claim as an Action. If it does not, ask whether the claim adopts a standing personal orientation; classify that as an Intention. Otherwise classify description or truth-seeking as developing thought. Apply this per claim so a mixed capture can retain each role.
+Read the complete capture to resolve references and spoken corrections before identifying separate claims. A sentence fragment may complete or repair the preceding thought. Punctuation alone does not make it independent. Keep corrections, completions, needs, and situational preferences with the thought they belong to. Split only when the surrounding meaning supports a distinct self-contained claim.
 - A concise first-person declaration is an intention when its function is to adopt a standing personal stance, permission, value, or way of living. It remains an intention when it uses active present-tense language but names no discrete act that can be completed once.
+- Wanting a solution, describing a preferred plan for a situation, or identifying a balance still to work out does not itself adopt a standing orientation. Keep that exploration with the thought. Preserve a genuinely adopted personal stance even when an existing Thread covers its topic.
 - A factual observation, belief under examination, uncertainty, or inquiry is developing thought even when it is first person.
 - A discrete promise, request, or commitment to perform a completable act is an Action. It needs a source-stated result that can be finished once; an active verb alone does not supply one.
+- Desired product behavior and constraints in an exploratory design note describe the system, not an assignment to implement it. Do not invent execution commitments. Explicit instructions to build, change, test, or produce something remain Actions.
+- When an initial interpretation is supplied, preserve its coherent developing thoughts unless the source clearly contradicts them. Splitting source for bookkeeping is not a reason to reinterpret a situational preference as an adopted personal principle. Require a distinct, affirmative adoption of a standing orientation before changing such a thought into an Intention.
 - An Intention owns no Action and no Thread destination.
 `;

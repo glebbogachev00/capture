@@ -27,7 +27,7 @@
  * Each row carries a chip saying which pass found it.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { TidyWaiting } from "./TidyWaiting";
 import type { OrganizeKind, OrganizeProposal } from "@/lib/organize";
 import { splitProposals } from "@/lib/organize";
@@ -131,6 +131,7 @@ export function OrganizeScreen({
   onAccept,
   onDismiss,
   onApproveAll,
+  children,
 }: {
   proposals: OrganizeProposal[];
   /** Whether the model's semantic pass has run. "thinking" shows a quiet
@@ -142,6 +143,8 @@ export function OrganizeScreen({
   onDismiss: (id: string) => void;
   /** Apply every proposal at once — gated behind the confirm modal. */
   onApproveAll: () => void;
+  /** Clean up — old photos and one-liners — under the suggestions. */
+  children?: ReactNode;
 }) {
   const [showMore, setShowMore] = useState(false);
   const [showApprove, setShowApprove] = useState(false);
@@ -239,6 +242,8 @@ export function OrganizeScreen({
           </div>
         </>
       )}
+
+      {children}
 
       {showApprove && (
         <div className="modal" onClick={() => setShowApprove(false)}>

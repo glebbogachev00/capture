@@ -1,4 +1,5 @@
 import { OwnershipBoundary } from "@/components/OwnershipBoundary";
+import { InstalledAppEntry } from "@/components/InstalledAppEntry";
 import { isCloudEnabled } from "@/lib/cloudBoard";
 import { Capture } from "./Capture";
 import { Landing } from "./Landing";
@@ -14,5 +15,5 @@ export const metadata = landingMetadata(PUBLIC_SITE);
  * the app, and the landing stays at /about.
  */
 export default function Home() {
-  return PUBLIC_SITE ? <Landing /> : <OwnershipBoundary cloud={isCloudEnabled()}><Capture /></OwnershipBoundary>;
+  return PUBLIC_SITE ? <><InstalledAppEntry /><Landing /></> : <OwnershipBoundary cloud={isCloudEnabled()}><Capture /></OwnershipBoundary>;
 }

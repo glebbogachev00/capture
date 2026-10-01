@@ -15,6 +15,7 @@ import {
   parsePendingRecoveryRecords,
 } from "@/lib/pendingRecovery";
 import { useBoard } from "./useBoard";
+import { stubSortFetch } from "../../test/simpleSortFetch";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -98,13 +99,186 @@ async function mount() {
 }
 
 describe("local-first planned capture", () => {
+  it.each(["automatic", "manual"])("shows the quota reset and keeps the original (%s)", async (mode) => {
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(mode === "automatic");
+    let calls = 0;
+    stubSortFetch(vi.fn(async (url: unknown) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      calls++;
+      return Response.json({ error: "quota exceeded" }, { status: 429,
+        headers: { Date: "Wed, 30 Sep 2026 09:00:00 GMT", "Retry-After": "3600" } });
+    }));
+    const hook = await mount();
+    const raw = "Keep this complete thought for Capture.";
+    act(() => hook.result.current.setText(raw));
+    await act(async () => { await hook.result.current.submit(); });
+    if (mode === "manual") {
+      online.mockReturnValue(true);
+      await act(async () => { await hook.result.current.resort(hook.result.current.data.actions.find(a => a.unsorted)!); });
+    }
+    await waitFor(() => expect(hook.result.current.err).toContain("Your AI allowance resets"));
+    expect(hook.result.current.err).toContain("Saved in Unsorted.");
+    expect(hook.result.current.err).not.toContain("untouched");
+    expect(calls).toBe(1);
+    expect(hook.result.current.data.actions.filter(a => a.unsorted)).toHaveLength(1);
+    const saved = JSON.parse((await storage.get(KEY))!);
+    expect(saved.ledger.some((entry: { raw: string; kind: string }) => entry.raw === raw && entry.kind === "pending")).toBe(true);
+  });
+  it.each(["complete", "edited", "deleted", "failed"])("fills mixed-capture Intention details without changing routing (%s)", async (outcome) => {
+    const thought = "For Ovid, the tower needs rain. ";
+    const intention = "My intention: I allow myself to rest.";
+    const raw = thought + intention;
+    const expansion = deferred<Response>();
+    const requested: string[] = [];
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) === "/api/intention") {
+        requested.push(JSON.parse(String(init?.body)).rawInput);
+        return expansion.promise;
+      }
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      const base = { action: null, due: null, ownerId: null, duplicateActionId: null, unresolved: false, ambiguity: null };
+      return Response.json({
+        planned: true, captureId: JSON.parse(String(init?.body)).captureId,
+        routingPlan: { items: [
+          { ...base, id: "thought", source: thought, kind: "developing_thought", destinations: [{ type: "existing", threadId: "destination" }] },
+          { ...base, id: "intention", source: intention, kind: "intention", destinations: [] },
+        ], newThreads: [] },
+        recovery: { clean: raw, kind: "thread", title: "Notes", actions: [], primaryActions: [], shelfLife: "keep", due: null, threadId: "destination", threadName: null },
+      });
+    }));
+    const hook = await mount();
+    act(() => hook.result.current.setText(raw));
+    await act(async () => { await hook.result.current.submit(); });
+    await waitFor(() => expect(hook.result.current.data.intentions).toHaveLength(1));
+    await waitFor(() => expect(requested).toEqual([intention]));
+    const saved = hook.result.current.data.intentions[0];
+    if (outcome === "edited") await act(async () => { await hook.result.current.updateIntention({ ...saved, expandedIntention: "My own wording" }); });
+    if (outcome === "deleted") await act(async () => { await hook.result.current.deleteIntention(saved.id); });
+    await act(async () => {
+      expansion.resolve(outcome === "failed" ? new Response(null, { status: 503 }) : Response.json({
+        expandedIntention: "A model rewrite that must not replace the saved wording",
+        recommendedActions: ["I take a walk.", "I play a game.", "I leave work alone."],
+        counterIntentions: ["I turn rest into another target."],
+      }));
+    });
+    if (outcome === "complete") {
+      await waitFor(() => expect(hook.result.current.data.intentions[0].recommendedActions).toHaveLength(3));
+      expect(hook.result.current.data.intentions[0]).toMatchObject({ rawInput: intention, expandedIntention: intention, counterIntentions: ["I turn rest into another target."] });
+      expect(JSON.parse((await storage.get(KEY))!).intentions[0].recommendedActions).toHaveLength(3);
+    } else if (outcome === "deleted") expect(hook.result.current.data.intentions).toEqual([]);
+    else expect(hook.result.current.data.intentions[0]).toMatchObject({ expandedIntention: outcome === "edited" ? "My own wording" : intention, recommendedActions: [], counterIntentions: [] });
+    expect(hook.result.current.data.threads[0].frags[0].text).toBe(thought);
+    expect(hook.result.current.data.actions).toEqual([]);
+    expect(hook.result.current.data.ledger.some(entry => entry.raw === raw)).toBe(true);
+  });
+  it("automatically files a planned 502 through one legacy recovery without a click", async () => {
+    const raw = "Call the dentist";
+    const requests: Array<{ captureId?: string }> = [];
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      const request = JSON.parse(String(init?.body));
+      requests.push(request);
+      return request.captureId
+        ? Response.json({ error: "SOURCE_NOT_ACCOUNTED" }, { status: 502 })
+        : sortedResponse(raw);
+    }));
+    const hook = await mount();
+    act(() => hook.result.current.setText(raw));
+    await act(async () => { await hook.result.current.submit(); });
+    await waitFor(() => expect(hook.result.current.unsorted).toHaveLength(0));
+    expect(requests).toHaveLength(2);
+    expect(requests[0].captureId).toBeTruthy();
+    expect(requests[1].captureId).toBeUndefined();
+    expect(hook.result.current.data.actions).toEqual([expect.objectContaining({ text: raw })]);
+    expect(JSON.parse((await storage.get(KEY))!).actions).toEqual([expect.objectContaining({ text: raw })]);
+  });
+
+  it.each([54_000, 55_000])("bounds automatic legacy recovery by the original 55 second deadline after %sms", async (elapsed) => {
+    const first = deferred<Response>();
+    const signals: AbortSignal[] = [];
+    let requestedAt = 0;
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      signals.push(init!.signal!);
+      if (signals.length === 1) { requestedAt = Date.now(); return first.promise; }
+      return new Promise<Response>(() => {});
+    }));
+    const hook = await mount();
+    act(() => hook.result.current.setText("Bound the total deadline"));
+    await act(async () => { await hook.result.current.submit(); });
+    await waitFor(() => expect(signals).toHaveLength(1));
+    expect(hook.result.current.autoSortingIds).toEqual([hook.result.current.unsorted[0].id]);
+    expect(hook.result.current.landed).toBe("Saved. Sorting…");
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(requestedAt + elapsed);
+      await act(async () => { first.resolve(new Response(null, { status: 502 })); });
+      expect(signals).toHaveLength(elapsed < 55_000 ? 2 : 1);
+      if (elapsed < 55_000) {
+        expect(hook.result.current.autoSortingIds).toEqual([hook.result.current.unsorted[0].id]);
+      }
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_001); });
+      if (elapsed < 55_000) expect(signals[1].aborted).toBe(true);
+      expect(hook.result.current.autoSortingIds).toEqual([]);
+      expect(hook.result.current.unsorted).toHaveLength(1);
+      expect(signals).toHaveLength(elapsed < 55_000 ? 2 : 1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("retains one exact commanded pending capture after both automatic calls fail", async () => {
+    const first = deferred<Response>();
+    const requests: Array<{ force?: string }> = [];
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      requests.push(JSON.parse(String(init?.body)));
+      return requests.length === 1 ? first.promise : new Response(null, { status: 502 });
+    }));
+    const hook = await mount();
+    const raw = "  /action Keep Unicode — exactly. \n";
+    act(() => hook.result.current.setText(raw));
+    await act(async () => { await hook.result.current.submit(); });
+    await waitFor(() => expect(requests).toHaveLength(1));
+    const before = hook.result.current.unsorted[0];
+    await act(async () => { first.resolve(new Response(null, { status: 502 })); });
+    await waitFor(() => expect(requests).toHaveLength(2));
+    expect(hook.result.current.unsorted).toEqual([before]);
+    expect(requests.map((request) => request.force)).toEqual(["action", "action"]);
+    expect(hook.result.current.data.ledger.filter((entry) => !entry.undone))
+      .toEqual([expect.objectContaining({ kind: "pending", raw })]);
+    expect(hook.result.current.err).toBe("");
+    expect(hook.result.current.landed).toBe("Saved. Awaiting sorting or placement");
+  });
+
+  it.each(["manual", "edit", "offline", "unmount"] as const)(
+    "suppresses automatic legacy recovery after %s while planned request fails", async (mode) => {
+      let online = true;
+      vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
+      const first = deferred<Response>();
+      const network = vi.fn(async (url: unknown) => String(url) === "/api/sort"
+        ? first.promise : new Response(null, { status: 503 }));
+      stubSortFetch(network);
+      const hook = await mount();
+      act(() => hook.result.current.setText("Manual placement wins"));
+      await act(async () => { await hook.result.current.submit(); });
+      await waitFor(() => expect(network.mock.calls.filter(([url]) => url === "/api/sort")).toHaveLength(1));
+      await act(async () => {
+        if (mode === "manual") await hook.result.current.manualSort(hook.result.current.unsorted[0], { kind: "action" });
+        if (mode === "edit") await hook.result.current.editUnsorted(hook.result.current.unsorted[0].id, "Edited source wins");
+        if (mode === "offline") online = false;
+        if (mode === "unmount") hook.unmount();
+        first.resolve(new Response(null, { status: 502 }));
+      });
+      expect(network.mock.calls.filter(([url]) => url === "/api/sort")).toHaveLength(1);
+    },
+  );
+
   it.each(["action-thread", "threads", "action-intention", "unresolved"] as const)(
     "reports only actual settled destinations in the %s receipt",
     async (kind) => {
-      const raw = "Call the dentist. I protect quiet mornings.";
+      const raw = "Call the dentist. My intention: I protect quiet mornings.";
       const delayed = deferred<Response>();
       let captureId = "";
-      vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+      stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
         if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
         captureId = JSON.parse(String(init?.body)).captureId;
         return delayed.promise;
@@ -125,7 +299,7 @@ describe("local-first planned capture", () => {
         ? [{ ...base, unresolved: true, ambiguity: "Unclear destination" }]
         : [
             { ...base, source: "Call the dentist. ", action: "Call the dentist" },
-            { ...base, id: "second", source: "I protect quiet mornings.", kind: kind === "action-intention" ? "intention" : "developing_thought", action: null,
+            { ...base, id: "second", source: "My intention: I protect quiet mornings.", kind: kind === "action-intention" ? "intention" : "developing_thought", action: null,
               destinations: kind === "action-intention" ? [] : [{ type: "existing", threadId: "destination" }] },
           ];
       if (kind === "threads") {
@@ -133,9 +307,10 @@ describe("local-first planned capture", () => {
       }
       await act(async () => { delayed.resolve(Response.json(response)); });
       if (kind === "unresolved") {
-        await waitFor(() => expect(hook.result.current.unsorted[0]?.id).not.toBe(originalPendingId));
-        expect(hook.result.current.landed).toBe("Saved. Awaiting sorting or placement");
-        expect(hook.result.current.pendingReceiptId).toBe(hook.result.current.unsorted[0].id);
+        /* Nothing understood: the capture itself stays pending for placement. */
+        await waitFor(() => expect(hook.result.current.landed).toBe("Saved. Awaiting sorting or placement"));
+        expect(hook.result.current.unsorted.map((action) => action.id)).toEqual([originalPendingId]);
+        expect(hook.result.current.pendingReceiptId).toBe(originalPendingId);
         expect(hook.result.current.data.threads[0].frags).toHaveLength(0);
       } else {
         await waitFor(() => expect(hook.result.current.unsorted).toHaveLength(0));
@@ -154,7 +329,7 @@ describe("local-first planned capture", () => {
       vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
       const delayed = deferred<Response>();
       let captureId = "";
-      vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+      stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
         if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
         captureId = JSON.parse(String(init?.body)).captureId;
         return delayed.promise;
@@ -195,7 +370,7 @@ describe("local-first planned capture", () => {
     const payload = "Keep this chosen destination";
     const raw = `  /${force} ${payload} \n`;
     const requests: Array<{ force?: string }> = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) === "/api/intention") return Response.json({
         expandedIntention: payload, recommendedActions: [], counterIntentions: [], via: "synthetic",
       });
@@ -233,7 +408,7 @@ describe("local-first planned capture", () => {
     "preserves exact /%s command provenance including outer whitespace",
     async (force) => {
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-      vi.stubGlobal("fetch", vi.fn());
+      stubSortFetch(vi.fn());
       const hook = await mount();
       const raw = `  /${force}  Keep Unicode — exactly. \n`;
       act(() => hook.result.current.setText(raw));
@@ -251,7 +426,7 @@ describe("local-first planned capture", () => {
       let online = false;
       vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
       const requests: Array<{ force?: string }> = [];
-      vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+      stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
         if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
         requests.push(JSON.parse(String(init?.body)));
         return sortedResponse("A model override", force === "action" ? "intention" : "action");
@@ -281,7 +456,7 @@ describe("local-first planned capture", () => {
     const payload = "Preserve this exact destination";
     const raw = `/${force} ${payload}`;
     const requests: Array<{ raw: string; force?: string }> = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       const request = JSON.parse(String(init?.body));
       requests.push(request);
@@ -307,7 +482,7 @@ describe("local-first planned capture", () => {
       online = true;
       await act(async () => { window.dispatchEvent(new Event("online")); });
     }
-    await waitFor(() => expect(requests).toHaveLength(1));
+    await waitFor(() => expect(requests).toHaveLength(2));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(requests[0]).toMatchObject({ raw: payload, force });
     expect(hook.result.current.unsorted).toEqual([expect.objectContaining({ src: payload, pendingForce: force })]);
@@ -321,7 +496,7 @@ describe("local-first planned capture", () => {
   it.each(["action", "thread", "mixed"] as const)(
     "settles final %s plan despite advisory initial Intention",
     async (kind) => {
-      const raw = "Call the dentist. I protect quiet mornings.";
+      const raw = "Call the dentist. My intention: I protect quiet mornings.";
       const network = vi.fn(async (url: unknown, init?: RequestInit) => {
         if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
         const request = JSON.parse(String(init?.body));
@@ -336,17 +511,19 @@ describe("local-first planned capture", () => {
           const base = response.routingPlan.items[0];
           response.routingPlan.items = [
             { ...base, source: "Call the dentist. ", action: "Call the dentist" },
-            { ...base, id: "intention-one", source: "I protect quiet mornings.", kind: "intention", action: null },
+            { ...base, id: "intention-one", source: "My intention: I protect quiet mornings.", kind: "intention", action: null },
           ];
         }
         return Response.json(response);
       });
-      vi.stubGlobal("fetch", network);
+      stubSortFetch(network);
       const hook = await mount();
       act(() => hook.result.current.setText(raw));
       await act(async () => { await hook.result.current.submit(); });
       await waitFor(() => expect(hook.result.current.unsorted).toHaveLength(0));
-      expect(network.mock.calls.filter(([url]) => String(url) === "/api/intention")).toHaveLength(0);
+      const detailRequests = network.mock.calls.filter(([url]) => String(url) === "/api/intention");
+      expect(detailRequests.map(([, init]) => JSON.parse(String(init?.body)).rawInput))
+        .toEqual(kind === "mixed" ? ["My intention: I protect quiet mornings."] : []);
       expect(hook.result.current.draft).toBeNull();
       expect(hook.result.current.data.actions.filter((item) => !item.unsorted))
         .toHaveLength(kind === "thread" ? 0 : 1);
@@ -553,7 +730,7 @@ describe("local-first planned capture", () => {
         : realSet(key, value));
     const writes = vi.spyOn(storage, "setMany");
     const network = vi.fn();
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
 
     const hook = renderHook(() => useBoard(Date.now()));
     await waitFor(() => expect(hook.result.current.err)
@@ -589,7 +766,7 @@ describe("local-first planned capture", () => {
       key === KEY ? Promise.reject(new DOMException("temporary read failure", "UnknownError")) : realGet(key));
     const writes = vi.spyOn(storage, "setMany");
     const network = vi.fn();
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
 
     const hook = renderHook(() => useBoard(Date.now()));
     await waitFor(() => expect(hook.result.current.err)
@@ -615,7 +792,7 @@ describe("local-first planned capture", () => {
     await storage.set(TOMBSTONE_KEY, malformedTombstones);
     const writes = vi.spyOn(storage, "setMany");
     const network = vi.fn();
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
 
     const hook = renderHook(() => useBoard(Date.now()));
     await waitFor(() => expect(hook.result.current.err)
@@ -644,7 +821,7 @@ describe("local-first planned capture", () => {
         : realSet(key, value));
     const writes = vi.spyOn(storage, "setMany");
     const network = vi.fn();
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
 
     const hook = renderHook(() => useBoard(Date.now()));
     await waitFor(() => expect(hook.result.current.err)
@@ -712,7 +889,7 @@ describe("local-first planned capture", () => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       return sortWait.promise;
     });
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
 
     const hook = renderHook(() => useBoard(now));
     await startupStarted.promise;
@@ -744,7 +921,7 @@ describe("local-first planned capture", () => {
 
   it("keeps composer text and attachments and shows no receipt when durable storage fails", async () => {
     const network = vi.fn();
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     vi.spyOn(storage, "setMany").mockRejectedValueOnce(new DOMException("quota", "QuotaExceededError"));
     act(() => {
@@ -785,7 +962,7 @@ describe("local-first planned capture", () => {
       expected: [{ id: "new-during-write", src: "data:image/png;base64,new" }],
     },
   ])("$case", async ({ duringWrite, expected, reminted }) => {
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     act(() => {
       hook.result.current.setText("Persist the exact attachment snapshot");
@@ -827,7 +1004,7 @@ describe("local-first planned capture", () => {
       const body = JSON.parse(String(init?.body));
       return sortedResponse(body.raw);
     });
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => {
       hook.result.current.setText("First immutable photo");
@@ -931,7 +1108,7 @@ describe("local-first planned capture", () => {
         entry.captureId === request.captureId)?.kind ?? "missing");
       return replies[persistedAtFetch.length - 1].promise;
     });
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
 
     act(() => hook.result.current.setText("First thought stays usable"));
@@ -963,7 +1140,7 @@ describe("local-first planned capture", () => {
     ["provider", () => new Response(null, { status: 503 })],
     ["malformed", () => Response.json({ planned: true, captureId: "wrong", recovery: {} })],
   ])("leaves one exact pending capture after a %s failure", async (_kind, reply) => {
-    vi.stubGlobal("fetch", vi.fn(async () => reply()));
+    stubSortFetch(vi.fn(async () => reply()));
     const hook = await mount();
     act(() => hook.result.current.setText("Exact source survives failure"));
     await act(async () => { await hook.result.current.submit(); });
@@ -980,7 +1157,7 @@ describe("local-first planned capture", () => {
   it("does not request a provider while offline and preserves the exact pending capture", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     const network = vi.fn();
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => hook.result.current.setText("Offline exact source"));
     await act(async () => { await hook.result.current.submit(); });
@@ -1007,7 +1184,7 @@ describe("local-first planned capture", () => {
   it("durably consumes the immediate bounded attempt before provider failure", async () => {
     const started = Date.now();
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    stubSortFetch(vi.fn(async () => new Response(null, { status: 503 })));
     const hook = await mount();
     act(() => hook.result.current.setText("Provider failure is durably bounded"));
 
@@ -1028,7 +1205,7 @@ describe("local-first planned capture", () => {
 
   it("provider timeout after local save releases without losing or globally blocking the capture", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
-    vi.stubGlobal("fetch", vi.fn((url: unknown) =>
+    stubSortFetch(vi.fn((url: unknown) =>
       String(url) === "/api/sort"
         ? Promise.reject(new DOMException("provider timeout", "TimeoutError"))
         : Promise.resolve(new Response(null, { status: 503 }))));
@@ -1051,7 +1228,7 @@ describe("local-first planned capture", () => {
   it("sends the stripped slash-command payload to planned sorting while retaining exact raw provenance", async () => {
     const waiting = deferred<Response>();
     let request: { raw: string; force?: string } | undefined;
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       request = JSON.parse(String(init?.body));
       return waiting.promise;
@@ -1081,7 +1258,7 @@ describe("local-first planned capture", () => {
 
   it("keeps an online /intention prefix only in raw Record provenance", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown) =>
+    stubSortFetch(vi.fn(async (url: unknown) =>
       String(url) === "/api/intention"
         ? Response.json({
             expandedIntention: "I protect unhurried mornings",
@@ -1150,7 +1327,7 @@ describe("local-first planned capture", () => {
     const network = vi.fn<(url: unknown) => Promise<Response>>(
       async () => new Response(null, { status: 503 }),
     );
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => hook.result.current.setText(command));
     await act(async () => { await hook.result.current.submit(); });
@@ -1173,7 +1350,7 @@ describe("local-first planned capture", () => {
 
   it("leaves ordinary planned and manual text unchanged", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     const ordinary = "Action items are part of this ordinary thought";
     act(() => hook.result.current.setText(ordinary));
@@ -1191,17 +1368,42 @@ describe("local-first planned capture", () => {
       .toMatchObject({ text: ordinary, src: ordinary });
   });
 
+  it("automatically sorts online images with their complete durable bytes", async () => {
+    const reply = deferred<Response>();
+    const requests: Array<{ captureId?: string; imgs?: string[] }> = [];
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      requests.push(JSON.parse(String(init?.body)));
+      return reply.promise;
+    }));
+    const hook = await mount();
+    act(() => {
+      hook.result.current.setText("Image task");
+      hook.result.current.setPics([{ id: "automatic-image", src: "data:image/png;base64,image" }]);
+    });
+    await act(async () => { await hook.result.current.submit(); });
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({ imgs: ["data:image/png;base64,image"] });
+    expect(requests[0].captureId).toBeUndefined();
+    expect(JSON.parse((await storage.get(PENDING_RECOVERY_KEY))!)[0].automaticAttempts).toBe(1);
+    expect(hook.result.current.autoSortingIds).toEqual([hook.result.current.unsorted[0].id]);
+    await act(async () => { reply.resolve(sortedResponse("Image task")); });
+    await waitFor(() => expect(hook.result.current.unsorted).toHaveLength(0));
+    expect(hook.result.current.autoSortingIds).toEqual([]);
+    expect(await storage.get(IMG("automatic-image"))).toBe("data:image/png;base64,image");
+  });
+
   it.each([
     ["image-only", ""],
     ["image-dependent", "Use the attached whiteboard diagram for this capture"],
-  ])("keeps an %s capture pending instead of planning without image semantics", async (_case, source) => {
-    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+  ])("keeps an offline %s capture pending with exact bytes", async (_case, source) => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     const network = vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       const request = JSON.parse(String(init?.body));
       return responseFor(request.captureId, request.raw);
     });
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => {
       hook.result.current.setText(source);
@@ -1243,7 +1445,7 @@ describe("local-first planned capture", () => {
             also: [],
           })
         : new Response(null, { status: 503 }));
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => {
       hook.result.current.setText("Use both attached diagrams");
@@ -1271,7 +1473,7 @@ describe("local-first planned capture", () => {
     let online = false;
     vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
     let sortBody: { imgs?: string[] } | undefined;
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       sortBody = JSON.parse(String(init?.body));
       return Response.json({
@@ -1325,7 +1527,7 @@ describe("local-first planned capture", () => {
       const body = JSON.parse(String(init?.body));
       return body.captureId ? new Response(null, { status: 503 }) : retryReply.promise;
     });
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => hook.result.current.setText("Older pending retry"));
     await act(async () => { await hook.result.current.submit(); });
@@ -1361,7 +1563,7 @@ describe("local-first planned capture", () => {
           ? new Promise<Response>(() => {})
           : sortedResponse("Retry releases after deadline")
         : new Response(null, { status: 503 }));
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => hook.result.current.setText("Retry releases after deadline"));
     await act(async () => { await hook.result.current.submit(); });
@@ -1400,7 +1602,7 @@ describe("local-first planned capture", () => {
   it("bounds stalled image loading, preserves every byte, releases retry state, and later succeeds", async () => {
     let online = false;
     vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown) =>
+    stubSortFetch(vi.fn(async (url: unknown) =>
       String(url) === "/api/sort"
         ? sortedResponse("Image read must share the retry deadline")
         : new Response(null, { status: 503 })));
@@ -1454,7 +1656,7 @@ describe("local-first planned capture", () => {
     let online = false;
     let expansionStalls = true;
     vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown) => {
+    stubSortFetch(vi.fn(async (url: unknown) => {
       if (String(url) === "/api/sort") {
         return sortedResponse("Intention expansion shares the retry deadline", "intention");
       }
@@ -1506,7 +1708,7 @@ describe("local-first planned capture", () => {
   it("lets an automatic commit that claimed finalization finish truthfully after the timeout lands", async () => {
     let online = false;
     vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown) =>
+    stubSortFetch(vi.fn(async (url: unknown) =>
       String(url) === "/api/sort"
         ? sortedResponse("Persistence owns its claimed commit phase")
         : new Response(null, { status: 503 })));
@@ -1559,7 +1761,7 @@ describe("local-first planned capture", () => {
   it("creates and later renames an offline Thread without provider work", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     const network = vi.fn();
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => hook.result.current.setText("Plan the Capture release without asking a model"));
     await act(async () => { await hook.result.current.submit(); });
@@ -1586,7 +1788,7 @@ describe("local-first planned capture", () => {
 
   it("survives reload during inference with raw text, transcript, image, destination, captureId and revision", async () => {
     const waiting = deferred<Response>();
-    vi.stubGlobal("fetch", vi.fn((url: unknown) =>
+    stubSortFetch(vi.fn((url: unknown) =>
       String(url) === "/api/sort"
         ? waiting.promise
         : Promise.resolve(new Response(null, { status: 503 }))));
@@ -1630,7 +1832,7 @@ describe("local-first planned capture", () => {
       const body = JSON.parse(String(init?.body));
       return responseFor(body.captureId, body.raw);
     });
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     for (const source of ["Pending one", "Pending two", "Pending three", "Pending four"]) {
       act(() => hook.result.current.setText(source));
@@ -1668,7 +1870,7 @@ describe("local-first planned capture", () => {
     let online = false;
     vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
     let sortBody: { imgs?: string[] } | undefined;
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       sortBody = JSON.parse(String(init?.body));
       return sortedResponse("Offline image recovery");
@@ -1712,7 +1914,7 @@ describe("local-first planned capture", () => {
         ? Response.json({ planned: true, captureId: "wrong", recovery: {} })
         : sortedResponse("Malformed responses stay bounded");
     });
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => hook.result.current.setText("Malformed responses stay bounded"));
     await act(async () => { await hook.result.current.submit(); });
@@ -1728,7 +1930,7 @@ describe("local-first planned capture", () => {
 
     const recovered = await mount();
     await waitFor(() => expect(network.mock.calls.filter(([url]) =>
-      String(url) === "/api/sort")).toHaveLength(2));
+      String(url) === "/api/sort")).toHaveLength(4));
     await waitFor(async () => {
       records = parsePendingRecoveryRecords(await storage.get(PENDING_RECOVERY_KEY));
       expect(records[0]?.automaticAttempts).toBe(2);
@@ -1740,13 +1942,13 @@ describe("local-first planned capture", () => {
 
     const third = await mount();
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(network.mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(2);
+    expect(network.mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(4);
     expect(third.result.current.unsorted).toHaveLength(1);
     expect(third.result.current.busy).toBeNull();
 
     malformed = false;
     await act(async () => { await third.result.current.resort(third.result.current.unsorted[0]); });
-    expect(network.mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(3);
+    expect(network.mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(5);
     expect(third.result.current.unsorted).toHaveLength(0);
     expect(third.result.current.data.actions.filter((action) =>
       action.text === "Malformed responses stay bounded" && !action.unsorted
@@ -1758,7 +1960,7 @@ describe("local-first planned capture", () => {
     vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
     const delayed = deferred<Response>();
     let captureId = "";
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       captureId = JSON.parse(String(init?.body)).captureId;
       return delayed.promise;
@@ -1805,7 +2007,7 @@ describe("local-first planned capture", () => {
       requestCaptureId = request.captureId;
       return first.promise;
     });
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => hook.result.current.setText("Settle only this revision"));
     await act(async () => { await hook.result.current.submit(); });
@@ -1823,7 +2025,7 @@ describe("local-first planned capture", () => {
   it("ignores a delayed response after the exact pending envelope is deleted", async () => {
     const delayed = deferred<Response>();
     let captureId = "";
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       const request = JSON.parse(String(init?.body));
       captureId = request.captureId;
@@ -1847,7 +2049,7 @@ describe("local-first planned capture", () => {
   it("lets a manual durable transaction beat a background settlement that resolves while the write waits", async () => {
     const delayedModel = deferred<Response>();
     let captureId = "";
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       captureId = JSON.parse(String(init?.body)).captureId;
       return delayedModel.promise;
@@ -1891,7 +2093,7 @@ describe("local-first planned capture", () => {
   it("refuses a manual claim once planned settlement has entered atomic finalization", async () => {
     const delayedModel = deferred<Response>();
     let captureId = "";
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       captureId = JSON.parse(String(init?.body)).captureId;
       return delayedModel.promise;
@@ -1962,7 +2164,7 @@ describe("local-first planned capture", () => {
   it("refuses a manual claim once explicit retry settlement has entered atomic finalization", async () => {
     let online = false;
     vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown) =>
+    stubSortFetch(vi.fn(async (url: unknown) =>
       String(url) === "/api/sort"
         ? sortedResponse("Manual defeats prepared explicit retry")
         : new Response(null, { status: 503 })));
@@ -2017,7 +2219,7 @@ describe("local-first planned capture", () => {
   it("does not show a Sort now receipt, switch tabs, or arm a new Undo when settlement persistence fails", async () => {
     let online = false;
     vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown) =>
+    stubSortFetch(vi.fn(async (url: unknown) =>
       String(url) === "/api/sort"
         ? Response.json({
             clean: "Retry remains pending",
@@ -2062,7 +2264,7 @@ describe("local-first planned capture", () => {
       sortSignal = init?.signal ?? undefined;
       return delayed.promise;
     });
-    vi.stubGlobal("fetch", network);
+    stubSortFetch(network);
     const hook = await mount();
     act(() => hook.result.current.setText("Manual wins over explicit retry"));
     await act(async () => { await hook.result.current.submit(); });
@@ -2105,7 +2307,7 @@ describe("local-first planned capture", () => {
 
   it("commits a lossless manual split once, keeps images on the original envelope, and reloads identically", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     act(() => {
       hook.result.current.setText("First half. Second half.");
@@ -2153,7 +2355,7 @@ describe("local-first planned capture", () => {
 
   it("keeps the exact original pending state when split persistence fails and permits an identical retry", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     act(() => hook.result.current.setText("One.Two."));
     await act(async () => { await hook.result.current.submit(); });
@@ -2185,7 +2387,7 @@ describe("local-first planned capture", () => {
     const delayed = deferred<Response>();
     let captureId = "";
     let sortSignal: AbortSignal | undefined;
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       const request = JSON.parse(String(init?.body));
       captureId = request.captureId;
@@ -2224,7 +2426,7 @@ describe("local-first planned capture", () => {
 
   it("keeps the exact pending state after a failed manual commit and releases its claim for retry", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     act(() => {
       hook.result.current.setText("Pending survives a failed manual choice");
@@ -2270,7 +2472,7 @@ describe("local-first planned capture", () => {
         updatedAt: now - 60 * 24 * 60 * 60 * 1000, shelf: "keep", expires: null,
       }],
     }));
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    stubSortFetch(vi.fn(async () => new Response(null, { status: 503 })));
     const hook = await mount();
     await act(async () => { await hook.result.current.runOrganize(); });
     const proposal = hook.result.current.organize?.find((item) => item.kind === "let_go");
@@ -2300,7 +2502,7 @@ describe("local-first planned capture", () => {
         shelf: "keep", expires: null,
       })),
     }));
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    stubSortFetch(vi.fn(async () => new Response(null, { status: 503 })));
     const hook = await mount();
     await act(async () => { await hook.result.current.runOrganize(); });
     expect(hook.result.current.organize?.filter((item) => item.kind === "let_go")).toHaveLength(2);
@@ -2316,7 +2518,7 @@ describe("local-first planned capture", () => {
 
   it("retains an image-backed Action and its bytes when completion persistence fails", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     act(() => {
       hook.result.current.setText("Image-backed action must survive");
@@ -2369,7 +2571,7 @@ describe("local-first planned capture", () => {
 
   it("serializes Undo behind a delayed manual settlement and persists the Undo result last", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     act(() => hook.result.current.setText("Undo this capture while filing waits"));
     await act(async () => { await hook.result.current.submit(); });
@@ -2406,7 +2608,7 @@ describe("local-first planned capture", () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     let remoteAvailable = false;
     const pullResponded = deferred<void>();
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (!String(url).startsWith("/api/sync")) return new Response(null, { status: 503 });
       if (init?.method === "POST") {
         const body = JSON.parse(String(init.body));
@@ -2474,7 +2676,7 @@ describe("local-first planned capture", () => {
   it("does not adopt or acknowledge a sync pull when local persistence fails", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     let remoteAvailable = false;
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (!String(url).startsWith("/api/sync") || init?.method === "POST") {
         return new Response(null, { status: 503 });
       }
@@ -2510,7 +2712,7 @@ describe("local-first planned capture", () => {
 
   it("rebases an unrelated generic mutation queued behind manual settlement", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     act(() => hook.result.current.setText("Older capture is filed manually"));
     await act(async () => { await hook.result.current.submit(); });
@@ -2553,7 +2755,7 @@ describe("local-first planned capture", () => {
 
   it("keeps a new durable intake when an older manual commit is delayed", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     act(() => hook.result.current.setText("File the older pending capture"));
     await act(async () => { await hook.result.current.submit(); });
@@ -2608,7 +2810,7 @@ describe("local-first planned capture", () => {
 
   it("exposes only the exact manual filing Undo beside its receipt and restores it after reload", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
 
     act(() => hook.result.current.setText("Older pending card"));
@@ -2645,7 +2847,7 @@ describe("local-first planned capture", () => {
 
   it("does not acknowledge manual Undo when its durable write fails", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     act(() => hook.result.current.setText("Manual Undo must persist first"));
     await act(async () => { await hook.result.current.submit(); });
@@ -2664,7 +2866,7 @@ describe("local-first planned capture", () => {
 
   it("fails a stale manual Undo without reverting a later edit or teaching a correction", async () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    vi.stubGlobal("fetch", vi.fn());
+    stubSortFetch(vi.fn());
     const hook = await mount();
     act(() => hook.result.current.setText("Later edited manual destination"));
     await act(async () => { await hook.result.current.submit(); });
@@ -2687,7 +2889,7 @@ describe("local-first planned capture", () => {
     const delayed = deferred<Response>();
     let captureId = "";
     let sortSignal: AbortSignal | undefined;
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       const request = JSON.parse(String(init?.body));
       captureId = request.captureId;
@@ -2742,7 +2944,7 @@ describe("local-first planned capture", () => {
   });
 
   it("atomically settles a still-pending response without duplicate artifacts", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (url: unknown, init?: RequestInit) => {
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       const request = JSON.parse(String(init?.body));
       return responseFor(request.captureId, request.raw);

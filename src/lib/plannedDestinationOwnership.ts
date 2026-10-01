@@ -431,6 +431,12 @@ export async function adjudicatePlannedDestinationOwnership({
     if (decisions.size !== candidateIds.size) {
       throw new DestinationOwnershipAdjudicationError("COVERAGE_INVALID");
     }
+    /* Abstaining is not a verdict. The planner already routed this thought
+       and could have left it unresolved itself; a second opinion that is
+       merely unsure keeps the planner's answer instead of wiping it. */
+    for (const [itemId, decision] of decisions) {
+      if (decision.ambiguity !== undefined) decisions.delete(itemId);
+    }
 
     const occupiedIds = new Set(plan.items.map((item) => item.id));
     const adjudicatedItems: PlannedRoutingPlan["items"] = [];

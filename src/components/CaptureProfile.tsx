@@ -4,7 +4,6 @@ import { getDocumentLifetime } from "@/lib/ownership";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
 import {
-  type ProfileDraft,
   type ProfileIdentity,
   type ProfileUpdate,
   type Thread,
@@ -66,11 +65,7 @@ export function CaptureProfile({
   const fileRef = useRef<HTMLInputElement>(null);
   const migrationStarted = useRef(false);
   const recurring = useMemo(() => recurringThreads(threads, 3), [threads]);
-  const identity: ProfileDraft = {
-    name: profile?.name ?? (legacy.name || defaults.name),
-    imageId: profile?.imageId,
-    showSignature: profile?.showSignature ?? false,
-  };
+  const name = profile?.name ?? (legacy.name || defaults.name);
 
 
   /* A profile created before board sync lived only in localStorage. Move it
@@ -100,8 +95,8 @@ export function CaptureProfile({
   }, [legacy, migrationReady, onProfileChange, profile, storageKey]);
 
 
-  const saveIdentity = (next: ProfileDraft) => {
-    if (onProfileChange) void onProfileChange(next);
+  const saveName = (name: string) => {
+    if (onProfileChange) void onProfileChange((current) => ({ ...current, name }));
   };
 
   const toggle = () => {
@@ -170,11 +165,11 @@ export function CaptureProfile({
                 <input
                   className="record-profile-name"
                   aria-label="Your name"
-                  value={identity.name}
+                  value={name}
                   maxLength={48}
                   placeholder="Your name"
                   onChange={(event) =>
-                    saveIdentity({ ...identity, name: event.target.value })
+                    saveName(event.target.value)
                   }
                 />
                 <span className="landed-point" aria-label="Formed from your Capture record">

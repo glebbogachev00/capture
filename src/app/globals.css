@@ -786,15 +786,17 @@ body {
   .destination-picker button {
     min-height: 48px;
   }
-  .pending-receipt {
-    flex-wrap: wrap;
+  .capture-receipt {
+    flex-wrap: nowrap;
   }
   .pending-receipt > span {
-    width: 100%;
+    flex: 1 1 0;
+    width: auto;
   }
   .pending-receipt .receipt-place-btn {
     min-height: 44px;
-    margin-left: 0;
+    margin-left: auto;
+    flex: none;
   }
   .unsorted-track {
     grid-template-columns: minmax(0, 1fr);

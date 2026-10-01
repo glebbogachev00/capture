@@ -362,7 +362,7 @@ describe("planned routing validation", () => {
     );
   });
 
-  it("allows an Intention to represent the non-Action half of a mixed recovery result", () => {
+  it("does not pull an undeclared Intention out of a capture that says several things", () => {
     const changed = plan({
       items: plan().items.map((item) =>
         item.kind === "developing_thought"
@@ -371,7 +371,10 @@ describe("planned routing validation", () => {
       ),
     });
 
-    expect(validateRoutingPlan(changed, context())).toEqual([]);
+    expect(new Set(validateRoutingPlan(changed, context()).map((failure) => failure.code)))
+      .toEqual(new Set(["INTENTION_NOT_DECLARED_ALONE"]));
+    expect(validateRoutingPlan(changed, context({ force: "intention" })).map((failure) => failure.code))
+      .not.toContain("INTENTION_NOT_DECLARED_ALONE");
   });
 
   it("rejects duplicate new-Thread keys before a Map can collapse them", () => {

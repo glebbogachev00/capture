@@ -24,6 +24,7 @@ export function SearchResults({
   onOpenThread,
   onOpenIntention,
   profile,
+  intentionNumbers,
   awaitingAnswer = false,
 }: {
   hits: Hits;
@@ -31,6 +32,7 @@ export function SearchResults({
   onOpenThread: (id: string, fragId?: string | null) => void;
   onOpenIntention: (id: string) => void;
   profile?: ProfileIdentity;
+  intentionNumbers?: ReadonlyMap<string, number>;
   awaitingAnswer?: boolean;
 }) {
   if (!hits.total) {
@@ -38,7 +40,7 @@ export function SearchResults({
     return (
       <div className="empty">
         <p className="big">Nothing by that shape.</p>
-        <p>Every word has to appear somewhere in the item.</p>
+        <p>Search needs every word in one item. For an answer from your whole board, tap Ask.</p>
       </div>
     );
   }
@@ -122,6 +124,7 @@ export function SearchResults({
             <IntentionCard
               key={i.id}
               intention={i}
+              displayNumber={intentionNumbers?.get(i.id)}
               onOpen={() => onOpenIntention(i.id)}
               profile={profile}
             />

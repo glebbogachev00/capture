@@ -15,6 +15,7 @@ import type { Tombstone } from "./sync";
 import { semanticThreads } from "./threadBrief";
 import {
   PlannedRoutingPlanSchema,
+  routingOwnerIds,
   validateRoutingPlan,
   type PlannedAtomicItem,
   type PlannedRoutingPlan,
@@ -65,17 +66,17 @@ export type PlannedSettlementResult =
 /** Stable for every JavaScript string, including hostile lone surrogates that
  * make encodeURIComponent throw. The escape marker itself is always escaped,
  * so distinct plan identities cannot collapse onto the same item id. */
-const enc = (value: string) => value.replace(/[^A-Za-z0-9.-]/g, (char) =>
+export const enc = (value: string) => value.replace(/[^A-Za-z0-9.-]/g, (char) =>
   `~${char.charCodeAt(0).toString(16).padStart(4, "0")}~`
 );
-const settlementLedgerId = (captureId: string) =>
+export const settlementLedgerId = (captureId: string) =>
   `planned:${enc(captureId)}:settlement`;
-const plannedId = (captureId: string, kind: string, identity: string) =>
+export const plannedId = (captureId: string, kind: string, identity: string) =>
   `planned:${enc(captureId)}:${kind}:${enc(identity)}`;
 
-const captureIdentity = (entry: CaptureEntry) => entry.captureId ?? entry.id;
+export const captureIdentity = (entry: CaptureEntry) => entry.captureId ?? entry.id;
 
-function conflict(
+export function conflict(
   board: Board,
   captureId: string,
   reason: PlannedSettlementConflictReason,
@@ -94,31 +95,36 @@ function ownedSource(
     .filter((item) =>
       !unresolvedIds.has(item.id) &&
       (item.id === owner.id ||
-        (item.ownerId === owner.id && childKinds.includes(item.kind)))
+        (routingOwnerIds(item).includes(owner.id) && childKinds.includes(item.kind)))
     )
     .map((item) => item.source)
     .join("");
 }
 
 function unresolvedRuns(items: PlannedAtomicItem[], unresolvedIds: Set<string>) {
-  const runs: { key: string; source: string }[] = [];
-  let current: { key: string; source: string } | null = null;
+  const runs: { key: string; ids: Set<string> }[] = [];
+  let current: { key: string; ids: Set<string> } | null = null;
   for (const item of items) {
     if (!unresolvedIds.has(item.id)) {
       current = null;
       continue;
     }
     if (!current) {
-      current = { key: item.id, source: item.source };
+      current = { key: item.id, ids: new Set([item.id]) };
       runs.push(current);
     } else {
-      current.source += item.source;
+      current.ids.add(item.id);
     }
   }
-  return runs;
+  return runs.map((run) => ({
+    key: run.key,
+    source: items.filter((item) => run.ids.has(item.id) ||
+      (item.kind === "deadline" && routingOwnerIds(item).some((id) => run.ids.has(id)))
+    ).map((item) => item.source).join(""),
+  }));
 }
 
-function activePendingFor(board: Board, captureId: string) {
+export function activePendingFor(board: Board, captureId: string) {
   return board.ledger.filter((entry) =>
     entry.kind === "pending" &&
     !entry.undone &&
@@ -194,7 +200,8 @@ export function settlePlannedRouting(
     plan.items.filter((item) => item.unresolved).map((item) => item.id)
   );
   for (const item of plan.items) {
-    if (item.ownerId && unresolvedIds.has(item.ownerId)) unresolvedIds.add(item.id);
+    const owners = routingOwnerIds(item);
+    if (owners.length && owners.every((id) => unresolvedIds.has(id))) unresolvedIds.add(item.id);
   }
   const pendingRuns = unresolvedRuns(plan.items, unresolvedIds);
   const generatedThreadIds = new Map(
@@ -275,7 +282,7 @@ export function settlePlannedRouting(
       .filter((item) =>
         item.kind === "deadline" && !unresolvedIds.has(item.id) && item.ownerId && item.due
       )
-      .map((item) => [item.ownerId!, parseDue(item.due, now)])
+      .flatMap((item) => routingOwnerIds(item).map((ownerId) => [ownerId, parseDue(item.due, now)] as const))
   );
   const shelf = recovery.shelfLife && recovery.shelfLife in SHELF
     ? recovery.shelfLife as ShelfLife
@@ -346,6 +353,14 @@ export function settlePlannedRouting(
     const text = ownedSource(item, plan.items, unresolvedIds, ["supporting_context"]);
     item.destinations.forEach((_, index) => {
       const threadId = destinationThreadId(item, index);
+      /* One capture, one thread, one fragment. Parts the planner split for
+         bookkeeping but sent to the same thread are joined back in source
+         order, so a thread never fills with one-line shards of one thought. */
+      const sameThread = createdFrags.find((created) => created.threadId === threadId);
+      if (sameThread) {
+        sameThread.frag.text = `${sameThread.frag.text.trimEnd()} ${text.trimStart()}`;
+        return;
+      }
       const frag: Frag = {
         id: plannedId(captureId, "frag", `${item.id}:${index}:${
           item.destinations[index].type === "existing"

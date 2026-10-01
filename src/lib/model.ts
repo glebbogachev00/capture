@@ -203,6 +203,9 @@ export type ProfileIdentity = {
   name: string;
   imageId?: string;
   showSignature?: boolean;
+  intentionShowcaseEnabled?: boolean;
+  pinnedIntentionIds?: string[];
+  intentionShowcaseCollapsed?: boolean;
   updatedAt?: number;
 };
 export type ProfileDraft = Omit<ProfileIdentity, "updatedAt">;

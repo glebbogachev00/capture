@@ -1,0 +1,156 @@
+.cleanup {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.section {
+  min-width: 0;
+  border-top: 1px solid var(--rule);
+  padding-top: 18px;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 19px;
+  line-height: 1.3;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.hint {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.ages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+/* Its own line, so the four chips fit one row at phone width. */
+.agesLabel {
+  flex-basis: 100%;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.age {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.age.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.thumb {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--paper);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: opacity 0.15s;
+}
+
+.thumb:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.missing {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--rule);
+}
+
+.kept {
+  border-color: var(--accent);
+}
+
+.kept img {
+  opacity: 0.45;
+}
+
+.badge {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: var(--card);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.before {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.before li + li {
+  margin-top: 3px;
+}
+
+.after {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 6px 6px 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+.after span {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}

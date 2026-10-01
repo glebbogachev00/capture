@@ -1,0 +1,11 @@
+.intention-select-card { position: relative; touch-action: manipulation; }
+.intention-select-card.is-pinned > .tcard { border-color: var(--accent); background: var(--accent-soft); }
+.intention-pin-target .int-number { padding-right: 76px; }
+.intention-pin-state {
+  position: absolute; top: 4px; right: 4px; display: flex; align-items: center; gap: 5px;
+  min-height: 44px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; touch-action: manipulation;
+}
+.is-pinned .intention-pin-state { color: var(--accent); }
+.intention-pin-state:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.intention-pin-hint { margin: 0 0 12px; color: var(--muted); font-size: 12px; }

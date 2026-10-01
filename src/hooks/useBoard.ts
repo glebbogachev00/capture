@@ -23,7 +23,7 @@ import {
   type Action,
   type Board,
   type Frag,
-  type Intention, type ProfileDraft, type ProfileUpdate,
+  type Intention, type ProfileUpdate,
   type ShelfLife,
   type Thread,
   DORMANT,
@@ -37,6 +37,7 @@ import {
   uid,
 } from "@/lib/model";
 import { actionViews } from "@/lib/actionViews";
+import { applyProfileUpdate } from "@/lib/intentionShowcasePrefs";
 import { hasCloudEntitlement } from "@/lib/cloudEntitlement";
 import { useDegradedProviderStatus } from "@/hooks/useDegradedProviderStatus";
 import { useBackupNavigationGuard } from "@/hooks/useBackupNavigationGuard";
@@ -83,6 +84,9 @@ import {
   computeSuggestion,
   type Suggestion,
 } from "@/lib/boardOps";
+import { repeatedThought } from "@/lib/repeatedThought";
+import { settleSimpleSort } from "@/lib/simpleSortSettlement";
+import type { SimpleSortItem } from "@/lib/simpleSort";
 import { resolveCapture } from "@/lib/command";
 import {
   answeredKindCorrection,
@@ -106,6 +110,7 @@ import { createReceiptWindow, type ReceiptWindow } from "@/lib/receiptWindow";
 import { receiptLines } from "@/lib/receiptCopy";
 import { createHeldImages, type HeldImages } from "@/lib/heldImages";
 import { organizeCorrection } from "@/lib/organizeOps";
+import type { CleanupChange } from "@/lib/cleanup";
 import {
   applyFragDelete,
   applyFragEdit,
@@ -125,11 +130,13 @@ import { suggestionOutcome } from "@/lib/suggestionRecord";
 import { acceptSummary, threadFingerprint } from "@/lib/summaryAccept";
 import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { applySaveDraft, type CaptureOrigin } from "@/lib/intentionOps";
+import { completeIntentionDetails } from "@/lib/completeIntentionDetails";
 import { editUnsortedCapture, removeUnsortedCapture } from "@/lib/unsortedOps";
 import { pendingDraftAction, pendingEntry, prepareResortedCapture, requestBoardSort,
   requestIntentionExpansion, resortIntentionOrigin } from "@/lib/resortOps";
+import { CloudQuotaError } from "@/lib/cloudQuotaMessage";
 import { applyTangleAccept } from "@/lib/tangleOps";
-import { assemblePanel } from "@/lib/tidyPanel";
+import { approveAllNotice, assemblePanel } from "@/lib/tidyPanel";
 import { captureUndoOutcome, restoreCapture, tombstonesAfterUndo } from "@/lib/undoOps";
 import { unreferencedImageIds } from "@/lib/imgSync";
 import {
@@ -168,13 +175,8 @@ import {
   type RawAiProposal,
 } from "@/lib/organizeAi";
 import { playgroundUsage } from "@/lib/playgroundUsageClient";
-import {
-  parsePlannedRoutingResponse,
-  reconcilePersistedComposerImages,
-  stagePlannedRoutingIntake,
-} from "@/lib/plannedRoutingIntake";
-import { validateRoutingPlan } from "@/lib/plannedRouting";
-import { settlePlannedRouting, type PlannedSettlementResult } from "@/lib/plannedRoutingSettlement";
+import { reconcilePersistedComposerImages, stagePlannedRoutingIntake } from "@/lib/plannedRoutingIntake";
+import type { PlannedSettlementResult } from "@/lib/plannedRoutingSettlement";
 import { useManualFiling } from "./useManualFiling";
 import { MANUAL_ROUTING_UNDO_KEY } from "@/lib/manualRoutingUndo";
 import { finalizingPendingTargetIds, PlannedSortAuthority } from "@/lib/plannedSortAuthority";
@@ -227,15 +229,7 @@ function createHydrationGate() {
 }
 
 const reasonOf = (error: unknown) => {
-  /* The server names its own failures precisely — rate limit, spent quota,
-     billing, a rejected key — and those come back as a SortError carrying
-     the text. Anything else means no usable answer arrived at all: the
-     connection dropped, or the request died before it could reply.
- 
-     That distinction was invisible. Both showed "The sort didn't go
-     through", so a phone on a patchy signal and a rate-limited provider
-     looked identical — and the one thing the person could actually act on,
-     being offline, was the thing the message hid. */
+  if (error instanceof CloudQuotaError) return error.message;
   if (error instanceof SortError && error.message) {
     return playgroundError(error.message) as string;
   }
@@ -272,6 +266,7 @@ export function useBoard(now: number) {
   const [landed, setLanded] = useState<string | null>(null);
   const [landedLines, setLandedLines] = useState<string[]>([]);
   const [pendingReceiptId, setPendingReceiptId] = useState<string | null>(null);
+  const [autoSortingIds, setAutoSortingIds] = useState<string[]>([]);
   const pendingReceiptRef = useRef<string | null>(null);
   /* How long a receipt stays, and why a second one is never blanked by the
      first one's clock — lib/receiptWindow owns the timing. Everything that
@@ -496,7 +491,7 @@ export function useBoard(now: number) {
      been. Cleared by answering, by dismissing, or by the next capture. */
   const [misfiled, setMisfiled] = useState<{
     text: string;
-    wrong: SortKind;
+    wrong?: SortKind; // absent when mixed or manual: nothing to learn, still asked
     captureId: string;
     /* The thread it landed in, when it landed in one. Right kind, wrong
        home is a different mistake from the wrong kind, and the strip can
@@ -791,14 +786,11 @@ export function useBoard(now: number) {
     /* The durable restore brought back whatever held these image ids. */
     heldImages.current!.cancel();
     const { wrongKind, undoneEntry, landedIn } = durable.value;
-    if (wrongKind && undoneEntry) {
-      setMisfiled({
-        text: undoneEntry.raw || undoneEntry.clean,
-        wrong: wrongKind,
-        captureId: undoneEntry.captureId ?? undoneEntry.id,
-        thread: landedIn,
-      });
-    }
+    /* Always ask where it goes: split, manual, or pending captures stay placeable by hand. */
+    const undoneText = undoneEntry ? undoneEntry.raw || undoneEntry.clean : snap.text ?? "";
+    const undoneCaptureId = undoneEntry ? undoneEntry.captureId ?? undoneEntry.id : snap.captureId;
+    if (undoneText.trim() && undoneCaptureId)
+      setMisfiled({ text: undoneText, wrong: wrongKind ?? undefined, captureId: undoneCaptureId, thread: landedIn });
     receiptWindow.current!.retire();
     /* The capture box gets its words back too — Undo returns the draft as
        it was, not just the board. A brand-new draft already being typed is
@@ -1337,17 +1329,23 @@ export function useBoard(now: number) {
     }
   };
 
-  const resort = async (a: Action, pinned?: SortKind) => {
+  const sortMounted = useRef(true);
+  useEffect(() => {
+    sortMounted.current = true;
+    return () => { sortMounted.current = false; };
+  }, []);
+
+  const resort = async (a: Action, pinned?: SortKind, automaticBudget?: number) => {
     const sentRecovery = exactPendingSnapshot(latest.current, a.id);
     const force = pinned ?? sentRecovery?.force;
     const sentPending = sentRecovery ? latest.current.ledger.find((entry) =>
       entry.id === sentRecovery.pendingId) : undefined;
     const sentCaptureId = sentPending && (sentPending.captureId ?? sentPending.id);
     const attempt = sentCaptureId
-      ? plannedSortAuthority.current.begin(sentCaptureId, 55_000)
+      ? plannedSortAuthority.current.begin(sentCaptureId, automaticBudget ?? 55_000)
       : null;
     setErr("");
-    receiptWindow.current!.retire();
+    if (automaticBudget === undefined) receiptWindow.current!.retire();
     if (!attempt) setBusy("Sorting");
     try {
       const work = async () => {
@@ -1367,6 +1365,10 @@ export function useBoard(now: number) {
           attempt?.signal,
         );
         if (attempt && !attempt.authoritative()) return;
+        if (automaticBudget !== undefined && ("planned" in sorted ||
+            typeof sorted.clean !== "string" || !["action", "thread", "both", "intention"].includes(sorted.kind))) {
+          throw new Error("invalid legacy recovery response");
+        }
         if (force && sorted.kind !== force) throw new Error("command kind conflict");
         const prepared = prepareResortedCapture(latest.current, a, sorted, uid);
         if (!prepared) return;
@@ -1440,9 +1442,12 @@ export function useBoard(now: number) {
       if (attempt) await attempt.run(work());
       else await work();
     } catch (error) {
-      if (!sentCaptureId || !plannedSortAuthority.current.claimed(sentCaptureId)) {
+      if (automaticBudget === undefined &&
+          (!sentCaptureId || !plannedSortAuthority.current.claimed(sentCaptureId))) {
         setErr(attempt?.signal.aborted
           ? "Saved here. Sorting is unavailable right now."
+          : error instanceof CloudQuotaError
+          ? a.unsorted ? error.captureMessage : `${error.message} The item is unchanged.`
           : reasonOf(error) + " It is still here, untouched.");
       }
     } finally {
@@ -1468,36 +1473,31 @@ export function useBoard(now: number) {
 
   const runPlannedSort = async (input: PendingRecoverySnapshot) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    if (!sortMounted.current || !lifetime.active || !snapshotMatchesPending(input, latest.current)) return;
+    const deadline = Date.now() + 55_000;
     const attempt = plannedSortAuthority.current.begin(input.captureId, 55_000);
+    setAutoSortingIds((ids) => [...new Set([...ids, input.targetId])]);
+    if (pendingReceiptRef.current === input.targetId) showReceipt("Saved. Sorting…", input.targetId);
     try {
+      if (input.imageIds.length) {
+        const pending = latest.current.actions.find((action) => action.id === input.targetId);
+        attempt.finish();
+        if (pending) await resort(pending, input.force, deadline - Date.now());
+        return;
+      }
       const work = async () => {
-        const value = await requestSort(
-          input.source || "(image only)",
-          input.force,
-          undefined,
-          input.captureId,
-          attempt.signal,
-        );
+        const response = await requestBoardSort<{ sort?: { items?: SimpleSortItem[] }; via?: string }>({
+          request: fetch, board: latest.current, raw: input.source, forgottenRules, force: input.force,
+          simple: true, captureId: input.captureId, signal: attempt.signal, noteVia, errorFor: (message) => new SortError(message),
+        });
       if (!attempt.authoritative()) return;
-      const response = parsePlannedRoutingResponse(value, input.captureId);
-      if (!response) throw new Error("invalid planned response");
+      const items = response.sort?.items;
+      if (!items?.length) throw new Error("invalid sort response");
+      const commanded = input.force === "thread" ? "thought" : input.force;
+      if (commanded && items.some((item) => item.kind !== commanded)) throw new Error("sort ignored the command");
       if (!snapshotMatchesPending(input, latest.current)) return;
-      const failures = validateRoutingPlan(response.routingPlan, {
-        captureId: input.captureId,
-        raw: input.source,
-        force: input.force,
-        recovery: response.recovery,
-        threads: latest.current.threads.map((thread) => ({
-          id: thread.id, name: thread.name, about: thread.summary,
-        })),
-        actions: latest.current.actions.filter((action) => !action.unsorted && !action.done),
-        now: stamp(),
-      });
-      if (failures.length) throw new Error("invalid final routing plan");
-      const pureIntention = response.routingPlan.items.some((item) => item.kind === "intention") &&
-        response.routingPlan.items.every((item) => !item.unresolved &&
-          (item.kind === "intention" || item.kind === "supporting_context"));
-      if (pureIntention) {
+      /* A capture that is only an intention opens the intention preview. */
+      if (items.every((item) => item.kind === "intention")) {
         const pendingEntryForCapture = latest.current.ledger.find((entry) =>
           entry.kind === "pending" &&
           !entry.undone &&
@@ -1510,19 +1510,8 @@ export function useBoard(now: number) {
             )
           : undefined;
         if (!expected || !attempt.authoritative()) return;
-        const origin = resortIntentionOrigin(
-          expected,
-          pendingEntryForCapture,
-          response.via,
-        );
-        if (await expandIntention(
-          input.source,
-          origin,
-          expected,
-          true,
-          attempt.signal,
-          attempt.authoritative,
-        )) {
+        const origin = resortIntentionOrigin(expected, pendingEntryForCapture, response.via);
+        if (await expandIntention(input.source, origin, expected, true, attempt.signal, attempt.authoritative)) {
           setPendingSource(expected.id);
         }
         return;
@@ -1530,11 +1519,10 @@ export function useBoard(now: number) {
       const durable = await transactDurable<PlannedSettlementResult | null>((current) => {
         if (!attempt.authoritative()) return { skip: null };
         if (!snapshotMatchesPending(input, current)) return { skip: null };
-        const settled = settlePlannedRouting(current, {
+        const settled = settleSimpleSort(current, {
           captureId: input.captureId,
           revision: input.revision,
-          plan: response.routingPlan,
-          recovery: response.recovery,
+          items,
           now: stamp(),
           via: response.via,
         });
@@ -1552,6 +1540,13 @@ export function useBoard(now: number) {
         durable.value.status !== "applied"
       ) return;
       const settled = durable.value;
+      void completeIntentionDetails(settled.intentionIds, () => latest.current,
+        build => transactDurable(current => { const next = build(current); return next ? { next, value: null } : { skip: null }; }),
+        () => lifetime.active && sortMounted.current,
+      ).catch(() => {
+        if (lifetime.active && captureSnapshot.current?.captureId === input.captureId)
+          setNotice("Intention saved. Details are unavailable right now.");
+      });
       for (const id of settled.summaryThreadIds) scheduleSummary(id);
       playgroundUsage.captureSorted(response.via);
       if (captureSnapshot.current?.captureId !== input.captureId) return;
@@ -1586,9 +1581,26 @@ export function useBoard(now: number) {
         setTab(settled.actionIds.length && !settled.threadIds.length ? "actions" : "threads");
         showReceipt(lines.join(" · "), null, lines);
       }
+      setSuggestion(repeatedThought(beforeUndo.board, durable.board, settled.summaryThreadIds));
       };
       await attempt.run(work());
-    } catch {
+    } catch (error) {
+      if (error instanceof CloudQuotaError) {
+        if (attempt.authoritative() && snapshotMatchesPending(input, latest.current))
+          setErr(error.captureMessage);
+        return;
+      }
+      const remaining = deadline - Date.now();
+      if (remaining > 0 && attempt.authoritative() && lifetime.active && sortMounted.current &&
+          (typeof navigator === "undefined" || navigator.onLine) &&
+          snapshotMatchesPending(input, latest.current)) {
+        const pending = latest.current.actions.find((action) => action.id === input.targetId);
+        if (pending) {
+          attempt.finish();
+          await resort(pending, input.force, remaining);
+          return;
+        }
+      }
       const stillPending = latest.current.ledger.some((entry) =>
         entry.kind === "pending" &&
         !entry.undone &&
@@ -1604,6 +1616,11 @@ export function useBoard(now: number) {
         setErr("Saved here. Sorting is unavailable right now.");
     } finally {
       attempt.finish();
+      setAutoSortingIds((ids) => ids.filter((id) => id !== input.targetId));
+      if (sortMounted.current && pendingReceiptRef.current === input.targetId &&
+          snapshotMatchesPending(input, latest.current)) {
+        showReceipt("Saved. Awaiting sorting or placement", input.targetId);
+      }
     }
   };
 
@@ -1675,10 +1692,7 @@ export function useBoard(now: number) {
         }
         const recoverySnapshot = exactPendingSnapshot(pendingBoard, staged.target.id);
         if (!recoverySnapshot) throw new Error("pending recovery snapshot mismatch");
-        const immediateAttempt = online && (
-          !recoverySnapshot.imageIds.length ||
-          !!pinned || !!pinnedThread || !!existingCaptureId || !!origin
-        );
+        const immediateAttempt = online;
         const recoveryStore = pendingRecovery.current.nextForIntake(
           current,
           recoverySnapshot,
@@ -1748,13 +1762,7 @@ export function useBoard(now: number) {
       await resort(expected, force);
       return;
     }
-    /* The planned schema does not assign image meaning or ownership to atomic
-       outputs. Sending text alone (or the placeholder for an image-only
-       capture) would let an incomplete plan settle and retire the bytes. Keep
-       the exact durable envelope pending until an image-aware route is used. */
-    if (expected?.imgs?.length) {
-      return;
-    }
+    // Image captures use the existing byte-complete legacy path, not text planning.
     const recovery = recoveryStore.records.find((record) => record.targetId === staged.target.id);
     if (recovery) void runPlannedSort(recovery);
   };
@@ -1764,9 +1772,7 @@ export function useBoard(now: number) {
     exclusive: <T,>(work: () => Promise<T>) => durableBoardCommits.current.run(work) });
   usePendingRecoveryWake({ loaded, board: data, orchestrator: pendingRecovery.current,
     access: pendingRecoveryAccess, now: stamp, run: async (snapshot) => {
-      if (!snapshot.imageIds.length) return runPlannedSort(snapshot);
-      const action = latest.current.actions.find((item) => item.id === snapshot.targetId);
-      if (action && snapshotMatchesPending(snapshot, latest.current)) await resort(action);
+      return runPlannedSort(snapshot);
     } });
 
   /* ----------------------- capture suggestion ----------------------- */
@@ -2612,20 +2618,33 @@ export function useBoard(now: number) {
     setNoticeUndoable(true);
   };
 
-  const acceptOrganize = async (id: string): Promise<boolean> => {
-    const p = organize?.find((x) => x.id === id);
-    if (!p) return false;
+  /* One tidy gesture, one Undo: the board as it was before the first change,
+     and the pictures the previous Undo protected released only if it lands. */
+  const tidyGesture = async (run: () => Promise<boolean>): Promise<boolean> => {
     const before = latest.current;
     const beforeTombstones = tombstones.current;
     const previouslyHeld = heldImages.current!.release();
-    const ok = await applyOrganizeProposal(p);
-    if (ok) {
-      if (previouslyHeld.length)
-        void backupGate.current.trackMutation(dropUnreferencedImages(previouslyHeld));
-      armOrganizeUndo(before, beforeTombstones);
-    } else holdImages(previouslyHeld);
-    return ok;
+    if (!await run()) { holdImages(previouslyHeld); return false; }
+    if (previouslyHeld.length) void backupGate.current.trackMutation(dropUnreferencedImages(previouslyHeld));
+    armOrganizeUndo(before, beforeTombstones);
+    return true;
   };
+
+  const acceptOrganize = async (id: string): Promise<boolean> => {
+    const p = organize?.find((x) => x.id === id);
+    return !!p && tidyGesture(() => applyOrganizeProposal(p));
+  };
+
+  /* A Clean up batch (lib/cleanup) — old photos or one-liners — lands as one
+     commit behind one Undo; the pictures it drops wait until that Undo expires. */
+  const applyCleanup = (change: (board: Board) => CleanupChange | null) => tidyGesture(async () => {
+    const out = change(latest.current);
+    if (!out || !await commit(out.board)) return false;
+    holdImages(out.imgs);
+    out.threads.forEach(scheduleSummary);
+    showTidyNotice(out.notice);
+    return true;
+  });
 
   /**
    * Approve every proposal on the board at once — the "Approve all" button.
@@ -2643,36 +2662,18 @@ export function useBoard(now: number) {
     /* ONE snapshot for the whole run, taken before the first row lands.
        Approve-all is the most destructive gesture in the app — a single tap
        can drop duplicates, move notes and merge threads' contents together
-       — so Undo has to take the whole run back, not just the last row. */
-    const before = latest.current;
-    const beforeTombstones = tombstones.current;
-    const previouslyHeld = heldImages.current!.release();
-    /* A row that throws must not brick the button for the rest of the
+       — so Undo has to take the whole run back, not just the last row.
+       A row that throws must not brick the button for the rest of the
        session — the guard is cleared even when a handler misbehaves. */
     try {
-      for (const p of list) {
-        if (await applyOrganizeProposal(p)) applied++;
-      }
+      await tidyGesture(async () => {
+        for (const p of list) if (await applyOrganizeProposal(p)) applied++;
+        return applied > 0;
+      });
     } finally {
       applyingOrganize.current = false;
     }
-    if (!applied) {
-      holdImages(previouslyHeld);
-      return;
-    }
-    if (previouslyHeld.length)
-      void backupGate.current.trackMutation(dropUnreferencedImages(previouslyHeld));
-    armOrganizeUndo(before, beforeTombstones);
-    const diff = list.length - applied;
-    showTidyNotice(
-      applied === list.length
-        ? `Applied all ${applied} ${applied === 1 ? "suggestion" : "suggestions"}.`
-        : `Applied ${applied} of ${list.length} — ${diff} ${
-            diff === 1
-              ? "couldn't be applied and is still listed"
-              : "couldn't be applied and are still listed"
-          }.`
-    );
+    if (applied) showTidyNotice(approveAllNotice(applied, list.length));
   };
 
   /** Wave an Organize proposal off — remembered by id so it never reappears,
@@ -3336,10 +3337,9 @@ export function useBoard(now: number) {
     setDraft(null);
     setPendingSource(null);
     setTab("intentions");
-    showReceipt("Intention " + pad(intention.number));
+    showReceipt("Intention " + pad(latest.current.intentions.length - latest.current.intentions.findIndex(item => item.id === intention.id)));
     setLandedIds([]);
-    /* Keep the receipt until the next capture or Undo: it holds the only
-       Undo button, and reading an intention can take several minutes. */
+    /* The receipt expires separately from the saved capture and Undo state. */
   };
 
   /** Correct an intention classification without losing its source or Undo. */
@@ -4184,11 +4184,10 @@ export function useBoard(now: number) {
   };
 
   const updateProfile = async (update: ProfileUpdate): Promise<void> => {
-    const profile = latest.current.profile;
-    const current: ProfileDraft = { name: profile?.name ?? "", imageId: profile?.imageId,
-      showSignature: profile?.showSignature };
-    await commit({ ...latest.current,
-      profile: typeof update === "function" ? update(current) : update });
+    const durable = await transactDurable((current) => ({
+      next: applyProfileUpdate(current, update), value: undefined,
+    }));
+    if (durable.status === "failed") setErr("Couldn't save that profile change. Try again.");
   };
 
   const guardMutation = createBackupMutationGuard(backupGate.current, () =>
@@ -4216,6 +4215,7 @@ export function useBoard(now: number) {
     err,
     landed, landedLines,
     pendingReceiptId,
+    autoSortingIds,
     landedIds,
     summarising,
     suggestion,
@@ -4236,6 +4236,7 @@ export function useBoard(now: number) {
     tidyHint,
     acceptOrganize: guardMutation(acceptOrganize),
     acceptOrganizeAll: guardMutation(acceptOrganizeAll),
+    applyCleanup: guardMutation(applyCleanup),
     dismissOrganize: guardMutation(dismissOrganize),
     notice,
     swept,

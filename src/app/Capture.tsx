@@ -1,24 +1,15 @@
 "use client";
 import { ownedFetch as fetch } from "@/lib/ownership";
-/* ============================================================
-   CAPTURE — one capture surface, three destinations, self-clearing.
-   Everything you say goes in one place. The system decides whether
-   it's something to close (Action), something that thickens over
-   time (Thread), or something you are declaring about your life
-   (Intention), cleans up the transcription, keeps each Thread's
-   "where this stands" block current, and quietly sweeps away what
-   has gone stale. Threads are never deleted. Only actions fade.
-
-   This file is deliberately the shell. All board state, persistence
-   and operations live in useBoard(); the components below just
-   render what it hands back. */
+/* Capture shell: the composer, board destinations and auxiliary views.
+   useBoard owns data and mutations. Components render that state. */
 import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { BrushCleaning, Image as ImageIcon, Layers, MessagesSquare, Mic, RefreshCw, Settings, Share2 } from "lucide-react";
 import { Markup } from "./Markup";
 import { BusyLine, Row, TCard } from "@/components/cards";
 import { GroupedActionRows } from "@/components/GroupedActionRows";
 import { SearchResults } from "@/components/SearchResults";
-import { createQuestionAnswerSession, QuestionAnswer, type AnswerProgress } from "@/components/QuestionAnswer";
+import { AskBar } from "@/components/AskBar";
+import { TidyCleanup } from "@/components/TidyCleanup";
 import { ThreadView } from "@/components/ThreadView";
 import { ThreadChoices } from "@/components/ThreadChoices";
 import { degradedNote } from "@/lib/degraded";
@@ -35,6 +26,9 @@ import { get, set } from "@/lib/storage";
 import { shrinkFile } from "@/lib/shrink";
 import { type Action, fmt, uid } from "@/lib/model";
 import { CaptureReceipt } from "@/components/CaptureReceipt";
+import { IntentionShowcase } from "@/components/IntentionShowcase";
+import { toggleIntentionPin } from "@/lib/intentionShowcasePrefs";
+import { intentionDisplayNumbers } from "@/lib/intentionDisplay";
 import {
   IntentionCard,
   IntentionDetail,
@@ -63,7 +57,6 @@ import { CheckoutReturnNotice } from "@/components/CloudBilling";
 import { PLAYGROUND } from "@/lib/playground";
 import { groupActions } from "@/lib/group";
 import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
-import { isLikelyRecallQuestion } from "@/lib/recall";
 import { hasAlternativeThread } from "@/lib/threadCorrection";
 /** Where the grouped-view toggle is remembered, in the same kv store as the
     board — a view preference that survives reloads on this device. */
@@ -96,8 +89,7 @@ const TRY = {
 /** How long a ticked action shows itself done before it leaves. Long enough
     to read as a finish, short enough that nobody waits on it. */
 export function Capture() {
-  const [answerSession, setAnswerSession] = useState(createQuestionAnswerSession);
-  const [answerProgress, setAnswerProgress] = useState<AnswerProgress>({ question: "", phase: "inactive" });
+  const [answering, setAnswering] = useState(false);
   /* The ticking clock the countdowns and shelf lives derive from. */
   const now = useSyncExternalStore(
     subscribeToClock,
@@ -168,7 +160,7 @@ export function Capture() {
     dismissTangle,
     tidyHint,
     acceptOrganize,
-    acceptOrganizeAll,
+    acceptOrganizeAll, applyCleanup,
     dismissOrganize,
     notice,
     swept,
@@ -200,7 +192,8 @@ export function Capture() {
     showResting,
     setShowResting,
     live,
-    unsorted,
+    unsorted: pendingCaptures,
+    autoSortingIds = [],
     fadedList,
     active,
     resting,
@@ -281,10 +274,9 @@ export function Capture() {
     learnedRules,
     toggleLearnedRule,
   } = useBoard(now);
+  const intentionNumbers = useMemo(() => intentionDisplayNumbers(data.intentions), [data.intentions]);
+  const unsorted = pendingCaptures.filter((capture) => !autoSortingIds.includes(capture.id));
   const { openPlacePicker, picker } = useDestinationPicker(data.threads, finalizingUnsortedIds, manualSort);
-  const updateQuery = (next: string) => { if (next !== query) {
-    setAnswerSession((value) => ({ ...value, revision: value.revision + 1 }));
-    setAnswerProgress({ question: next, phase: isLikelyRecallQuestion(next) ? "loading" : "inactive" }); setQuery(next); } };
   /* The rollback days, read when Settings opens — a list this short is
      cheaper to re-read than to keep in sync with every write. */
   const [snapDays, setSnapDays] = useState<string[]>([]);
@@ -763,12 +755,12 @@ export function Capture() {
                     ))}
                   {/* Undo can remove a newly created wrong Thread, so count
                       actual alternatives rather than remaining Threads. */}
-                  {!!misfiled.thread && hasAlternativeThread(data.threads, misfiled.thread.id) && (
+                  {hasAlternativeThread(data.threads, misfiled.thread?.id) && (
                     <button
                       className="misfiled-btn"
                       onClick={() => setPickingThread(true)}
                     >
-                      Another thread
+                      {misfiled.thread ? "Another thread" : "Pick a thread"}
                     </button>
                   )}
                   <button
@@ -858,7 +850,7 @@ export function Capture() {
             onAccept={(id) => void acceptOrganize(id)}
             onDismiss={(id) => dismissOrganize(id)}
             onApproveAll={() => void acceptOrganizeAll()}
-          />
+          ><TidyCleanup board={data} now={now} onApply={applyCleanup} /></OrganizeScreen>
         ) : showRecord ? (
           <RecordScreen
             ledger={(data.ledger ?? []).filter((entry) => entry.kind !== "pending")}
@@ -921,9 +913,10 @@ export function Capture() {
         ) : intention ? (
           <IntentionDetail
             intention={intention}
+            displayNumber={intentionNumbers.get(intention.id)}
             onBack={() => setOpenIntention(null)}
             onChange={updateIntention}
-            onCopy={() => copyWhole(shareIntention(intention))}
+            onCopy={() => copyWhole(shareIntention({ ...intention, number: intentionNumbers.get(intention.id) ?? intention.number }))}
             onDelete={() => deleteIntention(intention.id)}
           />
         ) : thread ? (
@@ -978,33 +971,21 @@ export function Capture() {
           />
         ) : (
           <>
+            <IntentionShowcase intentions={data.intentions} profile={data.profile}
+              onProfileChange={updateProfile} onOpen={setOpenIntention} />
             <UnsortedCaptures items={unsorted} pendingEntries={data.ledger} busy={!!busy} finalizingIds={finalizingUnsortedIds} threads={data.threads}
               onSort={(action) => void resort(action)} onManualSort={manualSort} onManualSplit={manualSplit}
               onChoosePlace={openPlacePicker} onEdit={editUnsorted} onDelete={removeUnsorted} />
-            <div className="searchbar">
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => updateQuery(e.target.value)}
-                placeholder="Search or ask a question"
-                aria-label="Search or ask a question"
-              />
-              {searching && (
-                <button className="ghost" onClick={() => updateQuery("")}>
-                  Clear
-                </button>
-              )}
-            </div>
-            <QuestionAnswer board={data} question={query} session={answerSession} onProgress={setAnswerProgress}
-              onOpenThread={(id, fragId) => {
-                setOpen(id); setOpenFrag(fragId || null);
-              }} onOpenIntention={(id) => setOpenIntention(id)} />
+            <AskBar board={data} now={now} query={query} onQuery={setQuery} onAnswering={setAnswering}
+              onOpenThread={(id) => { setOpen(id); setOpenFrag(null); }} onOpenIntention={setOpenIntention}
+              onOpenActions={() => { setQuery(""); setTab("actions"); }} />
 
             {searching ? (
               <SearchResults
+                intentionNumbers={intentionNumbers}
                 hits={hits}
                 now={now}
-                awaitingAnswer={answerProgress.question === query && answerProgress.phase === "loading"}
+                awaitingAnswer={answering}
                 onOpenThread={(id, fragId) => {
                   setOpen(id);
                   setOpenFrag(fragId || null);
@@ -1201,7 +1182,9 @@ export function Capture() {
                   <IntentionCard
                     key={i.id}
                     intention={i}
+                    displayNumber={intentionNumbers.get(i.id)}
                     onOpen={() => setOpenIntention(i.id)} profile={data.profile}
+                    onTogglePin={() => void updateProfile(current => toggleIntentionPin(current, i.id))}
                   />
                 ))}
                 <button

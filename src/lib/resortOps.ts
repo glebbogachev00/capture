@@ -6,6 +6,7 @@ import { applySorted, type Applied, type SortResult } from "./boardOps";
 import type { SortKind } from "./refiled";
 import { semanticSortContext } from "./sortContext";
 import { recordSortedCapture } from "./settle";
+import { cloudQuotaError } from "./cloudQuotaMessage";
 
 type RoutingStatus = {
   preferred?: string | null;
@@ -24,6 +25,8 @@ export async function requestBoardSort<T = SortResult>(options: {
   force?: SortKind;
   imageSources?: string[];
   captureId?: string;
+  /** Ask the one-call sorter instead of the planned pipeline. */
+  simple?: boolean;
   signal?: AbortSignal;
   noteVia: (via?: string | null, routing?: RoutingStatus) => void;
   errorFor: (message?: string) => Error;
@@ -37,9 +40,9 @@ export async function requestBoardSort<T = SortResult>(options: {
     body: JSON.stringify({
       raw: options.raw,
       threads: context.threads,
-      ...(options.captureId ? {
+      ...(options.simple || options.captureId ? {
         captureId: options.captureId,
-        routingPlanVersion: 1,
+        ...(options.simple ? { sortVersion: 2, tzOffset: new Date().getTimezoneOffset() } : { routingPlanVersion: 1 }),
         actions: options.board.actions
           .filter((action) => !action.unsorted && !action.done && !action.faded)
           .slice(0, 400)
@@ -56,7 +59,7 @@ export async function requestBoardSort<T = SortResult>(options: {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string };
-    throw options.errorFor(body.error);
+    throw cloudQuotaError(response, body.error) ?? options.errorFor(body.error);
   }
   const out = await response.json() as T & { via?: string | null; routing?: RoutingStatus };
   options.noteVia(out.via, out.routing);
@@ -157,7 +160,7 @@ export async function requestIntentionExpansion(
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string };
-    throw errorFor(body.error);
+    throw cloudQuotaError(response, body.error) ?? errorFor(body.error);
   }
   const out = await response.json() as Partial<SaveDraftInput> & { via?: string };
   if (signal?.aborted ||

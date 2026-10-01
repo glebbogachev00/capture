@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint src",
     "test": "vitest run",
+    "eval:help": "vitest run -c vitest.eval.config.mts --reporter=verbose",
     "check": "npm run lint && npm run test -- --maxWorkers=1 && tsc --noEmit --incremental false && NEXT_DIST_DIR=.next-check next build && node scripts/check-trace.mjs .next-check",
     "check:launch-hosted": "bash scripts/launch-hosted-source-gate.sh",
     "phone": "bash scripts/phone.sh",
