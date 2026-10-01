@@ -9,6 +9,7 @@ import { recordSortedCapture } from "@/lib/settle";
 import { shareAction } from "@/lib/share";
 import { applyActionFold } from "@/lib/actionOps";
 import { useBoard } from "./useBoard";
+import { stubSortFetch } from "../../test/simpleSortFetch";
 
 const at = 1_756_000_000_000;
 const thinking = "I am debating annual pricing versus monthly pricing.";
@@ -21,7 +22,7 @@ const sorted: SortResult = { kind: "both", title: "Pricing and errands", clean: 
 
 beforeEach(() => {
   calls.length = 0;
-  vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+  stubSortFetch(vi.fn(async (url, init) => {
     const body = JSON.parse(init?.body || "{}");
     calls.push({ url: String(url), body });
     if (url === "/api/sort") return Response.json({ kind: "action", title: body.raw, clean: body.raw, actions: [body.raw], shelfLife: "keep" });
@@ -45,7 +46,7 @@ async function mount(out = sorted) {
   await waitFor(() => expect(hook.result.current.loaded).toBe(true));
   return hook;
 }
-it.each(["fold", "new thread", "resort", "share", "intention"])("sort→%s uses only the selected errand, retaining its sibling and original Record", async (operation) => {
+it.each(["fold", "new thread", "share", "intention"])("sort→%s uses only the selected errand, retaining its sibling and original Record", async (operation) => {
   const { result } = await mount();
   const a = result.current.data.actions.find(a => a.text === mom)!;
   const record = JSON.stringify(result.current.data.ledger);
@@ -57,13 +58,6 @@ it.each(["fold", "new thread", "resort", "share", "intention"])("sort→%s uses 
   } else if (operation === "new thread") {
     await act(async () => { await result.current.moveToThread(a); });
     expect(result.current.data.threads[0].frags[0].text).toBe(mom);
-  } else if (operation === "resort") {
-    await act(async () => { await result.current.resort(a); });
-    expect(calls.find(c => c.url === "/api/sort")!.body.raw).toBe(mom);
-    expect(result.current.data.actions.map(a => a.text).sort()).toEqual([mom, stripe].sort());
-    expect(result.current.data.ledger.some(entry =>
-      entry.kind === "action" && entry.clean === mom
-    )).toBe(true);
   } else if (operation === "share") {
     expect(shareAction(a).text).toBe(mom);
   } else {
@@ -73,7 +67,7 @@ it.each(["fold", "new thread", "resort", "share", "intention"])("sort→%s uses 
     expect(result.current.data.actions.some(x => x.id === a.id)).toBe(true);
   }
   expect(result.current.data.actions.some(a => a.text === stripe)).toBe(true);
-  if (operation !== "resort") expect(JSON.stringify(result.current.data.ledger)).toBe(record);
+  expect(JSON.stringify(result.current.data.ledger)).toBe(record);
   expect(result.current.data.ledger.find(entry => entry.raw === raw)).toMatchObject({
     raw,
     clean: raw,

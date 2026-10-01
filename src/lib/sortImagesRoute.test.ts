@@ -460,4 +460,30 @@ describe("sort route images", () => {
     expect(body.captureId).toBeUndefined();
     expect(ai.generateObject).toHaveBeenCalledTimes(1);
   });
+
+  it("captions photos, then sorts them in the one-call sorter with a thought to keep them", async () => {
+    ai.generateText.mockResolvedValueOnce({ text: "A cracked hinge on the studio door" });
+    ai.generateObject.mockImplementationOnce(async ({ prompt }) => {
+      expect(prompt).toContain("(Attached photo: A cracked hinge on the studio door)");
+      expect(prompt).toContain("comes with a photo");
+      return { object: { items: [
+        { kind: "action", text: "Order a new hinge", threadId: null, newThread: null, due: null, sameAsAction: null },
+        { kind: "thought", text: "The studio door hinge cracked", threadId: "capture", newThread: null, due: null, sameAsAction: null },
+      ] } };
+    });
+
+    const response = await POST(request({ sortVersion: 2, tzOffset: 0, imgs: [png()] }));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.sort.items.map((item: { kind: string }) => item.kind)).toEqual(["thought", "action"]);
+    expect(ai.generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails a one-call photo sort closed when a photo cannot be read", async () => {
+    providers.visionEnabled = false;
+    const response = await POST(request({ sortVersion: 2, imgs: [png()] }));
+    expect(response.status).toBe(503);
+    expect(ai.generateObject).not.toHaveBeenCalled();
+  });
 });

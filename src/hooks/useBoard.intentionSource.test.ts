@@ -8,6 +8,7 @@ import { EMPTY, KEY } from "@/lib/model";
 import * as model from "@/lib/model";
 
 import { useBoard } from "./useBoard";
+import { stubSortFetch } from "../../test/simpleSortFetch";
 
 function intentionResponse(body: { raw: string }) {
   const recovery = {
@@ -28,7 +29,7 @@ function intentionResponse(body: { raw: string }) {
 
 beforeEach(async () => {
   await set(KEY, JSON.stringify({ ...EMPTY, principles: [] }));
-  vi.stubGlobal("fetch", vi.fn(async (url, init) => {
+  stubSortFetch(vi.fn(async (url, init) => {
     if (url === "/api/intention") return Response.json({ expandedIntention: "I choose thoughtfully." });
     if (url === "/api/sort") return Response.json(intentionResponse(JSON.parse(String(init?.body))));
     return new Response(null, { status: 503 });
@@ -41,7 +42,7 @@ const reviewed = "Compare morning and evening training schedules.";
 const recognizer = "  um I want to choose my training schedule thoughtfully.\n";
 
 it.each([undefined, "intention"] as const)("correcting an edited dictated draft (%s) preserves origin, learning and Undo", async (force) => {
-  vi.mocked(fetch).mockImplementation(async (url, init) => {
+  stubSortFetch(vi.fn(async (url, init) => {
     if (url === "/api/intention") return Response.json({ expandedIntention: "I choose thoughtfully." });
     if (url === "/api/sort") {
       const body = JSON.parse(init!.body as string);
@@ -50,7 +51,7 @@ it.each([undefined, "intention"] as const)("correcting an edited dictated draft 
         : intentionResponse(body));
     }
     return new Response(null, { status: 503 });
-  });
+  }));
   const hook = renderHook(() => useBoard(Date.now()));
   await waitFor(() => expect(hook.result.current.loaded).toBe(true));
   const ids = vi.spyOn(model, "uid");

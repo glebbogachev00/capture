@@ -81,7 +81,6 @@ import {
 import { search } from "@/lib/search";
 import {
   byRecency,
-  computeSuggestion,
   type Suggestion,
 } from "@/lib/boardOps";
 import { repeatedThought } from "@/lib/repeatedThought";
@@ -132,7 +131,7 @@ import { createTangleGate, type TangleGate } from "@/lib/tangleGate";
 import { applySaveDraft, type CaptureOrigin } from "@/lib/intentionOps";
 import { completeIntentionDetails } from "@/lib/completeIntentionDetails";
 import { editUnsortedCapture, removeUnsortedCapture } from "@/lib/unsortedOps";
-import { pendingDraftAction, pendingEntry, prepareResortedCapture, requestBoardSort,
+import { pendingDraftAction, pendingEntry, requestBoardSort,
   requestIntentionExpansion, resortIntentionOrigin } from "@/lib/resortOps";
 import { CloudQuotaError } from "@/lib/cloudQuotaMessage";
 import { applyTangleAccept } from "@/lib/tangleOps";
@@ -1331,125 +1330,30 @@ export function useBoard(now: number) {
     return () => { sortMounted.current = false; };
   }, []);
 
-  const resort = async (a: Action, pinned?: SortKind, automaticBudget?: number) => {
-    const sentRecovery = exactPendingSnapshot(latest.current, a.id);
-    const force = pinned ?? sentRecovery?.force;
-    const sentPending = sentRecovery ? latest.current.ledger.find((entry) =>
-      entry.id === sentRecovery.pendingId) : undefined;
-    const sentCaptureId = sentPending && (sentPending.captureId ?? sentPending.id);
-    const attempt = sentCaptureId
-      ? plannedSortAuthority.current.begin(sentCaptureId, automaticBudget ?? 55_000)
-      : null;
+  /** Sort an unsorted capture now ("Sort now", or a kind the person chose).
+      Same path as a fresh capture: one call, one settlement, same Undo. */
+  const resort = async (a: Action, pinned?: SortKind) => {
+    /* Already filed (a second tap, or another device): nothing to do. */
+    if (!latest.current.actions.some((action) => action.id === a.id && action.unsorted)) return;
     setErr("");
-    if (automaticBudget === undefined) receiptWindow.current!.retire();
-    if (!attempt) setBusy("Sorting");
-    try {
-      const work = async () => {
-        const imageIds = a.imgs ?? [];
-        const imageSources = await Promise.all(imageIds.map(async (id) => {
-          const src = await get(IMG(id));
-          if (!src) throw new Error(`missing image ${id}`);
-          return src;
-        }));
-        if (sentRecovery && !snapshotMatchesPending(sentRecovery, latest.current)) return;
-        if (attempt && !attempt.authoritative()) return;
-        const sorted = await requestSort(
-          a.src || a.text || "(image only)",
-          force,
-          imageSources,
-          undefined,
-          attempt?.signal,
-        );
-        if (attempt && !attempt.authoritative()) return;
-        if (automaticBudget !== undefined && ("planned" in sorted ||
-            typeof sorted.clean !== "string" || !["action", "thread", "both", "intention"].includes(sorted.kind))) {
-          throw new Error("invalid legacy recovery response");
-        }
-        if (force && sorted.kind !== force) throw new Error("command kind conflict");
-        const prepared = prepareResortedCapture(latest.current, a, sorted, uid);
-        if (!prepared) return;
-        if (prepared.kind === "intention") {
-          const origin = resortIntentionOrigin(prepared.current, prepared.pending, prepared.out.via);
-          if (await expandIntention(
-            prepared.current.src || prepared.current.text,
-            origin,
-            prepared.current,
-            !!attempt,
-            attempt?.signal,
-            attempt?.authoritative,
-          )) setPendingSource(prepared.current.id);
-          return;
-        }
-        const durable = await transactDurable((boardNow, tombstonesNow) => {
-          if (attempt && !attempt.authoritative()) return { skip: null };
-          if (sentRecovery && !snapshotMatchesPending(sentRecovery, boardNow)) return { skip: null };
-          const next = prepareResortedCapture(boardNow, a, sorted, uid);
-          if (!next || next.kind !== "settled") return { skip: null };
-          return {
-            next: next.board,
-            value: {
-              beforeBoard: boardNow,
-              beforeTombstones: [...tombstonesNow],
-              ...next,
-              recorded: next.board,
-            },
-          };
-        }, attempt ? {
-          guard: attempt.authoritative,
-          signal: attempt.signal,
-          finalize: attempt.claimFinalization,
-        } : undefined);
-        if (durable.status === "failed") {
-          if (!attempt?.signal.aborted) {
-            setErr("Couldn't save that sort. It is still safely Unsorted.");
-          }
-          return;
-        }
-        if (durable.status !== "committed" || !durable.value) return;
-        const {
-          beforeBoard,
-          beforeTombstones,
-          current: committedPending,
-          out: committedOut,
-          applied,
-          recorded,
-          summaryTargets,
-        } = durable.value;
-        const { targetId, landed, landedLines, source, landedIds: fresh } = applied;
-        captureSnapshot.current = captureUndoSnapshot(
-          beforeBoard,
-          beforeTombstones,
-          recorded,
-          durable.tombstones,
-          { text: committedPending.src || committedPending.text, captureId: sentCaptureId },
-        );
-        releaseHeldImages();
-        setNoticeUndoable(false);
-        setCanUndo(true);
-        showReceipt(landed, null, landedLines); setLandedIds(fresh);
-        setTab(committedOut.kind === "action" ? "actions" : "threads");
-        setSuggestion(computeSuggestion(recorded, committedOut.clean, source));
-        if (targetId) {
-          if (attempt) scheduleSummary(targetId);
-          else await regenerate(recorded, targetId);
-        }
-        for (const id of summaryTargets) if (id !== targetId) scheduleSummary(id);
-      };
-      if (attempt) await attempt.run(work());
-      else await work();
-    } catch (error) {
-      if (automaticBudget === undefined &&
-          (!sentCaptureId || !plannedSortAuthority.current.claimed(sentCaptureId))) {
-        setErr(attempt?.signal.aborted
-          ? "Saved here. Sorting is unavailable right now."
-          : error instanceof CloudQuotaError
-          ? a.unsorted ? error.captureMessage : `${error.message} The item is unchanged.`
-          : reasonOf(error) + " It is still here, untouched.");
-      }
-    } finally {
-      attempt?.finish();
-      if (!attempt) setBusy(null);
+    receiptWindow.current!.retire();
+    let snapshot = exactPendingSnapshot(latest.current, a.id);
+    if (snapshot && pinned && snapshot.force !== pinned) {
+      const forced = await transactDurable((current) => current.actions.some((action) => action.id === a.id && action.unsorted)
+        ? { next: { ...current, actions: current.actions.map((action) => action.id === a.id
+            ? { ...action, pendingForce: pinned, updatedAt: stamp() } : action) }, value: null }
+        : { skip: null });
+      snapshot = forced.status === "committed" ? exactPendingSnapshot(latest.current, a.id) : null;
     }
+    if (!snapshot) {
+      setErr("Couldn't sort that. It is still here, untouched.");
+      return;
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setErr("Saved here. Sorting is unavailable right now.");
+      return;
+    }
+    await runPlannedSort(snapshot);
   };
 
   /**
@@ -1470,20 +1374,19 @@ export function useBoard(now: number) {
   const runPlannedSort = async (input: PendingRecoverySnapshot) => {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     if (!sortMounted.current || !lifetime.active || !snapshotMatchesPending(input, latest.current)) return;
-    const deadline = Date.now() + 55_000;
     const attempt = plannedSortAuthority.current.begin(input.captureId, 55_000);
     setAutoSortingIds((ids) => [...new Set([...ids, input.targetId])]);
     if (pendingReceiptRef.current === input.targetId) showReceipt("Saved. Sorting…", input.targetId);
     try {
-      if (input.imageIds.length) {
-        const pending = latest.current.actions.find((action) => action.id === input.targetId);
-        attempt.finish();
-        if (pending) await resort(pending, input.force, deadline - Date.now());
-        return;
-      }
       const work = async () => {
+        /* Photos travel as bytes; a missing one fails the sort, never drops it. */
+        const imageSources = await Promise.all(input.imageIds.map(async (id) => {
+          const src = await get(IMG(id));
+          if (!src) throw new Error(`missing image ${id}`);
+          return src;
+        }));
         const response = await requestBoardSort<{ sort?: { items?: SimpleSortItem[] }; via?: string }>({
-          request: fetch, board: latest.current, raw: input.source, forgottenRules, force: input.force,
+          request: fetch, board: latest.current, raw: input.source, forgottenRules, force: input.force, imageSources,
           simple: true, captureId: input.captureId, signal: attempt.signal, noteVia, errorFor: (message) => new SortError(message),
         });
       if (!attempt.authoritative()) return;
@@ -1585,17 +1488,6 @@ export function useBoard(now: number) {
         if (attempt.authoritative() && snapshotMatchesPending(input, latest.current))
           setErr(error.captureMessage);
         return;
-      }
-      const remaining = deadline - Date.now();
-      if (remaining > 0 && attempt.authoritative() && lifetime.active && sortMounted.current &&
-          (typeof navigator === "undefined" || navigator.onLine) &&
-          snapshotMatchesPending(input, latest.current)) {
-        const pending = latest.current.actions.find((action) => action.id === input.targetId);
-        if (pending) {
-          attempt.finish();
-          await resort(pending, input.force, remaining);
-          return;
-        }
       }
       const stillPending = latest.current.ledger.some((entry) =>
         entry.kind === "pending" &&
@@ -1754,13 +1646,10 @@ export function useBoard(now: number) {
       });
       return;
     }
-    if (expected && (pinned || pinnedThread || existingCaptureId || origin)) {
-      await resort(expected, force);
-      return;
-    }
-    // Image captures use the existing byte-complete legacy path, not text planning.
     const recovery = recoveryStore.records.find((record) => record.targetId === staged.target.id);
-    if (recovery) void runPlannedSort(recovery);
+    /* A chosen kind or Thread, or a saved draft, is waited for; a plain capture is not. */
+    if (recovery && (pinned || pinnedThread || existingCaptureId || origin)) await runPlannedSort(recovery);
+    else if (recovery) void runPlannedSort(recovery);
   };
 
   const pendingRecoveryAccess = () => ({ board: () => latest.current,

@@ -8,6 +8,7 @@ import { get, set } from "@/lib/storage";
 import { TOMBSTONE_KEY } from "@/lib/sync";
 import type { SortResult } from "@/lib/boardOps";
 import { useBoard } from "./useBoard";
+import { stubSortFetch } from "../../test/simpleSortFetch";
 
 const at = 1_756_000_000_000;
 const raw = "A long offline capture whose picture and words must survive sorting.";
@@ -47,7 +48,7 @@ beforeEach(async () => {
     threadName: "Suggested elsewhere",
   };
   await seed();
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+  stubSortFetch(vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === "/api/sort") {
       return failSort
@@ -135,12 +136,13 @@ describe("retrying a waiting-to-sort capture", () => {
 
   it("replaces the envelope with every explicit action while retaining the picture in a thread", async () => {
     outcome = {
-      kind: "action",
+      kind: "both",
       title: "Offline work",
       clean: raw,
+      primaryText: "The picture shows the desk to clear.",
       actions: ["First task", "Second task"],
       shelfLife: "keep",
-      threadId: "model-choice",
+      threadId: null,
       threadName: "Model choice",
     };
     const hook = await mount();
@@ -150,9 +152,12 @@ describe("retrying a waiting-to-sort capture", () => {
     expect(hook.result.current.data.actions.map((action) => action.text).sort())
       .toEqual(["First task", "Second task"]);
     expect(hook.result.current.data.actions.every((action) => !action.unsorted)).toBe(true);
-    expect(hook.result.current.data.threads[0].frags.at(-1)?.imgs).toEqual(["pic"]);
+    const shot = hook.result.current.data.threads[0].frags.at(-1)!;
+    expect(shot.imgs).toEqual(["pic"]);
+    expect(hook.result.current.data.actions.every((action) =>
+      action.shot?.fragId === shot.id && action.threadId === "home")).toBe(true);
     expect(hook.result.current.data.ledger.some((entry) =>
-      entry.kind === "action" && entry.imgs?.includes("pic")
+      entry.kind === "thread" && entry.imgs?.includes("pic")
     )).toBe(true);
     expect(await get(IMG("pic"))).toBe(image);
   });

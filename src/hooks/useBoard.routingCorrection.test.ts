@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EMPTY, KEY } from "@/lib/model";
 import { set } from "@/lib/storage";
 import { useBoard } from "./useBoard";
+import { stubSortFetch } from "../../test/simpleSortFetch";
 
 const raw = "The release handoff needs a clearer owner.";
 const chosen = { id: "capture", name: "Capture", summary: "", frags: [{ id: "seed-c", at: 1, text: "Capture product" }] };
@@ -12,7 +13,7 @@ const wrong = { id: "operations", name: "Operations", summary: "", frags: [{ id:
 
 beforeEach(async () => {
   await set(KEY, JSON.stringify({ ...EMPTY, principles: [], threads: [chosen, wrong] }));
-  vi.stubGlobal("fetch", vi.fn(async (input) => {
+  stubSortFetch(vi.fn(async (input) => {
     const url = String(input);
     if (url === "/api/sort") {
       const recovery = {

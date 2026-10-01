@@ -80,6 +80,14 @@ describe("normalizeSimpleSort", () => {
       .toEqual([{ kind: "action", text: "Fix the bugs" }]);
   });
 
+  it("keeps photos with a thought: puts it first, refuses an answer with none", () => {
+    const answer = { items: [item({ kind: "action", text: "Buy the part" }), item({ kind: "thought", text: "Broken hinge", threadId: "rest" })] };
+    expect(normalizeSimpleSort(answer, { threads, photos: 1 }).map((entry) => entry.kind)).toEqual(["thought", "action"]);
+    expect(() => normalizeSimpleSort({ items: [item({ kind: "action", text: "Buy the part" })] }, { threads, photos: 1 })).toThrow();
+    expect(normalizeSimpleSort({ items: [item({ kind: "action", text: "Buy the part" })] }, { threads, photos: 1, force: "action" }))
+      .toEqual([{ kind: "action", text: "Buy the part" }]);
+  });
+
   it("obeys the person's command over the model's kind", () => {
     expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Email Mia", threadId: "rest" })] }, { threads, force: "action" }))
       .toEqual([{ kind: "action", text: "Email Mia" }]);
@@ -103,6 +111,12 @@ describe("calendar", () => {
     expect(prompt).toContain("Never put the same words in two Threads");
     expect(prompt).toContain("save this only in X");
     expect(prompt).toContain("and nowhere else");
+  });
+
+  it("asks for a thought to hold photos only when there are photos", () => {
+    expect(simpleSortPrompt({ raw: "Photo: a hinge", threads: [], photos: 2 })).toContain("comes with 2 photos");
+    expect(simpleSortPrompt({ raw: "Fix it", threads: [] })).not.toContain("photo");
+    expect(simpleSortPrompt({ raw: "Photo: a hinge", threads: [], photos: 1, force: "action" })).not.toContain("comes with");
   });
 
   it("puts the calendar and the capture in the prompt", () => {
@@ -171,5 +185,46 @@ describe("settleSimpleSort", () => {
     expect(result.board.ledger.some((entry) => entry.targetId === "demos" && entry.captureId === "cap")).toBe(true);
     expect(result.board.routingSettlements).toEqual([]);
     expect(parsePersistedBoard(JSON.parse(JSON.stringify(result.board)))).not.toBeNull();
+  });
+
+  const withPhotos = (threadId?: string): Board => {
+    const board = pending();
+    return {
+      ...board,
+      actions: board.actions.map((action) => action.id === "envelope" ? { ...action, imgs: ["p1", "p2"], ...(threadId ? { threadId } : {}) } : action),
+      ledger: board.ledger.map((entry) => ({ ...entry, imgs: ["p1", "p2"], source: "image" as const })),
+    };
+  };
+
+  it("keeps a capture's photos on its first thought and points new actions at them", () => {
+    const result = settleSimpleSort(withPhotos(), { captureId: "cap", revision: 1, now: 10, items: [
+      { kind: "thought", text: "Photo: a cracked hinge", threads: [{ id: "tank" }] },
+      { kind: "action", text: "Order a new hinge" },
+    ] });
+    if (result.status !== "applied") throw new Error(result.reason);
+    const frag = result.board.threads.find((thread) => thread.id === "tank")!.frags[0];
+    expect(frag.imgs).toEqual(["p1", "p2"]);
+    const action = result.board.actions.find((candidate) => candidate.text === "Order a new hinge")!;
+    expect(action.imgs).toEqual([]);
+    expect(action.shot).toEqual({ threadId: "tank", fragId: frag.id });
+    expect(result.board.ledger.find((entry) => entry.targetFragId === frag.id)?.imgs).toEqual(["p1", "p2"]);
+    expect(parsePersistedBoard(JSON.parse(JSON.stringify(result.board)))).not.toBeNull();
+  });
+
+  it("leaves a photo capture unsorted rather than land it with nowhere for the photos", () => {
+    const result = settleSimpleSort(withPhotos(), { captureId: "cap", revision: 1, now: 10,
+      items: [{ kind: "action", text: "Order a new hinge" }] });
+    expect(result.status).toBe("conflict");
+  });
+
+  it("files every thought in the Thread the capture was made in", () => {
+    const result = settleSimpleSort(withPhotos("pumps"), { captureId: "cap", revision: 1, now: 10, items: [
+      { kind: "thought", text: "Photo: the pump label", threads: [{ name: "Labels" }] },
+      { kind: "action", text: "Check the flow rate" },
+    ] });
+    if (result.status !== "applied") throw new Error(result.reason);
+    expect(result.board.threads.find((thread) => thread.id === "pumps")!.frags.map((frag) => frag.text)).toEqual(["Photo: the pump label"]);
+    expect(result.board.threads.some((thread) => thread.name === "Labels")).toBe(false);
+    expect(result.board.actions.find((action) => action.text === "Check the flow rate")?.threadId).toBe("pumps");
   });
 });

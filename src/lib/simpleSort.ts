@@ -79,6 +79,8 @@ export function simpleSortPrompt(input: {
   force?: Force;
   now?: number;
   tzOffset?: number;
+  /** Photos attached to the capture; their descriptions are in raw. */
+  photos?: number;
 }): string {
   const corrections = (input.corrections ?? []).map((example) =>
     `- "${example.capture}" → ${example.kind === "thread" ? `thought in ${example.threadName ?? example.threadId}` : example.kind}`
@@ -108,6 +110,7 @@ export function simpleSortPrompt(input: {
     calendar(input.now ?? Date.now(), input.tzOffset),
     ...(actions.length ? ["", `Open actions (an action that is the same task as one of these sets sameAsAction to its id; otherwise null):\n${JSON.stringify(actions.map(({ id, text }) => ({ id, text })))}`] : []),
     ...(input.force ? ["", `The person already chose: everything here is ${input.force === "thread" ? "a thought" : `an ${input.force}`}.`] : []),
+    ...(input.photos && keepsPhotos(input.force) ? ["", `This capture comes with ${input.photos === 1 ? "a photo" : `${input.photos} photos`}, described in the capture. The photos are kept with the first thought, so the first item is a thought, in its Thread, saying what they show.`] : []),
     "",
     `Existing Threads:\n${JSON.stringify(input.threads.map(({ id, name, about }) => ({ id, name, about })))}`,
     ...(corrections ? ["", `This person corrected earlier sorts like this (follow the pattern, not the words):\n${corrections}`] : []),
@@ -116,13 +119,16 @@ export function simpleSortPrompt(input: {
   ].join("\n");
 }
 
+/** Photos live on a thread fragment: only a capture that may hold a thought can keep them. */
+const keepsPhotos = (force?: Force) => !force || force === "thread";
+
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?$/;
 const nameKey = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 
 /** Check the model's answer against the board. Throws when it cannot be used. */
 export function normalizeSimpleSort(
   untrusted: unknown,
-  context: { threads: { id: string; name: string }[]; actions?: OpenAction[]; force?: Force; raw?: string },
+  context: { threads: { id: string; name: string }[]; actions?: OpenAction[]; force?: Force; raw?: string; photos?: number },
 ): SimpleSortItem[] {
   const { items } = Answer.parse(untrusted);
   const byId = new Map(context.threads.map((thread) => [thread.id, thread]));
@@ -153,6 +159,13 @@ export function normalizeSimpleSort(
     const same = nameKey(item.text);
     if (out.some((earlier) => earlier.kind === "thought" && nameKey(earlier.text) === same)) continue;
     out.push({ kind, text: item.text, threads: [thread] });
+  }
+  /* Photos are kept on the first thought's fragment; an answer with none
+     would leave them nowhere, so the next provider is asked instead. */
+  if (context.photos && keepsPhotos(context.force)) {
+    const first = out.findIndex((item) => item.kind === "thought");
+    if (first < 0) throw new Error("photos without a thought to keep them");
+    if (first > 0) out.unshift(...out.splice(first, 1));
   }
   /* A capture that is one thought is kept word for word. The model's wording
      is only needed where it had to divide the capture into parts. */

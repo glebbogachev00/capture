@@ -482,28 +482,9 @@ export async function POST(request: Request) {
   if (!body.raw.trim()) {
     return Response.json({ error: "nothing to sort" }, { status: 400 });
   }
-  if (body.imgs?.some((source) => !parseSortImageDataUrl(source))) {
+  if (body.imgs?.some((source) => !parseSortImageDataUrl(source)) ||
+      (body.sortVersion === SIMPLE_SORT_VERSION && body.raw.length > 20_000)) {
     return Response.json({ error: "bad request" }, { status: 400 });
-  }
-
-  if (body.sortVersion === SIMPLE_SORT_VERSION) {
-    if (body.imgs?.length || body.raw.length > 20_000) {
-      return Response.json({ error: "bad request" }, { status: 400 });
-    }
-    try {
-      const prompt = simpleSortPrompt({
-        raw: body.raw, threads: body.threads, actions: body.actions, corrections: body.correctionExamples, force: body.force, tzOffset: body.tzOffset,
-      });
-      const { value, via } = await withFallback(async (tier) =>
-        normalizeSimpleSort(
-          await generateSimpleSort({ tier, prompt, abortSignal: planningAbortSignal }),
-          { threads: body.threads, actions: body.actions, force: body.force, raw: body.raw },
-        ), preferredFor("sort"), { abortSignal: planningAbortSignal });
-      return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items: value }, via });
-    } catch (e) {
-      const { message, status } = explain(e);
-      return Response.json({ error: message }, { status });
-    }
   }
 
   /* Providers accept one image at this seam. Interpret each attachment in its
@@ -520,6 +501,25 @@ export async function POST(request: Request) {
     }
     raw = mergeCaptions(body.raw, captions as string[]);
   }
+
+  if (body.sortVersion === SIMPLE_SORT_VERSION) {
+    const photos = body.imgs?.length ?? 0;
+    try {
+      const prompt = simpleSortPrompt({
+        raw, threads: body.threads, actions: body.actions, corrections: body.correctionExamples, force: body.force, tzOffset: body.tzOffset, photos,
+      });
+      const { value, via } = await withFallback(async (tier) =>
+        normalizeSimpleSort(
+          await generateSimpleSort({ tier, prompt, abortSignal: planningAbortSignal }),
+          { threads: body.threads, actions: body.actions, force: body.force, raw, photos },
+        ), preferredFor("sort"), { abortSignal: planningAbortSignal });
+      return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items: value }, via });
+    } catch (e) {
+      const { message, status } = explain(e);
+      return Response.json({ error: message }, { status });
+    }
+  }
+
 
   try {
     const { value, via, preferred, fallback, fallbackReason } = await withFallback(async (tier) => {

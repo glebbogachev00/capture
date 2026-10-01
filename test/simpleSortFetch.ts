@@ -3,7 +3,8 @@ import type { PlannedRoutingPlan } from "@/lib/plannedRouting";
 import type { SimpleSortItem } from "@/lib/simpleSort";
 
 /**
- * The hook tests describe sorter answers as planned routing plans. The app
+ * The hook tests describe sorter answers as planned routing plans or as the
+ * older single-call answer. The app
  * now asks the one-call sorter, so this turns such a fixture into the answer
  * that sorter gives: one item per kept part, supporting text folded into its
  * owner, a deadline's date onto its Actions. Unresolved parts are dropped;
@@ -40,6 +41,31 @@ export function simpleAnswer(plan: PlannedRoutingPlan): SimpleSortItem[] {
   return items;
 }
 
+type LegacySorted = {
+  kind?: string; clean?: string; title?: string; actions?: string[]; due?: string | null;
+  threadId?: string | null; threadName?: string | null; primaryText?: string | null;
+  also?: { text: string; threadId?: string | null; threadName?: string | null }[];
+};
+
+/** The older single-call answer ({ kind, clean, actions, threadId, ... }) as
+ * the one-call sorter would say it. */
+export function simpleFromLegacy(sorted: LegacySorted): SimpleSortItem[] {
+  const clean = sorted.clean ?? "";
+  const home = (threadId?: string | null, threadName?: string | null) =>
+    [threadId ? { id: threadId } : { name: threadName || sorted.title || "New thread" }];
+  if (sorted.kind === "intention") return [{ kind: "intention", text: clean }];
+  const thoughts: SimpleSortItem[] = sorted.kind === "thread" || sorted.kind === "both"
+    ? [{ kind: "thought", text: (sorted.primaryText?.trim() || (sorted.kind === "both" ? "" : clean)) || clean,
+        threads: home(sorted.threadId, sorted.threadName) },
+       ...(sorted.also ?? []).map((part): SimpleSortItem => ({ kind: "thought", text: part.text, threads: home(part.threadId, part.threadName) }))]
+    : [];
+  const tasks = sorted.kind === "action" || sorted.kind === "both"
+    ? (sorted.actions?.length ? sorted.actions : sorted.kind === "action" ? [sorted.title || clean] : [])
+    : [];
+  const due = tasks.length === 1 && sorted.due ? sorted.due.slice(0, 10) : undefined;
+  return [...thoughts, ...tasks.map((text): SimpleSortItem => ({ kind: "action", text, ...(due ? { due } : {}) }))];
+}
+
 /** vi.stubGlobal("fetch", mock), with planned answers translated for the
  * one-call sorter. The mock still receives every call. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,8 +76,10 @@ export function stubSortFetch(mock: (input: any, init?: RequestInit) => unknown)
     const asked = (() => { try { return JSON.parse(String(init?.body ?? "{}")); } catch { return {}; } })();
     if (asked.sortVersion !== 2) return response;
     const body = await response.clone().json().catch(() => null);
-    if (!body?.routingPlan) return response;
-    return Response.json({ sort: { version: 2, items: simpleAnswer(body.routingPlan) }, via: body.via }, { status: response.status });
+    if (!body || body.sort) return response;
+    const items = body.routingPlan ? simpleAnswer(body.routingPlan) : typeof body.kind === "string" ? simpleFromLegacy(body) : null;
+    if (!items) return response;
+    return Response.json({ sort: { version: 2, items }, via: body.via }, { status: response.status });
   });
   vi.stubGlobal("fetch", wrapped);
   return wrapped;
