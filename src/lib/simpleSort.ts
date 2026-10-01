@@ -90,10 +90,10 @@ export function simpleSortPrompt(input: {
     "KINDS",
     "- thought: an idea, observation, question, opinion, plan being thought through, bug report, complaint, reference or lesson. Every thought goes to a Thread.",
     "- action: a specific task the person gives themselves: an instruction to themselves (\"Add retry logging\", \"Verify the pictures survive sorting\") or \"I need to / I have to / I'll\" plus a task (\"I need to email Mia\"). Each task is its own action, even when several share one sentence: \"reproduce the error and compare the prices\" is two actions. A task put off to a time (\"the guide can wait until the end of the month\") is still an action, due then. NOT actions, but part of the thought: what they would like to do or are considering (\"on a rest day I want to walk and play a game\"), how a product should behave (\"retry fast, then leave it unsorted\"), what something still needs (\"the tower still needs to match the rain\"), and a general resolve (\"I will build\").",
-    "- intention: the person declaring, in their own voice, a way of being or a reality of their life or work as already true: \"I rest without guilt\", \"I have built a strong audience that supports my work\", \"I rebuild Capture carefully, one verified slice at a time\". Present-tense \"I am / I have / I do\" statements about themselves are intentions, even when they name a project. A plan, wish, question or \"should\" about a project is a thought. Only when the whole capture is the declaration, or when they explicitly call a part an intention (\"my intention\", \"an intention for how I live\"). A part they call an intention is its own intention item, without the label: \"Fix the login. An intention for how I live: I say no easily.\" → an action \"Fix the login\" and an intention \"I say no easily.\" Never pull an unlabeled intention out of a longer thought.",
+    "- intention: the person declaring, in their own voice, a way of being or a reality of their life or work as already true: \"I rest without guilt\", \"I have built a strong audience that supports my work\", \"I rebuild Capture carefully, one verified slice at a time\". Present-tense \"I am / I have / I do\" statements about themselves are intentions, even when they name a project. A plan, wish, question or \"should\" about a project is a thought. Only when the whole capture is the declaration, or when they explicitly call a part an intention (\"my intention\", \"an intention for how I live\"). A part they call an intention is its own intention item, without the label: \"Fix the login. An intention for how I live: I say no easily.\" → an action \"Fix the login\" and an intention \"I say no easily.\" Never pull an unlabeled intention out of a longer thought. A resolve about the future (\"I'm going to ship smaller pieces\", \"I'll keep doing it\") is not an intention: it stays in the thought.",
     "",
     "SPLITTING",
-    "Keep the capture as ONE item unless it clearly holds separate things: a different subject, or a task beside thoughts. Sentences about the same subject are one item, never one item per sentence. A long rant, complaint or bug report about one subject is ONE thought, even when it says what needs fixing (\"these bugs need to be fixed\", \"you need to add a button\"): the report is the note, not a list of tasks.",
+    "Keep the capture as ONE item unless it clearly holds separate things: a different subject, or a task beside thoughts. Sentences about the same subject are one item, never one item per sentence. A long rant, complaint or bug report about one subject is ONE thought, even when it says what needs fixing (\"these bugs need to be fixed\", \"you need to add a button\"): the report is the note, not a list of tasks. But an instruction to themselves after a thought is still its own action, even on the same subject: \"Ovid's rain loops too obviously. Find a longer rain recording.\" → a thought and an action \"Find a longer rain recording\".",
     "",
     "TEXT",
     "Use the person's own words for that item: fix obvious dictation slips and drop filler, but never summarize and keep every idea. For an action, a short imperative (\"Check the heater\"), without the date.",
@@ -116,12 +116,32 @@ export function simpleSortPrompt(input: {
 }
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?$/;
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/** The model sometimes lands one day off a weekday it was told to look up
+ * ("next Wednesday" → Thursday). When the capture names exactly one weekday
+ * and a due date sits one day beside that weekday, it is that weekday. */
+export function snapToNamedWeekday(due: string, raw: string, now: number, tzOffset = 0): string {
+  const named = WEEKDAYS.filter((day) => new RegExp(`\\b${day}\\b`, "i").test(raw));
+  if (named.length !== 1) return due;
+  const target = WEEKDAYS.indexOf(named[0]);
+  const at = Date.parse(due.slice(0, 10) + "T00:00:00Z");
+  if (Number.isNaN(at) || new Date(at).getUTCDay() === target) return due;
+  const today = Date.parse(new Date(now - tzOffset * 60_000).toISOString().slice(0, 10) + "T00:00:00Z");
+  for (const step of [-1, 1]) {
+    const beside = at + step * 86_400_000;
+    if (new Date(beside).getUTCDay() === target && beside >= today && beside <= today + 14 * 86_400_000) {
+      return new Date(beside).toISOString().slice(0, 10);
+    }
+  }
+  return due;
+}
 const nameKey = (name: string) => name.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 
 /** Check the model's answer against the board. Throws when it cannot be used. */
 export function normalizeSimpleSort(
   untrusted: unknown,
-  context: { threads: { id: string; name: string }[]; actions?: OpenAction[]; force?: Force; raw?: string },
+  context: { threads: { id: string; name: string }[]; actions?: OpenAction[]; force?: Force; raw?: string; now?: number; tzOffset?: number },
 ): SimpleSortItem[] {
   const { items } = Answer.parse(untrusted);
   const byId = new Map(context.threads.map((thread) => [thread.id, thread]));
@@ -131,7 +151,8 @@ export function normalizeSimpleSort(
   for (const item of items) {
     const kind = context.force === "thread" ? "thought" : context.force ?? item.kind;
     if (kind === "action") {
-      const due = item.due && ISO_DAY.test(item.due) ? item.due : undefined;
+      const stated = item.due && ISO_DAY.test(item.due) ? item.due : undefined;
+      const due = stated && context.raw ? snapToNamedWeekday(stated, context.raw, context.now ?? Date.now(), context.tzOffset) : stated;
       const existing = item.sameAsAction && openActions.has(item.sameAsAction) ? item.sameAsAction : undefined;
       out.push({ kind, text: item.text, ...(due ? { due } : {}), ...(existing ? { existingActionId: existing } : {}) });
       continue;

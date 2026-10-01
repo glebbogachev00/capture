@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendar, normalizeSimpleSort, simpleSortPrompt } from "./simpleSort";
+import { calendar, normalizeSimpleSort, simpleSortPrompt, snapToNamedWeekday } from "./simpleSort";
 import { settleSimpleSort } from "./simpleSortSettlement";
 import { EMPTY, type Board } from "./model";
 import { parsePersistedBoard } from "./persistedBoard";
@@ -62,6 +62,31 @@ describe("normalizeSimpleSort", () => {
   it("obeys the person's command over the model's kind", () => {
     expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Email Mia", threadIds: ["rest"] })] }, { threads, force: "action" }))
       .toEqual([{ kind: "action", text: "Email Mia" }]);
+  });
+});
+
+describe("snapToNamedWeekday", () => {
+  // Thursday 2026-10-01, 9am in California (UTC-7).
+  const now = Date.parse("2026-10-01T16:00:00Z");
+  const snap = (due: string, raw: string) => snapToNamedWeekday(due, raw, now, 420);
+
+  it("moves a date one day off the named weekday onto it", () => {
+    expect(snap("2026-10-08", "Call the landlord next Wednesday.")).toBe("2026-10-07");
+    expect(snap("2026-10-06", "send it wednesday")).toBe("2026-10-07");
+  });
+
+  it("leaves every other date alone", () => {
+    expect(snap("2026-10-07", "Call the landlord next Wednesday.")).toBe("2026-10-07");
+    expect(snap("2026-10-02", "Tomorrow buy milk, and on Wednesday call the landlord.")).toBe("2026-10-02");
+    expect(snap("2026-10-06", "By Friday draft it, then send it Monday.")).toBe("2026-10-06");
+    expect(snap("2026-10-31", "Sunday rest; the guide can wait until the end of the month.")).toBe("2026-10-31");
+    expect(snap("2026-10-08", "Call the landlord next week.")).toBe("2026-10-08");
+  });
+
+  it("lands through the sorter", () => {
+    expect(normalizeSimpleSort({ items: [item({ kind: "action", text: "Call the landlord", due: "2026-10-08" })] },
+      { threads, raw: "Call the landlord next Wednesday.", now, tzOffset: 420 }))
+      .toEqual([{ kind: "action", text: "Call the landlord", due: "2026-10-07" }]);
   });
 });
 
