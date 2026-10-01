@@ -222,7 +222,7 @@ export type AskSource = {
 
 export type AskResult = { found: boolean; answer: string; sources: AskSource[]; refs: AskRef[] };
 
-const LABEL = /\s*[[(](?:[TAFIN]\d+)(?:\s*[,;]\s*[TAFIN]\d+)*[\])]/g;
+const LABEL = /\s*[[(](?:(?:sources?|see|from|notes?)\s*:?\s*)?[TAFIN]\d+(?:\s*(?:[,;]|and)\s*[TAFIN]\d+)*[\])]/gi;
 
 /** Same words, ignoring spacing, case and typographic quotes and dashes. */
 const comparable = (text: string) => text.normalize("NFKC").toLowerCase()
@@ -246,10 +246,15 @@ export function readAnswer(
   if (!answer) return null;
   const label = (raw: string) => raw.replace(/[[\]\s]/g, "").toUpperCase();
   const sources: AskSource[] = [];
+  const allNotes = Object.values(notes);
   for (const cited of parsed.data.sources) {
-    const note = notes[label(cited.note)];
-    if (!note || sources.some((s) => s.fragId === note.fragId)) continue;
     const quote = cited.quote?.trim().replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, "").trim();
+    let note = notes[label(cited.note)];
+    /* Right words, wrong label: the saved words decide which note it is. */
+    if (quote && (!note || !comparable(note.text).includes(comparable(quote)))) {
+      note = allNotes.find((n) => comparable(n.text).includes(comparable(quote))) ?? note;
+    }
+    if (!note || sources.some((s) => s.fragId === note.fragId)) continue;
     const exact = !!quote && comparable(note.text).includes(comparable(quote));
     sources.push({
       fragId: note.fragId, threadId: note.threadId, threadName: note.threadName, at: note.at,

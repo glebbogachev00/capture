@@ -134,6 +134,16 @@ describe("readAnswer", () => {
     expect(out.sources[1].excerpt).toBe("Capture creates clarity — the board sorts itself.");
   });
 
+  it("moves a citation to the note that actually holds the quoted words", () => {
+    const notes = {
+      N1: { fragId: "new", threadId: "c", threadName: "Capture.", at: 3, text: "Do not push to monetize yet." },
+      N9: { fragId: "old", threadId: "c", threadName: "Capture.", at: 1, text: "Capture is an open-source thinking companion." },
+    };
+    const out = readAnswer({ found: true, answer: "A companion (source: N1).", sources: [{ note: "N1", quote: "an open-source thinking companion" }], refs: [] }, refs, notes)!;
+    expect(out.answer).toBe("A companion.");
+    expect(out.sources.map((s) => [s.fragId, s.at, s.quote])).toEqual([["old", 1, "an open-source thinking companion"]]);
+  });
+
   it("accepts a quote that differs only in spacing, case or typographic marks", () => {
     const notes = { N1: { fragId: "f1", threadId: "c", threadName: "Capture.", at: 1, text: "It’s not a notes app — it’s a place to think." } };
     const out = readAnswer({ found: true, answer: "Not a notes app.", sources: [{ note: "N1", quote: "it's not a notes app - it's" }], refs: [] }, refs, notes)!;
