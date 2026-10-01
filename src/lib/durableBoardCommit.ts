@@ -17,6 +17,10 @@ export type DurableMutation<T> =
       replaceTombstones?: Tombstone[];
       /** Inverse receipts must snapshot the exact stamped state written below. */
       entries?: [string, string][] | ((prepared: SyncState) => [string, string][]);
+      /** The hub's merged answer: persist it exactly. Stamping it would mark
+          every item another device changed as edited here, just now, and the
+          two devices would re-send the whole board to each other forever. */
+      asIs?: boolean;
     }
   | { skip: T };
 export type DurableMutationResult<T> =
@@ -173,12 +177,14 @@ export function runDurableBoardMutation<T>(options: {
     const current = options.read();
     const mutation = options.build(current.board, current.tombstones);
     if ("skip" in mutation) return { status: "skipped", value: mutation.skip };
-    const prepared = prepareDurableBoardCommit(
-      current.board,
-      mutation.next,
-      mutation.replaceTombstones ?? current.tombstones,
-      mutation.tombstones ?? [],
-    );
+    const prepared = mutation.asIs
+      ? { board: mutation.next, tombstones: mutation.replaceTombstones ?? current.tombstones }
+      : prepareDurableBoardCommit(
+          current.board,
+          mutation.next,
+          mutation.replaceTombstones ?? current.tombstones,
+          mutation.tombstones ?? [],
+        );
     const finalization = options.finalize?.();
     if (options.finalize && !finalization) return { status: "failed" };
     try {

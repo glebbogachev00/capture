@@ -329,26 +329,26 @@ export function reconcileManualSettlementAuthority(board: Board, now = Date.now(
     mergeRoutingRetirements(board.routingRetirements ?? [], [], now)
       .map((retirement) => [routingSlot(retirement), retirement]),
   );
-  for (const record of manualRecords) {
-    retirementMap.set(routingSlot(record), {
+  /* A retirement is renewed while its records still circulate, so it cannot
+     expire under a device that still holds the losing settlement. But only
+     once it is past half its lifetime: renewing it on every merge made every
+     merge a change, and two open devices traded the board back and forth. */
+  const retire = (record: { captureId: string; pendingId: string; revision: number }) => {
+    const slot = routingSlot(record);
+    const existing = retirementMap.get(slot);
+    if (!existing || now - existing.retiredAt > ROUTING_RETIREMENT_TTL / 2) retirementMap.set(slot, {
       captureId: record.captureId,
       pendingId: record.pendingId,
       revision: record.revision,
       retiredAt: now,
     });
-  }
+  };
+  for (const record of manualRecords) retire(record);
   const manualSlots = new Set(retirementMap.keys());
   const losing = all.filter((record) =>
     record.settledBy === "automatic" && manualSlots.has(routingSlot(record))
   );
-  for (const record of losing) {
-    retirementMap.set(routingSlot(record), {
-      captureId: record.captureId,
-      pendingId: record.pendingId,
-      revision: record.revision,
-      retiredAt: now,
-    });
-  }
+  for (const record of losing) retire(record);
 
   const protectedArtifacts = new Set(all
     .filter((record) => !losing.includes(record))

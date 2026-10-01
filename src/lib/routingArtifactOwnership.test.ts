@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EMPTY, type Board } from "./model";
 import type { SortResult } from "./boardOps";
 import { stagePlannedRoutingIntake } from "./plannedRoutingIntake";
@@ -204,5 +204,26 @@ describe("routing artifact ownership under offline manual conflicts", () => {
       assertManual(board);
     }
     expect(automatic.routingSettlements?.[0].artifacts).toContainEqual({ kind: "frag", id: home.frags[0].id });
+  });
+});
+
+describe("merging is stable once it has settled", () => {
+  it("keeps a retirement's first time, so merging an unchanged board changes nothing", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000_000);
+      const pending = intake();
+      const manual = manualIntention(pending);
+      const automatic = { board: plannedThread(pending), tombstones: [] };
+      const merged = mergeSync(manual, automatic);
+      const retirements = merged.board.routingRetirements ?? [];
+      expect(retirements.length).toBeGreaterThan(0);
+      vi.setSystemTime(9_000_000);
+      const again = mergeSync(merged, { board: merged.board, tombstones: merged.tombstones });
+      expect(again.board.routingRetirements).toEqual(retirements);
+      expect(JSON.stringify(again)).toBe(JSON.stringify(merged));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

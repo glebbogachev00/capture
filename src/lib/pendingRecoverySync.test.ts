@@ -6,7 +6,7 @@ import { stagePlannedRoutingIntake } from "./plannedRoutingIntake";
 import { settleManualRouting } from "./manualRoutingSettlement";
 import { settlePlannedRouting } from "./plannedRoutingSettlement";
 import type { PlannedRoutingPlan } from "./plannedRouting";
-import { mergeSync, TOMBSTONE_TTL, type SyncState } from "./sync";
+import { mergeSync, ROUTING_RETIREMENT_TTL, TOMBSTONE_TTL, type SyncState } from "./sync";
 import { stampChanges } from "./sync";
 import { prepareResortedCapture } from "./resortOps";
 
@@ -369,8 +369,18 @@ describe("cross-device pending recovery authority", () => {
         item.id === "planned:capture-cross-device:action:automatic-action"
       )).toBe(false);
       expect(repeated.board.routingRetirements).toEqual([
-        expect.objectContaining({ retiredAt: 700 }),
+        expect.objectContaining({ captureId: "capture-cross-device", pendingId: "pending-row", revision: 1 }),
       ]);
+      // Renewed while the losing settlement still circulates, but only once it
+      // is past half its lifetime, so a merge of unchanged boards changes nothing.
+      const firstRetiredAt = repeated.board.routingRetirements![0].retiredAt;
+      expect(mergeSync(repeated, states.automatic, 800).board.routingRetirements![0].retiredAt).toBe(firstRetiredAt);
+      const later = firstRetiredAt + ROUTING_RETIREMENT_TTL / 2 + 1;
+      const renewed = mergeSync(repeated, states.automatic, later);
+      expect(renewed.board.routingRetirements![0].retiredAt).toBe(later);
+      expect(renewed.board.actions.some((item) =>
+        item.id === "planned:capture-cross-device:action:automatic-action"
+      )).toBe(false);
 
       const nextRevision: SyncState = {
         board: {

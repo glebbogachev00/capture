@@ -530,11 +530,7 @@ export function useBoard(now: number) {
         remote,
       );
       return adopted.changed
-        ? {
-            next: adopted.board,
-            replaceTombstones: adopted.tombstones,
-            value: adopted,
-          }
+        ? { next: adopted.board, replaceTombstones: adopted.tombstones, value: adopted, asIs: true }
         : { skip: adopted };
     },
     adopt: (state) => {
