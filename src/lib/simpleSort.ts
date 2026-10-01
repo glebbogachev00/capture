@@ -30,7 +30,7 @@ export const SimpleSortSchema = z.object({
 const Answer = z.object({
   items: z.array(z.object({
     kind: z.enum(["action", "thought", "intention"]),
-    text: z.string().trim().min(1).max(8000),
+    text: z.string().trim().min(1).max(20_000),
     threadIds: z.array(z.string().max(100)).max(4).nullish(),
     threadId: z.string().max(100).nullish(),
     newThread: z.string().trim().max(100).nullish(),
@@ -187,7 +187,9 @@ export async function generateSimpleSort({ tier, prompt, abortSignal }: {
   const common = {
     model: tier.model,
     maxRetries: 0 as const,
-    maxOutputTokens: 4_000,
+    /* A long one-thought capture is copied out whole: 20,000 characters is
+       about 5,000 tokens, plus reasoning. */
+    maxOutputTokens: 8_000,
     abortSignal,
     temperature: 0,
     prompt,
