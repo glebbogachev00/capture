@@ -59,6 +59,16 @@ describe("normalizeSimpleSort", () => {
       .toEqual([{ kind: "action", text: "Fix the bugs" }]);
   });
 
+  it("keeps a long one-thought capture without the model typing it out again", () => {
+    const raw = "Research note on lighthouse flash patterns. ".repeat(400).trim();
+    expect(raw.length).toBeGreaterThan(8000);
+    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "=", threadId: "rest" })] }, { threads, raw }))
+      .toEqual([{ kind: "thought", text: raw, threads: [{ id: "rest" }] }]);
+    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: raw, threadId: "rest" })] }, { threads, raw })[0].text).toBe(raw);
+    expect(() => normalizeSimpleSort({ items: [item({ kind: "thought", text: "=", threadId: "rest" }), item({ kind: "action", text: "Call Mia" })] }, { threads, raw })).toThrow();
+    expect(() => normalizeSimpleSort({ items: [item({ kind: "action", text: "=" })] }, { threads, raw })).toThrow();
+  });
+
   it("obeys the person's command over the model's kind", () => {
     expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Email Mia", threadIds: ["rest"] })] }, { threads, force: "action" }))
       .toEqual([{ kind: "action", text: "Email Mia" }]);
