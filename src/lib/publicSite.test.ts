@@ -26,8 +26,16 @@ describe("public-site presentation independent of Cloud transport", () => {
     const { default: robots } = await import("@/app/robots");
     const { PLAYGROUND } = await import("@/lib/playground");
     const { OwnershipBoundary } = await import("@/components/OwnershipBoundary");
+    const { InstalledAppEntry } = await import("@/components/InstalledAppEntry");
     const home = Home();
-    expect(home.type).toBe(isPublic ? Landing : OwnershipBoundary);
+    if (isPublic) {
+      // The public front door is the landing, with the installed-app entry above it.
+      const parts = React.Children.toArray(home.props.children) as React.ReactElement[];
+      expect(home.type).toBe(React.Fragment);
+      expect(parts.map((part) => part.type)).toEqual([InstalledAppEntry, Landing]);
+    } else {
+      expect(home.type).toBe(OwnershipBoundary);
+    }
     if (!isPublic) {
       expect(home.props.cloud).toBe(cloud === "1");
       expect(home.props.children.type).toBe(Capture);
