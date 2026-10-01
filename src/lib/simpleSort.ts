@@ -18,7 +18,7 @@ export const SimpleSortSchema = z.object({
   items: z.array(z.object({
     kind: z.enum(["action", "thought", "intention"]),
     text: z.string(),
-    threadIds: z.array(z.string()),
+    threadId: z.string().nullable(),
     newThread: z.string().nullable(),
     due: z.string().nullable(),
     sameAsAction: z.string().nullable(),
@@ -43,7 +43,8 @@ export type SimpleSortTarget = { id: string } | { name: string };
 export type SimpleSortItem = {
   kind: "action" | "thought" | "intention";
   text: string;
-  /** Thoughts only: every Thread it belongs to (existing ids, or new names). */
+  /** Thoughts only: the one Thread it belongs to (an existing id, or a new
+      name). A list in type only; normalizeSimpleSort always leaves one. */
   threads?: SimpleSortTarget[];
   /** Actions only: ISO date as the model resolved it. */
   due?: string;
@@ -85,7 +86,7 @@ export function simpleSortPrompt(input: {
   const actions = (input.actions ?? []).slice(0, 80);
   return [
     "You sort one capture from someone's personal notes app. Say what is in it.",
-    'Return one JSON object: {"items":[{"kind":"thought"|"action"|"intention","text":string,"threadIds":string[],"newThread":string|null,"due":string|null,"sameAsAction":string|null}]}',
+    'Return one JSON object: {"items":[{"kind":"thought"|"action"|"intention","text":string,"threadId":string|null,"newThread":string|null,"due":string|null,"sameAsAction":string|null}]}',
     "",
     "KINDS",
     "- thought: an idea, observation, question, opinion, plan being thought through, bug report, complaint, reference or lesson. Every thought goes to a Thread.",
@@ -99,8 +100,8 @@ export function simpleSortPrompt(input: {
     "Use the person's own words for that item: fix obvious dictation slips and drop filler, but never summarize and keep every idea. For an action, a short imperative (\"Check the heater\"), without the date.",
     "",
     "THREADS",
-    "For a thought, threadIds lists every existing Thread it belongs in, judged by each Thread's description. One thought about several projects belongs to each of them (\"Retake could record the TechTutor walkthroughs while Capture holds the lesson ideas\" → TechTutor, Retake and Capture). Only if none fits, leave threadIds empty and set newThread to a short name.",
-    "\"Add this to X\", \"put this in X\", \"create a new thread called X\" are filing instructions, not items: put the rest of the capture in X (its existing id, or newThread exactly X).",
+    "For a thought, threadId is the ONE existing Thread it is about, judged by each Thread's description. A passing mention of another project does not make the thought about that project: a note on rest that mentions Capture belongs in the rest Thread only. If a capture really holds two subjects, split it into one thought per subject, each with its own part of the words and its own threadId. Never put the same words in two Threads. Only if no Thread fits, set threadId to null and newThread to a short name.",
+    "Filing instructions are not items, and they decide the Thread: \"add this to X\", \"put this in X\", \"save this only in X\", \"this should only go to X\", \"create a new thread called X\". Put the rest of the capture in X (its existing id, or newThread exactly X) and nowhere else.",
     "",
     "DUE",
     "For an action with a stated day or date, due is the ISO date (YYYY-MM-DD); otherwise null. A deadline covers every task it names (\"By Friday I need to A, B and C\" → each due Friday). A different date given later for one task (\"do C next Monday instead\") applies to that task only. A weekday (\"Tuesday\", \"next Tuesday\", \"by Friday\") is the date this calendar lists for that weekday. Look days up in this calendar; never calculate them:",
@@ -140,13 +141,18 @@ export function normalizeSimpleSort(
       out.push({ kind, text: item.text });
       continue;
     }
-    const ids = [...(item.threadIds ?? []), ...(item.threadId ? [item.threadId] : [])].filter((id) => byId.has(id));
+    /* One Thread per thought. Copying one thought into several Threads
+       made both noisier and fed the copies back into the next sort, so
+       whatever the model sends (a list, from an older prompt or a provider
+       without the schema), the first Thread it names that exists wins. */
     const named = item.newThread ? byName.get(nameKey(item.newThread)) : undefined;
-    if (named) ids.push(named.id);
-    const threads: SimpleSortTarget[] = [...new Set(ids)].map((id) => ({ id }));
-    if (!threads.length && item.newThread) threads.push({ name: item.newThread });
-    if (!threads.length) throw new Error("thought without a thread");
-    out.push({ kind, text: item.text, threads });
+    const id = [item.threadId, ...(item.threadIds ?? []), named?.id].find((candidate) => candidate && byId.has(candidate));
+    const thread: SimpleSortTarget | null = id ? { id } : item.newThread ? { name: item.newThread } : null;
+    if (!thread) throw new Error("thought without a thread");
+    /* The same words twice are one thought, not two notes. */
+    const same = nameKey(item.text);
+    if (out.some((earlier) => earlier.kind === "thought" && nameKey(earlier.text) === same)) continue;
+    out.push({ kind, text: item.text, threads: [thread] });
   }
   /* A capture that is one thought is kept word for word. The model's wording
      is only needed where it had to divide the capture into parts. */

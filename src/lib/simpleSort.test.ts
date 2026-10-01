@@ -5,24 +5,45 @@ import { EMPTY, type Board } from "./model";
 import { parsePersistedBoard } from "./persistedBoard";
 
 const threads = [{ id: "rest", name: "Rest day planning" }, { id: "ovid", name: "Ovid" }, { id: "retake", name: "Retake" }];
-const item = (fields: Record<string, unknown>) => ({ threadIds: [], newThread: null, due: null, sameAsAction: null, ...fields });
+const item = (fields: Record<string, unknown>) => ({ threadId: null, newThread: null, due: null, sameAsAction: null, ...fields });
 
 describe("normalizeSimpleSort", () => {
   it("keeps existing thread ids and maps a 'new' thread that already exists by name", () => {
     expect(normalizeSimpleSort({ items: [
-      item({ kind: "thought", text: "Walk and play a game.", threadIds: ["rest"] }),
+      item({ kind: "thought", text: "Walk and play a game.", threadId: "rest" }),
       item({ kind: "thought", text: "The tower needs rain.", newThread: " ovid " }),
-      { kind: "thought", text: "Legacy single id.", threadId: "rest" },
+      { kind: "thought", text: "Legacy list of ids.", threadIds: ["rest"] },
     ] }, { threads })).toEqual([
       { kind: "thought", text: "Walk and play a game.", threads: [{ id: "rest" }] },
       { kind: "thought", text: "The tower needs rain.", threads: [{ id: "ovid" }] },
-      { kind: "thought", text: "Legacy single id.", threads: [{ id: "rest" }] },
+      { kind: "thought", text: "Legacy list of ids.", threads: [{ id: "rest" }] },
     ]);
   });
 
-  it("keeps a thought about several projects in each of their threads", () => {
-    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Retake records it for Ovid.", threadIds: ["retake", "ovid", "gone", "ovid"] })] }, { threads }))
-      .toEqual([{ kind: "thought", text: "Retake records it for Ovid.", threads: [{ id: "retake" }, { id: "ovid" }] }]);
+  it("files a thought in one thread, never a copy in each", () => {
+    // An older prompt, or a provider without the schema, may still send a list.
+    expect(normalizeSimpleSort({ items: [{ kind: "thought", text: "Retake records it for Ovid.", threadIds: ["gone", "retake", "ovid"] }] }, { threads }))
+      .toEqual([{ kind: "thought", text: "Retake records it for Ovid.", threads: [{ id: "retake" }] }]);
+    expect(normalizeSimpleSort({ items: [{ kind: "thought", text: "x", threadId: "ovid", threadIds: ["retake"] }] }, { threads }))
+      .toEqual([{ kind: "thought", text: "x", threads: [{ id: "ovid" }] }]);
+  });
+
+  it("drops a second copy of the same words sent to another thread", () => {
+    const raw = "I should rest more. Capture can wait.";
+    expect(normalizeSimpleSort({ items: [
+      item({ kind: "thought", text: "I should rest more. Capture can wait.", threadId: "rest" }),
+      item({ kind: "thought", text: "i should rest more.  Capture can wait.", threadId: "retake" }),
+    ] }, { threads, raw })).toEqual([{ kind: "thought", text: raw, threads: [{ id: "rest" }] }]);
+  });
+
+  it("keeps a real split: two subjects, two parts, two threads", () => {
+    expect(normalizeSimpleSort({ items: [
+      item({ kind: "thought", text: "Rest days need a walk.", threadId: "rest" }),
+      item({ kind: "thought", text: "Retake should trim silences.", threadId: "retake" }),
+    ] }, { threads, raw: "Rest days need a walk. Retake should trim silences." })).toEqual([
+      { kind: "thought", text: "Rest days need a walk.", threads: [{ id: "rest" }] },
+      { kind: "thought", text: "Retake should trim silences.", threads: [{ id: "retake" }] },
+    ]);
   });
 
   it("points a repeated task at the open action instead of a new one", () => {
@@ -47,20 +68,20 @@ describe("normalizeSimpleSort", () => {
 
   it("refuses a thought with nowhere to go and an unknown id without a name", () => {
     expect(() => normalizeSimpleSort({ items: [item({ kind: "thought", text: "Somewhere" })] }, { threads })).toThrow();
-    expect(() => normalizeSimpleSort({ items: [item({ kind: "thought", text: "x", threadIds: ["gone"] })] }, { threads })).toThrow();
+    expect(() => normalizeSimpleSort({ items: [item({ kind: "thought", text: "x", threadId: "gone" })] }, { threads })).toThrow();
     expect(() => normalizeSimpleSort({ items: [] }, { threads })).toThrow();
   });
 
   it("keeps a one-thought capture word for word, whatever the model rewrote", () => {
     const raw = "So that is absolutely gone. These three bucks need to be fixed right now.";
-    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Three bugs need fixing.", threadIds: ["rest"] })] }, { threads, raw }))
+    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Three bugs need fixing.", threadId: "rest" })] }, { threads, raw }))
       .toEqual([{ kind: "thought", text: raw, threads: [{ id: "rest" }] }]);
     expect(normalizeSimpleSort({ items: [item({ kind: "action", text: "Fix the bugs" })] }, { threads, raw }))
       .toEqual([{ kind: "action", text: "Fix the bugs" }]);
   });
 
   it("obeys the person's command over the model's kind", () => {
-    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Email Mia", threadIds: ["rest"] })] }, { threads, force: "action" }))
+    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Email Mia", threadId: "rest" })] }, { threads, force: "action" }))
       .toEqual([{ kind: "action", text: "Email Mia" }]);
   });
 });
@@ -73,6 +94,15 @@ describe("calendar", () => {
     expect(lines[4]).toBe("Monday 2026-10-05");
     expect(lines).toHaveLength(9);
     expect(lines[8]).toBe("End of this month: Saturday 2026-10-31");
+  });
+
+  it("asks for one thread per thought and lets 'only save it in X' decide", () => {
+    const prompt = simpleSortPrompt({ raw: "x", threads: [] });
+    expect(prompt).toContain('"threadId":string|null');
+    expect(prompt).not.toContain("threadIds");
+    expect(prompt).toContain("Never put the same words in two Threads");
+    expect(prompt).toContain("save this only in X");
+    expect(prompt).toContain("and nowhere else");
   });
 
   it("puts the calendar and the capture in the prompt", () => {
