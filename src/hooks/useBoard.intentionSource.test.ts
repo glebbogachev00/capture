@@ -9,7 +9,7 @@ import * as model from "@/lib/model";
 
 import { useBoard } from "./useBoard";
 
-function intentionResponse(body: { raw: string; captureId?: string; routingPlanVersion?: number }) {
+function intentionResponse(body: { raw: string }) {
   const recovery = {
     kind: "intention",
     clean: body.raw,
@@ -23,28 +23,7 @@ function intentionResponse(body: { raw: string; captureId?: string; routingPlanV
     primaryText: null,
     also: [],
   };
-  if (!body.routingPlanVersion) return recovery;
-  return {
-    ...recovery,
-    planned: true,
-    captureId: body.captureId,
-    recovery,
-    routingPlan: {
-      items: [{
-        id: "intention",
-        source: body.raw,
-        kind: "intention",
-        action: null,
-        due: null,
-        ownerId: null,
-        destinations: [],
-        duplicateActionId: null,
-        unresolved: false,
-        ambiguity: null,
-      }],
-      newThreads: [],
-    },
-  };
+  return recovery;
 }
 
 beforeEach(async () => {

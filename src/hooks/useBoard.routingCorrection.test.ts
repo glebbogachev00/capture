@@ -12,10 +12,9 @@ const wrong = { id: "operations", name: "Operations", summary: "", frags: [{ id:
 
 beforeEach(async () => {
   await set(KEY, JSON.stringify({ ...EMPTY, principles: [], threads: [chosen, wrong] }));
-  vi.stubGlobal("fetch", vi.fn(async (input, init) => {
+  vi.stubGlobal("fetch", vi.fn(async (input) => {
     const url = String(input);
     if (url === "/api/sort") {
-      const request = JSON.parse(String(init?.body));
       const recovery = {
         clean: raw,
         kind: "thread",
@@ -29,28 +28,7 @@ beforeEach(async () => {
         threadName: null,
         also: [],
       };
-      if (!request.routingPlanVersion) return Response.json(recovery);
-      return Response.json({
-        ...recovery,
-        planned: true,
-        captureId: request.captureId,
-        recovery,
-        routingPlan: {
-          items: [{
-            id: "handoff",
-            source: raw,
-            kind: "developing_thought",
-            action: null,
-            due: null,
-            ownerId: null,
-            destinations: [{ type: "existing", threadId: "operations" }],
-            duplicateActionId: null,
-            unresolved: false,
-            ambiguity: null,
-          }],
-          newThreads: [],
-        },
-      });
+      return Response.json(recovery);
     }
     if (url === "/api/summarize") return Response.json({ summary: "Synthetic" });
     return new Response(null, { status: 503 });

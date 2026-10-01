@@ -14,40 +14,12 @@ import {
 import {
   opsEvent,
   routingStageEvent,
-  routingValidationEvent,
   type RoutingProviderTier,
   type RoutingStageCode,
 } from "@/lib/opsEvent.server";
-import { DUE_RULE, RELATIVE_DUE_RULE, ROUTING_RULE, todayLine } from "@/lib/engineRules";
+import { DUE_RULE, ROUTING_RULE, todayLine } from "@/lib/engineRules";
 import { enforceStandingDecision, reconcileSorted } from "@/lib/sort";
 import { scheduleJevThreadRerankShadow } from "@/lib/jevThreadRerank";
-import {
-  PlannedRoutingPlanSchema,
-  RoutingPlanCandidateValidationError,
-  compileRoutingPlan,
-  planRoutingWithRetry,
-  type PlannedSortResult,
-  type RoutingPlanFailure,
-} from "@/lib/plannedRouting";
-import { generatePlannedRoutingCandidate } from "@/lib/plannedRoutingGeneration";
-import {
-  DeadlineAdjudicationError,
-  adjudicatePlannedDeadlines,
-  generatePlannedDeadlineAdjudicationCandidate,
-  requiresPlannedDeadlineAdjudication,
-} from "@/lib/plannedDeadlineAdjudication";
-import {
-  DestinationOwnershipAdjudicationError,
-  adjudicatePlannedDestinationOwnership,
-  generatePlannedDestinationOwnershipCandidate,
-  requiresPlannedDestinationOwnership,
-} from "@/lib/plannedDestinationOwnership";
-import {
-  ActionIdentityAdjudicationError,
-  adjudicatePlannedActionIdentity,
-  generatePlannedActionIdentityCandidate,
-  requiresPlannedActionIdentity,
-} from "@/lib/plannedActionIdentity";
 import { SEMANTIC_KIND_BOUNDARY } from "@/lib/semanticKindBoundary";
 import { SIMPLE_SORT_VERSION, generateSimpleSort, normalizeSimpleSort, simpleSortPrompt } from "@/lib/simpleSort";
 import { parseSortImageDataUrl } from "@/lib/sortImageDataUrl";
@@ -67,12 +39,6 @@ const PLANNING_DEADLINE_MS = 55_000;
 function routingStageCode(error: unknown, signal: AbortSignal): RoutingStageCode {
   if (signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
     return "ABORTED";
-  }
-  if (error instanceof DeadlineAdjudicationError) return error.code;
-  if (error instanceof DestinationOwnershipAdjudicationError) return error.code;
-  if (error instanceof ActionIdentityAdjudicationError) return error.code;
-  if (error instanceof RoutingPlanCandidateValidationError) {
-    return error.failures[0]?.code ?? "FINAL_PLAN_INVALID";
   }
   return "PROVIDER_OR_OUTPUT_FAILURE";
 }
@@ -189,14 +155,13 @@ function ago(at: number | undefined, now: number): string {
 }
 
 const Body = z.object({
-  /** Planned clients assign this before any model call. */
+  /** Clients name the capture; kept for logs and the routing harness. */
   captureId: z.string().min(1).max(100).optional(),
   raw: z.string(),
   threads: z.array(
     z.object({ id: z.string(), name: z.string(), about: z.string() })
   ),
   /** Versioned planning seam used only after the client durably saves intake. */
-  routingPlanVersion: z.literal(1).optional(),
   /** The one-call sorter (lib/simpleSort). */
   sortVersion: z.literal(SIMPLE_SORT_VERSION).optional(),
   /** The person's Date#getTimezoneOffset(), so "Friday" means their Friday. */
@@ -492,91 +457,7 @@ function prompt(
   );
 }
 
-function immutableIndexedSourceLedger(raw: string): string {
-  const characters = [...raw];
-  const chunks: string[] = [];
-  const chunkSize = 48;
-  for (let start = 0; start < characters.length; start += chunkSize) {
-    const end = Math.min(start + chunkSize, characters.length);
-    chunks.push(`[${start},${end}) ${JSON.stringify(characters.slice(start, end).join(""))}`);
-  }
-  const exactCharacters = characters.flatMap((character, characterOffset) => {
-    if (/^[\p{L}\p{N} ]$/u.test(character)) return [];
-    const codePoint = character.codePointAt(0)!;
-    return [
-      `[${characterOffset}] U+${codePoint.toString(16).toUpperCase().padStart(4, "0")} ${JSON.stringify(character)}`,
-    ];
-  });
-  return (
-    "Immutable indexed source ledger (Unicode code-point offsets; this is the copying authority):\n" +
-    "Contiguous exact chunks:\n" + chunks.join("\n") + "\n" +
-    "Exact punctuation, controls, marks, and symbols:\n" +
-    (exactCharacters.length ? exactCharacters.join("\n") : "(none)") + "\n"
-  );
-}
-
-function routingPlanPrompt(
-  raw: string,
-  body: z.infer<typeof Body>,
-  failures: RoutingPlanFailure[],
-  initialInterpretation: z.infer<typeof Sorted>,
-): string {
-  const retryGuidance = [
-    failures.some((failure) => failure.code === "INTENTION_NOT_DECLARED_ALONE")
-      ? "\nINTENTION_NOT_DECLARED_ALONE repair: This capture says several things, and the affected item is not named as an intention by the person. Intentions are declared on their own, not pulled out of a longer capture. Re-decide the affected item from the source as a developing_thought (with its Thread destination) or an Action, or keep it with the thought it belongs to.\n"
-      : "",
-    failures.some((failure) => failure.code === "NON_THOUGHT_DESTINATION")
-      ? "\nNON_THOUGHT_DESTINATION repair: Re-evaluate each affected item's semantic kind from the original source before changing its fields. Do not mechanically clear destinations just to satisfy validation: if the destinations reflect genuine developing thought, correct the kind; if the source truly requests or commits a discrete act, keep action and clear destinations. The model still owns that semantic decision.\n"
-      : "",
-    failures.some((failure) => failure.code === "DEADLINE_NOT_ATOMIC")
-      ? "\nDEADLINE_NOT_ATOMIC repair: A due-bearing Action must be represented by two adjacent owned items, not by putting due on the Action. Action.due must be null. Give the Action item only its exact non-deadline source slice. Add one deadline item whose ownerId is that Action id, whose due is the resolved ISO date, and whose source is the exact complete due-bearing source—including the relative phrase, punctuation, and adjacent separator whitespace—represented once. Do not change the Action meaning, invent timing, merge sibling deadlines, or attach a deadline to Actions outside its exact semantic scope. For one phrase explicitly shared by several Actions, keep one deadline source and declare its additionalOwnerIds.\n"
-      : "",
-    failures.some((failure) => failure.code === "SOURCE_NOT_ACCOUNTED")
-      ? "\nSOURCE_NOT_ACCOUNTED repair: Rebuild the ordered source boundaries against the original string. Concatenating item.source must reproduce it exactly. Each sourceMismatch identifies the first differing Unicode character: at characterOffset, copy expected exactly instead of received; null means that side ended. Then audit the complete remainder, not only that character. Preserve every non-whitespace character unchanged and in order; never paraphrase, normalize punctuation, infer, overlap, or reorder. Preserve separator whitespace exactly once, assigning whitespace between adjacent items to the end of the preceding item.source.\n"
-      : "",
-  ].join("");
-  const feedback = failures.length
-    ? `\nThe previous plan was rejected for these exact integrity failures:\n${JSON.stringify(failures)}\n${retryGuidance}Return a corrected complete plan.\n`
-    : "";
-  return (
-    todayLine() +
-    RELATIVE_DUE_RULE +
-    "PLANNED ROUTING STAGE\n" +
-    "Convert the initial interpretation into one complete source-owned plan. Check it against the original source and stable Thread/correction context. It is advisory, not authoritative: correct an interpretation only when the original source supports the change. Do not write to the board.\n\n" +
-    `Initial interpretation (advisory):\n${JSON.stringify(initialInterpretation)}\n\n` +
-    `Original source (preserve it exactly):\n${JSON.stringify(raw)}\n\n` +
-    immutableIndexedSourceLedger(raw) +
-    "Copy item.source only from the indexed ledger. Do not substitute typographic punctuation, normalize Unicode, or retype from memory. Use the chunk ranges and exact-character checkpoints to audit every boundary before returning.\n\n" +
-    SEMANTIC_KIND_BOUNDARY +
-    `Every existing Thread, with its complete bounded routing brief:\n${JSON.stringify(body.threads)}\n\n` +
-    "Existing open Actions are intentionally withheld from this mixed-purpose stage. Extract every explicit Action and decide every item kind from the source itself. A later dedicated stage receives the open Actions and may decide only whether each proposed Action is new or names an existing Action id.\n\n" +
-    `Bounded full-capture correction examples:\n${JSON.stringify(body.correctionExamples ?? [])}\n` +
-    "\nComplete JSON contract (return exactly one JSON object; no prose, Markdown, code fences, or extra keys):\n" +
-    "- Root: { items, newThreads }. items is an array of 1..30 AtomicItem objects. newThreads is an array of 0..8 NewThread objects.\n" +
-    "- AtomicItem has: id, source, kind, action, due, ownerId, destinations, duplicateActionId, unresolved, ambiguity, and optional additionalOwnerIds.\n" +
-    "- id: non-empty string, max 80 characters. source: non-empty string, max 8000 characters.\n" +
-    "- kind is exactly one of: action, developing_thought, intention, supporting_context, deadline. An action is a direct instruction or commitment to a discrete task. An imperative addresses the person implicitly and does not need a named actor or date. An ordinary review or check can finish once. A developing_thought is an observation, question, explanation, design idea, option under consideration, or problem the person is trying to understand. Thinking about what might work does not adopt a personal stance. An intention is an explicitly adopted lasting personal principle, identity, or way of living; it is not an ordinary intention to investigate, compare, decide, or change a project. Intentions are declared on their own: when the capture says several things, use intention only for a part the person explicitly calls an intention; any other sentence of resolve belongs with the thought or Action around it. Classify the whole semantic thought before dividing its source for bookkeeping. Keep its reasoning and qualifying clauses with that thought unless the source actually changes subject or speech act. Use supporting_context and deadline only for source owned by another item.\n" +
-    "- action: null or non-empty string max 500. due: null or non-empty string max 40. ownerId: null or non-empty string max 80. Action.due must always be null. Only a separate deadline item may carry due, as a resolved ISO date, and its ownerId must name one Action item. Optional additionalOwnerIds is an array of 0..28 unique additional Action ids, each max 80 characters, allowed only on deadline items (omit or [] otherwise). Declare every Action in the exact semantic scope of a genuinely shared deadline phrase; do not repeat ownerId in this array. Exclude Actions with different local dates; represent their local deadlines separately. Each Action may own at most one deadline.\n" +
-    "- destinations: array of 0..4 Destination objects. Each Destination is exactly either { type: \"existing\", threadId: <non-empty string max 100> } or { type: \"new\", newThreadKey: <non-empty string max 80> }. Only developing_thought items may carry destinations; all other kinds must use an empty destinations array. Preserve the semantic kind and clear destinations when the source is not developing thought; use developing_thought only when that is what the source means.\n" +
-    "- duplicateActionId is reserved for a later dedicated Action identity adjudicator. Always return null. unresolved: boolean. ambiguity: null or non-empty string max 240.\n" +
-    "- NewThread has exactly: key, name, closestExistingThreadId, whyNew. key: non-empty string max 80. name: non-empty string max 100. closestExistingThreadId: null or non-empty string max 100. Use null only when the supplied Threads list is empty. Otherwise, choose the closest supplied Thread id, even if it is unrelated, and explain the difference. whyNew: non-empty string max 300.\n" +
-    (body.force
-      ? `Explicit user destination command: ${body.force}. This is authoritative, not an advisory classification. All primary items must use ${body.force === "thread" ? "developing_thought" : body.force}; supporting_context may only support that kind, and deadline items are allowed only for an Action command. Preserve the exact source; do not substitute another kind.\n`
-      : "") +
-    feedback +
-    "\nBuild the plan in this order:\n" +
-    "1. Partition the original source into meaningful items in original order. Keep one idea and its explanation, uncertainty, purpose, or qualifications together. Do not turn each sentence or subordinate clause into a separate item. Split when the source changes subject or speech act, or when a deadline must name its Action owner. An indivisible shared thought may have several destinations. Copy exact source slices, including punctuation and separator whitespace, so concatenating every item.source equals the original byte for byte. Never omit, overlap, reorder, paraphrase, or invent source.\n" +
-    "2. Independently decide the final item kinds and explicit Actions from the original source. Every explicit Action must appear exactly once and no source may be turned into an invented Action. Do not suppress or reclassify an explicit Action because it may duplicate an open Action; Action identity is decided only after this plan is validated. For every due-bearing Action, create an Action item with due null and represent its deadline separately. A phrase genuinely shared by several Actions appears once as one deadline item: ownerId names one Action and additionalOwnerIds names the exact remaining owners; deadline.due carries the resolved ISO date; deadline.source owns the exact complete deadline wording from the original, including a relative phrase such as a day reference, its punctuation, and its one share of adjacent whitespace. Do not leave deadline wording inside the Action source, copy it into two sources, combine distinct deadline phrases, or put due on the Action. Do not infer sharing from position alone or copy the advisory scalar due onto siblings. Supporting context points to the item it supports.\n" +
-    "3. Route each developing thought to every Thread where it genuinely belongs. Multiple destinations are normal. Use all Thread briefs above; do not choose by word overlap. If no existing Thread fits, declare one newThreads entry with the closest existing Thread and a concrete semantic reason it is different. Never propose a paraphrase of an existing Thread.\n" +
-    "4. If an affected source part is genuinely ambiguous, set unresolved true, give a short ambiguity reason, and leave its destinations empty. Never force ambiguity into a Thread. Do not create supporting Actions for an Intention; only explicit Action source may become an Action.\n" +
-    "5. Keep exact existing ids. New Thread keys are request-local. Do not return explanations outside the schema.\n" +
-    "6. Before returning, perform two independent ownership audits. Destination ownership: inspect each developing_thought item by itself. Give it only destinations that own that exact item.source. Another subject elsewhere in the same capture is never evidence for another destination; for independent thoughts, do not copy or union destination sets across items. Action/deadline ownership: inspect each deadline together with every explicitly owning Action. Confirm that ownerId plus additionalOwnerIds names exactly the intended scope, excluding Actions with differing local dates, and that due exactly resolves that deadline.source under today's calendar rules. Recompute relative weekdays as the next occurrence strictly after today; do not copy or union dates or owners across sibling Actions unless the original phrase actually shares that deadline across those exact Actions." +
-    (body.force ? "" : FILING_REQUEST_RULE)
-  );
-}
-
 export async function POST(request: Request) {
-  const planningDeadlineAt = Date.now() + PLANNING_DEADLINE_MS;
   const planningAbortSignal = AbortSignal.timeout(PLANNING_DEADLINE_MS);
   const authorization = await authorizeManagedAiRequest(request);
   if (authorization instanceof Response) return authorization;
@@ -601,21 +482,7 @@ export async function POST(request: Request) {
   if (!body.raw.trim()) {
     return Response.json({ error: "nothing to sort" }, { status: 400 });
   }
-  if (body.routingPlanVersion === 1 && !body.captureId) {
-    return Response.json({ error: "bad request" }, { status: 400 });
-  }
   if (body.imgs?.some((source) => !parseSortImageDataUrl(source))) {
-    return Response.json({ error: "bad request" }, { status: 400 });
-  }
-  if (
-    body.routingPlanVersion === 1 &&
-    (body.imgs?.length ||
-      body.raw.length > 20_000 ||
-      body.threads.length > 60 ||
-      body.threads.some((thread) =>
-        thread.id.length > 100 || thread.name.length > 200 || thread.about.length > 1_200
-      ))
-  ) {
     return Response.json({ error: "bad request" }, { status: 400 });
   }
 
@@ -750,242 +617,7 @@ export async function POST(request: Request) {
       primaryActions: standing.threadId === value.threadId && standing.threadName === value.threadName
         ? value.primaryActions : [],
     });
-    /* P3 opts in only after durable local intake. The raw validated plan is
-       returned for pending-only client settlement; the compiled preview stays
-       for evaluation compatibility. Images remain client-owned throughout. */
-    let reconciled: typeof recovery | PlannedSortResult = recovery;
-    let finalVia = via;
-    let finalRouting = { preferred, fallback, fallbackReason };
-    let routingPlan: z.infer<typeof PlannedRoutingPlanSchema> | undefined;
-    if (body.routingPlanVersion === 1) {
-      const planningContext = {
-        captureId: body.captureId!,
-        raw: body.raw,
-        force: body.force,
-        threads: body.threads,
-        actions: body.actions ?? [],
-        recovery,
-        now: Date.now(),
-      };
-      let plannedVia = via;
-      let plannedRouting = finalRouting;
-      const validated = await planRoutingWithRetry(
-        planningContext,
-        async (failures, validateCandidate) => {
-          const remainingMs = planningDeadlineAt - Date.now();
-          if (remainingMs <= 0) throw new Error("planned routing deadline elapsed");
-          const generated = await withFallback(async (tier) => {
-            try {
-              const untrusted = await generatePlannedRoutingCandidate({
-                tier,
-                abortSignal: planningAbortSignal,
-                prompt: routingPlanPrompt(body.raw, body, failures, recovery),
-              });
-              const candidate = validateCandidate!(untrusted);
-              routingStageEvent({
-                stage: "planner",
-                providerTier: tier.name as RoutingProviderTier,
-                result: "accepted",
-                code: "SUCCESS",
-                itemCount: candidate.items.length,
-                decisionCount: null,
-              });
-              return candidate;
-            } catch (error) {
-              routingStageEvent({
-                stage: "planner",
-                providerTier: tier.name as RoutingProviderTier,
-                result: "rejected",
-                code: routingStageCode(error, planningAbortSignal),
-                itemCount: error instanceof RoutingPlanCandidateValidationError &&
-                  error.failures.every((failure) => failure.itemId)
-                  ? new Set(error.failures.map((failure) => failure.itemId)).size
-                  : null,
-                decisionCount: null,
-              });
-              throw error;
-            }
-          }, preferredFor("sort"), { abortSignal: planningAbortSignal });
-          plannedVia = generated.via;
-          plannedRouting = {
-            preferred: generated.preferred,
-            fallback: generated.fallback,
-            fallbackReason: generated.fallbackReason,
-          };
-          return generated.value;
-        },
-        (observation) => {
-          routingValidationEvent(observation);
-        },
-        { validateInsideGenerate: true },
-      );
-      let stagedPlan = validated.plan;
-      if (requiresPlannedDestinationOwnership(stagedPlan)) {
-        const stageInput = stagedPlan;
-        const destinationCount = stageInput.items.filter((item) =>
-          item.kind === "developing_thought" && !item.unresolved
-        ).length;
-        const destinationGenerated = await withFallback(async (tier) => {
-          try {
-            const adjudicated = await adjudicatePlannedDestinationOwnership({
-              plan: stageInput,
-              context: planningContext,
-              correctionExamples: (body.correctionExamples ?? []).flatMap((example) =>
-                example.kind === "thread" && example.threadId
-                  ? [{
-                      capture: example.capture,
-                      threadId: example.threadId,
-                      ...(example.threadName ? { threadName: example.threadName } : {}),
-                    }]
-                  : []
-              ),
-              generate: async (destinationPrompt) => {
-                const remainingMs = planningDeadlineAt - Date.now();
-                if (remainingMs <= 0) throw new Error("planned routing deadline elapsed");
-                return generatePlannedDestinationOwnershipCandidate({
-                  tier,
-                  abortSignal: planningAbortSignal,
-                  prompt: destinationPrompt,
-                });
-              },
-            });
-            routingStageEvent({
-              stage: "destination_adjudication",
-              providerTier: tier.name as RoutingProviderTier,
-              result: "accepted",
-              code: "SUCCESS",
-              itemCount: adjudicated.items.length,
-              decisionCount: destinationCount,
-            });
-            return adjudicated;
-          } catch (error) {
-            routingStageEvent({
-              stage: "destination_adjudication",
-              providerTier: tier.name as RoutingProviderTier,
-              result: "rejected",
-              code: routingStageCode(error, planningAbortSignal),
-              itemCount: stageInput.items.length,
-              decisionCount: destinationCount,
-            });
-            throw error;
-          }
-        }, preferredFor("sort"), { abortSignal: planningAbortSignal });
-        if (destinationGenerated.fallback || !plannedRouting.fallback) {
-          plannedVia = destinationGenerated.via;
-          plannedRouting = {
-            preferred: destinationGenerated.preferred,
-            fallback: destinationGenerated.fallback,
-            fallbackReason: destinationGenerated.fallbackReason,
-          };
-        }
-        stagedPlan = destinationGenerated.value;
-      }
-      if (requiresPlannedActionIdentity(stagedPlan, planningContext)) {
-        const stageInput = stagedPlan;
-        const actionCount = stageInput.items.filter((item) =>
-          item.kind === "action" && item.action && !item.unresolved
-        ).length;
-        const actionGenerated = await withFallback(async (tier) => {
-          try {
-            const adjudicated = await adjudicatePlannedActionIdentity({
-              plan: stageInput,
-              context: planningContext,
-              generate: async (actionPrompt) => {
-                const remainingMs = planningDeadlineAt - Date.now();
-                if (remainingMs <= 0) throw new Error("planned routing deadline elapsed");
-                return generatePlannedActionIdentityCandidate({
-                  tier,
-                  abortSignal: planningAbortSignal,
-                  prompt: actionPrompt,
-                });
-              },
-            });
-            routingStageEvent({
-              stage: "action_identity",
-              providerTier: tier.name as RoutingProviderTier,
-              result: "accepted",
-              code: "SUCCESS",
-              itemCount: adjudicated.items.length,
-              decisionCount: actionCount,
-            });
-            return adjudicated;
-          } catch (error) {
-            routingStageEvent({
-              stage: "action_identity",
-              providerTier: tier.name as RoutingProviderTier,
-              result: "rejected",
-              code: routingStageCode(error, planningAbortSignal),
-              itemCount: stageInput.items.length,
-              decisionCount: actionCount,
-            });
-            throw error;
-          }
-        }, preferredFor("sort"), { abortSignal: planningAbortSignal });
-        if (actionGenerated.fallback || !plannedRouting.fallback) {
-          plannedVia = actionGenerated.via;
-          plannedRouting = {
-            preferred: actionGenerated.preferred,
-            fallback: actionGenerated.fallback,
-            fallbackReason: actionGenerated.fallbackReason,
-          };
-        }
-        stagedPlan = actionGenerated.value;
-      }
-      if (requiresPlannedDeadlineAdjudication(stagedPlan)) {
-        const planningTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const stageInput = stagedPlan;
-        const deadlineGenerated = await withFallback(async (tier) => {
-          try {
-            const adjudicated = await adjudicatePlannedDeadlines({
-              plan: stageInput,
-              context: planningContext,
-              timeZone: planningTimeZone,
-              generate: async (deadlinePrompt) => {
-                const remainingMs = planningDeadlineAt - Date.now();
-                if (remainingMs <= 0) throw new Error("planned routing deadline elapsed");
-                return generatePlannedDeadlineAdjudicationCandidate({
-                  tier,
-                  abortSignal: planningAbortSignal,
-                  prompt: deadlinePrompt,
-                });
-              },
-            });
-            routingStageEvent({
-              stage: "deadline_adjudication",
-              providerTier: tier.name as RoutingProviderTier,
-              result: "accepted",
-              code: "SUCCESS",
-              itemCount: adjudicated.items.length,
-              decisionCount: adjudicated.items.filter((item) => item.kind === "deadline").length,
-            });
-            return adjudicated;
-          } catch (error) {
-            routingStageEvent({
-              stage: "deadline_adjudication",
-              providerTier: tier.name as RoutingProviderTier,
-              result: "rejected",
-              code: routingStageCode(error, planningAbortSignal),
-              itemCount: stageInput.items.length,
-              decisionCount: stageInput.items.filter((item) => item.kind === "deadline").length,
-            });
-            throw error;
-          }
-        }, preferredFor("sort"), { abortSignal: planningAbortSignal });
-        if (deadlineGenerated.fallback || !plannedRouting.fallback) {
-          plannedVia = deadlineGenerated.via;
-          plannedRouting = {
-            preferred: deadlineGenerated.preferred,
-            fallback: deadlineGenerated.fallback,
-            fallbackReason: deadlineGenerated.fallbackReason,
-          };
-        }
-        stagedPlan = deadlineGenerated.value;
-      }
-      routingPlan = stagedPlan;
-      reconciled = compileRoutingPlan(stagedPlan, planningContext);
-      finalVia = plannedVia;
-      finalRouting = plannedRouting;
-    }
+    const reconciled = recovery;
     /* Jev is an opt-in shadow only. It receives the already-isolated thinking
        share, never images/history/rules, runs after this response, and cannot
        change the destination. A failed shadow therefore leaves both the
@@ -997,7 +629,6 @@ export async function POST(request: Request) {
           ? reconciled.primaryText?.trim()
           : undefined;
     if (
-      body.routingPlanVersion !== 1 &&
       (reconciled.kind === "thread" || reconciled.kind === "both") &&
       jevCapture
     ) {
@@ -1011,9 +642,8 @@ export async function POST(request: Request) {
     return Response.json({
       ...value,
       ...reconciled,
-      ...(routingPlan ? { routingPlan, recovery } : {}),
-      via: finalVia,
-      routing: finalRouting,
+      via,
+      routing: { preferred, fallback, fallbackReason },
     });
   } catch (error) {
     /* AI SDK errors can carry the full request body, including the person's

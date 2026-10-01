@@ -40,9 +40,10 @@ export async function requestBoardSort<T = SortResult>(options: {
     body: JSON.stringify({
       raw: options.raw,
       threads: context.threads,
-      ...(options.simple || options.captureId ? {
+      ...(options.simple ? {
         captureId: options.captureId,
-        ...(options.simple ? { sortVersion: 2, tzOffset: new Date().getTimezoneOffset() } : { routingPlanVersion: 1 }),
+        sortVersion: 2,
+        tzOffset: new Date().getTimezoneOffset(),
         actions: options.board.actions
           .filter((action) => !action.unsorted && !action.done && !action.faded)
           .slice(0, 400)
