@@ -132,7 +132,7 @@ describe("settleSimpleSort", () => {
     const { board } = result;
     expect(board.actions.map((action) => action.text)).toEqual(["Check the heater", "Create 2-3 demos for x"]);
     expect(board.actions[0].due).toBeTypeOf("number");
-    expect(board.threads.find((thread) => thread.id === "tank")?.frags.map((frag) => frag.text)).toEqual(["A magnetic latch might beat screws. And cheap."]);
+    expect(board.threads.find((thread) => thread.id === "tank")?.frags.map((frag) => frag.text)).toEqual(["A magnetic latch might beat screws.\n\nAnd cheap."]);
     expect(board.threads.find((thread) => thread.id === "pumps")?.frags.map((frag) => frag.text)).toEqual(["A magnetic latch might beat screws."]);
     expect(board.threads.find((thread) => thread.name === "Pump notes")?.frags).toHaveLength(1);
     expect(board.ledger.find((entry) => entry.id === "pending-row")?.undone).toBe(true);
@@ -188,6 +188,18 @@ describe("onlyThreadIds", () => {
       .toEqual([{ kind: "thought", text: said, threads: [{ id: "friction" }] }]);
     expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "t", threadIds: ["retake"] })] }, { threads: board, raw: said }))
       .toEqual([{ kind: "thought", text: said, threads: [{ id: "retake" }] }]);
+  });
+});
+
+describe("only save it in X", () => {
+  it("sends every part of the capture to X, not just the part that named it", () => {
+    const board = [{ id: "friction", name: "Reducing friction strategy" }, { id: "retake", name: "Retake" }];
+    const raw = "I built Retake but I don't use it.\n\nI need workflows that reduce friction. Only save it in the friction strategy thread.";
+    const out = normalizeSimpleSort({ items: [
+      item({ kind: "thought", text: "I built Retake but I don't use it.", threadIds: ["retake"] }),
+      item({ kind: "thought", text: "I need workflows that reduce friction. Only save it in the friction strategy thread.", threadIds: ["friction"] }),
+    ] }, { threads: board, raw });
+    expect(out.map((part) => part.threads)).toEqual([[{ id: "friction" }], [{ id: "friction" }]]);
   });
 });
 

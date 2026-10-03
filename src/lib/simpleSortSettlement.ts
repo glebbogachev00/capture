@@ -101,7 +101,7 @@ export function settleSimpleSort(board: Board, input: {
       for (const threadId of new Set(threadIds.filter((id): id is string => !!id))) {
         /* One capture, one entry per Thread: parts sent to the same Thread join. */
         const same = createdFrags.find((created) => created.threadId === threadId);
-        if (same) { same.frag.text = `${same.frag.text} ${item.text}`; continue; }
+        if (same) { same.frag.text = `${same.frag.text}\n\n${item.text}`; continue; }
         const frag: Frag = { id: plannedId(captureId, "frag", `${index}:${threadId}`), at: envelope.at, updatedAt: now, text: item.text, imgs: [] };
         createdFrags.push({ threadId, frag });
         newLedger.push(entry("thread", item.text, threadId, frag.id));

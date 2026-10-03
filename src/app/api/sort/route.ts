@@ -49,6 +49,8 @@ import {
   requiresPlannedActionIdentity,
 } from "@/lib/plannedActionIdentity";
 import { SEMANTIC_KIND_BOUNDARY } from "@/lib/semanticKindBoundary";
+import { shouldFormat } from "@/lib/captureFormat";
+import { formatCapture } from "@/lib/captureFormat.server";
 import { SIMPLE_SORT_VERSION, generateSimpleSort, normalizeSimpleSort, simpleSortPrompt } from "@/lib/simpleSort";
 import { parseSortImageDataUrl } from "@/lib/sortImageDataUrl";
 
@@ -625,13 +627,20 @@ export async function POST(request: Request) {
     }
     try {
       const now = Date.now();
+      /* Clean and lay out first, then sort the readable version. The words as
+         captured stay in the record (the ledger's raw); a failed or doubtful
+         formatting keeps them as they are. */
+      const raw = shouldFormat(body.raw)
+        ? await withFallback((tier) => formatCapture(body.raw, { tier, abortSignal: planningAbortSignal }), preferredFor("sort"), { abortSignal: planningAbortSignal })
+          .then((result) => result.value, () => body.raw)
+        : body.raw;
       const prompt = simpleSortPrompt({
-        raw: body.raw, threads: body.threads, actions: body.actions, corrections: body.correctionExamples, force: body.force, now, tzOffset: body.tzOffset,
+        raw, threads: body.threads, actions: body.actions, corrections: body.correctionExamples, force: body.force, now, tzOffset: body.tzOffset,
       });
       const { value, via } = await withFallback(async (tier) =>
         normalizeSimpleSort(
           await generateSimpleSort({ tier, prompt, abortSignal: planningAbortSignal }),
-          { threads: body.threads, actions: body.actions, force: body.force, raw: body.raw, now, tzOffset: body.tzOffset },
+          { threads: body.threads, actions: body.actions, force: body.force, raw, now, tzOffset: body.tzOffset },
         ), preferredFor("sort"), { abortSignal: planningAbortSignal });
       return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items: value }, via });
     } catch (e) {
