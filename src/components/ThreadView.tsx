@@ -17,6 +17,8 @@ import type { DoneItem } from "@/lib/threadActions";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { ThreadChoices } from "./ThreadChoices";
 import { PublishThreadSheet } from "./PublishThreadSheet";
+import { shouldFormat } from "@/lib/captureFormat";
+import { ownedFetch } from "@/lib/ownership";
 import { PLAYGROUND } from "@/lib/playground";
 
 export function ThreadView({
@@ -80,6 +82,37 @@ export function ThreadView({
   const coverFile = useRef<HTMLInputElement>(null);
   const [more, setMore] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [formatting, setFormatting] = useState(false);
+  /* Notes captured before automatic formatting: cleaned up and laid out the
+     same way new captures are. Only notes that still need it are sent. */
+  const unformatted = thread.frags.filter((frag) => shouldFormat(frag.text));
+  const formatNotes = async () => {
+    setFormatting(true);
+    try {
+      const batches: typeof unformatted[] = [];
+      for (const frag of unformatted) {
+        const last = batches.at(-1);
+        const size = last?.reduce((sum, item) => sum + item.text.length, 0) ?? Infinity;
+        if (last && last.length < 10 && size + frag.text.length <= 50_000) last.push(frag); else batches.push([frag]);
+      }
+      for (const batch of batches) {
+        const response = await ownedFetch("/api/format", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texts: batch.map((frag) => frag.text) }),
+        });
+        if (!response.ok) break;
+        const { texts } = (await response.json()) as { texts: string[] };
+        batch.forEach((frag, index) => {
+          if (typeof texts[index] === "string" && texts[index] !== frag.text) onEditFrag(frag.id, texts[index]);
+        });
+      }
+    } catch {
+      /* Nothing changed; the notes stay as they were. */
+    } finally {
+      setFormatting(false);
+    }
+  };
   /* The Related line stays collapsed until asked — a quiet affordance,
      never a list sitting in the thread. */
 
@@ -198,6 +231,11 @@ export function ThreadView({
                   }}
                 >
                   Merge in
+                </button>
+              )}
+              {unformatted.length > 0 && (
+                <button className="ghost" onClick={formatNotes} disabled={formatting}>
+                  {formatting ? "Formatting…" : "Format"}
                 </button>
               )}
               {!PLAYGROUND && (

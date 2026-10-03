@@ -31,6 +31,7 @@ const managedRoutes: Record<string, string[]> = {
   organize: ["POST"],
   ask: ["POST"],
   cleanup: ["POST"],
+  format: ["POST"],
   combine: ["POST"],
   summarize: ["POST"],
   untangle: ["POST"],

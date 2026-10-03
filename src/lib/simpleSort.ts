@@ -188,6 +188,12 @@ export function normalizeSimpleSort(
     if (!threads.length) throw new Error("thought without a thread");
     out.push({ kind, text: item.text, threads });
   }
+  /* "Only save it in X" is about the whole capture: every part goes to X,
+     where the parts join as one note. */
+  const onlyThread = only.length
+    ? out.flatMap((item) => item.threads ?? []).find((target) => "id" in target && only.includes(target.id))
+    : undefined;
+  if (onlyThread) for (const item of out) if (item.kind === "thought") item.threads = [onlyThread];
   /* A capture that is one thought is kept word for word. The model's wording
      is only needed where it had to divide the capture into parts. */
   if (out.length === 1 && out[0].kind === "thought" && context.raw?.trim()) {
