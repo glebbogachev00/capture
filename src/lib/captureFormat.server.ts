@@ -1,7 +1,7 @@
 import "server-only";
 
 import { generateText } from "ai";
-import { FORMAT_SYSTEM, keepsTheWords } from "./captureFormat";
+import { FORMAT_SYSTEM, airy, keepsTheWords } from "./captureFormat";
 import type { Tier } from "./providers";
 
 /** One model pass: clean up and lay out, then keep it only if the words survived. */
@@ -17,5 +17,7 @@ export async function formatCapture(raw: string, { tier, abortSignal }: { tier: 
     abortSignal,
   });
   const formatted = text.trim().replace(/[ \t]+$/gm, "").replace(/\n{3,}/g, "\n\n");
-  return formatted && keepsTheWords(raw, formatted) ? formatted : raw.trim();
+  /* A doubtful cleanup keeps the words as captured; they still get short
+     paragraphs, since splitting changes only line breaks. */
+  return airy(formatted && keepsTheWords(raw, formatted) ? formatted : raw.trim());
 }

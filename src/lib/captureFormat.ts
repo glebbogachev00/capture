@@ -14,8 +14,12 @@ import { CLEANUP_SYSTEM } from "./dictationCleanup";
 
 export const FORMAT_SYSTEM =
   CLEANUP_SYSTEM.replace(/ Reply with the cleaned text only, no commentary\.$/, "") +
-  " Then lay the text out for rereading: put a blank line between distinct ideas, " +
-  "and put '- ' bullets on their own lines where the speaker lists things. Line " +
+  " Then lay the text out for rereading, like a well-written long post: short " +
+  "paragraphs of two or three sentences with a blank line between them, breaking " +
+  "where the thought turns. Use '- ' bullets only when the speaker names several " +
+  "separate items in a row; ordinary sentences stay in paragraphs. Never one long " +
+  "block, but don't leave single sentences on their " +
+  "own unless they stand alone as a point. Line " +
   "breaks and '- ' markers are the only things you may add. No headings, no bold, " +
   "no emphasis. Reply with the formatted text only, no commentary.";
 
@@ -45,4 +49,48 @@ export function keepsTheWords(raw: string, formatted: string): boolean {
   const kept = content.filter((word) => afterSet.has(word)).length / Math.max(1, content.length);
   const invented = after.filter((word) => !beforeSet.has(word)).length / after.length;
   return kept >= 0.85 && invented <= 0.03 && after.length >= before.length * 0.6;
+}
+
+/* A sentence ends at . ! or ? followed by a space, so links and decimals stay whole. */
+const sentences = (paragraph: string) =>
+  paragraph.split(/(?<=[.!?]["”’')\]]*)\s+/).map((sentence) => sentence.trim()).filter(Boolean);
+const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
+
+/** Short paragraphs, guaranteed, like a well-written long post: two or three
+ * sentences each. Long paragraphs are split at sentence ends; a sentence left
+ * on its own joins its neighbour when the pair still fits. Lists stay as they
+ * are. Only line breaks change, never words. */
+export function airy(text: string): string {
+  type Block = { list: boolean; parts: string[] };
+  const fits = (parts: string[]) => parts.length <= 3 && wordCount(parts.join(" ")) <= 60;
+  const blocks: Block[] = [];
+  for (const paragraph of text.split(/\n{2,}/)) {
+    if (/^\s*([-*•]|\d+[.)])\s/m.test(paragraph)) { blocks.push({ list: true, parts: [paragraph] }); continue; }
+    const parts = sentences(paragraph.replace(/\s*\n\s*/g, " "));
+    // Split anything long into groups of two or three sentences.
+    let group: string[] = [];
+    for (const sentence of parts) {
+      if (group.length >= 2 && !fits([...group, sentence])) { blocks.push({ list: false, parts: group }); group = []; }
+      group.push(sentence);
+    }
+    if (group.length) blocks.push({ list: false, parts: group });
+  }
+  // Join a lone sentence to its neighbour when they still fit together.
+  const out: Block[] = [];
+  for (const block of blocks) {
+    const previous = out.at(-1);
+    if (previous && !previous.list && !block.list && (block.parts.length === 1 || previous.parts.length === 1)
+        && fits([...previous.parts, ...block.parts])) {
+      previous.parts.push(...block.parts);
+    } else {
+      out.push({ list: block.list, parts: [...block.parts] });
+    }
+  }
+  // A last sentence left alone after a full paragraph takes one from it.
+  const last = out.at(-1);
+  const before = out.at(-2);
+  if (last && before && !last.list && !before.list && last.parts.length === 1 && before.parts.length === 3) {
+    last.parts.unshift(before.parts.pop()!);
+  }
+  return out.map((block) => block.parts.join(" ")).join("\n\n");
 }

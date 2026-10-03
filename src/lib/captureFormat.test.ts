@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CLEANUP_SYSTEM } from "./dictationCleanup";
-import { FORMAT_SYSTEM, keepsTheWords, shouldFormat } from "./captureFormat";
+import { FORMAT_SYSTEM, airy, keepsTheWords, shouldFormat } from "./captureFormat";
 
 const dictated =
   "Um, so, I think one of my biggest worries right now is, uh, that I have so many ideas and main things that I can build. " +
@@ -40,4 +40,33 @@ it("keeps the dictation-cleanup contract word for word and adds only layout", ()
   expect(FORMAT_SYSTEM.startsWith(CLEANUP_SYSTEM.replace(/ Reply with the cleaned text only, no commentary\.$/, ""))).toBe(true);
   expect(FORMAT_SYSTEM).toContain("Do not correct, replace, spell-check");
   expect(FORMAT_SYSTEM).toMatch(/Line breaks and '- ' markers are the only things you may add/);
+});
+
+describe("short paragraphs", () => {
+  const long = "I built Retake. I am not using it. I was focused on Capture. The thing I really need now is demos. " +
+    "Find creative demos. Maybe a story around Capture. Mistakes are fine here.";
+
+  it("splits a long paragraph into groups of two or three sentences, never leaving one alone", () => {
+    const out = airy(long).split("\n\n");
+    expect(out.length).toBeGreaterThan(1);
+    for (const paragraph of out) {
+      const count = paragraph.split(/(?<=[.!?])\s+/).length;
+      expect(count).toBeGreaterThanOrEqual(2);
+      expect(count).toBeLessThanOrEqual(4);
+    }
+    expect(airy(long).replace(/\s+/g, " ")).toBe(long.replace(/\s+/g, " "));
+  });
+
+  it("joins one-sentence paragraphs instead of leaving a column of one-liners", () => {
+    const choppy = "First point here.\n\nSecond point here.\n\nThird point here.\n\nFourth point here.";
+    expect(airy(choppy)).toBe("First point here. Second point here.\n\nThird point here. Fourth point here.");
+  });
+
+  it("leaves short paragraphs, lists and links alone", () => {
+    expect(airy("One idea. Two ideas.")).toBe("One idea. Two ideas.");
+    expect(airy("- one\n- two\n- three\n- four")).toBe("- one\n- two\n- three\n- four");
+    const withLink = "See https://www.youtube.com/watch?v=MDoCijeHu-s&t=303s for the source. It is 05:03. Then 06:54. Also 1.5x speed. Done.";
+    expect(airy(withLink)).toContain("https://www.youtube.com/watch?v=MDoCijeHu-s&t=303s");
+    expect(airy(withLink).replace(/\s+/g, " ")).toBe(withLink);
+  });
 });
