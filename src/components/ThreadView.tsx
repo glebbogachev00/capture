@@ -16,6 +16,8 @@ import { shrinkFile } from "@/lib/shrink";
 import type { DoneItem } from "@/lib/threadActions";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { ThreadChoices } from "./ThreadChoices";
+import { PublishThreadSheet } from "./PublishThreadSheet";
+import { PLAYGROUND } from "@/lib/playground";
 
 export function ThreadView({
   thread,
@@ -40,6 +42,7 @@ export function ThreadView({
   onDismissNext,
   fromActions,
   busy,
+  publisherName,
 }: {
   thread: Thread;
   focusFragId?: string | null;
@@ -66,6 +69,8 @@ export function ThreadView({
       when there is something to show. */
   fromActions: { open: Action[]; done: DoneItem[] };
   busy: boolean;
+  /** Default name on a public snapshot; the owner can change or clear it. */
+  publisherName?: string;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(thread.name);
@@ -74,8 +79,21 @@ export function ThreadView({
   const [pickingCover, setPickingCover] = useState(false);
   const coverFile = useRef<HTMLInputElement>(null);
   const [more, setMore] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   /* The Related line stays collapsed until asked — a quiet affordance,
      never a list sitting in the thread. */
+
+  /* Publishing is its own screen: the notes to choose from, nothing else. */
+  if (publishing) {
+    return (
+      <div>
+        <button className="back" onClick={() => setPublishing(false)}>
+          ← {thread.name}
+        </button>
+        <PublishThreadSheet thread={thread} publisherName={publisherName} />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -182,6 +200,11 @@ export function ThreadView({
                   Merge in
                 </button>
               )}
+              {!PLAYGROUND && (
+                <button className="ghost" onClick={() => { setPublishing(true); setMore(false); }}>
+                  Publish
+                </button>
+              )}
               <button
                 className="ghost warn"
                 onClick={() => {
@@ -195,6 +218,7 @@ export function ThreadView({
           )}
         </div>
       )}
+
 
       {pickingCover && (
         <div className="shelf cover-picker">

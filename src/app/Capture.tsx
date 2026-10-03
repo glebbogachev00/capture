@@ -932,7 +932,7 @@ export function Capture() {
             onRefreshSummary={() => refreshSummary(thread.id)}
             onEditFrag={(fragId, text) => editFrag(thread.id, fragId, text)}
             onDeleteFrag={(fragId) => deleteFrag(thread.id, fragId)}
-            others={data.threads.filter((t) => t.id !== thread.id)}
+            others={data.threads.filter((t) => t.id !== thread.id)} publisherName={data.profile?.name}
             onMerge={(fromId) => mergeThreads(thread.id, fromId)}
             onSetCover={(cover) => setThreadCover(thread.id, cover)}
             onMoveFrag={(fragId, toId) => moveFrag(thread.id, fragId, toId)}

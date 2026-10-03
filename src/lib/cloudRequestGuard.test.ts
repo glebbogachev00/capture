@@ -139,6 +139,24 @@ describe("shared Cloud request guard", () => {
     expect(deps.consumeQuota).toHaveBeenCalledWith("owner-a", cloudQuotaPolicy("backup_read"));
   });
 
+  it("lets a free account publish, with its own quota, while board writes and AI stay paid", async () => {
+    const deps = dependencies({ hasEntitlement: vi.fn().mockResolvedValue(false) });
+    await expect(authorizeCloudRequest(request(), "publish", deps))
+      .resolves.toEqual({ mode: "cloud", ownerId: "owner-a" });
+    expect(deps.hasEntitlement).not.toHaveBeenCalled();
+    expect(deps.consumeQuota).toHaveBeenCalledWith("owner-a", cloudQuotaPolicy("publish"));
+
+    for (const paid of ["board_write", "board_read", "managed_ai"] as const) {
+      const result = await authorizeCloudRequest(request(), paid, deps);
+      expect((result as Response).status).toBe(402);
+    }
+  });
+
+  it("still refuses publishing without a signed-in account", async () => {
+    const deps = dependencies({ verifyIdentity: vi.fn().mockResolvedValue(null) });
+    expect(((await authorizeCloudRequest(request(), "publish", deps)) as Response).status).toBe(401);
+  });
+
   it("fails closed when durable external-work admission cannot be acquired", async () => {
     const deps = dependencies({ acquireExternalWork: vi.fn().mockResolvedValue(null) });
     const result = await authorizeCloudRequest(request(), "managed_ai", deps);

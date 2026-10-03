@@ -93,6 +93,15 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        /* Public Thread snapshots: no cache may keep a copy, so unpublishing
+           ends access at once; shared by link, never listed in search. */
+        source: "/t/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store, max-age=0" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           {
