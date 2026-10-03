@@ -17,7 +17,7 @@ import type { DoneItem } from "@/lib/threadActions";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { ThreadChoices } from "./ThreadChoices";
 import { PublishThreadSheet } from "./PublishThreadSheet";
-import { shouldFormat } from "@/lib/captureFormat";
+import { sentenceCase, shouldFormat } from "@/lib/captureFormat";
 import { ownedFetch } from "@/lib/ownership";
 import { PLAYGROUND } from "@/lib/playground";
 
@@ -29,6 +29,7 @@ export function ThreadView({
   onDelete,
   onRefreshSummary,
   onEditFrag,
+  onEditFrags,
   onDeleteFrag,
   others,
   onMerge,
@@ -53,6 +54,8 @@ export function ThreadView({
   onDelete: () => void;
   onRefreshSummary: () => void;
   onEditFrag: (fragId: string, text: string) => void;
+  /** Several notes in one save (Format). */
+  onEditFrags?: (edits: { fragId: string; text: string }[]) => Promise<void> | void;
   onDeleteFrag: (fragId: string) => void;
   others: Thread[];
   onMerge: (fromId: string) => void;
@@ -86,8 +89,11 @@ export function ThreadView({
   /* Notes captured before automatic formatting: cleaned up and laid out the
      same way new captures are. Only notes that still need it are sent. */
   const unformatted = thread.frags.filter((frag) => shouldFormat(frag.text));
+  /* Notes that only need capitals are fixed here, without a model call. */
+  const lowercase = thread.frags.filter((frag) => !shouldFormat(frag.text) && sentenceCase(frag.text) !== frag.text);
   const formatNotes = async () => {
     setFormatting(true);
+    const edits = lowercase.map((frag) => ({ fragId: frag.id, text: sentenceCase(frag.text) }));
     try {
       const batches: typeof unformatted[] = [];
       for (const frag of unformatted) {
@@ -104,14 +110,18 @@ export function ThreadView({
         if (!response.ok) break;
         const { texts } = (await response.json()) as { texts: string[] };
         batch.forEach((frag, index) => {
-          if (typeof texts[index] === "string" && texts[index] !== frag.text) onEditFrag(frag.id, texts[index]);
+          if (typeof texts[index] === "string" && texts[index] !== frag.text) edits.push({ fragId: frag.id, text: texts[index] });
         });
       }
     } catch {
-      /* Nothing changed; the notes stay as they were. */
-    } finally {
-      setFormatting(false);
+      /* Whatever came back is still applied below; the rest stays as it was. */
     }
+    /* One save for every note, so the summary is refreshed once. */
+    if (edits.length) {
+      if (onEditFrags) await onEditFrags(edits);
+      else for (const edit of edits) onEditFrag(edit.fragId, edit.text);
+    }
+    setFormatting(false);
   };
   /* The Related line stays collapsed until asked — a quiet affordance,
      never a list sitting in the thread. */
@@ -233,7 +243,7 @@ export function ThreadView({
                   Merge in
                 </button>
               )}
-              {unformatted.length > 0 && (
+              {unformatted.length + lowercase.length > 0 && (
                 <button className="ghost" onClick={formatNotes} disabled={formatting}>
                   {formatting ? "Formatting…" : "Format"}
                 </button>

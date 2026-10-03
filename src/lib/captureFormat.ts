@@ -94,3 +94,14 @@ export function airy(text: string): string {
   }
   return out.map((block) => block.parts.join(" ")).join("\n\n");
 }
+
+/** Capital letters where a sentence starts and for a standalone "i", for
+ * captures typed or dictated in lowercase. Letters only, never words; a word
+ * that is already capitalised or mixed-case is left as it is. */
+export function sentenceCase(text: string): string {
+  return text
+    .replace(/(^|[.!?]["”’')\]]*\s+|\n\s*(?:[-*•]\s+)?)([a-z])/g, (match: string, before: string, letter: string, offset: number, all: string) =>
+      /\b(e\.g|i\.e|etc|vs|cf|approx)\.\s+$/i.test(all.slice(Math.max(0, offset - 8), offset) + before) ? match : before + letter.toUpperCase())
+    .replace(/\bi(?=\b(?:'(?:m|ve|ll|d))?(?![\p{L}\p{N}.\/-]))/gu, "I");
+}
+

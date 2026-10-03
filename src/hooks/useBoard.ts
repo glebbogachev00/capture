@@ -2996,6 +2996,10 @@ export function useBoard(now: number) {
     await regenerate(latest.current, threadId);
   };
 
+  const editFrags = async (threadId: string, edits: { fragId: string; text: string }[]) => { // Format: one save, one summary refresh
+    const next = edits.reduce<Board | null>((board, edit) => applyFragEdit(board ?? latest.current, threadId, edit.fragId, edit.text) ?? board, null);
+    if (next && await commit(next)) await regenerate(latest.current, threadId);
+  };
   const deleteFrag = async (threadId: string, fragId: string): Promise<boolean> => {
     /* Idempotency, empty-thread removal, and the image handover all live
        in fragOps — a double-tap comes back null before any work. */
@@ -4290,7 +4294,7 @@ export function useBoard(now: number) {
     editActionText: guardMutation(editActionText),
     renameThread: guardMutation(renameThread),
     setThreadCover: guardMutation(setThreadCover),
-    editFrag: guardMutation(editFrag),
+    editFrag: guardMutation(editFrag), editFrags: guardMutation(editFrags),
     addFragImages: guardMutation(addFragImages),
     deleteFrag: guardMutation(deleteFrag),
     moveFrag: guardMutation(moveFrag),

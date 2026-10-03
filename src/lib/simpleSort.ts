@@ -1,5 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
+import { sentenceCase } from "./captureFormat";
 import type { Tier } from "./providers";
 
 /**
@@ -200,9 +201,9 @@ export function normalizeSimpleSort(
      is only needed where it had to divide the capture into parts. */
   if (out.length === 1 && out[0].kind === "thought" && context.raw?.trim()) {
     out[0].text = context.raw.trim();
-    return out;
   }
-  return context.raw?.trim() ? ownWords(context.raw, out) : out;
+  const placed = out.length === 1 || !context.raw?.trim() ? out : ownWords(context.raw, out);
+  return placed.map((item) => item.kind === "thought" ? { ...item, text: sentenceCase(item.text) } : item);
 }
 
 const wordSet = (text: string) => new Set(text.toLowerCase().match(/[\p{L}\p{N}']{4,}/gu) ?? []);
