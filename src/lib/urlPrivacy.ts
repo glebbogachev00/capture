@@ -69,7 +69,9 @@ export function redactBrowserUrl(value: string): string | null {
 export function sanitizeAnalyticsEvent(event: BeforeSendEvent): BeforeSendEvent | null {
   try {
     const url = new URL(event.url);
-    return { ...event, url: `${url.origin}${url.pathname}` };
+    // A public Thread link is a secret: count the page, never keep the token.
+    const path = url.pathname.replace(/^\/t\/[^/]+/, "/t/[snapshot]");
+    return { ...event, url: `${url.origin}${path}` };
   } catch {
     return null;
   }
