@@ -66,8 +66,19 @@ with tempfile.TemporaryDirectory(prefix='capture-public-pg-', dir='/tmp') as d:
         revoke all on function public.capture_account_write_allowed(uuid), public.capture_account_read_allowed(uuid) from public, anon;
         grant execute on function public.capture_account_write_allowed(uuid), public.capture_account_read_allowed(uuid) to authenticated;
         """)
+        # The quota tables as Cloud already has them (20260921200000 + backup reads).
+        ok("""create table public.capture_cloud_owner_quotas (user_id uuid not null, scope text not null check (scope in ('managed_ai', 'board_read', 'board_write', 'backup_read')), primary key (user_id, scope));
+        create table public.capture_cloud_quota_policies (scope text primary key check (scope in ('managed_ai', 'board_read', 'board_write', 'backup_read')), request_limit integer not null, window_seconds integer not null);
+        insert into public.capture_cloud_quota_policies values ('managed_ai',200,86400),('board_read',720,3600),('board_write',240,3600),('backup_read',2000,3600);""")
         ok(MIGRATION.read_text())
         ok(MIGRATION.read_text())  # re-runnable
+
+        # Publishing gets its own ceiling; existing scopes and limits are untouched.
+        assert ok("select request_limit || '/' || window_seconds from public.capture_cloud_quota_policies where scope='publish'") == '60/3600'
+        assert ok("select count(*) from public.capture_cloud_quota_policies") == '5'
+        assert ok("select request_limit from public.capture_cloud_quota_policies where scope='board_write'") == '240'
+        ok(f"insert into public.capture_cloud_owner_quotas values ('{A}', 'publish'), ('{A}', 'backup_read')")
+        denied(f"insert into public.capture_cloud_owner_quotas values ('{A}', 'free_for_all')", 'scope_check')
 
         def insert(owner, token=TOKEN):
             return f"""insert into public.capture_public_threads(owner_id, token, source_key, title, intro, byline, fragments)

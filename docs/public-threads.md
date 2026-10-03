@@ -22,12 +22,20 @@ read without an account, and copy it as clean Markdown for an agent.
 5. **Owner controls** on `/publish`: copy link and unpublish; update by
    publishing the Thread again.
 
+## Who can publish
+
+Anyone with a **free** Capture Cloud account: the existing emailed-code sign-in
+creates one. No subscription is needed. Publishing skips the entitlement check
+the way exact-owner backup reads do, and has its own durable per-owner quota
+(`publish`, 60 per hour). Board sync, AI and images stay paid. Readers need
+nothing.
+
 ## Public/private boundary
 
 | | What it can reach |
 |---|---|
 | Anonymous reader | `capture_public_thread(token)` only: one row, by exact token, columns `token, title, intro, byline, fragments, published_at, updated_at`. No table grant, so no listing, no owner, no source key, nothing on `capture_boards`. |
-| Signed-in owner | Their own rows of `capture_public_threads` (RLS on `auth.uid() = owner_id`), behind the same account-erasure fences as `capture_boards`, through `/api/cloud/public-threads` (same identity check, `X-Capture-Owner` precondition, Cloud access check and `board_write` quota as board writes). |
+| Signed-in owner | Their own rows of `capture_public_threads` (RLS on `auth.uid() = owner_id`), behind the same account-erasure fences as `capture_boards`, through `/api/cloud/public-threads` (same identity check and `X-Capture-Owner` precondition as board writes, plus its own `publish` quota of 60 requests an hour). |
 | Another user | Nothing of yours: list is empty; update and unpublish return 404; a mismatched owner header returns 412. |
 
 What a snapshot can contain is an explicit allowlist (`PublicThreadInputSchema`):
@@ -61,7 +69,9 @@ operation is open the public function serves none of that owner's snapshots.
 
 `supabase/migrations/20261003120000_capture_public_threads.sql`: one table, four
 owner policies, a trigger that freezes owner/token/source/first publication,
-and the anonymous read function. It depends on
+the anonymous read function, and the `publish` quota scope (it widens the scope
+checks on `capture_cloud_owner_quotas` / `capture_cloud_quota_policies` the same
+way `20260921210000_cloud_backup_reads.sql` did, and adds the policy row). It depends on
 `capture_account_read_allowed`, `capture_account_write_allowed` and
 `capture_account_erasure_operations` from `20260922100000_account_erasure.sql`.
 

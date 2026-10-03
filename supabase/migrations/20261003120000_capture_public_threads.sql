@@ -120,3 +120,20 @@ $$;
 
 revoke all on function public.capture_public_thread(text) from public;
 grant execute on function public.capture_public_thread(text) to anon, authenticated, service_role;
+
+-- Publishing needs a (free) Capture Cloud account, not a subscription. It gets
+-- its own per-owner ceiling, the way exact-owner backup reads do; the app skips
+-- the entitlement check for this scope only. Sync, AI and images stay paid.
+alter table public.capture_cloud_owner_quotas
+  drop constraint if exists capture_cloud_owner_quotas_scope_check;
+alter table public.capture_cloud_owner_quotas
+  add constraint capture_cloud_owner_quotas_scope_check
+  check (scope in ('managed_ai', 'board_read', 'board_write', 'backup_read', 'publish'));
+alter table public.capture_cloud_quota_policies
+  drop constraint if exists capture_cloud_quota_policies_scope_check;
+alter table public.capture_cloud_quota_policies
+  add constraint capture_cloud_quota_policies_scope_check
+  check (scope in ('managed_ai', 'board_read', 'board_write', 'backup_read', 'publish'));
+insert into public.capture_cloud_quota_policies (scope, request_limit, window_seconds)
+values ('publish', 60, 3600)
+on conflict (scope) do nothing;

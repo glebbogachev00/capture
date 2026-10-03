@@ -95,7 +95,7 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
       .then(async (response) => {
         if (!live) return;
         if (!response.ok) {
-          setError(response.status === 402 ? "Publishing needs Capture Cloud access on this account." : "Couldn't load your published threads.");
+          setError("Couldn't load your published threads.");
           return;
         }
         const body = await response.json();
@@ -120,9 +120,7 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(response.status === 402
-          ? "Publishing needs Capture Cloud on this account."
-          : response.status === 429 ? "Too many changes just now. Try again in a minute." : "Couldn't publish. Nothing was made public.");
+        setError(response.status === 429 ? "Too many changes just now. Try again in a minute." : "Couldn't publish. Nothing was made public.");
         return;
       }
       setPublished({ ...(body.thread as OwnedPublicThread), url: body.url as string });

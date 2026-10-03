@@ -2,7 +2,7 @@ import "server-only";
 
 import { ownerPrecondition } from "@/lib/ownerPrecondition";
 
-export type CloudQuotaScope = "managed_ai" | "board_read" | "board_write" | "backup_read";
+export type CloudQuotaScope = "managed_ai" | "board_read" | "board_write" | "backup_read" | "publish";
 export type CloudQuotaPolicy = {
   scope: CloudQuotaScope;
 };
@@ -77,9 +77,10 @@ export async function authorizeCloudRequest(
     }
 
     // A complete explicit owner backup is an account-recovery read, not paid
-    // product access. It still requires exact identity, lifecycle availability,
-    // and its own durable quota; writes and managed AI retain billing checks.
-    if (scope !== "backup_read" && deps.requiresEntitlement() && !await deps.hasEntitlement(identity)) {
+    // product access, and publishing a Thread snapshot needs only a (free)
+    // account. Both still require exact identity, lifecycle availability and
+    // their own durable quota; board writes and managed AI keep billing checks.
+    if (scope !== "backup_read" && scope !== "publish" && deps.requiresEntitlement() && !await deps.hasEntitlement(identity)) {
       return json({ error: "capture cloud access required" }, 402);
     }
 

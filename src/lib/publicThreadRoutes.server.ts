@@ -24,8 +24,9 @@ import {
 
 export type Owner = { owner: string; store: PublicThreadStore };
 export type PublicThreadsDeps = {
-  /** Verified identity + owner header + account fences + quota, or a refusal. */
-  authorize(request: Request, scope: "board_read" | "board_write"): Promise<Owner | Response>;
+  /** Verified identity + owner header + account fences + the publish quota,
+      or a refusal. A free account is enough: no subscription check. */
+  authorize(request: Request): Promise<Owner | Response>;
   /** Who is signed in, for the confirmation page; null when nobody. */
   whoami(request: Request): Promise<string | null>;
   newToken(title: string): string;
@@ -40,7 +41,7 @@ export async function getPublicThreads(request: Request, deps: PublicThreadsDeps
   if (new URL(request.url).searchParams.has("whoami")) {
     return reply({ owner: await deps.whoami(request) });
   }
-  const auth = await deps.authorize(request, "board_read");
+  const auth = await deps.authorize(request);
   if (auth instanceof Response) return auth;
   const threads = await auth.store.list(auth.owner);
   return reply({
@@ -50,7 +51,7 @@ export async function getPublicThreads(request: Request, deps: PublicThreadsDeps
 }
 
 export async function postPublicThread(request: Request, deps: PublicThreadsDeps): Promise<Response> {
-  const auth = await deps.authorize(request, "board_write");
+  const auth = await deps.authorize(request);
   if (auth instanceof Response) return auth;
   const raw = await request.text().catch(() => "");
   if (!raw || raw.length > MAX_BODY) return reply({ error: "snapshot too large" }, 413);
@@ -78,7 +79,7 @@ export async function postPublicThread(request: Request, deps: PublicThreadsDeps
 }
 
 export async function deletePublicThread(request: Request, deps: PublicThreadsDeps): Promise<Response> {
-  const auth = await deps.authorize(request, "board_write");
+  const auth = await deps.authorize(request);
   if (auth instanceof Response) return auth;
   const token = new URL(request.url).searchParams.get("token");
   if (!isPublicThreadToken(token)) return reply({ error: "bad request" }, 400);
@@ -101,9 +102,9 @@ export function publicThreadsDeps(): PublicThreadsDeps | null {
   if (mode === "cloud") {
     return {
       ...base,
-      async authorize(request, scope) {
+      async authorize(request) {
         const { client, guard } = await createCloudGuardServerContext();
-        const result = await authorizeCloudRequest(request, scope, guard);
+        const result = await authorizeCloudRequest(request, "publish", guard);
         if (result instanceof Response) return result;
         if (result.mode !== "cloud") return reply({ error: "not found" }, 404);
         return { owner: result.ownerId, store: supabasePublicThreadStore(client) };
