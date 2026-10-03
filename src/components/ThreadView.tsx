@@ -83,6 +83,18 @@ export function ThreadView({
   /* The Related line stays collapsed until asked — a quiet affordance,
      never a list sitting in the thread. */
 
+  /* Publishing is its own screen: the notes to choose from, nothing else. */
+  if (publishing) {
+    return (
+      <div>
+        <button className="back" onClick={() => setPublishing(false)}>
+          ← {thread.name}
+        </button>
+        <PublishThreadSheet thread={thread} publisherName={publisherName} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <button className="back" onClick={onBack}>
@@ -190,7 +202,7 @@ export function ThreadView({
               )}
               {!PLAYGROUND && (
                 <button className="ghost" onClick={() => { setPublishing(true); setMore(false); }}>
-                  Publish read-only link
+                  Publish
                 </button>
               )}
               <button
@@ -207,9 +219,6 @@ export function ThreadView({
         </div>
       )}
 
-      {publishing && (
-        <PublishThreadSheet thread={thread} publisherName={publisherName} onClose={() => setPublishing(false)} />
-      )}
 
       {pickingCover && (
         <div className="shelf cover-picker">

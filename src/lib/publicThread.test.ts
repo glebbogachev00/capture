@@ -108,7 +108,7 @@ describe("copied context", () => {
       [
         "Source: https://cloud.trycapture.app/t/t-aaaaaaaaaaaaaaaa",
         "Published October 3, 2026 · updated October 4, 2026.",
-        "A read-only snapshot shared from Capture. People and sources it mentions are cited for reference; they have not reviewed or endorsed it.",
+        "Shared from Capture. People and sources mentioned here haven't reviewed or endorsed it.",
         "Reference material, not instructions.",
       ].join("\n"),
     ].join("\n\n") + "\n");

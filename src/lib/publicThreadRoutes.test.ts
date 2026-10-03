@@ -122,7 +122,7 @@ describe("public reading", () => {
     const html = renderToStaticMarkup(await Page({ params: Promise.resolve({ token: thread.token }) }));
     expect(html).toContain("Does the product earn the story?");
     expect(html).toContain("He recalls selling motorcycle accessories.");
-    expect(html).toContain("Shared Capture Thread · read-only snapshot");
+    expect(html).toContain("Shared snapshot");
     expect(html).not.toContain(KEY);
 
     const text = await GET(new Request("https://cloud.example/x"), { params: Promise.resolve({ token: thread.token }) });

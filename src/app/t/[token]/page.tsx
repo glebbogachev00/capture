@@ -53,7 +53,7 @@ export default async function PublicThreadPage({ params }: Props) {
         </header>
         <PublicThreadView
           thread={thread}
-          actions={<CopyContextButton markdown={publicThreadMarkdown(thread, url)} textHref={publicThreadTextPath(thread.token)} />}
+          actions={<CopyContextButton markdown={publicThreadMarkdown(thread, url)} />}
         />
       </div>
     </main>

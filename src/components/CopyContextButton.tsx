@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 /** Copies the snapshot's Markdown. When the clipboard refuses (permissions,
  * an embedded browser, an old phone), the same text appears selected so it can
  * be copied by hand; nothing is lost either way. */
-export function CopyContextButton({ markdown, textHref }: { markdown: string; textHref: string }) {
+export function CopyContextButton({ markdown }: { markdown: string }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const fallback = useRef<HTMLTextAreaElement>(null);
 
@@ -28,15 +28,12 @@ export function CopyContextButton({ markdown, textHref }: { markdown: string; te
 
   return (
     <div className="public-snapshot-actions">
-      <div className="public-snapshot-buttons">
-        <button type="button" className="capture-btn" onClick={copy}>
-          {state === "copied" ? "Copied" : "Copy context"}
-        </button>
-        <a className="ghost" href={textHref}>Plain text</a>
-      </div>
-      <p role="status" aria-live="polite" className="public-snapshot-status">
-        {state === "copied" && "Copied as Markdown, ready to paste into your agent."}
-        {state === "failed" && "Couldn't reach the clipboard. The text below is selected; copy it by hand."}
+      <button type="button" className="capture-btn" onClick={copy}>
+        {state === "copied" ? "Copied" : "Copy context"}
+      </button>
+      <p role="status" aria-live="polite" className={state === "failed" ? "public-snapshot-status" : "visually-hidden"}>
+        {state === "copied" && "Copied as Markdown."}
+        {state === "failed" && "Couldn't copy. The text is selected below."}
       </p>
       {state === "failed" && (
         <textarea

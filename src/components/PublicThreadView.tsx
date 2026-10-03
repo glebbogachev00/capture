@@ -26,13 +26,12 @@ export function PublicThreadView({ thread, actions, preview = false }: {
       <header className="public-thread-head">
         <div className="public-thread-kicker">
           <span className="thread-glyph" aria-hidden="true">≋</span>
-          <span>{preview ? "Preview · not published" : "Shared Capture Thread · read-only snapshot"}</span>
+          <span>{preview ? "Preview · not published yet" : "Shared snapshot"}</span>
         </div>
         <h1>{thread.title}</h1>
         <div className="public-thread-meta">
-          {thread.byline && <span>Shared by {thread.byline}</span>}
-          {preview ? <span>Nothing is public until you publish</span> : <span>{publicThreadDates(thread)}</span>}
-          <span>{thread.fragments.length} {thread.fragments.length === 1 ? "note" : "notes"}</span>
+          {thread.byline && <span>{thread.byline}</span>}
+          {!preview && <span>{publicThreadDates(thread)}</span>}
         </div>
         <Sediment />
       </header>
@@ -44,10 +43,6 @@ export function PublicThreadView({ thread, actions, preview = false }: {
       )}
 
       <article className="finished-thread public-snapshot-body" data-capture-thread="read-only">
-        <div className="finished-thread-label">
-          <span>Thread</span>
-          <span>Read-only</span>
-        </div>
         <div className="article-body">
           {thread.fragments.map((fragment, index) => (
             <section className="public-snapshot-fragment" key={index}>
@@ -57,10 +52,12 @@ export function PublicThreadView({ thread, actions, preview = false }: {
         </div>
       </article>
 
-      <footer className="public-snapshot-foot">
-        <p>{PUBLIC_THREAD_NOTICE}</p>
-        {actions}
-      </footer>
+      {!preview && (
+        <footer className="public-snapshot-foot">
+          {actions}
+          <p>{PUBLIC_THREAD_NOTICE}</p>
+        </footer>
+      )}
     </div>
   );
 }

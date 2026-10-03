@@ -5,7 +5,6 @@ import { CloudLoginForm } from "./CloudLoginForm";
 import { PublicThreadView } from "./PublicThreadView";
 import { OWNER_HEADER } from "@/lib/ownership";
 import {
-  PUBLIC_THREAD_NOTICE,
   PublicThreadInputSchema,
   decodeHandoff,
   publicThreadDates,
@@ -56,7 +55,6 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
   const [identityAttempt, setIdentityAttempt] = useState(0);
   const [threads, setThreads] = useState<Listed[] | null>(null);
   const [listVersion, setListVersion] = useState(0);
-  const [choice, setChoice] = useState<"auto" | "new" | string>("auto");
   const [published, setPublished] = useState<Listed | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -107,10 +105,8 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
     return () => { live = false; };
   }, [owner, listVersion]);
 
-  // Publishing the same private thread again defaults to updating its link.
+  // A Thread published before always updates its own link: one decision, made once.
   const existing = draft && threads?.find((thread) => thread.sourceKey === draft.sourceKey);
-  const target = choice === "auto" ? existing?.token ?? "new" : choice;
-  const setTarget = setChoice;
 
   async function publish() {
     if (!draft || !owner) return;
@@ -120,12 +116,12 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
       const response = await fetch(API, {
         method: "POST",
         headers: headers({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ snapshot: draft, ...(target === "new" ? {} : { replace: target }) }),
+        body: JSON.stringify({ snapshot: draft, ...(existing ? { replace: existing.token } : {}) }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         setError(response.status === 402
-          ? "Publishing needs Capture Cloud access on this account."
+          ? "Publishing needs Capture Cloud on this account."
           : response.status === 429 ? "Too many changes just now. Try again in a minute." : "Couldn't publish. Nothing was made public.");
         return;
       }
@@ -144,11 +140,10 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
     try {
       const response = await fetch(`${API}?token=${encodeURIComponent(token)}`, { method: "DELETE", headers: headers() });
       if (!response.ok && response.status !== 404) {
-        setError("Couldn't unpublish. The link is still live; try again.");
+        setError("Couldn't unpublish. The link still works; try again.");
         return;
       }
       setConfirming(null);
-      if (published?.token === token) setPublished(null);
       refresh();
     } finally {
       setBusy(false);
@@ -159,103 +154,93 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
     setCopied((await copyText(url)) ? url : `failed:${url}`);
   }
 
-  if (owner === undefined) return <p className="publish-note">Checking your Capture Cloud account…</p>;
+  const discard = () => {
+    setDraft(null);
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch {}
+  };
+  const failure = error && <p className="publish-error" role="alert">{error}</p>;
+
+  if (owner === undefined) return <p className="publish-note">Checking your account…</p>;
 
   if (owner === null) {
     return (
       <div className="publish-flow">
-        {draft && <p className="publish-note">Sign in to publish “{draft.title}”. Nothing is public yet.</p>}
+        <h2 className="publish-heading">Sign in to publish</h2>
         {cloudConfig
           ? <div className="publish-login"><CloudLoginForm config={cloudConfig} onAuthenticated={() => { setOwner(undefined); setIdentityAttempt((attempt) => attempt + 1); }} /></div>
           : <p className="publish-note">Capture Cloud isn&apos;t available right now.</p>}
-        {error && <p className="publish-error" role="alert">{error}</p>}
+        {failure}
       </div>
     );
   }
 
-  return (
-    <div className="publish-flow">
-      {published && (
+  // 1. Confirm: the exact page readers will get, and one button.
+  if (draft) {
+    return (
+      <div className="publish-flow">
+        <PublicThreadView thread={{ ...draft, publishedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }} preview />
+        {failure}
+        <div className="publish-bar publish-bar-sticky">
+          <button type="button" className="capture-btn" disabled={busy || threads === null} onClick={publish}>
+            {existing ? "Update" : "Publish"}
+          </button>
+          <button type="button" className="ghost" disabled={busy} onClick={discard}>Cancel</button>
+          {existing && <span className="publish-hint">Replaces what&apos;s at your existing link.</span>}
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Done: the link, ready to copy. The end of the flow.
+  if (published) {
+    return (
+      <div className="publish-flow">
         <section className="publish-done" aria-live="polite">
-          <p className="funding-card-label">Published</p>
-          <h2>Anyone with this link can read it.</h2>
+          <h2 className="publish-heading">Published</h2>
           <div className="publish-link-row">
-            <input readOnly value={published.url} aria-label="Public link" onFocus={(event) => event.currentTarget.select()} />
+            <input readOnly value={published.url} aria-label="Link" onFocus={(event) => event.currentTarget.select()} />
             <button type="button" className="capture-btn" onClick={() => copyLink(published.url)}>
               {copied === published.url ? "Copied" : "Copy link"}
             </button>
-            <a className="ghost" href={published.url} target="_blank" rel="noopener">Open</a>
           </div>
-          {copied === `failed:${published.url}` && <p className="publish-note">Couldn&apos;t reach the clipboard. The link above is selectable.</p>}
+          {copied === `failed:${published.url}` && <p className="publish-note">Couldn&apos;t copy. Select the link above.</p>}
         </section>
-      )}
+        <button type="button" className="publish-quiet" onClick={() => setPublished(null)}>All published threads</button>
+      </div>
+    );
+  }
 
-      {draft && (
-        <section className="publish-review" aria-labelledby="publish-review-title">
-          <div className="publish-review-head">
-            <div>
-              <p className="funding-card-label">Review before publishing</p>
-              <h2 id="publish-review-title">This is exactly what readers will see.</h2>
-            </div>
-            <div className="publish-target" role="radiogroup" aria-label="Where to publish">
-              {existing && (
-                <label>
-                  <input type="radio" name="target" checked={target === existing.token} onChange={() => setTarget(existing.token)} />
-                  Update the existing link
-                </label>
-              )}
-              <label>
-                <input type="radio" name="target" checked={target === "new"} onChange={() => setTarget("new")} />
-                {existing ? "Publish as a new link" : "Publish a new link"}
-              </label>
-            </div>
-          </div>
-          <PublicThreadView thread={{ ...draft, publishedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }} preview />
-          <div className="publish-actions">
-            <button type="button" className="capture-btn" disabled={busy} onClick={publish}>
-              {target === "new" ? "Publish read-only link" : "Update published snapshot"}
-            </button>
-            <button type="button" className="ghost" disabled={busy} onClick={() => { setDraft(null); try { sessionStorage.removeItem(DRAFT_KEY); } catch {} }}>
-              Discard
-            </button>
-          </div>
-        </section>
-      )}
-
-      {error && <p className="publish-error" role="alert">{error}</p>}
-
-      <section className="publish-list" aria-labelledby="publish-list-title">
-        <p className="funding-card-label" id="publish-list-title">Your published threads</p>
-        {threads === null ? <p className="publish-note">Loading…</p> : threads.length === 0 ? (
-          <p className="publish-note">Nothing published yet. Use “Publish read-only link” on a thread in Capture.</p>
-        ) : (
-          <ul>
-            {threads.map((thread) => (
-              <li key={thread.token}>
-                <div>
-                  <a href={thread.url} target="_blank" rel="noopener">{thread.title}</a>
-                  <span>{publicThreadDates(thread)}</span>
-                </div>
-                <div className="publish-list-actions">
-                  <button type="button" className="ghost" onClick={() => copyLink(thread.url)}>{copied === thread.url ? "Copied" : "Copy link"}</button>
-                  {confirming === thread.token ? (
-                    <>
-                      <button type="button" className="ghost danger" disabled={busy} onClick={() => unpublish(thread.token)}>Unpublish</button>
-                      <button type="button" className="ghost" onClick={() => setConfirming(null)}>Keep</button>
-                    </>
-                  ) : (
-                    <button type="button" className="ghost" onClick={() => setConfirming(thread.token)}>Unpublish…</button>
-                  )}
-                </div>
-                {confirming === thread.token && (
-                  <p className="publish-note">The link stops working at once. Copies someone already saved can&apos;t be taken back.</p>
+  // 3. Everything published from this account.
+  return (
+    <div className="publish-flow">
+      <h2 className="publish-heading">Published</h2>
+      {failure}
+      {threads === null ? <p className="publish-note">Loading…</p> : threads.length === 0 ? (
+        <p className="publish-note">Nothing yet. Publish a thread from Capture.</p>
+      ) : (
+        <ul className="publish-list">
+          {threads.map((thread) => (
+            <li key={thread.token}>
+              <a href={thread.url} target="_blank" rel="noopener">{thread.title}</a>
+              <span>{publicThreadDates(thread)}</span>
+              <div className="publish-list-actions">
+                {confirming === thread.token ? (
+                  <>
+                    <button type="button" className="ghost warn" disabled={busy} onClick={() => unpublish(thread.token)}>Unpublish</button>
+                    <button type="button" className="ghost" onClick={() => setConfirming(null)}>Keep</button>
+                    <p className="publish-note">The link stops working at once. Copies already saved can&apos;t be recalled.</p>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" className="ghost" onClick={() => copyLink(thread.url)}>{copied === thread.url ? "Copied" : "Copy link"}</button>
+                    <button type="button" className="ghost" onClick={() => setConfirming(thread.token)}>Unpublish</button>
+                  </>
                 )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <p className="publish-note">{PUBLIC_THREAD_NOTICE}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

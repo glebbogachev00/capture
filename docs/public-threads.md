@@ -5,20 +5,21 @@ read without an account, and copy it as clean Markdown for an agent.
 
 ## Flow
 
-1. **Local Capture** (any install): Thread → More options → **Publish read-only link**.
-   Tick the notes to include (none are ticked to start), edit the title, add an
-   optional introduction and name, and review the exact preview. Nothing leaves
-   the device.
-2. **Continue to Capture Cloud** opens `https://cloud.trycapture.app/publish`
-   with the reviewed snapshot in the URL *fragment* (`#publish=…`). Browsers never
-   send a fragment to a server; the page clears it from the address bar and keeps
-   the draft in that tab's `sessionStorage` only.
-3. **Cloud confirmation**: sign in if needed (the existing emailed-code form),
-   review the same preview again, then **Publish read-only link**, or, if this
-   Thread was published before, **Update published snapshot** (the default) or
-   publish as a new link.
-4. **Reading**: `/t/<token>` (page) and `/t/<token>/context.md` (Markdown), no account.
-5. **Owner controls** on `/publish`: copy link, unpublish, and update by
+1. **Local Capture** (any install): Thread → More options → **Publish**. The
+   thread's notes become the preview: tick what to share (none to start), edit
+   the title in place, optionally add an introduction. The name is your profile
+   name. Nothing leaves the device.
+2. **Publish** opens `https://cloud.trycapture.app/publish` with exactly that in
+   the URL *fragment* (`#publish=…`). Browsers never send a fragment to a server;
+   the page clears it from the address bar and keeps the draft in that tab's
+   `sessionStorage` only.
+3. **Cloud, one screen at a time:** sign in if needed (the existing emailed-code
+   form) → the page exactly as readers will see it, with **Publish** (or
+   **Update**, when this Thread already has a link: a Thread keeps one link) →
+   **Published** with the link and **Copy link**.
+4. **Reading**: `/t/<token>` (page, **Copy context**) and `/t/<token>/context.md`
+   (Markdown, linked from the page head for agents), no account.
+5. **Owner controls** on `/publish`: copy link and unpublish; update by
    publishing the Thread again.
 
 ## Public/private boundary
