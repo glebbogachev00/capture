@@ -866,7 +866,7 @@ export function useBoard(now: number) {
   };
 
   /**
-   * "Another thread" — the answer when the kind was right and the home
+   * "Existing thread" — the answer when the kind was right and the home
    * was wrong.
    *
    * Undo asks what KIND it should have been, which is no help at all when

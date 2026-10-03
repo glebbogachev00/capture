@@ -760,7 +760,7 @@ export function Capture() {
                       className="misfiled-btn"
                       onClick={() => setPickingThread(true)}
                     >
-                      {misfiled.thread ? "Another thread" : "Pick a thread"}
+                      {misfiled.thread ? "Existing thread" : "Pick a thread"}
                     </button>
                   )}
                   <button
