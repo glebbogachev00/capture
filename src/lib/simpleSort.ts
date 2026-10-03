@@ -169,7 +169,9 @@ export function normalizeSimpleSort(
       const stated = item.due && ISO_DAY.test(item.due) ? item.due : undefined;
       const due = stated && context.raw ? snapToNamedWeekday(stated, context.raw, context.now ?? Date.now(), context.tzOffset) : stated;
       const existing = item.sameAsAction && openActions.has(item.sameAsAction) ? item.sameAsAction : undefined;
-      out.push({ kind, text: item.text, ...(due ? { due } : {}), ...(existing ? { existingActionId: existing } : {}) });
+      /* A line on a list starts with a capital, however it was typed. */
+      const text = item.text.charAt(0).toUpperCase() + item.text.slice(1);
+      out.push({ kind, text, ...(due ? { due } : {}), ...(existing ? { existingActionId: existing } : {}) });
       continue;
     }
     if (kind === "intention") {

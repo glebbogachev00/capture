@@ -51,6 +51,7 @@ import {
 import { SEMANTIC_KIND_BOUNDARY } from "@/lib/semanticKindBoundary";
 import { shouldFormat } from "@/lib/captureFormat";
 import { formatCapture } from "@/lib/captureFormat.server";
+import { tightenActions } from "@/lib/actionText.server";
 import { SIMPLE_SORT_VERSION, generateSimpleSort, normalizeSimpleSort, simpleSortPrompt } from "@/lib/simpleSort";
 import { parseSortImageDataUrl } from "@/lib/sortImageDataUrl";
 
@@ -642,7 +643,10 @@ export async function POST(request: Request) {
           await generateSimpleSort({ tier, prompt, abortSignal: planningAbortSignal }),
           { threads: body.threads, actions: body.actions, force: body.force, raw, now, tzOffset: body.tzOffset },
         ), preferredFor("sort"), { abortSignal: planningAbortSignal });
-      return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items: value }, via });
+      /* A run-on action becomes its separate short tasks (only long ones are sent). */
+      const items = await withFallback((tier) => tightenActions(value, { tier, abortSignal: planningAbortSignal }), preferredFor("sort"), { abortSignal: planningAbortSignal })
+        .then((result) => result.value, () => value);
+      return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items }, via });
     } catch (e) {
       const { message, status } = explain(e);
       return Response.json({ error: message }, { status });
