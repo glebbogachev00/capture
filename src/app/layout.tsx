@@ -35,7 +35,7 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "capture",
   description:
-    "One place for all your thoughts, organized for you and easy to find.",
+    "Speak freely. Everything lands in the right place. Never lose a thought again.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

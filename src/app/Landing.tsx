@@ -162,17 +162,20 @@ export function Landing() {
         <section className="site-hero site-hero-split" aria-labelledby="landing-title">
           <div className="site-hero-heading">
             <p className="funding-kicker">Thought capture</p>
-            <h1 id="landing-title" aria-label="Messy thoughts that sort themselves.">
-              <span aria-hidden="true">Messy</span>{" "}
-              <span aria-hidden="true">thoughts</span>{" "}
-              <span aria-hidden="true">that</span>{" "}
-              <span aria-hidden="true">sort</span>{" "}
-              <span aria-hidden="true">themselves.</span>
+            <h1 id="landing-title" aria-label="Speak freely. Everything lands in the right place.">
+              <span aria-hidden="true">Speak</span>{" "}
+              <span aria-hidden="true">freely.</span>{" "}
+              <span aria-hidden="true">Everything</span>{" "}
+              <span aria-hidden="true">lands</span>{" "}
+              <span aria-hidden="true">in</span>{" "}
+              <span aria-hidden="true">the</span>{" "}
+              <span aria-hidden="true">right</span>{" "}
+              <span aria-hidden="true">place.</span>
             </h1>
           </div>
           <div className="site-hero-aside">
             <p className="funding-lede site-lede">
-              Say what’s on your mind. Capture keeps related ideas together, separates out tasks, and helps you find your thoughts later.
+              Never lose a thought again.
             </p>
             <div className="site-actions">
               <Link className="capture-btn" href={APP}>

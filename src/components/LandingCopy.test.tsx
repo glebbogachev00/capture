@@ -16,7 +16,7 @@ async function page(playground = true, publicSite = true, cloud = false) {
   return render(<Landing />);
 }
 
-const HEADLINE = "Messy thoughts that sort themselves.";
+const HEADLINE = "Speak freely. Everything lands in the right place.";
 
 describe("Landing copy within the existing page", () => {
   it("explains multi-topic capture without a length or accuracy guarantee", async () => {
@@ -28,7 +28,7 @@ describe("Landing copy within the existing page", () => {
     await page();
     const hero = screen.getByRole("region", { name: HEADLINE });
     expect(within(hero).getByRole("heading", { level: 1 }).textContent).toBe(HEADLINE);
-    expect(hero.querySelector(".site-lede")?.textContent?.trim()).toBe("Say what’s on your mind. Capture keeps related ideas together, separates out tasks, and helps you find your thoughts later.");
+    expect(hero.querySelector(".site-lede")?.textContent?.trim()).toBe("Never lose a thought again.");
     expect(hero.querySelector(".site-lede")?.textContent).not.toMatch(/Action|Thread|Intention/);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
