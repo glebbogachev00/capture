@@ -47,6 +47,16 @@ describe("Capture-controlled URL privacy", () => {
     }
   });
 
+  it("counts public Thread snapshots without keeping their secret token", () => {
+    for (const path of ["/t/does-the-product-earn-the-story-k7m2q9xw4pabcdef", "/t/k7m2q9xw4pabcdef/context.md"]) {
+      const event = sanitizeAnalyticsEvent({ type: "pageview", url: `https://cloud.trycapture.app${path}?ref=x#y` } as BeforeSendEvent);
+      expect(event?.url).toBe(`https://cloud.trycapture.app/t/[snapshot]${path.endsWith("context.md") ? "/context.md" : ""}`);
+      expect(JSON.stringify(event)).not.toContain("k7m2q9xw4p");
+    }
+    expect(sanitizeAnalyticsEvent({ type: "pageview", url: "https://cloud.trycapture.app/publish#publish=secret" } as BeforeSendEvent)?.url)
+      .toBe("https://cloud.trycapture.app/publish");
+  });
+
   it("mounts Analytics only through the redaction boundary", () => {
     const layout = readFileSync("src/app/layout.tsx", "utf8");
     const boundary = readFileSync("src/components/PrivateAnalytics.tsx", "utf8");
