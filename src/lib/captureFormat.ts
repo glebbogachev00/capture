@@ -105,3 +105,13 @@ export function sentenceCase(text: string): string {
     .replace(/\bi(?=\b(?:'(?:m|ve|ll|d))?(?![\p{L}\p{N}.\/-]))/gu, "I");
 }
 
+/** For Format on older notes: still worth sending only if it has filler or is
+ * long enough to need paragraphs. A short note that is already a fine single
+ * paragraph is left alone, so one press of Format is enough and pressing it
+ * again never re-sends the same notes. */
+export function needsFormatting(text: string): boolean {
+  if (!shouldFormat(text)) return false;
+  const one = text.trim();
+  return FILLER.test(one) || sentences(one).length > 3 || wordCount(one) > 60;
+}
+

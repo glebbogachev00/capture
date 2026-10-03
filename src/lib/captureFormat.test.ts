@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CLEANUP_SYSTEM } from "./dictationCleanup";
-import { FORMAT_SYSTEM, airy, keepsTheWords, sentenceCase, shouldFormat } from "./captureFormat";
+import { FORMAT_SYSTEM, airy, keepsTheWords, needsFormatting, sentenceCase, shouldFormat } from "./captureFormat";
 
 const dictated =
   "Um, so, I think one of my biggest worries right now is, uh, that I have so many ideas and main things that I can build. " +
@@ -81,5 +81,18 @@ describe("sentence capitals", () => {
     const text = "See https://example.com/i/x and the iPhone app. ok, mail.com is fine. Retake stays Retake. e.g. this";
     expect(sentenceCase(text)).toBe("See https://example.com/i/x and the iPhone app. Ok, mail.com is fine. Retake stays Retake. E.g. this");
     expect(sentenceCase("Already Fine. Nothing to do.")).toBe("Already Fine. Nothing to do.");
+  });
+});
+
+describe("Format on older notes settles after one press", () => {
+  it("skips a short note that is already a fine single paragraph", () => {
+    const fine = "My agents have been handling Retake pretty well. I also want to simplify this and create a UI where I can make different examples of videos, choose music and set the captions.";
+    expect(shouldFormat(fine)).toBe(true);
+    expect(needsFormatting(fine)).toBe(false);
+  });
+
+  it("still sends long blocks and notes with filler", () => {
+    expect(needsFormatting(dictated)).toBe(true);
+    expect(needsFormatting("First thing on my mind today. Second thing that came up on the walk. Third idea about the launch plan. Fourth and last point, which keeps the block going for a while here.")).toBe(true);
   });
 });
