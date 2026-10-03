@@ -16,7 +16,7 @@ async function page(playground = true, publicSite = true, cloud = false) {
   return render(<Landing />);
 }
 
-const HEADLINE = "Messy thoughts that sort themselves.";
+const HEADLINE = "Speak freely. Everything lands in the right place.";
 
 describe("Landing copy within the existing page", () => {
   it("explains multi-topic capture without a length or accuracy guarantee", async () => {
@@ -125,7 +125,7 @@ describe("Landing copy within the existing page", () => {
   it("preserves main's DOM order and motion hooks without the alternate order override", async () => {
     const { container } = await page();
     expect(container.querySelector("main")?.classList.contains(motion.root)).toBe(true);
-    expect(container.querySelectorAll(".site-hero-heading h1 > span")).toHaveLength(5);
+    expect(container.querySelectorAll(".site-hero-heading h1 > span")).toHaveLength(8);
     expect(container.querySelector(".hero-clip")?.closest("details")).toBeNull();
     expect(container.querySelectorAll(".demo-split")).toHaveLength(1);
     for (const selector of [".site-kind-grid", ".site-day", ".site-quiet", ".site-voice"]) {

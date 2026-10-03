@@ -2,9 +2,9 @@ import type { Metadata, MetadataRoute } from "next";
 import { ARTICLES, type CaptureArticle } from "@/content/articles";
 
 export const SITE_URL = "https://www.trycapture.app/";
-export const SITE_TITLE = "Capture | One place for all your thoughts";
+export const SITE_TITLE = "Capture | Speak freely. Everything lands in the right place.";
 export const SITE_DESCRIPTION =
-  "One place for all your thoughts, organized for you and easy to find.";
+  "Speak freely. Everything lands in the right place. Never lose a thought again.";
 export const INSTALL_URL = new URL("install", SITE_URL).toString();
 export const WRITING_URL = new URL("writing", SITE_URL).toString();
 export const OG_IMAGE_URL = new URL("og-clarity.png", SITE_URL).toString();

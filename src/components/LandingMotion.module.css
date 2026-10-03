@@ -58,6 +58,18 @@
   --word-x: -18px; --word-y: 32px; --word-angle: -2deg;
   animation-delay: 400ms;
 }
+.root :global(.site-hero-heading).enter h1 > span:nth-child(6) {
+  --word-x: 16px; --word-y: -22px; --word-angle: 3deg;
+  animation-delay: 500ms;
+}
+.root :global(.site-hero-heading).enter h1 > span:nth-child(7) {
+  --word-x: -20px; --word-y: 26px; --word-angle: -4deg;
+  animation-delay: 600ms;
+}
+.root :global(.site-hero-heading).enter h1 > span:nth-child(8) {
+  --word-x: 14px; --word-y: 30px; --word-angle: 2deg;
+  animation-delay: 700ms;
+}
 /* A short visual sentence: source, direction, then two distinct destinations.
    These classes exist only while the example is in view. No perpetual loop. */
 @keyframes sourceSweep {

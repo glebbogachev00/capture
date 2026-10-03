@@ -156,7 +156,7 @@ describe("install section links", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "Messy thoughts that sort themselves.",
+        name: "Speak freely. Everything lands in the right place.",
       })
     ).toBeTruthy();
     expect(screen.queryByLabelText(/install prompt/i)).toBeNull();

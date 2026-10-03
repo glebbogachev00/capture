@@ -19,13 +19,13 @@ const SITE = "https://www.trycapture.app/";
 describe("TryCapture search identity", () => {
   it("gives the public home a descriptive canonical identity", () => {
     const metadata = landingMetadata(true);
-    expect(metadata.title).toBe("Capture | One place for all your thoughts");
+    expect(metadata.title).toBe("Capture | Speak freely. Everything lands in the right place.");
     expect(metadata.description).toBe(
-      "One place for all your thoughts, organized for you and easy to find."
+      "Speak freely. Everything lands in the right place. Never lose a thought again."
     );
     expect(metadata.alternates?.canonical).toBe(SITE);
     expect(metadata.openGraph).toMatchObject({
-      title: "Capture | One place for all your thoughts",
+      title: "Capture | Speak freely. Everything lands in the right place.",
       url: SITE,
       siteName: "Capture",
       type: "website",
