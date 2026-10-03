@@ -91,6 +91,11 @@ export async function proxy(request: NextRequest) {
   ) {
     return passThrough;
   }
+  // Public Thread snapshots are read without an account; publishing is
+  // guarded by the Cloud identity on its API, not by the deployment password.
+  if (cloudEnabled && (pathname === "/publish" || pathname.startsWith("/t/"))) {
+    return passThrough;
+  }
   if (!PLAYGROUND && cloudEnabled && pathname === "/app" && !cloudSession.authenticated) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
