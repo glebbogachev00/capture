@@ -28,7 +28,7 @@ describe("Landing copy within the existing page", () => {
     await page();
     const hero = screen.getByRole("region", { name: HEADLINE });
     expect(within(hero).getByRole("heading", { level: 1 }).textContent).toBe(HEADLINE);
-    expect(hero.querySelector(".site-lede")?.textContent?.trim()).toBe("Never lose a thought again.");
+    expect(hero.querySelector(".site-lede")?.textContent?.trim()).toBe("Say what’s on your mind. Capture keeps related ideas together, separates out tasks, and helps you find your thoughts later.");
     expect(hero.querySelector(".site-lede")?.textContent).not.toMatch(/Action|Thread|Intention/);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
@@ -125,7 +125,7 @@ describe("Landing copy within the existing page", () => {
   it("preserves main's DOM order and motion hooks without the alternate order override", async () => {
     const { container } = await page();
     expect(container.querySelector("main")?.classList.contains(motion.root)).toBe(true);
-    expect(container.querySelectorAll(".site-hero-heading h1 > span")).toHaveLength(5);
+    expect(container.querySelectorAll(".site-hero-heading h1 > span")).toHaveLength(8);
     expect(container.querySelector(".hero-clip")?.closest("details")).toBeNull();
     expect(container.querySelectorAll(".demo-split")).toHaveLength(1);
     for (const selector of [".site-kind-grid", ".site-day", ".site-quiet", ".site-voice"]) {

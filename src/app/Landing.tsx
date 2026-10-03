@@ -175,7 +175,7 @@ export function Landing() {
           </div>
           <div className="site-hero-aside">
             <p className="funding-lede site-lede">
-              Never lose a thought again.
+              Say what’s on your mind. Capture keeps related ideas together, separates out tasks, and helps you find your thoughts later.
             </p>
             <div className="site-actions">
               <Link className="capture-btn" href={APP}>
