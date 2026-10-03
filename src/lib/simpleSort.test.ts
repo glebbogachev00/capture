@@ -191,6 +191,11 @@ describe("onlyThreadIds", () => {
   });
 });
 
+it("starts every action with a capital, keeping its words", () => {
+  expect(normalizeSimpleSort({ items: [item({ kind: "action", text: "set up facebook integration" })] }, { threads }))
+    .toEqual([{ kind: "action", text: "Set up facebook integration" }]);
+});
+
 describe("only save it in X", () => {
   it("sends every part of the capture to X, not just the part that named it", () => {
     const board = [{ id: "friction", name: "Reducing friction strategy" }, { id: "retake", name: "Retake" }];

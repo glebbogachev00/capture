@@ -7023,3 +7023,12 @@ body {
   .public-snapshot .article-body blockquote { font-size: 17px; }
   .publish-hint { flex-basis: 100%; margin-left: 0; }
 }
+
+/* Long action text: two lines in the list, the rest on tap. */
+.act-text.clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  cursor: pointer;
+}

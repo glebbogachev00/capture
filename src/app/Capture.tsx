@@ -212,7 +212,7 @@ export function Capture() {
     editActionText,
     renameThread,
     setThreadCover,
-    editFrag,
+    editFrag, editFrags,
     addFragImages,
     deleteFrag,
     moveFrag,
@@ -930,7 +930,7 @@ export function Capture() {
             onRename={(name) => renameThread(thread.id, name)}
             onDelete={() => deleteThread(thread.id)}
             onRefreshSummary={() => refreshSummary(thread.id)}
-            onEditFrag={(fragId, text) => editFrag(thread.id, fragId, text)}
+            onEditFrag={(fragId, text) => editFrag(thread.id, fragId, text)} onEditFrags={(edits) => editFrags(thread.id, edits)}
             onDeleteFrag={(fragId) => deleteFrag(thread.id, fragId)}
             others={data.threads.filter((t) => t.id !== thread.id)} publisherName={data.profile?.name}
             onMerge={(fromId) => mergeThreads(thread.id, fromId)}

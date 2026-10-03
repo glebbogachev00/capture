@@ -71,6 +71,7 @@ export const Row = memo(function Row({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(a.text);
   const [more, setMore] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   /* Ticking used to delete the action mid-tap: the row was gone before your
      finger lifted, so the most-repeated gesture in the app had no payoff.
      The box fills, the text strikes through, and the row folds away — then
@@ -121,7 +122,13 @@ export const Row = memo(function Row({
             }}
           />
         ) : (
-          <div className="act-text">{a.text}</div>
+          /* A long action shows two lines; tapping it shows the rest. */
+          <div
+            className={"act-text" + (a.text.length > 90 && !expanded ? " clamped" : "")}
+            onClick={a.text.length > 90 ? () => setExpanded((open) => !open) : undefined}
+          >
+            {a.text}
+          </div>
         )}
         <div className="act-meta">
           <span>{fmt(a.at)}</span>

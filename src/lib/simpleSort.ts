@@ -1,5 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
+import { sentenceCase } from "./captureFormat";
 import type { Tier } from "./providers";
 
 /**
@@ -169,7 +170,9 @@ export function normalizeSimpleSort(
       const stated = item.due && ISO_DAY.test(item.due) ? item.due : undefined;
       const due = stated && context.raw ? snapToNamedWeekday(stated, context.raw, context.now ?? Date.now(), context.tzOffset) : stated;
       const existing = item.sameAsAction && openActions.has(item.sameAsAction) ? item.sameAsAction : undefined;
-      out.push({ kind, text: item.text, ...(due ? { due } : {}), ...(existing ? { existingActionId: existing } : {}) });
+      /* A line on a list starts with a capital, however it was typed. */
+      const text = item.text.charAt(0).toUpperCase() + item.text.slice(1);
+      out.push({ kind, text, ...(due ? { due } : {}), ...(existing ? { existingActionId: existing } : {}) });
       continue;
     }
     if (kind === "intention") {
@@ -198,9 +201,9 @@ export function normalizeSimpleSort(
      is only needed where it had to divide the capture into parts. */
   if (out.length === 1 && out[0].kind === "thought" && context.raw?.trim()) {
     out[0].text = context.raw.trim();
-    return out;
   }
-  return context.raw?.trim() ? ownWords(context.raw, out) : out;
+  const placed = out.length === 1 || !context.raw?.trim() ? out : ownWords(context.raw, out);
+  return placed.map((item) => item.kind === "thought" ? { ...item, text: sentenceCase(item.text) } : item);
 }
 
 const wordSet = (text: string) => new Set(text.toLowerCase().match(/[\p{L}\p{N}']{4,}/gu) ?? []);
