@@ -4,7 +4,7 @@ import { modelRateLimit } from "@/lib/limiter";
 import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { withFallback } from "@/lib/providers";
 import { preferredFor } from "@/lib/routing";
-import { shouldFormat } from "@/lib/captureFormat";
+import { needsFormatting } from "@/lib/captureFormat";
 import { formatCapture } from "@/lib/captureFormat.server";
 
 /**
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       while (next < texts.length) {
         const index = next++;
         const raw = texts[index];
-        if (!shouldFormat(raw)) continue;
+        if (!needsFormatting(raw)) continue;
         texts[index] = await withFallback((tier) => formatCapture(raw, { tier, abortSignal: signal }), preferredFor("sort"), { abortSignal: signal })
           .then((result) => result.value, () => raw);
       }

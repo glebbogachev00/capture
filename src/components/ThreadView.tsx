@@ -17,7 +17,7 @@ import type { DoneItem } from "@/lib/threadActions";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { ThreadChoices } from "./ThreadChoices";
 import { PublishThreadSheet } from "./PublishThreadSheet";
-import { sentenceCase, shouldFormat } from "@/lib/captureFormat";
+import { needsFormatting, sentenceCase } from "@/lib/captureFormat";
 import { ownedFetch } from "@/lib/ownership";
 import { PLAYGROUND } from "@/lib/playground";
 
@@ -88,9 +88,9 @@ export function ThreadView({
   const [formatting, setFormatting] = useState(false);
   /* Notes captured before automatic formatting: cleaned up and laid out the
      same way new captures are. Only notes that still need it are sent. */
-  const unformatted = thread.frags.filter((frag) => shouldFormat(frag.text));
+  const unformatted = thread.frags.filter((frag) => needsFormatting(frag.text));
   /* Notes that only need capitals are fixed here, without a model call. */
-  const lowercase = thread.frags.filter((frag) => !shouldFormat(frag.text) && sentenceCase(frag.text) !== frag.text);
+  const lowercase = thread.frags.filter((frag) => !needsFormatting(frag.text) && sentenceCase(frag.text) !== frag.text);
   const formatNotes = async () => {
     setFormatting(true);
     const edits = lowercase.map((frag) => ({ fragId: frag.id, text: sentenceCase(frag.text) }));
