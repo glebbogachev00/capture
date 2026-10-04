@@ -8,7 +8,7 @@ Capture is already a full web app: IndexedDB board, sync to the hub or Cloud, an
 
 1. **Shell.** A Capacitor (WKWebView) app that loads Capture from the user's server: the Mac over Tailscale, or Cloud. Every web fix ships to iOS too, with no App Store review.
 2. **Native edges.** Add these one at a time. Each one can be absent.
-   - Recording through native audio, so the mic doesn't re-prompt and Capture can record with the screen locked.
+   - Recording through native audio, so Capture can record with the screen locked. (The mic already asks only once: Capacitor grants WebView capture after the system prompt.)
    - A Share extension: send text, links or photos into Capture.
    - A Shortcut and an Action button entry ("Capture a thought").
    - A Lock Screen or Home Screen widget that opens straight into recording.
