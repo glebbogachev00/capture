@@ -1,6 +1,22 @@
+import { X_ARTICLES } from "./xArticles";
+
 export type SourceMoment = {
   label: string;
   text: string;
+};
+
+export type ArticleImage = {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+};
+
+/** Where the piece first appeared on X. */
+export type ArticleOriginal = {
+  title: string;
+  url: string;
+  publishedAt: string;
 };
 
 export type CaptureArticle = {
@@ -8,16 +24,18 @@ export type CaptureArticle = {
   title: string;
   description: string;
   publishedAt: string;
-  threadSummary: string;
+  threadSummary?: string;
   sourceMoments: SourceMoment[];
-  provenance: string;
+  provenance?: string;
+  cover?: ArticleImage;
+  original?: ArticleOriginal;
   body: string;
 };
 
 const provenance =
   "Spoken while moving → sorted in Capture → developed with Hermes → edited by Gleb.";
 
-export const ARTICLES: CaptureArticle[] = [
+const SITE_ARTICLES: CaptureArticle[] = [
   {
     slug: "software-i-can-use-while-running",
     title: "The Software I Can Use While Running",
@@ -41,6 +59,8 @@ export const ARTICLES: CaptureArticle[] = [
       },
     ],
     provenance,
+    cover: { src: "/writing/software-i-can-use-while-running.jpg", alt: "Original cover for “My Best Ideas Come While I'm Moving. I Finally Found a Way to Keep Them.”.", width: 1978, height: 791 },
+    original: { title: "My Best Ideas Come While I'm Moving. I Finally Found a Way to Keep Them.", url: "https://x.com/Peaceful_HN/status/2096093377800675532", publishedAt: "2026-09-05T04:29:39.000Z" },
     body: `I went for a run last night. Twenty-seven minutes. By the time I got home, I had said eight things into my phone.
 
 They were unrelated.
@@ -158,6 +178,8 @@ Fifteen captures may be enough for a stranger to decide whether Capture is usefu
       },
     ],
     provenance,
+    cover: { src: "/writing/walking-to-find-ideas.jpg", alt: "Original cover for “I Added a Heat Map for Fun. It Made Me Want to Go for a Walk and Capture More Ideas.”.", width: 1898, height: 759 },
+    original: { title: "I Added a Heat Map for Fun. It Made Me Want to Go for a Walk and Capture More Ideas.", url: "https://x.com/Peaceful_HN/status/2096854937280127405", publishedAt: "2026-09-07T06:55:49.000Z" },
     body: `I built Capture because ideas often arrive at the wrong time.
 
 They show up while I am walking, running, washing dishes, or doing something that makes opening a laptop feel like a bad interruption. If I do not catch the thought quickly, it changes shape or disappears. If I stop to organize it, I can lose the thought in the act of saving it.
@@ -243,6 +265,8 @@ Then return to the thought and ask the question that matters: What did it become
       },
     ],
     provenance,
+    cover: { src: "/writing/learning-to-publish-my-thoughts.jpg", alt: "Original cover for “Making it easier to capture my ideas showed me why I was not publishing them”.", width: 1983, height: 793 },
+    original: { title: "Making it easier to capture my ideas showed me why I was not publishing them", url: "https://x.com/Peaceful_HN/status/2098018977922318624", publishedAt: "2026-09-10T12:01:18.000Z" },
     body: `I have spent a lot of time removing friction from the beginning of my work.
 
 When an idea arrives, I can say it into Capture without deciding where it belongs. When I want to build, I can bring the useful context into Hermes and start from the real thought instead of reconstructing it later. Those two parts have become fast enough that I rarely lose an idea because I could not be bothered to open the right app.
@@ -304,6 +328,11 @@ For now, the next step is smaller. Use the walking journal to produce one articl
 I built Capture to keep ideas from disappearing. The work now is to make sure the ideas do not merely survive. They have to leave the private thread, become something worth reading or using, and meet another person who can disagree with them.`,
   },
 ];
+
+/** Every native article, newest first. */
+export const ARTICLES: CaptureArticle[] = [...SITE_ARTICLES, ...X_ARTICLES].sort((a, b) =>
+  b.publishedAt.localeCompare(a.publishedAt)
+);
 
 export function articleBySlug(slug: string): CaptureArticle | undefined {
   return ARTICLES.find((article) => article.slug === slug);
