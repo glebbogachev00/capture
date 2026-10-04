@@ -1,0 +1,16 @@
+{
+  "appId": "app.trycapture.capture",
+  "appName": "Capture",
+  "webDir": "shell",
+  "backgroundColor": "#edefe8",
+  "appendUserAgent": "CaptureiOS",
+  "server": {
+    "allowNavigation": ["*.*.ts.net", "trycapture.app", "*.trycapture.app"],
+    "errorPath": "unreachable.html"
+  },
+  "ios": {
+    "path": "xcode",
+    "contentInset": "never",
+    "scheme": "Capture"
+  }
+}

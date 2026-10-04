@@ -14,6 +14,22 @@ Capture is already a full web app: IndexedDB board, sync to the hub or Cloud, an
    - A Lock Screen or Home Screen widget that opens straight into recording.
 3. **App Store.** Privacy labels and sign in. The native edges are what get past guideline 4.2 ("not just a website").
 
+## Run it
+
+```
+cd ios
+npm install
+npx cap sync ios
+npx cap open ios
+```
+
+In Xcode, pick an iPhone simulator and press Run. On the first launch, enter your Mac's Tailscale address or cloud.trycapture.app. After that the app opens Capture directly. If the server can't be reached, it asks again.
+
+What's where:
+- `ios/shell/`: the first-run screen. It's the only web code the app ships with; everything else loads from your server.
+- `ios/capacitor.config.json`: which hosts the app may open (Tailscale `*.*.ts.net` and trycapture.app). Any other link opens in Safari.
+- `ios/xcode/`: the Xcode project, with the icon, splash and permission strings.
+
 ## Known edges
 
 - WKWebView doesn't run service workers outside App-Bound Domains, so `public/sw.js` offline mode needs App-Bound Domains or a native fallback.
