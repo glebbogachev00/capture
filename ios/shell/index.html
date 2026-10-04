@@ -5,13 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
 <title>Capture</title>
+<script>try { if (localStorage.getItem("capture.server") && location.hash !== "#unreachable") document.documentElement.className = "leaving"; } catch {}</script>
 <style>
   :root { --paper: #edefe8; --card: #f8f9f5; --ink: #191d19; --muted: #60685e; --rule: #dbdfd3; --accent: #2f5d3f; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink); }
   body { font: 17px/1.45 -apple-system, system-ui, sans-serif; display: flex; }
   main { margin: auto; width: 100%; max-width: 420px; padding: 24px 16px calc(24px + env(safe-area-inset-bottom)); }
-  main[hidden] { display: none; }
+  .leaving main { visibility: hidden; }
   h1 { font: 500 28px/1.2 ui-serif, Georgia, serif; margin: 0 0 8px; letter-spacing: -0.01em; }
   p { margin: 0 0 24px; color: var(--muted); }
   input { width: 100%; font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px; outline: none; }
@@ -22,7 +23,7 @@
 </style>
 </head>
 <body>
-<main hidden>
+<main>
   <h1 id="title">Where's your Capture?</h1>
   <p id="lede">Your Mac's Tailscale address, or Capture Cloud.</p>
   <form>
@@ -32,8 +33,10 @@
   </form>
 </main>
 <script>
+  window.onerror = (message) => { document.documentElement.className = ""; document.getElementById("note").textContent = String(message); };
   const KEY = "capture.server";
-  const allowed = (host) => /(^|\.)trycapture\.app$/.test(host) || /\.ts\.net$/.test(host);
+  // Mirrors server.allowNavigation in capacitor.config.json; any other host would open in Safari.
+  const allowed = (host) => /^([^.]+\.)?trycapture\.app$/.test(host) || /^[^.]+\.[^.]+\.ts\.net$/.test(host);
   const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
   const save = (url) => { try { localStorage.setItem(KEY, url); } catch {} };
 
@@ -55,16 +58,15 @@
   } else {
     const field = document.getElementById("server");
     const note = document.getElementById("note");
-    field.value = saved ? saved.replace(/^https:\/\//, "") : "cloud.trycapture.app";
+    field.value = saved ? saved.replace(/^https:\/\//, "") : "";
     if (unreachable && saved) {
       document.getElementById("title").textContent = "Couldn't reach Capture";
       document.getElementById("lede").textContent = "Check that Tailscale is on, or change the address.";
       document.querySelector("button").textContent = "Try again";
     }
-    document.querySelector("main").hidden = false;
     document.querySelector("form").addEventListener("submit", (event) => {
       event.preventDefault();
-      const url = normalize(field.value);
+      const url = normalize(field.value || field.placeholder);
       if (!url) { note.textContent = "Use your Tailscale address or cloud.trycapture.app."; return; }
       save(url);
       location.replace(url);
