@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ARTICLES } from "@/content/articles";
 import {
   appMetadata,
   appStartUrl,
@@ -86,7 +87,7 @@ describe("TryCapture search identity", () => {
     expect(urls).toContain(
       "https://www.trycapture.app/writing/software-i-can-use-while-running"
     );
-    expect(urls).toHaveLength(6);
+    expect(urls).toHaveLength(3 + ARTICLES.length);
   });
 
   it("gives the writing index and each article a canonical search identity", () => {

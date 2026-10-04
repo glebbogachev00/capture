@@ -83,7 +83,7 @@ export function utilityMetadata(title: string, description?: string): Metadata {
 export function writingMetadata(playground: boolean): Metadata {
   const title = "Written with Capture";
   const description =
-    "Long-form articles spoken while moving, sorted in Capture, developed with Hermes, and edited by Gleb.";
+    "Articles by Gleb Bogachev on building Capture, most of them spoken while walking or running, plus threads shared straight from Capture.";
   if (!playground) {
     return { title, description, robots: { index: false, follow: false } };
   }
@@ -101,13 +101,22 @@ export function writingMetadata(playground: boolean): Metadata {
   };
 }
 
-type ArticleIdentity = Pick<CaptureArticle, "slug" | "title" | "description">;
+type ArticleIdentity = Pick<CaptureArticle, "slug" | "title" | "description"> &
+  Partial<Pick<CaptureArticle, "cover" | "publishedAt">>;
 
 export function articleMetadata(
   playground: boolean,
   article: ArticleIdentity
 ): Metadata {
   const url = new URL(`writing/${article.slug}`, SITE_URL).toString();
+  const image = article.cover
+    ? {
+        url: new URL(article.cover.src, SITE_URL).toString(),
+        width: article.cover.width,
+        height: article.cover.height,
+        alt: article.cover.alt,
+      }
+    : { url: OG_IMAGE_URL, width: 1200, height: 630, alt: OG_IMAGE_ALT };
   if (!playground) {
     return {
       title: article.title,
@@ -125,15 +134,15 @@ export function articleMetadata(
       url,
       siteName: "Capture",
       type: "article",
-      images: [
-        { url: OG_IMAGE_URL, width: 1200, height: 630, alt: OG_IMAGE_ALT },
-      ],
+      ...(article.publishedAt ? { publishedTime: article.publishedAt } : {}),
+      authors: ["Gleb Bogachev"],
+      images: [image],
     },
     twitter: {
       card: "summary_large_image",
       title: article.title,
       description: article.description,
-      images: [OG_IMAGE_URL],
+      images: [image.url],
     },
   };
 }
@@ -198,5 +207,7 @@ export function articleSchema(article: CaptureArticle) {
     author: { "@type": "Person", name: "Gleb Bogachev" },
     publisher: { "@type": "Organization", name: "Capture" },
     mainEntityOfPage: new URL(`writing/${article.slug}`, SITE_URL).toString(),
+    ...(article.cover ? { image: new URL(article.cover.src, SITE_URL).toString() } : {}),
+    ...(article.original ? { sameAs: article.original.url } : {}),
   };
 }

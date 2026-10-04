@@ -30,6 +30,6 @@ it.each(ARTICLES)("keeps $slug readable inside the shared header frame", (articl
   expect(frame?.querySelector(":scope > .site-head")).not.toBeNull();
   expect(content?.querySelector(".site-head")).toBeNull();
   expect(content?.querySelector(".finished-thread")).not.toBeNull();
-  expect(content?.querySelector(".public-record")).not.toBeNull();
+  expect(content?.querySelector(".public-record") !== null).toBe(article.sourceMoments.length > 0);
   expect(content?.querySelector(".article-end")).not.toBeNull();
 });

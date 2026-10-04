@@ -51,7 +51,7 @@ export function inline(text: string, keyPrefix = "i"): ReactNode[] {
   return out;
 }
 
-function lines(text: string, keyPrefix: string): ReactNode[] {
+export function lines(text: string, keyPrefix: string): ReactNode[] {
   return text.split("\n").flatMap((line, index) =>
     index === 0 ? inline(line, `${keyPrefix}-${index}`) : [<br key={`${keyPrefix}-br-${index}`} />, ...inline(line, `${keyPrefix}-${index}`)],
   );

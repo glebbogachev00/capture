@@ -4374,6 +4374,81 @@ body {
   font-weight: 600;
   text-transform: uppercase;
 }
+.writing-section-label {
+  margin: 18px 0 2px;
+}
+.shared-thread-list {
+  margin-top: 46px;
+}
+.writing-section-head p {
+  max-width: 640px;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+/* Portrait beside the label and title; the description runs full width below,
+   so the card never has an empty column under the picture. */
+.shared-thread-card {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  column-gap: 18px;
+  align-items: start;
+}
+.shared-thread-card > div {
+  display: contents;
+}
+.shared-thread-portrait {
+  grid-row: 1 / span 2;
+  width: 88px;
+  height: 88px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+.shared-thread-card .public-thread-card-kind,
+.shared-thread-card h2 {
+  grid-column: 2;
+}
+.shared-thread-card h2 {
+  margin: 10px 0 14px;
+}
+.shared-thread-card > div > p {
+  grid-column: 1 / -1;
+  max-width: 700px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.shared-thread-card .public-thread-card-foot,
+.shared-thread-card .public-thread-card-open {
+  grid-column: 1 / -1;
+}
+.shared-thread-credits {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.shared-thread-credits a,
+.article-original a,
+.article-body a {
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+.article-body a {
+  overflow-wrap: anywhere;
+}
+.article-cover {
+  margin: 0 0 22px;
+}
+.article-cover img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+}
 .public-sediment {
   display: flex;
   flex-direction: column;
@@ -4666,6 +4741,12 @@ body {
   .mobile-site-actions {
     display: flex;
   }
+  /* Text above, both buttons side by side below, so they never wrap unevenly. */
+  .article-end {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
 }
 
 /*
@@ -4776,6 +4857,23 @@ body {
   }
   .public-thread-card {
     padding: 19px 18px 21px;
+  }
+  /* On a phone the portrait is a badge beside the label, so the title gets
+     the full width instead of a narrow column. */
+  .shared-thread-card {
+    grid-template-columns: 44px minmax(0, 1fr);
+    column-gap: 12px;
+    align-items: center;
+  }
+  .shared-thread-portrait {
+    grid-row: 1;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+  }
+  .shared-thread-card h2 {
+    grid-column: 1 / -1;
+    margin: 14px 0 9px;
   }
   .public-thread-head {
     padding-top: 24px;
