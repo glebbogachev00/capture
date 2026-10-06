@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { PLAYGROUND, isClosedInPlayground } from "@/lib/playground";
+import { HOSTED_VOICE, PLAYGROUND, isClosedInPlayground } from "@/lib/playground";
 import { PUBLIC_SITE } from "@/lib/publicSite";
 import { AUTH_COOKIE, isValidSession } from "@/lib/auth";
 import { isPublicHome } from "@/lib/seo";
@@ -61,8 +61,8 @@ export async function proxy(request: NextRequest) {
   // These services still use a single-owner hub, local upstream, or issue
   // token. Cloud identity does not make them tenant-safe. Keep them closed
   // on public/Cloud deployments until they have their own authorization.
-  // (Transcription is open: there it is Groq only, see its route.)
-  if ((PUBLIC_SITE || cloudEnabled) && ["/api/tts", "/api/report"].some(
+  // (Transcription opens with HOSTED_VOICE: there it is Groq only, see its route.)
+  if ((PUBLIC_SITE || cloudEnabled) && [...(HOSTED_VOICE ? [] : ["/api/transcribe"]), "/api/tts", "/api/report"].some(
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   )) {
     // ReportBug already uses 501 to open its safe, pre-filled GitHub fallback.

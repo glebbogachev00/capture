@@ -6,8 +6,9 @@ vi.mock("@/lib/supabase/proxy", () => ({
 }));
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
 
-async function proxyFor(playground: string, publicSite: string, cloud: string, password = "") {
+async function proxyFor(playground: string, publicSite: string, cloud: string, password = "", hostedVoice = "") {
   vi.stubEnv("NEXT_PUBLIC_PLAYGROUND", playground);
+  vi.stubEnv("NEXT_PUBLIC_HOSTED_VOICE", hostedVoice);
   vi.stubEnv("NEXT_PUBLIC_PUBLIC_SITE", publicSite);
   vi.stubEnv("CAPTURE_CLOUD", cloud);
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
@@ -104,6 +105,7 @@ describe("public-site proxy safety", () => {
       const proxy = await proxyFor("0", publicSite, cloud);
       for (const [path, methods, status] of [
         ["/api/img/photo-id", ["GET", "HEAD", "PUT"], cloud === "1" ? 200 : 404],
+        ["/api/transcribe", ["POST"], 404],
         ["/api/tts", ["GET", "POST"], 404],
         ["/api/report", ["POST"], 501],
       ] as const) {
@@ -113,9 +115,9 @@ describe("public-site proxy safety", () => {
   );
 
   it.each([["legacy playground", "1", "0", "0"], ["public Cloud", "0", "1", "1"], ["public without Cloud", "0", "1", "0"]])(
-    "%s lets voice through to its route, which uses Groq only there",
+    "%s lets voice through to its route (Groq only there) once HOSTED_VOICE is on",
     async (_label, playground, publicSite, cloud) => {
-      const proxy = await proxyFor(playground, publicSite, cloud);
+      const proxy = await proxyFor(playground, publicSite, cloud, "", "1");
       expect((await proxy(request("/api/transcribe", "POST"))).status).toBe(200);
     },
   );
@@ -134,7 +136,7 @@ describe("public-site proxy safety", () => {
 
   it("legacy playground still blocks Cloud and sync even when Cloud is enabled", async () => {
     const proxy = await proxyFor("1", "0", "1");
-    for (const path of ["/api/cloud/board", "/api/cloud/subscription", "/api/sync", "/api/img/x", "/api/tts", "/api/report"]) {
+    for (const path of ["/api/cloud/board", "/api/cloud/subscription", "/api/sync", "/api/img/x", "/api/tts", "/api/transcribe", "/api/report"]) {
       expect((await proxy(request(path))).status, path).toBe(404);
     }
     const app = await proxy(request("/app"));

@@ -18,8 +18,8 @@ import { dayKey } from "./record";
  * past the browser:
  *
  *   - sync: no push, no poll, no "Sync now", no hub at all
- *   - voice replies: they point at Kokoro on Gleb's Mac (dictation itself is
- *     open, through Groq only, with a daily allowance: voiceAllowance.ts)
+ *   - dictation and voice: they point at Parakeet and Kokoro on Gleb's Mac
+ *     (hosted dictation exists behind HOSTED_VOICE, below, but is off)
  *   - the bug reporter's token path (the form falls back to GitHub)
  *
  * and the server refuses those routes too, so a hand-built request gets the
@@ -31,6 +31,15 @@ import { dayKey } from "./record";
  * cannot touch the real hub even by accident.
  */
 export const PLAYGROUND = process.env.NEXT_PUBLIC_PLAYGROUND === "1";
+
+/**
+ * Dictation on public deployments (the free version, Cloud), through Groq
+ * only, with the free version's ten minutes a day (voiceAllowance.ts).
+ * Built and tested, but off until it is wanted: people dictate with Wispr
+ * Flow or a local Whisper for now. Set NEXT_PUBLIC_HOSTED_VOICE=1 on a
+ * deployment to open /api/transcribe there and show the free version's mic.
+ */
+export const HOSTED_VOICE = process.env.NEXT_PUBLIC_HOSTED_VOICE === "1";
 
 /**
  * The fifteen-capture daily browser allowance.
@@ -142,13 +151,14 @@ export function createCaptureGate() {
 }
 
 /** Routes that reach past the browser. Refused outright in playground mode. */
-export const PLAYGROUND_CLOSED = [
+export const PLAYGROUND_CLOSED: readonly string[] = [
   "/api/cloud",
   "/api/sync",
   "/api/img",
+  ...(HOSTED_VOICE ? [] : ["/api/transcribe"]),
   "/api/tts",
   "/api/report",
-] as const;
+];
 
 export function isClosedInPlayground(pathname: string): boolean {
   return PLAYGROUND_CLOSED.some(

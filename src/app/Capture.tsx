@@ -51,7 +51,7 @@ import { RecoveryDisclosure } from "@/components/RecoveryDisclosure";
 import { InstallInvitation } from "@/components/InstallInvitation";
 import { OfflineInvitation } from "@/components/OfflineSettings";
 import { CheckoutReturnNotice } from "@/components/CloudBilling";
-import { PLAYGROUND } from "@/lib/playground";
+import { HOSTED_VOICE, PLAYGROUND } from "@/lib/playground";
 import { groupActions } from "@/lib/group";
 import { mapAiGroups, type RawAiGroup } from "@/lib/groupAi";
 import { hasAlternativeThread } from "@/lib/threadCorrection";
@@ -642,7 +642,7 @@ export function Capture() {
               hidden
               onChange={(e) => addFiles(e.target.files)}
             />
-            {canDictate && (
+            {canDictate && (HOSTED_VOICE || !PLAYGROUND) && (
               <button
                 className={"icon-btn" + (listening ? " live" : "")}
                 onClick={toggleMic}

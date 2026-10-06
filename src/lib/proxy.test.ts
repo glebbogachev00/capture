@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 
-vi.mock("@/lib/playground", () => ({ PLAYGROUND: false, isClosedInPlayground: () => false }));
+vi.mock("@/lib/playground", () => ({ PLAYGROUND: false, HOSTED_VOICE: false, isClosedInPlayground: () => false }));
 vi.mock("@/lib/auth", () => ({ AUTH_COOKIE: "capture-session", isValidSession: vi.fn().mockResolvedValue(false) }));
 vi.mock("@/lib/seo", () => ({ isPublicHome: () => false }));
 vi.mock("@/lib/supabase/config", () => ({ getCloudConfig: vi.fn(() => null) }));
