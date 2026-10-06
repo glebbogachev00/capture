@@ -15,12 +15,9 @@ import { ThreadChoices } from "@/components/ThreadChoices";
 import { degradedNote } from "@/lib/degraded";
 import { TangleCallout, TangleReview } from "./Tangle";
 import { DistillView } from "./Distill";
-import {
-  clockServerSnapshot,
-  clockSnapshot,
-  subscribeToClock,
-} from "@/lib/clock";
+import { clockServerSnapshot, clockSnapshot, subscribeToClock } from "@/lib/clock";
 import { useRecordedDictation } from "@/hooks/useRecordedDictation";
+import { useNativeShares } from "@/hooks/useNativeShares";
 import { appendDictationTranscript } from "@/lib/voiceSource";
 import { get, set } from "@/lib/storage";
 import { shrinkFile } from "@/lib/shrink";
@@ -388,6 +385,7 @@ export function Capture() {
       setText((x) => (x ? x + " " : "") + t.trim());
     }
   });
+  useNativeShares(submit, !text.trim() && !pics.length); // iPhone share sheet
 
   /* Every picked photo is shrunk before it reaches the box — a phone photo
      comes in at ~15MB as a data URL, and shrinking it at capture time is what

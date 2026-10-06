@@ -1620,7 +1620,7 @@ export function useBoard(now: number) {
     }
   };
 
-  /** Persist one complete pending envelope before launching one bounded sort. */
+  /** Persist one complete pending envelope before launching one bounded sort (false: nothing saved). */
   const submit = async (
     dictated = false,
     pinned?: SortKind,
@@ -1635,13 +1635,13 @@ export function useBoard(now: number) {
     const submittedRaw = override ?? text;
     const { payload, force, commandCorrection } = resolveCapture(submittedRaw.trim(), pinned);
     const raw = force ? submittedRaw : submittedRaw.trim();
-    if (!payload && !composerPics.length) return;
-    if (!captureGate.current.enter()) return;
+    if (!payload && !composerPics.length) return false;
+    if (!captureGate.current.enter()) return false;
     if (!existingCaptureId && trialExhaustedNow()) {
       captureGate.current.leave();
       playgroundUsage.trialLimitReached();
       setErr(`You have used today's ${TRIAL_LIMIT} captures. Your board is still here.`);
-      return;
+      return false;
     }
 
     setErr("");
@@ -1717,7 +1717,7 @@ export function useBoard(now: number) {
     }
     if (durable.status !== "committed") {
       setErr("Couldn't save that. Your capture is still in the composer.");
-      return;
+      return false;
     }
     const { before, beforeTombstones, staged, recoveryStore } = durable.value;
     pendingRecovery.current.adopt(recoveryStore.records);

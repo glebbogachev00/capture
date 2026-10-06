@@ -97,11 +97,14 @@ export function airy(text: string): string {
 
 /** Capital letters where a sentence starts and for a standalone "i", for
  * captures typed or dictated in lowercase. Letters only, never words; a word
- * that is already capitalised or mixed-case is left as it is. */
+ * that is already capitalised or mixed-case is left as it is, and so is a
+ * link, an address or a domain, which a capital would break. */
+const LINK = /^(?:\S*:\/\/|www\.|\S+@|[\w-]+(?:\.[a-z]{2,})+(?:[/:?#]|[.,;:!?)]*(?:\s|$)))/i;
 export function sentenceCase(text: string): string {
   return text
     .replace(/(^|[.!?]["”’')\]]*\s+|\n\s*(?:[-*•]\s+)?)([a-z])/g, (match: string, before: string, letter: string, offset: number, all: string) =>
-      /\b(e\.g|i\.e|etc|vs|cf|approx)\.\s+$/i.test(all.slice(Math.max(0, offset - 8), offset) + before) ? match : before + letter.toUpperCase())
+      /\b(e\.g|i\.e|etc|vs|cf|approx)\.\s+$/i.test(all.slice(Math.max(0, offset - 8), offset) + before) ||
+      LINK.test(all.slice(offset + before.length)) ? match : before + letter.toUpperCase())
     .replace(/\bi(?=\b(?:'(?:m|ve|ll|d))?(?![\p{L}\p{N}.\/-]))/gu, "I");
 }
 

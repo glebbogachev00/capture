@@ -897,7 +897,7 @@ describe("local-first planned capture", () => {
     expect(hook.result.current.data.actions).toHaveLength(0);
 
     act(() => hook.result.current.setText("Capture while startup durability waits"));
-    let submit!: Promise<void>;
+    let submit!: Promise<unknown>;
     act(() => { submit = hook.result.current.submit(); });
     await Promise.resolve();
     expect(network.mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(0);
@@ -980,7 +980,7 @@ describe("local-first planned capture", () => {
       return realSetMany(entries, guard);
     });
 
-    let submit!: Promise<void>;
+    let submit!: Promise<unknown>;
     act(() => { submit = hook.result.current.submit(); });
     await writeStarted.promise;
     act(() => hook.result.current.setPics(duringWrite));
@@ -1022,7 +1022,7 @@ describe("local-first planned capture", () => {
       return realSetMany(entries, guard);
     });
 
-    let firstSubmit!: Promise<void>;
+    let firstSubmit!: Promise<unknown>;
     act(() => { firstSubmit = hook.result.current.submit(); });
     await writeStarted.promise;
     act(() => {
@@ -2783,7 +2783,7 @@ describe("local-first planned capture", () => {
     await writeStarted.promise;
 
     act(() => hook.result.current.setText("New capture while manual persistence waits"));
-    let intake!: Promise<void>;
+    let intake!: Promise<unknown>;
     act(() => { intake = hook.result.current.submit(); });
     await Promise.resolve();
     await act(async () => {

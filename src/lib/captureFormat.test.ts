@@ -82,6 +82,14 @@ describe("sentence capitals", () => {
     expect(sentenceCase(text)).toBe("See https://example.com/i/x and the iPhone app. Ok, mail.com is fine. Retake stays Retake. E.g. this");
     expect(sentenceCase("Already Fine. Nothing to do.")).toBe("Already Fine. Nothing to do.");
   });
+
+  it("leaves a link, address or domain at the start of a line as it is", () => {
+    const shared = "Getting Things Done - Wikipedia\nhttps://en.wikipedia.org/wiki/Getting_Things_Done";
+    expect(sentenceCase(shared)).toBe(shared);
+    expect(sentenceCase("www.example.com has it. example.com/docs too.\ngleb@mail.com wrote back."))
+      .toBe("www.example.com has it. example.com/docs too.\ngleb@mail.com wrote back.");
+    expect(sentenceCase("read it. then reply.")).toBe("Read it. Then reply.");
+  });
 });
 
 describe("Format on older notes settles after one press", () => {

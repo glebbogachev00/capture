@@ -72,5 +72,9 @@
 	<string>Capture turns what you say into text.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Capture adds the photo you take to a thread.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 </dict>
 </plist>

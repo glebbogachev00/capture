@@ -6,7 +6,7 @@ import Capacitor
 /// Capacitor's view sits under the status bar and the strip above it stays paper.
 /// Capacitor makes the web view its root view, hence the container.
 class CaptureViewController: UIViewController {
-    private let bridge = CAPBridgeViewController()
+    private let bridge = CaptureBridgeViewController()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -24,4 +24,11 @@ class CaptureViewController: UIViewController {
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle { .darkContent }
+}
+
+/// Capacitor's controller with Capture's own plugin registered.
+class CaptureBridgeViewController: CAPBridgeViewController {
+    override func capacitorDidLoad() {
+        bridge?.registerPluginInstance(CaptureShellPlugin())
+    }
 }

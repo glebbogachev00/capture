@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Check, Download, Share, SquarePlus, X } from "lucide-react";
+import { inNativeShell } from "@/lib/nativeShell";
 
 const VISITED_KEY = "capture:install-visited:v1";
 const DISMISSED_KEY = "capture:install-dismissed:v1";
@@ -18,6 +19,7 @@ function isIosDevice() {
 function isInstalled() {
   const nav = window.navigator as NavigatorWithStandalone;
   return nav.standalone === true ||
+    inNativeShell() || // the iPhone app is installed by definition
     window.matchMedia?.("(display-mode: standalone)").matches === true;
 }
 

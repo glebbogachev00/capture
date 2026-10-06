@@ -3,6 +3,7 @@ import { ownedFetch as fetch } from "@/lib/ownership";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { capability } from "@/lib/clock";
+import { callShell, inNativeShell } from "@/lib/nativeShell";
 
 /**
  * Push-to-talk dictation backed by a real speech model via /api/transcribe,
@@ -13,6 +14,10 @@ import { capability } from "@/lib/clock";
  * tap the mic to start recording, tap again to stop; the whole utterance is
  * transcribed in one shot and handed to `onResult`. Unlike the recogniser
  * there are no interim results — text lands once, after `transcribing`.
+ *
+ * Inside the iPhone app the recording is native instead, so it carries on
+ * with the screen locked; the audio comes back here and takes the same
+ * /api/transcribe path.
  */
 export function useRecordedDictation(
   onResult: (text: string, raw?: string) => void
@@ -37,7 +42,47 @@ export function useRecordedDictation(
     () => false
   );
 
+  const transcribe = (blob: Blob) => {
+    if (blob.size < 1_000) return; // accidental tap, nothing recorded
+    setTranscribing(true);
+    void fetch("/api/transcribe", {
+      method: "POST",
+      headers: { "content-type": blob.type },
+      body: blob,
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(await res.text());
+        const { text, raw } = (await res.json()) as {
+          text: string;
+          raw?: string;
+        };
+        /* `raw` is what the recogniser heard before the cleanup pass
+           rewrote it — handed on so the ledger can keep the evidence
+           next to the tidied words. */
+        if (text) onResultRef.current(text, raw);
+      })
+      .catch(() => {})
+      .finally(() => setTranscribing(false));
+  };
+
+  const toggleNative = () => {
+    if (listening) {
+      setListening(false);
+      void callShell<{ data: string; mime: string }>("stopRecording")
+        .then(({ data, mime }) =>
+          transcribe(new Blob([Uint8Array.from(atob(data), (c) => c.charCodeAt(0))], { type: mime }))
+        )
+        .catch(() => {});
+      return;
+    }
+    void callShell("startRecording").then(
+      () => setListening(true),
+      () => {} // mic permission refused — the button simply does nothing
+    );
+  };
+
   const toggleMic = () => {
+    if (inNativeShell()) return toggleNative();
     if (listening) {
       recorder.current?.stop();
       setListening(false);
@@ -69,26 +114,7 @@ export function useRecordedDictation(
           type: r.mimeType || "audio/mp4",
         });
         chunks.current = [];
-        if (blob.size < 1_000) return; // accidental tap, nothing recorded
-        setTranscribing(true);
-        void fetch("/api/transcribe", {
-          method: "POST",
-          headers: { "content-type": blob.type },
-          body: blob,
-        })
-          .then(async (res) => {
-            if (!res.ok) throw new Error(await res.text());
-            const { text, raw } = (await res.json()) as {
-              text: string;
-              raw?: string;
-            };
-            /* `raw` is what the recogniser heard before the cleanup pass
-               rewrote it — handed on so the ledger can keep the evidence
-               next to the tidied words. */
-            if (text) onResultRef.current(text, raw);
-          })
-          .catch(() => {})
-          .finally(() => setTranscribing(false));
+        transcribe(blob);
       };
       r.start();
       recorder.current = r;
