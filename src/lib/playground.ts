@@ -18,7 +18,8 @@ import { dayKey } from "./record";
  * past the browser:
  *
  *   - sync: no push, no poll, no "Sync now", no hub at all
- *   - dictation and voice: they point at Parakeet and Kokoro on Gleb's Mac
+ *   - voice replies: they point at Kokoro on Gleb's Mac (dictation itself is
+ *     open, through Groq only, with a daily allowance: voiceAllowance.ts)
  *   - the bug reporter's token path (the form falls back to GitHub)
  *
  * and the server refuses those routes too, so a hand-built request gets the
@@ -145,7 +146,6 @@ export const PLAYGROUND_CLOSED = [
   "/api/cloud",
   "/api/sync",
   "/api/img",
-  "/api/transcribe",
   "/api/tts",
   "/api/report",
 ] as const;

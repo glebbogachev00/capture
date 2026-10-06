@@ -11,6 +11,8 @@
  * of them, so each can be raised or turned off with an env var (0 = off).
  */
 
+import { PUBLIC_SITE } from "./publicSite";
+
 export type LimitResult = { allowed: boolean; retryAfterSec: number };
 
 const DEFAULT_LIMIT = 5;
@@ -52,8 +54,10 @@ export function ttsRateLimit(key: string): LimitResult {
 }
 
 /** Transcription spends local CPU (or a sliver of Groq quota on fallback),
-    same deal as TTS: generous, but a ceiling. */
-const TRANSCRIBE_LIMIT = limitFromEnv("CAPTURE_TRANSCRIBE_LIMIT", 120);
+    same deal as TTS: generous, but a ceiling. On a public deployment every
+    call is Groq, paid for by the owner, so the ceiling sits near one person
+    talking: a recording every few seconds at most. */
+const TRANSCRIBE_LIMIT = limitFromEnv("CAPTURE_TRANSCRIBE_LIMIT", PUBLIC_SITE ? 10 : 120);
 const TRANSCRIBE_WINDOW = 60_000;
 
 export function transcribeRateLimit(key: string): LimitResult {

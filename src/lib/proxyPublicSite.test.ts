@@ -104,12 +104,19 @@ describe("public-site proxy safety", () => {
       const proxy = await proxyFor("0", publicSite, cloud);
       for (const [path, methods, status] of [
         ["/api/img/photo-id", ["GET", "HEAD", "PUT"], cloud === "1" ? 200 : 404],
-        ["/api/transcribe", ["POST"], 404],
         ["/api/tts", ["GET", "POST"], 404],
         ["/api/report", ["POST"], 501],
       ] as const) {
         for (const method of methods) expect((await proxy(request(path, method))).status, `${method} ${path}`).toBe(status);
       }
+    },
+  );
+
+  it.each([["legacy playground", "1", "0", "0"], ["public Cloud", "0", "1", "1"], ["public without Cloud", "0", "1", "0"]])(
+    "%s lets voice through to its route, which uses Groq only there",
+    async (_label, playground, publicSite, cloud) => {
+      const proxy = await proxyFor(playground, publicSite, cloud);
+      expect((await proxy(request("/api/transcribe", "POST"))).status).toBe(200);
     },
   );
 
@@ -127,7 +134,7 @@ describe("public-site proxy safety", () => {
 
   it("legacy playground still blocks Cloud and sync even when Cloud is enabled", async () => {
     const proxy = await proxyFor("1", "0", "1");
-    for (const path of ["/api/cloud/board", "/api/cloud/subscription", "/api/sync", "/api/img/x", "/api/tts", "/api/transcribe", "/api/report"]) {
+    for (const path of ["/api/cloud/board", "/api/cloud/subscription", "/api/sync", "/api/img/x", "/api/tts", "/api/report"]) {
       expect((await proxy(request(path))).status, path).toBe(404);
     }
     const app = await proxy(request("/app"));

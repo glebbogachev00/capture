@@ -61,7 +61,8 @@ export async function proxy(request: NextRequest) {
   // These services still use a single-owner hub, local upstream, or issue
   // token. Cloud identity does not make them tenant-safe. Keep them closed
   // on public/Cloud deployments until they have their own authorization.
-  if ((PUBLIC_SITE || cloudEnabled) && ["/api/transcribe", "/api/tts", "/api/report"].some(
+  // (Transcription is open: there it is Groq only, see its route.)
+  if ((PUBLIC_SITE || cloudEnabled) && ["/api/tts", "/api/report"].some(
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   )) {
     // ReportBug already uses 501 to open its safe, pre-filled GitHub fallback.

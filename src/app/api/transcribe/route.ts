@@ -5,6 +5,7 @@ import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRe
 import { withFallback } from "@/lib/providers";
 import { CLEANUP_SYSTEM } from "@/lib/dictationCleanup";
 import { opsEvent } from "@/lib/opsEvent.server";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 
 /**
  * Transcribe — recorded audio in, text out.
@@ -23,6 +24,12 @@ import { opsEvent } from "@/lib/opsEvent.server";
  *
  * The client sends raw audio bytes with its content-type (Safari records
  * audio/mp4, Chrome audio/webm); both backends sniff the container.
+ *
+ * A public deployment (the free version, Cloud) has no Mac behind it and
+ * serves strangers, so it uses Groq only, never the local upstream, and takes
+ * one recording of a few minutes at most. Nothing here touches a board, which
+ * is what makes the route safe to share; Cloud still meters each call through
+ * the managed-AI guard like every other model route.
  */
 
 export const runtime = "nodejs";
@@ -34,6 +41,9 @@ const LOCAL_URL =
    in; past this deadline the route stops waiting and lets Groq answer, so
    dictation stays usable on a loaded machine. */
 const LOCAL_TIMEOUT_MS = Number(process.env.LOCAL_TRANSCRIBE_TIMEOUT_MS ?? 15_000);
+const HOSTED_ONLY = PUBLIC_SITE || process.env.CAPTURE_CLOUD === "1";
+/** ~4 minutes of phone or browser audio; under Vercel's 4.5 MB body limit. */
+const MAX_HOSTED_AUDIO_BYTES = 4_000_000;
 const GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const GROQ_MODEL = "whisper-large-v3-turbo";
 
@@ -130,6 +140,9 @@ export async function POST(request: Request) {
   if (audio.byteLength === 0) {
     return Response.json({ error: "empty audio" }, { status: 400 });
   }
+  if (HOSTED_ONLY && audio.byteLength > MAX_HOSTED_AUDIO_BYTES) {
+    return Response.json({ error: "recording too long" }, { status: 413 });
+  }
 
   /* Local first with a short deadline; Groq when it's slow or absent; and a
      patient local retry last, because Groq is geo-blocked from some networks
@@ -137,6 +150,7 @@ export async function POST(request: Request) {
      tight-RAM machine — slow text still beats no text. */
   let raw = "";
   try {
+    if (HOSTED_ONLY) throw new Error("no local upstream on a public deployment");
     raw = (await transcribeLocal(audio, contentType)).trim();
   } catch {
     const groqKey = process.env.GROQ_API_KEY;
@@ -145,6 +159,7 @@ export async function POST(request: Request) {
       raw = (await transcribeGroq(audio, contentType, groqKey)).trim();
     } catch {
       try {
+        if (HOSTED_ONLY) throw new Error("no local upstream on a public deployment");
         raw = (await transcribeLocal(audio, contentType, 55_000)).trim();
       } catch {
         opsEvent({
@@ -155,8 +170,10 @@ export async function POST(request: Request) {
         });
         return Response.json(
           {
-            error: "transcription failed — is the local server running? " +
-              "(~/whisper: uv run python server.py)",
+            error: HOSTED_ONLY
+              ? "voice isn't available right now"
+              : "transcription failed — is the local server running? " +
+                "(~/whisper: uv run python server.py)",
           },
           { status: 502 }
         );

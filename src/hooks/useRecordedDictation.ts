@@ -4,6 +4,8 @@ import { ownedFetch as fetch } from "@/lib/ownership";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { capability } from "@/lib/clock";
 import { callShell, inNativeShell } from "@/lib/nativeShell";
+import { PLAYGROUND } from "@/lib/playground";
+import { VOICE_SECONDS_PER_DAY, spendVoice, subscribeVoice, voiceSecondsLeft } from "@/lib/voiceAllowance";
 
 /**
  * Push-to-talk dictation backed by a real speech model via /api/transcribe,
@@ -18,6 +20,9 @@ import { callShell, inNativeShell } from "@/lib/nativeShell";
  * Inside the iPhone app the recording is native instead, so it carries on
  * with the screen locked; the audio comes back here and takes the same
  * /api/transcribe path.
+ *
+ * In the free version a recording also counts against the day's ten minutes
+ * of voice (voiceAllowance.ts) and stops by itself when they run out.
  */
 export function useRecordedDictation(
   onResult: (text: string, raw?: string) => void
@@ -31,6 +36,11 @@ export function useRecordedDictation(
   const chunks = useRef<Blob[]>([]);
   const [listening, setListening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const startedAt = useRef(0);
+  const cutoff = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const toggleRef = useRef<() => void>(() => {});
+  const voiceLeft = useSyncExternalStore(subscribeVoice, () => voiceSecondsLeft(), () => VOICE_SECONDS_PER_DAY);
+  const voiceHint = PLAYGROUND && voiceLeft <= 0 ? `today's ${VOICE_SECONDS_PER_DAY / 60} minutes of voice are used` : null;
 
   /* Same SSR-safe capability read as useDictation: the server snapshot says
      "no", the client snapshot answers for real once mounted. */
@@ -65,9 +75,23 @@ export function useRecordedDictation(
       .finally(() => setTranscribing(false));
   };
 
+  /* Recording on and off, for both recorders. The free version's allowance
+     is spent here, and a timer ends the recording when today's runs out. */
+  const began = () => {
+    startedAt.current = Date.now();
+    setListening(true);
+    if (PLAYGROUND) cutoff.current = setTimeout(() => toggleRef.current(), voiceSecondsLeft() * 1000);
+  };
+  const ended = () => {
+    clearTimeout(cutoff.current);
+    setListening(false);
+    if (PLAYGROUND && startedAt.current) spendVoice((Date.now() - startedAt.current) / 1000);
+    startedAt.current = 0;
+  };
+
   const toggleNative = () => {
     if (listening) {
-      setListening(false);
+      ended();
       void callShell<{ data: string; mime: string }>("stopRecording")
         .then(({ data, mime }) =>
           transcribe(new Blob([Uint8Array.from(atob(data), (c) => c.charCodeAt(0))], { type: mime }))
@@ -76,16 +100,17 @@ export function useRecordedDictation(
       return;
     }
     void callShell("startRecording").then(
-      () => setListening(true),
+      began,
       () => {} // mic permission refused — the button simply does nothing
     );
   };
 
   const toggleMic = () => {
+    if (!listening && voiceHint) return;
     if (inNativeShell()) return toggleNative();
     if (listening) {
       recorder.current?.stop();
-      setListening(false);
+      ended();
       return;
     }
     void (async () => {
@@ -118,9 +143,14 @@ export function useRecordedDictation(
       };
       r.start();
       recorder.current = r;
-      setListening(true);
+      began();
     })();
   };
 
-  return { canDictate, listening, transcribing, toggleMic };
+  useEffect(() => {
+    toggleRef.current = toggleMic;
+  });
+  useEffect(() => () => clearTimeout(cutoff.current), []);
+
+  return { canDictate, listening, transcribing, toggleMic, voiceHint };
 }

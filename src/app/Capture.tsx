@@ -372,7 +372,7 @@ export function Capture() {
      Read through the ref by useRecordedDictation, so the destination is always
      the one that is current when a result lands. Dictation attribution follows
      the draft's transcript when moving between Capture and Distill. */
-  const { canDictate, listening, transcribing, toggleMic } =
+  const { canDictate, listening, transcribing, toggleMic, voiceHint } =
     useRecordedDictation((t, raw) => {
     if (distillOpen) {
       setDistillTranscript((x) => appendDictationTranscript(x, t, raw));
@@ -642,19 +642,19 @@ export function Capture() {
               hidden
               onChange={(e) => addFiles(e.target.files)}
             />
-            {canDictate && !PLAYGROUND && (
+            {canDictate && (
               <button
                 className={"icon-btn" + (listening ? " live" : "")}
                 onClick={toggleMic}
-                disabled={transcribing}
+                disabled={transcribing || !!voiceHint}
                 aria-label="Dictate"
               >
                 <Mic size={18} strokeWidth={1.7} />
               </button>
             )}
             <div className="cap-hint">
-              {PLAYGROUND
-                ? null
+              {PLAYGROUND && !listening && !transcribing
+                ? voiceHint
                 : transcribing
                   ? "transcribing…"
                   : listening
