@@ -1,7 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useSyncExternalStore } from "react";
+import { cloudPricingHandoff } from "@/lib/cloudCheckoutClient";
+import { inNativeShell } from "@/lib/nativeShell";
 import { TRIAL_LIMIT, type TrialState } from "@/lib/playground";
+
+const noSubscribe = () => () => undefined;
 
 export function TrialMeter({
   trial,
@@ -11,6 +16,10 @@ export function TrialMeter({
   showCloudUpgrade?: boolean;
 }) {
   const used = TRIAL_LIMIT - trial.remaining;
+  /* In the iPhone app the moment the day's captures run out is where Cloud
+     is offered; installing your own Capture means nothing on a phone. */
+  const phone = useSyncExternalStore(noSubscribe, inNativeShell, () => false);
+  const cloud = phone ? cloudPricingHandoff() : null;
   return (
     <div
       id="trial-meter-status"
@@ -48,7 +57,10 @@ export function TrialMeter({
       )}
       {trial.exhausted && (
         <span className="trial-meter-next">
-          Resets tomorrow · <Link href="/install">Install your own</Link>
+          Resets tomorrow
+          {phone
+            ? cloud && <> · <a href={cloud}>Get Capture Cloud</a></>
+            : <> · <Link href="/install">Install your own</Link></>}
         </span>
       )}
     </div>

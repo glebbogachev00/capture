@@ -45,14 +45,12 @@ describe("PlaygroundNotice trial boundary", () => {
     expect(screen.queryByRole("link", { name: "Install Capture" })).toBeNull();
   });
 
-  it("in the iPhone app, says the board is on the phone and drops the install link", () => {
+  it("stays out of the iPhone app, which opens straight onto the board", () => {
     (window as unknown as { Capacitor?: unknown }).Capacitor = {
       isNativePlatform: () => true,
       nativePromise: async () => ({}),
     };
-    render(<PlaygroundNotice />);
-    expect(screen.getByText("Your board stays on this phone. Use Cloud to sync across devices.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Start with Capture Cloud" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Try Capture Locally" })).toBeNull();
+    const { container } = render(<PlaygroundNotice />);
+    expect(container.innerHTML).toBe("");
   });
 });

@@ -1,10 +1,14 @@
 /** @vitest-environment jsdom */
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TrialMeter } from "./TrialMeter";
 import type { TrialState } from "@/lib/playground";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+  delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+});
 
 const trial = (remaining: number): TrialState => ({
   remaining,
@@ -45,5 +49,19 @@ describe("daily trial meter", () => {
     render(<TrialMeter trial={trial(0)} showCloudUpgrade />);
     expect(screen.getByRole("link", { name: "See Capture Cloud" }).getAttribute("href"))
       .toBe("/pricing");
+  });
+
+  it("in the iPhone app, offers Cloud when the day's captures run out", () => {
+    vi.stubEnv("NEXT_PUBLIC_CLOUD_URL", "https://cloud.trycapture.app");
+    (window as unknown as { Capacitor?: unknown }).Capacitor = {
+      isNativePlatform: () => true,
+      nativePromise: async () => ({}),
+    };
+    const { rerender } = render(<TrialMeter trial={trial(3)} />);
+    expect(screen.queryByRole("link", { name: "Get Capture Cloud" })).toBeNull();
+    rerender(<TrialMeter trial={trial(0)} />);
+    expect(screen.getByRole("link", { name: "Get Capture Cloud" }).getAttribute("href"))
+      .toBe("https://cloud.trycapture.app/pricing#plans");
+    expect(screen.queryByRole("link", { name: "Install your own" })).toBeNull();
   });
 });
