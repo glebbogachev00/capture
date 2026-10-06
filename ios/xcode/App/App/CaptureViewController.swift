@@ -28,7 +28,13 @@ class CaptureViewController: UIViewController {
 
 /// Capacitor's controller with Capture's own plugin registered.
 class CaptureBridgeViewController: CAPBridgeViewController {
+    private var urlObservation: NSKeyValueObservation?
+
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(CaptureShellPlugin())
+        // Remember whichever board was reached last; the next launch opens it.
+        urlObservation = webView?.observe(\.url, options: [.new]) { webView, _ in
+            if let url = webView.url, let board = CaptureHome.board(for: url) { CaptureHome.save(board) }
+        }
     }
 }

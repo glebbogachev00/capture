@@ -12,6 +12,9 @@ public class CaptureShellPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "clearShare", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startRecording", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopRecording", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "home", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setHome", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "chooseServer", returnType: CAPPluginReturnPromise),
     ]
     private var recorder: AVAudioRecorder?
 
@@ -33,6 +36,27 @@ public class CaptureShellPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func clearShare(_ call: CAPPluginCall) {
         SharedInbox.clear(id: call.getString("id") ?? "")
         call.resolve()
+    }
+
+    @objc func home(_ call: CAPPluginCall) {
+        call.resolve(["url": CaptureHome.saved ?? CaptureHome.free])
+    }
+
+    @objc func setHome(_ call: CAPPluginCall) {
+        CaptureHome.save(call.getString("url"))
+        call.resolve()
+    }
+
+    /// Settings → "Use another server": back to the bundled address screen.
+    @objc func chooseServer(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let webView = self.bridge?.webView, let local = self.bridge?.config.localURL,
+                  let url = URL(string: local.absoluteString + "/index.html#choose") else {
+                return call.reject("No web view")
+            }
+            webView.load(URLRequest(url: url))
+            call.resolve()
+        }
     }
 
     /// Records AAC to a temporary file. With the audio background mode in
@@ -74,5 +98,31 @@ public class CaptureShellPlugin: CAPPlugin, CAPBridgedPlugin {
             guard let data = try? Data(contentsOf: recorder.url) else { return call.reject("Nothing was recorded") }
             call.resolve(["data": data.base64EncodedString(), "mime": "audio/mp4"])
         }
+    }
+}
+
+/// The Capture this phone opens: the free version, until someone reaches the
+/// board of another one (Cloud once signed in, or their own server).
+enum CaptureHome {
+    static let free = "https://www.trycapture.app/app"
+    private static let key = "captureHome"
+
+    static var saved: String? { UserDefaults.standard.string(forKey: key) }
+
+    static func save(_ url: String?) {
+        UserDefaults.standard.set(url, forKey: key)
+    }
+
+    /// The board's address when `url` is a board, nil for any other page
+    /// (pricing, sign-in, articles), so just looking around never switches it.
+    static func board(for url: URL) -> String? {
+        guard url.scheme == "https", let host = url.host else { return nil }
+        if host == "trycapture.app" || host.hasSuffix(".trycapture.app") {
+            return url.path == "/app" ? "https://\(host)/app" : nil
+        }
+        if host.hasSuffix(".ts.net"), url.path.isEmpty || url.path == "/" {
+            return "https://\(host)\(url.port.map { ":\($0)" } ?? "")/"
+        }
+        return nil
     }
 }

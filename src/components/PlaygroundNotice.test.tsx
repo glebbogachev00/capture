@@ -6,7 +6,11 @@ import { PlaygroundNotice } from "./PlaygroundNotice";
 beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_CLOUD_URL", "https://cloud.trycapture.app");
 });
-afterEach(() => { cleanup(); vi.unstubAllEnvs(); });
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+  delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+});
 
 describe("PlaygroundNotice trial boundary", () => {
   it("presents one primary Cloud action with a quieter login path", () => {
@@ -39,5 +43,16 @@ describe("PlaygroundNotice trial boundary", () => {
     expect(screen.getByRole("link", { name: "Try Capture Locally" }).getAttribute("href"))
       .toBe("/install");
     expect(screen.queryByRole("link", { name: "Install Capture" })).toBeNull();
+  });
+
+  it("in the iPhone app, says the board is on the phone and drops the install link", () => {
+    (window as unknown as { Capacitor?: unknown }).Capacitor = {
+      isNativePlatform: () => true,
+      nativePromise: async () => ({}),
+    };
+    render(<PlaygroundNotice />);
+    expect(screen.getByText("Your board stays on this phone. Use Cloud to sync across devices.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Start with Capture Cloud" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Try Capture Locally" })).toBeNull();
   });
 });

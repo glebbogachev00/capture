@@ -23,17 +23,36 @@ npx cap sync ios
 npx cap open ios
 ```
 
-In Xcode, pick an iPhone simulator and press Run. On the first launch, enter your Mac's Tailscale address or cloud.trycapture.app. After that the app opens Capture directly. If the server can't be reached, it asks again.
+In Xcode, pick an iPhone simulator and press Run.
+
+## Where the app opens
+
+- **Free, by default:** the first launch opens www.trycapture.app/app, with no setup. The board lives on the phone, with 15 sorted captures a day.
+- **Cloud:** sign in from the free version ("Start with Capture Cloud"). Once a Cloud board opens, the app opens Cloud from then on.
+- **Your own server:** Settings → Capture Cloud → Server → "Use another server" takes a Tailscale address. "Use the free version" goes back.
+
+The app remembers the last board it reached, never a pricing or sign-in page (`CaptureHome` in `CaptureShellPlugin.swift`). The bundled screen in `ios/shell/` only shows when that server can't be reached, or when choosing another server.
+
+## Native pieces
+
+- **Share sheet** (`ios/xcode/App/ShareExtension`): text and links go into an app-group queue (`Shared/SharedInbox.swift`). Capture files them the next time it's open (`src/hooks/useNativeShares.ts`).
+- **Recording** (`CaptureShellPlugin.swift`): records natively with the audio background mode, so it keeps going when the phone locks. The web app reaches it through `src/lib/nativeShell.ts`.
 
 What's where:
-- `ios/shell/`: the first-run screen. It's the only web code the app ships with; everything else loads from your server.
+- `ios/shell/`: the bundled fallback screen. Everything else loads from the server.
 - `ios/capacitor.config.json`: which hosts the app may open (Tailscale `*.*.ts.net` and trycapture.app). Any other link opens in Safari.
-- `ios/xcode/`: the Xcode project, with the icon, splash and permission strings.
+- `ios/xcode/`: the Xcode project, with the icon, splash, permission strings and the share extension.
+
+## Still to do
+
+- Voice in the free version (it's switched off there today), with a daily cap.
+- Bring the phone board along when someone upgrades to Cloud.
+- Apple in-app purchase for Cloud.
+- Photos in the share sheet; Action button and Shortcut; Lock Screen widget.
 
 ## Known edges
 
 - WKWebView doesn't run service workers outside App-Bound Domains, so `public/sw.js` offline mode needs App-Bound Domains or a native fallback.
-- Server choice: the first-run screen asks for the server URL (the Tailscale address or cloud.trycapture.app). That's the only setup step.
 - Cookies and auth must persist in WKWebView across launches.
 - Each server keeps its own IndexedDB. That matches the web app's ownership model (`src/lib/storage.ts`).
 

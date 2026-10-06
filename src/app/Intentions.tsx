@@ -1,5 +1,6 @@
 "use client";
 import { OfflineSettings } from "@/components/OfflineSettings";
+import { NativeServerSetting } from "@/components/NativeServerSetting";
 import { LegacyImportSettings } from "@/components/LegacyImport";
 import "@/components/IntentionPinCard.css";
 
@@ -994,6 +995,7 @@ export function SettingsScreen({
         >
           <CloudAccountPanel />
           <OfflineSettings />
+          <NativeServerSetting />
         </SettingsDisclosure>
 
         <SettingsDisclosure
