@@ -45,3 +45,42 @@ export function useNativeShares(submit: Submit, composerEmpty: boolean) {
     return () => window.removeEventListener(SHELL_ACTIVE_EVENT, drain);
   }, [composerEmpty]);
 }
+
+type SaveBackup = (backup: unknown, filename: string) => void;
+type Carry = {
+  exportBoard: (save?: SaveBackup) => Promise<void>;
+  restoreFromFile: (file: File) => Promise<boolean | undefined>;
+};
+let carry: Carry | null = null;
+
+/**
+ * Carrying the free version's board to Cloud (or your own server) in the
+ * iPhone app. Each server keeps its own storage, so the free version saves a
+ * backup with the app on its way to Cloud, and the next board offers to bring
+ * it in (PhoneBoardOffer) through the ordinary restore, which only ever adds.
+ * Capture registers its board's backup and restore here.
+ */
+export function useBoardCarry(exportBoard: Carry["exportBoard"], restoreFromFile: Carry["restoreFromFile"]) {
+  useEffect(() => {
+    carry = { exportBoard, restoreFromFile };
+  });
+}
+
+/** Keep this phone's board with the app, then go to `href`. */
+export async function carryBoardTo(href: string, go = (url: string) => window.location.assign(url)) {
+  let kept: Promise<unknown> = Promise.resolve();
+  await carry?.exportBoard((backup) => {
+    kept = callShell("stashBoard", { json: JSON.stringify(backup) });
+  }).catch(() => {});
+  await kept.catch(() => {});
+  go(href);
+}
+
+/** Restore the kept board into this one; true once it is in. */
+export async function bringInKeptBoard(): Promise<boolean> {
+  if (!carry) return false;
+  const { json } = await callShell<{ json: string }>("takeStashedBoard");
+  const done = await carry.restoreFromFile(new File([json], "free-board.json", { type: "application/json" }));
+  if (done) await callShell("clearStashedBoard");
+  return Boolean(done);
+}

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
+import { carryBoardTo } from "@/hooks/useNativeShell";
 import { cloudPricingHandoff } from "@/lib/cloudCheckoutClient";
 import { inNativeShell } from "@/lib/nativeShell";
 import { TRIAL_LIMIT, type TrialState } from "@/lib/playground";
@@ -59,7 +60,7 @@ export function TrialMeter({
         <span className="trial-meter-next">
           Resets tomorrow
           {phone
-            ? cloud && <> · <a href={cloud}>Get Capture Cloud</a></>
+            ? cloud && <> · <a href={cloud} onClick={(event) => { event.preventDefault(); void carryBoardTo(cloud); }}>Get Capture Cloud</a></>
             : <> · <Link href="/install">Install your own</Link></>}
         </span>
       )}

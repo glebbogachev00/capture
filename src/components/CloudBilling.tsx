@@ -7,6 +7,8 @@ import type { PolarPlan } from "@/lib/polar";
 import type { PublicCloudSubscription } from "@/lib/cloudSubscription";
 import { cloudCheckoutHandoff, safePolarDestination } from "@/lib/cloudCheckoutClient";
 import { hasCheckoutReturnState } from "@/lib/urlPrivacy";
+import { inNativeShell } from "@/lib/nativeShell";
+import { PLAYGROUND } from "@/lib/playground";
 
 export { safePolarDestination } from "@/lib/cloudCheckoutClient";
 
@@ -187,7 +189,8 @@ export function CloudAccountPanel() {
   };
 
   if (state === "loading") return <p className="settings-copy">Checking your Cloud access…</p>;
-  if (state === "unavailable") return <p className="settings-copy">Cloud billing is not available on this installation.</p>;
+  if (state === "unavailable") return PLAYGROUND && inNativeShell() // the iPhone app offers Cloud itself (NativeCloudSetting)
+    ? null : <p className="settings-copy">Cloud billing is not available on this installation.</p>;
   if (state === "signed-out") {
     return <Link className="ghost cloud-inline-link" href="/login?next=%2Fapp">Sign in to Capture Cloud</Link>;
   }

@@ -100,7 +100,7 @@ describe.each<DeletePath>(["toggleAction", "removeUnsorted"])(
           });
         },
       } as File;
-      let restore!: Promise<void>;
+      let restore!: Promise<unknown>;
       act(() => { restore = hook.result.current.restoreFromFile(file); });
       await Promise.resolve();
 

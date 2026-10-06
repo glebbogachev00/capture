@@ -1,6 +1,6 @@
 "use client";
 import { OfflineSettings } from "@/components/OfflineSettings";
-import { NativeServerSetting } from "@/components/NativeServerSetting";
+import { NativeCloudSetting, NativeServerSetting } from "@/components/NativeServerSetting";
 import { LegacyImportSettings } from "@/components/LegacyImport";
 import "@/components/IntentionPinCard.css";
 
@@ -994,6 +994,7 @@ export function SettingsScreen({
           onToggle={() => toggleSection("cloud")}
         >
           <CloudAccountPanel />
+          <NativeCloudSetting />
           <OfflineSettings />
           <NativeServerSetting />
         </SettingsDisclosure>
@@ -1023,7 +1024,7 @@ export function SettingsScreen({
               {counts.intentions === 1 ? "" : "s"}. Includes pictures and
               history.
             </p>
-            <button className="capture-btn" onClick={onExport} disabled={!!ioBusy}>
+            <button className="capture-btn" onClick={() => onExport()} disabled={!!ioBusy}>
               {ioBusy ?? "Download backup"}
             </button>
           </div>

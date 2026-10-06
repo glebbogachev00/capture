@@ -346,8 +346,8 @@ it("coalesces same-turn duplicate restore calls and releases the mutex after fai
     reads++;
     return new Promise<string>((resolve) => { finish = resolve; });
   } });
-  let first!: Promise<void>;
-  let duplicate!: Promise<void>;
+  let first!: Promise<unknown>;
+  let duplicate!: Promise<unknown>;
   act(() => {
     first = a.result.current.restoreFromFile(file);
     duplicate = a.result.current.restoreFromFile(file);
@@ -450,7 +450,7 @@ it("drops an in-flight same-document sync reply when restore takes exclusivity",
   Object.defineProperty(file, "text", { value: () => new Promise<string>((resolve) => {
     finishRestore = resolve;
   }) });
-  let restoring!: Promise<void>;
+  let restoring!: Promise<unknown>;
   act(() => { restoring = a.result.current.restoreFromFile(file); });
   const stale = {
     ...EMPTY,
@@ -587,7 +587,7 @@ it("revocation cancels a queued hook push and blocks delayed restore writes", as
   let completeRead!: (text: string) => void;
   const file = new File([""], "backup.json");
   Object.defineProperty(file, "text", { value: () => new Promise<string>(resolve => { completeRead = resolve; }) });
-  let restore!: Promise<void>;
+  let restore!: Promise<unknown>;
   await act(async () => { restore = a.result.current.restoreFromFile(file); });
   account = "B";
   act(() => window.dispatchEvent(new StorageEvent("storage", { key: "capture:auth-transition" })));

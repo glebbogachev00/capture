@@ -3539,7 +3539,7 @@ export function useBoard(now: number) {
 
   /* v3 is created only after the authoritative state and every canonical
      image reference have been verified. */
-  const exportBoard = async () => {
+  const exportBoard = async (save: (backup: unknown, filename: string) => void = downloadJSON) => {
     const operation = backupGate.current.start("export");
     if (!operation) return;
     setIoNote(null); setIoBusy("Preparing backup…");
@@ -3548,7 +3548,7 @@ export function useBoard(now: number) {
         { board: latest.current, tombstones: tombstones.current },
         (progress) => setIoBusy(backupProgressText(progress)),
       );
-      downloadJSON(backup, backupFilename());
+      save(backup, backupFilename());
       setIoNote({
         text: `Saved ${count(backup.board.actions.length, "action")}, ${count(backup.board.threads.length, "thread")} and ${count(backup.board.intentions.length, "intention")} — with ${count(Object.keys(backup.images).length, "image")} — to a file. Keep it somewhere that isn't this phone.`,
         ok: true,
@@ -3603,7 +3603,7 @@ export function useBoard(now: number) {
       });
     }
   };
-  const restoreFromFile = async (file: File): Promise<void> => {
+  const restoreFromFile = async (file: File): Promise<boolean | undefined> => { // true once restored
     const reserved = backupGate.current.startRestore();
     if (!reserved) {
       setIoNote({ text: "Finish the current change before restoring a backup.", ok: false });
@@ -3635,7 +3635,7 @@ export function useBoard(now: number) {
           history: historyAdded, images: Object.keys(restored.images).length, added,
         }, lifetime.cloud ? "cloud" : "local"));
         pushAfterRestore = !lifetime.cloud;
-        return;
+        return true;
       }
 
       // v1/v2 compatibility remains additive and keeps destination conflicts.
@@ -3649,15 +3649,14 @@ export function useBoard(now: number) {
         kind: result.actions ? "action" : result.threads ? "thread" : "intention",
         source: "import", targetId: "",
       }) : result.board;
-      if (!await commit(board, operation, result.images ?? {})) {
-        throw new Error("That backup could not be saved. Your existing board is unchanged.");
-      }
+      if (!await commit(board, operation, result.images ?? {})) throw new Error("That backup could not be saved. Your existing board is unchanged.");
       setIoNote({
         text: added
           ? `Restored ${count(result.actions, "action")}, ${count(result.threads, "thread")}, ${count(result.intentions, "intention")} and ${count(result.principles, "principle")}.`
           : "Nothing new in that file — everything in it was already here.",
         ok: true,
       });
+      return true;
     } catch (error) {
       setIoNote(error instanceof CloudRestoreLocalCacheError
         ? backupRestoreCloudSavedNotice()

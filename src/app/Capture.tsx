@@ -17,7 +17,8 @@ import { TangleCallout, TangleReview } from "./Tangle";
 import { DistillView } from "./Distill";
 import { clockServerSnapshot, clockSnapshot, subscribeToClock } from "@/lib/clock";
 import { useRecordedDictation } from "@/hooks/useRecordedDictation";
-import { useNativeShares } from "@/hooks/useNativeShares";
+import { useBoardCarry, useNativeShares } from "@/hooks/useNativeShell";
+import { PhoneBoardOffer } from "@/components/PhoneBoardOffer";
 import { appendDictationTranscript } from "@/lib/voiceSource";
 import { get, set } from "@/lib/storage";
 import { shrinkFile } from "@/lib/shrink";
@@ -386,6 +387,7 @@ export function Capture() {
     }
   });
   useNativeShares(submit, !text.trim() && !pics.length); // iPhone share sheet
+  useBoardCarry(exportBoard, restoreFromFile); // iPhone: free board → Cloud
 
   /* Every picked photo is shrunk before it reaches the box — a phone photo
      comes in at ~15MB as a data URL, and shrinking it at capture time is what
@@ -443,7 +445,7 @@ export function Capture() {
   return (
     <div className="capture-root">
       <div className="capture-wrap">
-        {PLAYGROUND && <PlaygroundNotice />}
+        {PLAYGROUND ? <PlaygroundNotice /> : <PhoneBoardOffer />}
         <Suspense fallback={null}><CheckoutReturnNotice /></Suspense>
       {/* Only once the board has loaded: the first-sight check must see
           the real capture count, not the empty board of a loading one. */}

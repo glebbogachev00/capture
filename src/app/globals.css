@@ -2133,7 +2133,9 @@ body {
   padding: 0 10px;
   border: 1px solid var(--rule);
   border-radius: 10px;
+  background: transparent;
   color: var(--ink);
+  cursor: pointer;
   font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 13px;
   font-weight: 500;

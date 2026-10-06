@@ -15,6 +15,10 @@ public class CaptureShellPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "home", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setHome", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "chooseServer", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "stashBoard", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "hasStashedBoard", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "takeStashedBoard", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearStashedBoard", returnType: CAPPluginReturnPromise),
     ]
     private var recorder: AVAudioRecorder?
 
@@ -57,6 +61,39 @@ public class CaptureShellPlugin: CAPPlugin, CAPBridgedPlugin {
             webView.load(URLRequest(url: url))
             call.resolve()
         }
+    }
+
+    /// The free version's board, carried to another server (Cloud, a Mac).
+    /// Each server keeps its own storage, so the free version saves a backup
+    /// here on its way out and the next board offers to bring it in.
+    private var stashedBoardURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("free-board-backup.json")
+    }
+
+    @objc func stashBoard(_ call: CAPPluginCall) {
+        guard let json = call.getString("json"), let url = stashedBoardURL else { return call.reject("Nothing to keep") }
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(json.utf8).write(to: url, options: .atomic)
+            call.resolve()
+        } catch {
+            call.reject("Couldn't keep the board", nil, error)
+        }
+    }
+
+    @objc func hasStashedBoard(_ call: CAPPluginCall) {
+        call.resolve(["exists": stashedBoardURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false])
+    }
+
+    @objc func takeStashedBoard(_ call: CAPPluginCall) {
+        guard let url = stashedBoardURL, let data = try? Data(contentsOf: url) else { return call.reject("No board kept") }
+        call.resolve(["json": String(decoding: data, as: UTF8.self)])
+    }
+
+    @objc func clearStashedBoard(_ call: CAPPluginCall) {
+        if let url = stashedBoardURL { try? FileManager.default.removeItem(at: url) }
+        call.resolve()
     }
 
     /// Records AAC to a temporary file. With the audio background mode in

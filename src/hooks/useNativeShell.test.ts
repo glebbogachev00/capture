@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 
 const network = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/ownership", () => ({ ownedFetch: network }));
 
 import { SHELL_ACTIVE_EVENT } from "@/lib/nativeShell";
-import { useNativeShares } from "./useNativeShares";
+import { bringInKeptBoard, carryBoardTo, useBoardCarry, useNativeShares } from "./useNativeShell";
 import { useRecordedDictation } from "./useRecordedDictation";
 
 type Call = [plugin: string, method: string, options?: object];
@@ -14,6 +14,7 @@ let queue: { id: string; text: string }[];
 let calls: Call[];
 
 function installBridge(handlers: Record<string, (options?: object) => unknown> = {}) {
+  // a handler that throws rejects the bridge call, like a native failure
   (window as unknown as { Capacitor?: unknown }).Capacitor = {
     isNativePlatform: () => true,
     nativePromise: async (plugin: string, method: string, options?: object) => {
@@ -103,4 +104,41 @@ it("records natively in the iPhone app and transcribes the returned audio", asyn
   expect(url).toBe("/api/transcribe");
   expect((init.body as Blob).type).toBe("audio/mp4");
   expect((init.body as Blob).size).toBe(audio.length);
+});
+
+describe("carrying the free board to Cloud", () => {
+  it("keeps the phone's board with the app before going to Cloud", async () => {
+    let kept = "";
+    installBridge({ stashBoard: (options) => { kept = (options as { json: string }).json; return {}; } });
+    const exportBoard = vi.fn(async (save?: (backup: unknown, filename: string) => void) => {
+      save?.({ version: 3, board: { actions: [1, 2] } }, "capture.json");
+    });
+    renderHook(() => useBoardCarry(exportBoard, vi.fn()));
+    const go = vi.fn();
+    await carryBoardTo("https://cloud.trycapture.app/pricing#plans", go);
+    expect(JSON.parse(kept)).toEqual({ version: 3, board: { actions: [1, 2] } });
+    expect(go).toHaveBeenCalledWith("https://cloud.trycapture.app/pricing#plans");
+  });
+
+  it("still goes to Cloud when keeping the board fails", async () => {
+    installBridge({ stashBoard: () => { throw new Error("disk full"); } });
+    renderHook(() => useBoardCarry(async (save) => { save?.({}, "x.json"); }, vi.fn()));
+    const go = vi.fn();
+    await carryBoardTo("https://cloud.trycapture.app/pricing#plans", go);
+    expect(go).toHaveBeenCalled();
+  });
+
+  it("brings the kept board in through restore, and clears it only once restored", async () => {
+    const backup = JSON.stringify({ version: 3, board: {} });
+    installBridge({ takeStashedBoard: () => ({ json: backup }) });
+    const restoreFromFile = vi.fn(async (file: File) => (await file.text()) === backup ? true : undefined);
+    renderHook(() => useBoardCarry(vi.fn(), restoreFromFile));
+    expect(await bringInKeptBoard()).toBe(true);
+    expect(calls.map(([, method]) => method)).toEqual(["takeStashedBoard", "clearStashedBoard"]);
+
+    calls = [];
+    restoreFromFile.mockResolvedValueOnce(undefined);
+    expect(await bringInKeptBoard()).toBe(false);
+    expect(calls.map(([, method]) => method)).toEqual(["takeStashedBoard"]);
+  });
 });
