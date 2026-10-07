@@ -42,6 +42,39 @@ export function acceptTasks(original: string, tasks: string[]): string[] | null 
   return clean.map((task) => task.charAt(0).toUpperCase() + task.slice(1));
 }
 
+/* A short action that leans on what only the capture explains: "Let Aside
+   run it" or "Post it on X" mean nothing on a list without the task beside
+   them. "This" and "that" count only as the last word ("check that the build
+   passes" is fine). Long actions explain their own "it" ("allow them to post
+   instead"), so they are left alone. */
+const POINTS_BACK = new Set(["it", "them", "this", "that"]);
+export function pointsBack(item: SimpleSortItem): boolean {
+  if (item.kind !== "action" || item.existingActionId) return false;
+  const own: string[] = words(item.text);
+  return own.length >= 2 && own.length <= 8
+    && (own.includes("it") || own.includes("them") || POINTS_BACK.has(own.at(-1)!));
+}
+
+export const NAME_IT_SYSTEM =
+  "This to-do item came from the note below, but a word in it like \"it\" or \"them\" only " +
+  "makes sense with the note. Rewrite just this one item, in at most eight words, so it says " +
+  "what that word means. Use the note's own words; leave out every other task in the note. " +
+  "Return JSON: {\"task\": string}.";
+
+export const NameItSchema = z.object({ task: z.string() });
+
+/** The rewrite may only use the note's words, must stay short, and must
+ * actually name the thing; otherwise the action stays as written. */
+export function acceptNamed(note: string, item: string, task: string): string | null {
+  const source = new Set([...words(note), ...words(item)].map(stem));
+  const clean = task.trim().replace(/\s+/g, " ").replace(/\.+$/, "");
+  const own = words(clean);
+  if (own.length < 2 || own.length > ACTION_WORD_LIMIT) return null;
+  if (own.some((word) => !SMALL.has(word) && !source.has(stem(word)))) return null;
+  if (pointsBack({ kind: "action", text: clean })) return null;
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
 /** Replace each run-on action with its tasks. Tasks inherit the due date; a
  * repeat of an existing action stays a single line. */
 export function splitActions(

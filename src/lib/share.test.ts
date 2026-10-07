@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Action, Board } from "./model";
 import { EMPTY } from "./model";
-import { shareAction, shareableFor, shareRecord, shareRecordDay, shareText } from "./share";
+import { photoFile, photoFiles, shareAction, shareableFor, shareRecord, shareRecordDay, shareText } from "./share";
 describe("shareAction — one task, on its way to an assistant", () => {
   const act = (over: Partial<Action> = {}): Action => ({
     id: "a1",
@@ -251,6 +251,19 @@ describe("the Record header shares the selected day only", () => {
     }
   });
 
+  it("carries the selected day's photos from the Share button, and only that day's", () => {
+    const withPhotos = {
+      ...board,
+      ledger: board.ledger.map((entry) =>
+        entry.id === "day-a" ? { ...entry, imgs: ["photo-a"] } : entry.id === "other-day" ? { ...entry, imgs: ["photo-other"] } : entry
+      ),
+    } as Board;
+    const a = shareableFor(withPhotos, { kind: "record", day: "2026-08-25" }, at(28, 12));
+    expect(a?.imgIds).toEqual(["photo-a"]);
+    expect(a?.text).toContain("· 1 photo: Day A capture");
+    expect(shareableFor(withPhotos, { kind: "record", day: "2026-08-26" }, at(28, 12))?.imgIds).toBeUndefined();
+  });
+
   it("has no header payload for a quiet selected day", () => {
     expect(
       shareableFor(board, { kind: "record", day: "2026-08-28" }, at(28, 12))
@@ -283,6 +296,22 @@ describe("selected-day Record handoff", () => {
 
     await expect(shareText(handoff)).resolves.toBe("shared");
     expect(share).toHaveBeenCalledWith({ text: handoff.text });
+  });
+
+  it("names a capture's photos in its row and hands them to the share sheet once", () => {
+    const handoff = shareRecordDay(
+      [
+        entry({ id: "a", clean: "Create Instagram page for Capture", imgs: ["img-1"] }),
+        entry({ id: "b", at: new Date(2026, 8, 2, 10, 30).getTime(), clean: "Plain capture" }),
+        entry({ id: "c", at: new Date(2026, 8, 2, 11, 0).getTime(), clean: "Two shots", imgs: ["img-1", "img-2"] }),
+      ],
+      "2026-09-02"
+    )!;
+    expect(handoff.text).toMatch(/· 1 photo: Create Instagram page for Capture/);
+    expect(handoff.text).toMatch(/· action: Plain capture/);
+    expect(handoff.text).toMatch(/· 2 photos: Two shots/);
+    expect(handoff.imgIds).toEqual(["img-1", "img-2"]);
+    expect(shareRecordDay([entry()], "2026-09-02")!.imgIds).toBeUndefined();
   });
 
   it.each([
@@ -356,5 +385,38 @@ describe("the record as a diff", () => {
     expect(out.text).toContain("fresh capture");
     expect(out.text).not.toContain("stale capture");
     expect(shareRecordSince(board, 1000)).toBeNull();
+  });
+});
+
+describe("photoFile", () => {
+  it("turns a stored photo into a file without fetch, which the site's CSP blocks", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const jpeg = photoFile("data:image/jpeg;base64,/9j/4AAQ", "capture-abc");
+    expect(jpeg?.name).toBe("capture-abc.jpg");
+    expect(jpeg?.type).toBe("image/jpeg");
+    expect([...new Uint8Array(await jpeg!.arrayBuffer())]).toEqual([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+    expect(photoFile("data:image/webp;base64,UklGRg==", "p")?.name).toBe("p.webp");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("gives nothing for something that is not a photo", () => {
+    expect(photoFile("https://example.com/a.jpg", "p")).toBeNull();
+    expect(photoFile("data:image/jpeg;base64,***", "p")).toBeNull();
+  });
+});
+
+describe("photoFiles", () => {
+  it("loads at most four, skipping any that are missing or fail", async () => {
+    const load = vi.fn(async (id: string) => {
+      if (id === "gone") return null;
+      if (id === "broken") throw new Error("store");
+      return "data:image/jpeg;base64,/9j/4AAQ";
+    });
+    const files = await photoFiles(["a1", "gone", "broken", "b2", "c3", "d4"], load);
+    expect(files.map((file) => file.name)).toEqual(["capture-a1.jpg", "capture-b2.jpg"]);
+    expect(load).toHaveBeenCalledTimes(4);
+    expect(await photoFiles(undefined, load)).toEqual([]);
   });
 });

@@ -43,9 +43,9 @@ export type Shareable = {
   title: string;
   text: string;
   summary: string;
-  /* The image ids a thread's fragments reference, so the share sheet can
-     carry the actual photos alongside the text. Populated for threads;
-     empty for every other shareable. */
+  /* The image ids a thread's fragments (or a Record day's captures)
+     reference, so the share sheet can carry the actual photos alongside the
+     text. Empty for every other shareable. */
   imgIds?: string[];
   /* Built from imgIds by the caller just before sharing — the OS sheet
      takes File objects, the clipboard fallback ignores them. */
@@ -246,6 +246,45 @@ export async function copyToClipboard(text: string, assertDisclosure: () => void
 export type ShareOutcome = "shared" | "copied" | "cancelled" | "failed";
 
 /**
+ * A stored photo (a data URL) as a file for the share sheet. Decoded here
+ * rather than with fetch(): the site's CSP only lets fetch reach this server,
+ * so fetch("data:…") failed and every shared photo was silently left behind.
+ */
+export function photoFile(src: string, name: string): File | null {
+  const match = /^data:([^;,]+)?((?:;[^;,]+)*?)(;base64)?,([\s\S]*)$/.exec(src);
+  if (!match) return null;
+  try {
+    const type = match[1] || "image/jpeg";
+    const bytes = match[3]
+      ? Uint8Array.from(atob(match[4]), (char) => char.charCodeAt(0))
+      : new TextEncoder().encode(decodeURIComponent(match[4]));
+    const ext = type === "image/webp" ? "webp" : type === "image/png" ? "png" : "jpg";
+    return new File([bytes], `${name}.${ext}`, { type });
+  } catch {
+    return null;
+  }
+}
+
+/** The photos a share carries, at most four, read with `load`. One that
+ * fails to load never blocks the share. */
+export async function photoFiles(
+  ids: string[] | undefined,
+  load: (id: string) => Promise<string | null | undefined>
+): Promise<File[]> {
+  const files: File[] = [];
+  for (const id of (ids ?? []).slice(0, 4)) {
+    try {
+      const src = await load(id);
+      const file = src ? photoFile(src, `capture-${id.slice(0, 8)}`) : null;
+      if (file) files.push(file);
+    } catch {
+      /* skip this one */
+    }
+  }
+  return files;
+}
+
+/**
  * Hand text — and, when present, the photos — to the OS share sheet, falling
  * back to the clipboard (which carries the text only).
  *
@@ -326,7 +365,12 @@ export function shareRecordDay(
 
   const date = new Date(`${day}T12:00:00`).getTime();
   const lines = [`# The record — ${shortDate(date)}`, ""];
+  /* Photos go along as files in the share sheet; the row says it had them,
+     so the text alone still shows a picture belonged to that capture. */
+  const imgIds: string[] = [];
   for (const entry of rows) {
+    const photos = (entry.imgs ?? []).length;
+    for (const id of entry.imgs ?? []) if (!imgIds.includes(id)) imgIds.push(id);
     const said = (entry.transcript || entry.raw || "").trim();
     const filed = (entry.clean || "").trim();
     const time = new Date(entry.at).toLocaleTimeString(undefined, {
@@ -334,9 +378,9 @@ export function shareRecordDay(
       minute: "2-digit",
     });
     lines.push(
-      `- ${time} · ${entry.kind}${entry.undone ? " · undone" : ""}: ${
-        filed || said
-      }`
+      `- ${time} · ${entry.kind}${entry.undone ? " · undone" : ""}${
+        photos ? ` · ${photos} photo${photos === 1 ? "" : "s"}` : ""
+      }: ${filed || said}`
     );
     /* The raw transcript is audit context, not a second rendering of the
        same sentence. Preserve it unless a deliberately surface-only compare
@@ -354,6 +398,7 @@ export function shareRecordDay(
     title: "",
     summary: `${rows.length} capture${rows.length === 1 ? "" : "s"}`,
     text: lines.join("\n"),
+    ...(imgIds.length ? { imgIds } : {}),
   };
 }
 

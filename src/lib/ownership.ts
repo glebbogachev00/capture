@@ -104,6 +104,14 @@ export class OwnershipLifetime {
     if (this.cloud && (this.verificationPending || this.state !== "active" || Date.now() >= this.expiresAt || (typeof navigator !== "undefined" && !navigator.onLine)))
       throw new DOMException("Verify your account online before using Cloud or AI", "AbortError");
   };
+  /** A share the person started may wait for an already-running identity
+   * check, the way their requests do; it never discloses before that check
+   * has settled for this owner. */
+  async waitForDisclosure(): Promise<void> {
+    this.assert();
+    if (this.verificationPending) await this.ready();
+    this.assertDisclosure();
+  }
   /** User-started Cloud work may wait for an already-running same-owner check.
    * It must never turn that harmless race into a visible account error. */
   async waitUntilOnline(): Promise<void> {

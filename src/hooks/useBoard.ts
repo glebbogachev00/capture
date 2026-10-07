@@ -75,6 +75,7 @@ import { commitLegacyBackup, createBackupClient } from "@/lib/backupClient";
 import { BackupOperationGate, createBackupMutationGuard, type BackupOperationToken } from "@/lib/backupOperation";
 import {
   copyToClipboard,
+  photoFiles,
   shareText,
   shareableFor,
 } from "@/lib/share";
@@ -3501,23 +3502,11 @@ export function useBoard(now: number) {
      IndexedDB, so they are fetched only at the moment of sharing. */
   const doShare = async () => {
     if (!shareable) return;
-    const files: File[] = [];
-    if (shareable.imgIds?.length) {
-      for (const id of shareable.imgIds.slice(0, 4)) {
-        try {
-          const url = await get(IMG(id));
-          if (!url) continue;
-          const blob = await (await fetch(url)).blob();
-          const ext = blob.type === "image/webp" ? "webp" : "jpg";
-          files.push(
-            new File([blob], `capture-${id.slice(0, 8)}.${ext}`, {
-              type: blob.type || "image/jpeg",
-            })
-          );
-        } catch {
-          /* one photo failing to load never blocks the share */
-        }
-      }
+    const files = await photoFiles(shareable.imgIds, (id) => get(IMG(id)));
+    /* A share with photos waits for a running account check (it did when the
+       photos were fetched); without photos it is refused during the check. */
+    if (files.length) {
+      try { await lifetime.waitForDisclosure(); } catch { return; }
     }
     if (!lifetime.active) return;
     const outcome = await shareText({
