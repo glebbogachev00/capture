@@ -83,3 +83,42 @@ describe("PendingRecoveryOrchestrator startup retirement", () => {
     expect(persist).toHaveBeenLastCalledWith(PENDING_RECOVERY_KEY, "[]");
   });
 });
+
+describe("PendingRecoveryOrchestrator retries on time", () => {
+  const live = (): PendingRecoveryAccess => ({
+    board: liveBoard,
+    allowed: () => true,
+    exclusive: (work) => work(),
+    persist: vi.fn(async () => {}),
+  });
+  const loaded = (attempts: number, nextAttemptAt: number) => {
+    const orchestrator = new PendingRecoveryOrchestrator();
+    const snapshot = exactPendingSnapshot(liveBoard(), "pending-target")!;
+    orchestrator.load(serializePendingRecoveryRecords([
+      createPendingRecoveryRecord(snapshot, attempts, nextAttemptAt),
+    ]), liveBoard());
+    return orchestrator;
+  };
+
+  it("says when the next retry is due, and nothing once attempts run out", () => {
+    expect(loaded(1, 30_100).nextDueAt(liveBoard())).toBe(30_100);
+    expect(loaded(2, 30_100).nextDueAt(liveBoard())).toBeNull();
+    /* A capture that is no longer pending has nothing to retry. */
+    expect(loaded(1, 30_100).nextDueAt({ ...EMPTY, principles: [] })).toBeNull();
+  });
+
+  it("leaves a capture whose sort is still running alone, without spending an attempt", async () => {
+    const orchestrator = loaded(1, 100);
+    const run = vi.fn(async () => {});
+    const options = live();
+
+    await orchestrator.wake({ ...options, now: () => 1_000, online: () => true, run, busy: () => true });
+    expect(run).not.toHaveBeenCalled();
+    expect(options.persist).not.toHaveBeenCalled();
+    expect(orchestrator.nextDueAt(liveBoard())).toBe(100);
+
+    await orchestrator.wake({ ...options, now: () => 1_000, online: () => true, run, busy: () => false });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(orchestrator.nextDueAt(liveBoard())).toBeNull();
+  });
+});

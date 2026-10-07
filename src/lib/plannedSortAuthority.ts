@@ -42,6 +42,11 @@ export class PlannedSortAuthority {
     this.phaseChanged?.([...this.finalizations.keys()]);
   }
 
+  /** A sort for this capture is still running or committing. */
+  busy(captureId: string): boolean {
+    return this.attempts.has(captureId) || this.finalizations.has(captureId);
+  }
+
   begin(captureId: string, timeoutMs: number) {
     if (this.finalizations.has(captureId)) {
       const controller = new AbortController();
