@@ -643,8 +643,9 @@ export async function POST(request: Request) {
           await generateSimpleSort({ tier, prompt, abortSignal: planningAbortSignal }),
           { threads: body.threads, actions: body.actions, force: body.force, raw, now, tzOffset: body.tzOffset },
         ), preferredFor("sort"), { abortSignal: planningAbortSignal });
-      /* A run-on action becomes its separate short tasks (only long ones are sent). */
-      const items = await withFallback((tier) => tightenActions(value, { tier, abortSignal: planningAbortSignal }), preferredFor("sort"), { abortSignal: planningAbortSignal })
+      /* A run-on action becomes its separate short tasks (only long ones are
+         sent), and a short one ending on "it" says what it is. */
+      const items = await withFallback((tier) => tightenActions(value, { tier, abortSignal: planningAbortSignal, raw }), preferredFor("sort"), { abortSignal: planningAbortSignal })
         .then((result) => result.value, () => value);
       return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items }, via });
     } catch (e) {

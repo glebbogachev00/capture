@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptTasks, isRunOnAction, splitActions } from "./actionText";
+import { acceptNamed, acceptTasks, isRunOnAction, pointsBack, splitActions } from "./actionText";
 import type { SimpleSortItem } from "./simpleSort";
 
 const runOn = "Create a Retake account on mail.com using my Apple account, set up Facebook integration, configure automation, and assign a specific personality and content type.";
@@ -51,5 +51,38 @@ describe("splitting into actions", () => {
 
   it("leaves everything else alone", () => {
     expect(splitActions([thought, long], new Map())).toEqual([thought, long]);
+  });
+});
+
+describe("an action that ends on 'it'", () => {
+  const action = (text: string, extra: Partial<SimpleSortItem> = {}): SimpleSortItem => ({ kind: "action", text, ...extra });
+
+  it("is sent only when short and ending on what the capture explains", () => {
+    expect(pointsBack(action("Let aside run it"))).toBe(true);
+    expect(pointsBack(action("Post about this."))).toBe(true);
+    expect(pointsBack(action("Post it on X"))).toBe(true);
+    expect(pointsBack(action("Send it to Mia for review"))).toBe(true);
+    expect(pointsBack(action("Schedule them"))).toBe(true);
+    expect(pointsBack(action("Call Mia"))).toBe(false);
+    expect(pointsBack(action("Check that the build passes"))).toBe(false);
+    expect(pointsBack(action("Let aside run it", { existingActionId: "a1" }))).toBe(false);
+    expect(pointsBack({ kind: "thought", text: "Ship it", threads: [{ id: "t" }] })).toBe(false);
+    /* Real captures where the word is explained inside its own sentence. */
+    expect(pointsBack(action("Decide whether to let a site post on Zalo or create a document with all the posts and allow them to post instead"))).toBe(false);
+    expect(pointsBack(action("And if it doesn't work, there needs to be a fast way to do it manually."))).toBe(false);
+  });
+
+  it("accepts a rewrite that names it in the capture's own words", () => {
+    const note = "Create instagram page for Capture and let aside run it";
+    expect(acceptNamed(note, "Let aside run it", "let Aside run the Instagram page.")).toBe("Let Aside run the Instagram page");
+    expect(acceptNamed(note, "Let aside run it", "Let Aside run the Capture Instagram page")).toBe("Let Aside run the Capture Instagram page");
+  });
+
+  it("refuses invented words, a rewrite that still says 'it', or a long one", () => {
+    const note = "Create instagram page for Capture and let aside run it";
+    expect(acceptNamed(note, "Let aside run it", "Let Aside run the TikTok account")).toBeNull();
+    expect(acceptNamed(note, "Let aside run it", "Let Aside run it")).toBeNull();
+    expect(acceptNamed(note, "Let aside run it", "Let Aside run it for Capture")).toBeNull();
+    expect(acceptNamed(note, "Let aside run it", "Let Aside run the Instagram page for Capture and create the Instagram page for Capture")).toBeNull();
   });
 });
