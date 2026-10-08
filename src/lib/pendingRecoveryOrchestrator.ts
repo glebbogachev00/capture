@@ -1,5 +1,6 @@
 import type { Board } from "./model";
 import {
+  MAX_AUTOMATIC_PENDING_ATTEMPTS,
   PENDING_RECOVERY_KEY,
   claimPendingRecovery,
   createPendingRecoveryRecord,
@@ -75,10 +76,19 @@ export class PendingRecoveryOrchestrator {
     });
   }
 
+  /** When the next automatic retry comes due, or null when none is left. */
+  nextDueAt(board: Board): number | null {
+    const left = prunePendingRecoveryRecords(this.records, board)
+      .filter((record) => record.automaticAttempts < MAX_AUTOMATIC_PENDING_ATTEMPTS);
+    return left.length ? Math.min(...left.map((record) => record.nextAttemptAt)) : null;
+  }
+
   async wake(options: PendingRecoveryAccess & {
     now: () => number;
     online: () => boolean;
     run: (snapshot: PendingRecoverySnapshot) => Promise<void>;
+    /** A sort for this capture is still running: leave it, and its attempts, alone. */
+    busy?: (captureId: string) => boolean;
   }): Promise<void> {
     if (this.wakeActive || !options.allowed() || !options.online()) return;
     this.wakeActive = true;
@@ -88,6 +98,7 @@ export class PendingRecoveryOrchestrator {
       await this.prune(options);
       const due = recoveryCandidates(this.records, options.board(), options.now());
       for (const candidate of due) {
+        if (options.busy?.(candidate.captureId)) continue;
         const snapshot = await options.exclusive(async () => {
           if (!options.allowed()) return null;
           const current = prunePendingRecoveryRecords(this.records, options.board());

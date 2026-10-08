@@ -1768,7 +1768,7 @@ export function useBoard(now: number) {
     allowed: () => hydrationSucceeded.current && lifetime.active, persist: set,
     exclusive: <T,>(work: () => Promise<T>) => durableBoardCommits.current.run(work) });
   usePendingRecoveryWake({ loaded, board: data, orchestrator: pendingRecovery.current,
-    access: pendingRecoveryAccess, now: stamp, run: async (snapshot) => {
+    access: pendingRecoveryAccess, now: stamp, busy: (id) => plannedSortAuthority.current.busy(id), run: async (snapshot) => {
       return runPlannedSort(snapshot);
     } });
 
