@@ -40,8 +40,25 @@ export function simpleAnswer(plan: PlannedRoutingPlan): SimpleSortItem[] {
   return items;
 }
 
-/** vi.stubGlobal("fetch", mock), with planned answers translated for the
- * one-call sorter. The mock still receives every call. */
+/** An older sorter's answer ({kind, clean, actions, threadId, …}) as the
+ * one-call sorter's items, now that Sort now and retries ask that sorter. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function simpleFromLegacy(body: any): SimpleSortItem[] {
+  const due = typeof body.due === "string" ? body.due.slice(0, 10) : undefined;
+  const actions: SimpleSortItem[] = (body.actions?.length ? body.actions : [body.clean])
+    .map((text: string) => ({ kind: "action" as const, text, ...(due ? { due } : {}) }));
+  const thought: SimpleSortItem = {
+    kind: "thought", text: body.clean,
+    threads: [body.threadId ? { id: body.threadId } : { name: body.threadName ?? body.title ?? "New thread" }],
+  };
+  if (body.kind === "intention") return [{ kind: "intention", text: body.clean }];
+  if (body.kind === "thread") return [thought];
+  if (body.kind === "both") return [thought, ...actions];
+  return actions;
+}
+
+/** vi.stubGlobal("fetch", mock), with planned and older answers translated
+ * for the one-call sorter. The mock still receives every call. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function stubSortFetch(mock: (input: any, init?: RequestInit) => unknown) {
   const wrapped = vi.fn(async (input: unknown, init?: RequestInit) => {
@@ -50,8 +67,11 @@ export function stubSortFetch(mock: (input: any, init?: RequestInit) => unknown)
     const asked = (() => { try { return JSON.parse(String(init?.body ?? "{}")); } catch { return {}; } })();
     if (asked.sortVersion !== 2) return response;
     const body = await response.clone().json().catch(() => null);
-    if (!body?.routingPlan) return response;
-    return Response.json({ sort: { version: 2, items: simpleAnswer(body.routingPlan) }, via: body.via }, { status: response.status });
+    if (body?.routingPlan) return Response.json({ sort: { version: 2, items: simpleAnswer(body.routingPlan) }, via: body.via }, { status: response.status });
+    if (typeof body?.kind === "string" && typeof body?.clean === "string") {
+      return Response.json({ sort: { version: 2, items: simpleFromLegacy(body) }, via: body.via }, { status: response.status });
+    }
+    return response;
   });
   vi.stubGlobal("fetch", wrapped);
   return wrapped;

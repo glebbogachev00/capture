@@ -29,14 +29,19 @@ export function settleSimpleSort(board: Board, input: {
   via?: string;
 }): PlannedSettlementResult {
   const { captureId, items, now } = input;
-  const markerId = settlementLedgerId(captureId);
-  if (board.ledger.some((entry) => entry.id === markerId ||
-      (captureIdentity(entry) === captureId && entry.kind !== "pending" && !entry.undone))) {
+  if (board.ledger.some((entry) => captureIdentity(entry) === captureId && entry.kind !== "pending" && !entry.undone)) {
     return conflict(board, captureId, "already_settled");
   }
   const pendingRows = activePendingFor(board, captureId);
   if (pendingRows.length !== 1) return conflict(board, captureId, "not_pending");
   const pendingRow = pendingRows[0];
+  /* Ids come from the capture so a retry lands on the same records. "Sort
+     again" after Undo re-submits the same capture: its first settlement is
+     undone (and its ids deleted for good), so this one takes ids of its own. */
+  const resorted = board.ledger.some((entry) => entry.id === settlementLedgerId(captureId) && entry.undone);
+  const key = resorted ? `${captureId}~${pendingRow.id}` : captureId;
+  const markerId = settlementLedgerId(key);
+  if (board.ledger.some((entry) => entry.id === markerId)) return conflict(board, captureId, "already_settled");
   const envelope = board.actions.find((action) => action.id === pendingRow.targetId && action.unsorted);
   if (!envelope) return conflict(board, captureId, "not_pending");
   const revision = pendingRow.pendingRevision ?? 1;
@@ -53,7 +58,7 @@ export function settleSimpleSort(board: Board, input: {
     if ("id" in target) return board.threads.some((thread) => thread.id === target.id) ? target.id : null;
     const existing = [...createdThreads, ...board.threads].find((thread) => nameKey(thread.name) === nameKey(target.name));
     if (existing) return existing.id;
-    const thread: Thread = { id: plannedId(captureId, "thread", nameKey(target.name)), name: target.name.trim(), summary: "", frags: [], updatedAt: now };
+    const thread: Thread = { id: plannedId(key, "thread", nameKey(target.name)), name: target.name.trim(), summary: "", frags: [], updatedAt: now };
     createdThreads.push(thread);
     return thread.id;
   };
@@ -63,7 +68,7 @@ export function settleSimpleSort(board: Board, input: {
   const createdFrags: { threadId: string; frag: Frag }[] = [];
   const newLedger: CaptureEntry[] = [];
   const entry = (kind: CaptureEntry["kind"], clean: string, targetId: string, targetFragId?: string): CaptureEntry => ({
-    id: plannedId(captureId, `ledger-${kind}`, `${newLedger.length}:${targetId}`),
+    id: plannedId(key, `ledger-${kind}`, `${newLedger.length}:${targetId}`),
     captureId, at: envelope.at, raw: pendingRow.raw, clean, kind, source: pendingRow.source,
     targetId, ...(targetFragId ? { targetFragId } : {}), settledBy: "automatic", modelVia: input.via,
   });
@@ -81,7 +86,7 @@ export function settleSimpleSort(board: Board, input: {
     } else if (item.kind === "action") {
       const due = parseDue(item.due, now);
       const action: Action = {
-        id: plannedId(captureId, "action", String(index)), text: item.text, done: false,
+        id: plannedId(key, "action", String(index)), text: item.text, done: false,
         at: envelope.at, updatedAt: now, src: raw, imgs: [], shelf: "weeks", due,
         expires: expiryFor(SHELF.weeks, due, now),
       };
@@ -89,7 +94,7 @@ export function settleSimpleSort(board: Board, input: {
       newLedger.push(entry("action", item.text, action.id));
     } else if (item.kind === "intention") {
       const intention: Intention = {
-        id: plannedId(captureId, "intention", String(index)), number: number++,
+        id: plannedId(key, "intention", String(index)), number: number++,
         rawInput: items.length === 1 ? raw : item.text, expandedIntention: item.text,
         recommendedActions: [], counterIntentions: [], imgs: [], at: envelope.at, updatedAt: now,
       };
@@ -102,7 +107,7 @@ export function settleSimpleSort(board: Board, input: {
         /* One capture, one entry per Thread: parts sent to the same Thread join. */
         const same = createdFrags.find((created) => created.threadId === threadId);
         if (same) { same.frag.text = `${same.frag.text}\n\n${item.text}`; continue; }
-        const frag: Frag = { id: plannedId(captureId, "frag", `${index}:${threadId}`), at: envelope.at, updatedAt: now, text: item.text, imgs: [] };
+        const frag: Frag = { id: plannedId(key, "frag", `${index}:${threadId}`), at: envelope.at, updatedAt: now, text: item.text, imgs: [] };
         createdFrags.push({ threadId, frag });
         newLedger.push(entry("thread", item.text, threadId, frag.id));
       }
