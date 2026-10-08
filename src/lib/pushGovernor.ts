@@ -20,6 +20,9 @@ export type PushGovernor = {
   dispose: () => void;
   /** Push NOW if anything is scheduled or in flight — the manual sync. */
   flush: () => Promise<void>;
+  /** Push now only if an edit is still waiting for its beat — the app is
+      going to the background, and a phone freezes it before the beat. */
+  flushWaiting: () => Promise<void>;
 };
 
 export function createPushGovernor(
@@ -78,5 +81,9 @@ export function createPushGovernor(
     if (timer !== null) clearT(timer);
     timer = null;
   };
-  return { schedule, flush, dispose };
+  const flushWaiting = async (): Promise<void> => {
+    if (timer === null && !pending) return;
+    await flush();
+  };
+  return { schedule, flush, flushWaiting, dispose };
 }

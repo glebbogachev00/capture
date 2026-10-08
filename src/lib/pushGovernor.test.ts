@@ -103,3 +103,19 @@ describe("the push governor never drops an edit", () => {
     expect(calls).toBe(2);
   });
 });
+
+describe("going to the background", () => {
+  it("sends a waiting edit now, once, and sends nothing when nothing waits", async () => {
+    const c = clock();
+    let runs = 0;
+    const g = createPushGovernor(async () => { runs++; }, 1200, c.set, c.clear);
+    await g.flushWaiting();
+    expect(runs).toBe(0);
+    g.schedule();
+    await g.flushWaiting();
+    expect(runs).toBe(1);
+    await c.advance(1200);
+    expect(runs).toBe(1);
+  });
+});
+

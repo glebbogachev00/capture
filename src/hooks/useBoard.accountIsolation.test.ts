@@ -147,7 +147,7 @@ it.each(["checking", "revoked", "focus", "online", "pageshow"])("%s blocks share
   act(() => a.result.current.setTab("threads"));
   const backup = await import("@/lib/backup");
   const download = vi.spyOn(backup, "downloadJSON").mockImplementation(() => {});
-  const share = vi.fn(async () => {});
+  const share = vi.fn<(data?: ShareData) => Promise<void>>(async () => {});
   const writeText = vi.fn(async () => {});
   vi.stubGlobal("navigator", { onLine: true, share, clipboard: { writeText } });
   await a.storage.del(IMG("a-photo"));
@@ -202,7 +202,7 @@ it.each(["pending", "same-owner", "mismatch"])("routine poll %s gates clipboard,
   act(() => a.result.current.setOpen("a-thread"));
   const backup = await import("@/lib/backup");
   const download = vi.spyOn(backup, "downloadJSON").mockImplementation(() => {});
-  const share = vi.fn(async () => {});
+  const share = vi.fn<(data?: ShareData) => Promise<void>>(async () => {});
   const writeText = vi.fn(async () => {});
   vi.stubGlobal("navigator", { onLine: true, share, clipboard: { writeText } });
   (await import("@/lib/imgCache"))._clearImgCache();
@@ -212,8 +212,9 @@ it.each(["pending", "same-owner", "mismatch"])("routine poll %s gates clipboard,
     ? new Promise(resolve => { reads.push(resolve); }) : originalGet(key));
   let exporting!: Promise<void>;
   let sharing!: Promise<void>;
-  await act(async () => { exporting = a.result.current.exportBoard(); sharing = a.result.current.doShare(); });
-  expect(reads).toHaveLength(2);
+  await act(async () => { exporting = a.result.current.exportBoard(); });
+  /* Only the export reads the photo; a share is text. */
+  expect(reads).toHaveLength(1);
   let finish!: (response: Response) => void;
   const network = globalThis.fetch;
   const imageResponse = new Response(null);
@@ -232,6 +233,9 @@ it.each(["pending", "same-owner", "mismatch"])("routine poll %s gates clipboard,
     expect(JSON.stringify(a.result.current.data)).toContain(secret);
     await act(async () => { await a.result.current.copyFragment("a-thread", "a-frag"); });
     expect(writeText).not.toHaveBeenCalled();
+    /* A share of a thread with a photo, started while the check is running,
+       waits for it (a share is text now, so nothing else holds it). */
+    act(() => { sharing = a.result.current.doShare(); });
     if (resolution !== "pending") {
       await act(async () => { finish(Response.json({ owner: resolution === "same-owner" ? "A" : "B", expiresAt: Date.now() + 60000 })); });
     }
@@ -251,13 +255,18 @@ it.each(["pending", "same-owner", "mismatch"])("routine poll %s gates clipboard,
         await sharing;
       });
       expect(share).toHaveBeenCalledTimes(1);
+      /* The thread holds a photo, yet the share is its text alone: with a file
+         attached, iOS destinations drop the words. */
+      expect(share.mock.calls[0][0]).toEqual(expect.objectContaining({ text: expect.stringContaining(secret) }));
+      expect(share.mock.calls[0][0]).not.toHaveProperty("files");
       expect(download).not.toHaveBeenCalled();
       await act(async () => { await a.result.current.copyFragment("a-thread", "a-frag"); });
       expect(writeText).toHaveBeenCalledWith(secret);
     } else if (resolution === "same-owner") {
       expect(download).toHaveBeenCalledTimes(1);
       expect(share).toHaveBeenCalledTimes(1);
-      expect(share.mock.calls[0]).toEqual([expect.objectContaining({ files: [expect.any(File)] })]);
+      expect(share.mock.calls[0][0]).toEqual(expect.objectContaining({ text: expect.stringContaining(secret) }));
+      expect(share.mock.calls[0][0]).not.toHaveProperty("files");
       await act(async () => { await a.result.current.copyFragment("a-thread", "a-frag"); });
       expect(writeText).toHaveBeenCalledWith(secret);
     } else {

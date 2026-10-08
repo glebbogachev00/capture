@@ -75,7 +75,6 @@ import { commitLegacyBackup, createBackupClient } from "@/lib/backupClient";
 import { BackupOperationGate, createBackupMutationGuard, type BackupOperationToken } from "@/lib/backupOperation";
 import {
   copyToClipboard,
-  photoFiles,
   shareText,
   shareableFor,
 } from "@/lib/share";
@@ -1086,8 +1085,11 @@ export function useBoard(now: number) {
     const onOnline = () => { void pullNow(); startPoll(); };
     const onOffline = () => stopPoll();
     const onHidden = () => {
-      if (document.visibilityState === "hidden") stopPoll();
-      else startPoll();
+      if (document.visibilityState !== "hidden") return startPoll();
+      stopPoll();
+      /* Sorted, then pocketed: send what is waiting now, not after a beat the
+         phone never gives, or the other device keeps the Unsorted copy. */
+      void pushGovernor.current?.flushWaiting();
     };
     document.addEventListener("visibilitychange", onHidden);
     if (navigator.onLine) startPoll();
@@ -3506,22 +3508,17 @@ export function useBoard(now: number) {
     [data, showRecord, recordDay, openIntention, open, tab, now]
   );
 
-  /* A thread share carries its photos as real files in the OS sheet — the
-     text tells the story, the pictures go along with it. The bytes come from
-     IndexedDB, so they are fetched only at the moment of sharing. */
+  /* Shares are text. With a photo attached, iOS treats the share as an image
+     and most destinations (Copy, chat and AI apps) keep only the picture, so
+     the words were lost. The text says which captures had photos. */
   const doShare = async () => {
     if (!shareable) return;
-    const files = await photoFiles(shareable.imgIds, (id) => get(IMG(id)));
-    /* A share with photos waits for a running account check (it did when the
-       photos were fetched); without photos it is refused during the check. */
-    if (files.length) {
+    /* A share that names photos waits for a running account check, as before. */
+    if (shareable.imgIds?.length) {
       try { await lifetime.waitForDisclosure(); } catch { return; }
     }
     if (!lifetime.active) return;
-    const outcome = await shareText({
-      ...shareable,
-      files: files.length ? files : undefined,
-    }, lifetime.assertDisclosure);
+    const outcome = await shareText(shareable, lifetime.assertDisclosure);
     if (outcome === "cancelled") return;
     setNotice(
       outcome === "shared"
