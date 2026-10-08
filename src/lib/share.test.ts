@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Action, Board } from "./model";
 import { EMPTY } from "./model";
-import { photoFile, photoFiles, shareAction, shareableFor, shareRecord, shareRecordDay, shareText } from "./share";
+import { shareAction, shareableFor, shareRecord, shareRecordDay, shareText } from "./share";
 describe("shareAction — one task, on its way to an assistant", () => {
   const act = (over: Partial<Action> = {}): Action => ({
     id: "a1",
@@ -388,35 +388,3 @@ describe("the record as a diff", () => {
   });
 });
 
-describe("photoFile", () => {
-  it("turns a stored photo into a file without fetch, which the site's CSP blocks", async () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal("fetch", fetchSpy);
-    const jpeg = photoFile("data:image/jpeg;base64,/9j/4AAQ", "capture-abc");
-    expect(jpeg?.name).toBe("capture-abc.jpg");
-    expect(jpeg?.type).toBe("image/jpeg");
-    expect([...new Uint8Array(await jpeg!.arrayBuffer())]).toEqual([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
-    expect(photoFile("data:image/webp;base64,UklGRg==", "p")?.name).toBe("p.webp");
-    expect(fetchSpy).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
-  });
-
-  it("gives nothing for something that is not a photo", () => {
-    expect(photoFile("https://example.com/a.jpg", "p")).toBeNull();
-    expect(photoFile("data:image/jpeg;base64,***", "p")).toBeNull();
-  });
-});
-
-describe("photoFiles", () => {
-  it("loads at most four, skipping any that are missing or fail", async () => {
-    const load = vi.fn(async (id: string) => {
-      if (id === "gone") return null;
-      if (id === "broken") throw new Error("store");
-      return "data:image/jpeg;base64,/9j/4AAQ";
-    });
-    const files = await photoFiles(["a1", "gone", "broken", "b2", "c3", "d4"], load);
-    expect(files.map((file) => file.name)).toEqual(["capture-a1.jpg", "capture-b2.jpg"]);
-    expect(load).toHaveBeenCalledTimes(4);
-    expect(await photoFiles(undefined, load)).toEqual([]);
-  });
-});

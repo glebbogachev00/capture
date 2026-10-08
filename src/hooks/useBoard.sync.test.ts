@@ -152,6 +152,27 @@ describe("the real hook, pushing to the real seam", () => {
     unmount();
   });
 
+  it("sends a waiting edit the moment the app goes to the background", async () => {
+    const { result, unmount } = renderHook(() => useBoard(T0 + 60_000));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    await act(async () => {
+      await result.current.toggleAction("a1");
+    });
+    // The edit is waiting for its 1.2 s beat; a phone would freeze the app now.
+    expect(sync.posts).toHaveLength(0);
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    try {
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await waitFor(() => expect(sync.posts).toHaveLength(1), { timeout: 400 });
+      expect(sync.posts[0].body.board.actions.map((action) => action.id)).toEqual(["a2"]);
+    } finally {
+      delete (document as unknown as { visibilityState?: string }).visibilityState;
+    }
+    unmount();
+  });
+
   it("an unchanged push reply keeps the current board identity", async () => {
     const { result, unmount } = renderHook(() => useBoard(T0 + 60_000));
     await waitFor(() => expect(result.current.loaded).toBe(true));
