@@ -1334,6 +1334,15 @@ export function useBoard(now: number) {
 
   const resort = async (a: Action, pinned?: SortKind, automaticBudget?: number) => {
     const sentRecovery = exactPendingSnapshot(latest.current, a.id);
+    /* Every text capture is sorted by the one-call sorter, whichever button or
+       retry sent it; a Thread chosen up front stays the destination. The older
+       sorter (no calendar, so it guessed dates) is kept for photos only. */
+    if (sentRecovery && !sentRecovery.imageIds.length && !a.imgs?.length) {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return setErr("Offline. It's saved here and sorts when you're back online.");
+      setErr("");
+      if (automaticBudget === undefined) receiptWindow.current!.retire();
+      return runPlannedSort(sentRecovery, { force: pinned, threadId: a.threadId, pressed: automaticBudget === undefined });
+    }
     const force = pinned ?? sentRecovery?.force;
     const sentPending = sentRecovery ? latest.current.ledger.find((entry) =>
       entry.id === sentRecovery.pendingId) : undefined;
@@ -1468,29 +1477,32 @@ export function useBoard(now: number) {
     intention: "An intention, then — a state, not a task.",
   };
 
-  const runPlannedSort = async (input: PendingRecoverySnapshot) => {
+  const runPlannedSort = async (input: PendingRecoverySnapshot, chosen: { force?: SortKind; threadId?: string; budget?: number; pressed?: boolean } = {}) => {
+    const force = chosen.force ?? input.force;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     if (!sortMounted.current || !lifetime.active || !snapshotMatchesPending(input, latest.current)) return;
-    const deadline = Date.now() + 55_000;
-    const attempt = plannedSortAuthority.current.begin(input.captureId, 55_000);
+    const deadline = Date.now() + (chosen.budget ?? 55_000);
+    const attempt = plannedSortAuthority.current.begin(input.captureId, chosen.budget ?? 55_000);
     setAutoSortingIds((ids) => [...new Set([...ids, input.targetId])]);
     if (pendingReceiptRef.current === input.targetId) showReceipt("Saved. Sorting…", input.targetId);
     try {
       if (input.imageIds.length) {
         const pending = latest.current.actions.find((action) => action.id === input.targetId);
         attempt.finish();
-        if (pending) await resort(pending, input.force, deadline - Date.now());
+        if (pending) await resort(pending, force, deadline - Date.now());
         return;
       }
       const work = async () => {
         const response = await requestBoardSort<{ sort?: { items?: SimpleSortItem[] }; via?: string }>({
-          request: fetch, board: latest.current, raw: input.source, forgottenRules, force: input.force,
+          request: fetch, board: latest.current, raw: input.source, forgottenRules, force,
           simple: true, captureId: input.captureId, signal: attempt.signal, noteVia, errorFor: (message) => new SortError(message),
         });
       if (!attempt.authoritative()) return;
-      const items = response.sort?.items;
-      if (!items?.length) throw new Error("invalid sort response");
-      const commanded = input.force === "thread" ? "thought" : input.force;
+      const sorted = response.sort?.items;
+      if (!sorted?.length) throw new Error("invalid sort response");
+      const pinnedThread = chosen.threadId && latest.current.threads.some((thread) => thread.id === chosen.threadId);
+      const items = pinnedThread ? sorted.map((item) => item.kind === "thought" ? { ...item, threads: [{ id: chosen.threadId! }] } : item) : sorted;
+      const commanded = force === "thread" ? "thought" : force;
       if (commanded && items.some((item) => item.kind !== commanded)) throw new Error("sort ignored the command");
       if (!snapshotMatchesPending(input, latest.current)) return;
       /* A capture that is only an intention opens the intention preview. */
@@ -1587,16 +1599,13 @@ export function useBoard(now: number) {
           setErr(error.captureMessage);
         return;
       }
+      /* One quick retry of an automatic sort inside the same window, by the same sorter. */
       const remaining = deadline - Date.now();
-      if (remaining > 0 && attempt.authoritative() && lifetime.active && sortMounted.current &&
-          (typeof navigator === "undefined" || navigator.onLine) &&
-          snapshotMatchesPending(input, latest.current)) {
-        const pending = latest.current.actions.find((action) => action.id === input.targetId);
-        if (pending) {
-          attempt.finish();
-          await resort(pending, input.force, remaining);
-          return;
-        }
+      if (!chosen.pressed && chosen.budget === undefined && remaining > 0 && attempt.authoritative() && lifetime.active && sortMounted.current &&
+          (typeof navigator === "undefined" || navigator.onLine) && snapshotMatchesPending(input, latest.current)) {
+        attempt.finish();
+        await runPlannedSort(input, { ...chosen, budget: remaining });
+        return;
       }
       const stillPending = latest.current.ledger.some((entry) =>
         entry.kind === "pending" &&

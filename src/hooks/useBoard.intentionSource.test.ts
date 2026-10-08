@@ -8,6 +8,7 @@ import { EMPTY, KEY } from "@/lib/model";
 import * as model from "@/lib/model";
 
 import { useBoard } from "./useBoard";
+import { simpleFromLegacy } from "../../test/simpleSortFetch";
 
 function intentionResponse(body: { raw: string; captureId?: string; routingPlanVersion?: number }) {
   const recovery = {
@@ -47,11 +48,19 @@ function intentionResponse(body: { raw: string; captureId?: string; routingPlanV
   };
 }
 
+/* Sort now and retries ask the one-call sorter (sortVersion 2), which answers
+   in items; older-style requests keep the older answer. */
+function sortReply(init: RequestInit | undefined, answer?: object) {
+  const body = JSON.parse(String(init?.body));
+  const legacy = answer ?? intentionResponse(body);
+  return Response.json(body.sortVersion === 2 ? { sort: { version: 2, items: simpleFromLegacy(legacy) } } : legacy);
+}
+
 beforeEach(async () => {
   await set(KEY, JSON.stringify({ ...EMPTY, principles: [] }));
   vi.stubGlobal("fetch", vi.fn(async (url, init) => {
     if (url === "/api/intention") return Response.json({ expandedIntention: "I choose thoughtfully." });
-    if (url === "/api/sort") return Response.json(intentionResponse(JSON.parse(String(init?.body))));
+    if (url === "/api/sort") return sortReply(init);
     return new Response(null, { status: 503 });
   }));
 });
@@ -66,9 +75,9 @@ it.each([undefined, "intention"] as const)("correcting an edited dictated draft 
     if (url === "/api/intention") return Response.json({ expandedIntention: "I choose thoughtfully." });
     if (url === "/api/sort") {
       const body = JSON.parse(init!.body as string);
-      return Response.json(body.force === "thread"
+      return sortReply(init, body.force === "thread"
         ? { kind: "thread", clean: body.raw, threadName: "Training schedule", actions: [] }
-        : intentionResponse(body));
+        : undefined);
     }
     return new Response(null, { status: 503 });
   });

@@ -171,14 +171,14 @@ describe("local-first planned capture", () => {
     expect(hook.result.current.data.actions).toEqual([]);
     expect(hook.result.current.data.ledger.some(entry => entry.raw === raw)).toBe(true);
   });
-  it("automatically files a planned 502 through one legacy recovery without a click", async () => {
+  it("automatically files a 502 through one quick retry by the same sorter, without a click", async () => {
     const raw = "Call the dentist";
-    const requests: Array<{ captureId?: string }> = [];
+    const requests: Array<{ captureId?: string; sortVersion?: number }> = [];
     stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
       const request = JSON.parse(String(init?.body));
       requests.push(request);
-      return request.captureId
+      return requests.length === 1
         ? Response.json({ error: "SOURCE_NOT_ACCOUNTED" }, { status: 502 })
         : sortedResponse(raw);
     }));
@@ -187,8 +187,10 @@ describe("local-first planned capture", () => {
     await act(async () => { await hook.result.current.submit(); });
     await waitFor(() => expect(hook.result.current.unsorted).toHaveLength(0));
     expect(requests).toHaveLength(2);
+    /* Both asks go to the one-call sorter for the same capture; the older
+       sorter (no calendar) is no longer a fallback for text. */
+    for (const request of requests) expect(request).toMatchObject({ sortVersion: 2, captureId: requests[0].captureId });
     expect(requests[0].captureId).toBeTruthy();
-    expect(requests[1].captureId).toBeUndefined();
     expect(hook.result.current.data.actions).toEqual([expect.objectContaining({ text: raw })]);
     expect(JSON.parse((await storage.get(KEY))!).actions).toEqual([expect.objectContaining({ text: raw })]);
   });
@@ -2965,5 +2967,58 @@ describe("local-first planned capture", () => {
       expect.objectContaining({ kind: "action", id: expect.any(String) }),
     ]);
     expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(1);
+  });
+});
+
+describe("one sorter for every text capture", () => {
+  it("sends Sort now to the one-call sorter, not the older one", async () => {
+    let online = false;
+    vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
+    const requests: Array<{ sortVersion?: number; captureId?: string }> = [];
+    stubSortFetch(vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) !== "/api/sort") return new Response(null, { status: 503 });
+      requests.push(JSON.parse(String(init?.body)));
+      return sortedResponse("Book the bike service");
+    }));
+    const hook = await mount();
+    act(() => hook.result.current.setText("Book the bike service for Saturday"));
+    await act(async () => { await hook.result.current.submit(); });
+    const pending = hook.result.current.unsorted[0];
+    online = true;
+    await act(async () => { await hook.result.current.resort(pending); });
+    expect(requests).toEqual([expect.objectContaining({ sortVersion: 2, captureId: expect.any(String) })]);
+    expect(hook.result.current.unsorted).toHaveLength(0);
+    expect(hook.result.current.data.actions).toEqual([expect.objectContaining({ text: "Book the bike service" })]);
+  });
+
+  it("files Sort now's thought in the Thread chosen up front, with the sorter's wording", async () => {
+    let online = false;
+    vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
+    stubSortFetch(vi.fn(async (url: unknown) => String(url) === "/api/sort"
+      ? Response.json({ clean: "Handoffs need an owner.", kind: "thread", title: "Elsewhere", actions: [], shelfLife: "keep", due: null, threadId: null, threadName: "Somewhere else", primaryText: null, also: [] })
+      : new Response(null, { status: 503 })));
+    const hook = await mount();
+    act(() => hook.result.current.setText("handoffs need an owner"));
+    await act(async () => { await hook.result.current.submit(false, undefined, undefined, "destination"); });
+    online = true;
+    const pending = hook.result.current.unsorted[0];
+    if (pending) await act(async () => { await hook.result.current.resort(pending); });
+    await waitFor(() => expect(hook.result.current.unsorted).toHaveLength(0));
+    expect(hook.result.current.data.threads.find((thread) => thread.id === "destination")?.frags.at(-1)?.text)
+      .toBe("Handoffs need an owner.");
+    expect(hook.result.current.data.threads.some((thread) => thread.name === "Somewhere else")).toBe(false);
+  });
+
+  it("says so when Sort now is pressed offline, and leaves the capture saved", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const network = vi.fn(async (url: unknown) => new Response(null, { status: String(url) ? 503 : 500 }));
+    stubSortFetch(network);
+    const hook = await mount();
+    act(() => hook.result.current.setText("Sorted later"));
+    await act(async () => { await hook.result.current.submit(); });
+    await act(async () => { await hook.result.current.resort(hook.result.current.unsorted[0]); });
+    expect(hook.result.current.err).toBe("Offline. It's saved here and sorts when you're back online.");
+    expect(hook.result.current.unsorted).toHaveLength(1);
+    expect(network.mock.calls.filter(([url]) => String(url) === "/api/sort")).toHaveLength(0);
   });
 });
