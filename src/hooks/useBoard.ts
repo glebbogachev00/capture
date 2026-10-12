@@ -283,7 +283,7 @@ export function useBoard(now: number) {
       setLandedIds([]);
       setSuggestion(null);
     });
-  const showReceipt = useCallback((text: string, pendingTargetId: string | null = null, lines = text === "Actions" ? ["Actions"] : receiptLines(text)) => {
+  const showReceipt = useCallback((text: string, pendingTargetId: string | null = null, lines = text === "Actions" ? [t("Actions")] : receiptLines(text)) => {
     setLanded(text);
     setLandedLines(lines);
     pendingReceiptRef.current = pendingTargetId;
@@ -835,7 +835,7 @@ export function useBoard(now: number) {
    * empty box. Defined fresh each render, it always reads the box as it
    * actually is.
    */
-  const sortAgainAs = async (right: SortKind) => {
+  const sortAgainAs = async (right: SortKind, freshThread = false) => {
     const m = misfiled;
     setMisfiled(null);
     /* The box may have been edited since Undo put the words back; what is
@@ -858,6 +858,7 @@ export function useBoard(now: number) {
          still right here. */
       if (!text.trim()) setText(m.text);
     }
+    freshThreadFor.current = freshThread ? m?.captureId : undefined; // "A new thread": the sorter is shown none to reuse
     await submit(false, right, words || undefined, undefined, m?.captureId);
     /* After the capture lands, not before — the banner says where it went,
        this says why that was the right shape for it. */
@@ -1258,6 +1259,7 @@ export function useBoard(now: number) {
 
   /** Rewrite a thread's "Where this stands" from its current fragments. */
   const activeSummaries = useRef(0);
+  const freshThreadFor = useRef<string | undefined>(undefined);
   const regenerate = async (board: Board, threadId: string): Promise<Board> => {
     const target = board.threads.find((t) => t.id === threadId);
     if (!target?.frags.length || target.temporaryName) return board;
@@ -1498,7 +1500,7 @@ export function useBoard(now: number) {
       }
       const work = async () => {
         const response = await requestBoardSort<{ sort?: { items?: SimpleSortItem[] }; via?: string }>({
-          request: fetch, board: latest.current, raw: input.source, forgottenRules, force,
+          request: fetch, board: freshThreadFor.current === input.captureId ? { ...latest.current, threads: [] } : latest.current, raw: input.source, forgottenRules, force,
           simple: true, captureId: input.captureId, signal: attempt.signal, noteVia, errorFor: (message) => new SortError(message),
         });
       if (!attempt.authoritative()) return;
@@ -1581,12 +1583,9 @@ export function useBoard(now: number) {
         ...settled.intentionIds,
       ]);
       const lines = [
-        ...(settled.actionIds.length ? ["Actions"] : []),
-        ...settled.summaryThreadIds.flatMap((id) => {
-          const thread = settled.board.threads.find((item) => item.id === id);
-          return thread ? [`Thread: ${thread.name}`] : [];
-        }),
-        ...(settled.intentionIds.length ? ["Intentions"] : []),
+        ...(settled.actionIds.length ? [t("Actions")] : []),
+        ...settled.summaryThreadIds.flatMap((id) => settled.board.threads.filter((item) => item.id === id).map((thread) => t("Thread: {name}", { name: thread.name }))),
+        ...(settled.intentionIds.length ? [t("Intentions")] : []),
       ];
       if (!lines.length && settled.pendingActionIds.length) {
         showReceipt(t("Saved. Awaiting sorting or placement"), settled.pendingActionIds[0]);
@@ -3351,7 +3350,7 @@ export function useBoard(now: number) {
     setDraft(null);
     setPendingSource(null);
     setTab("intentions");
-    showReceipt(t("Intention {number}", { number: pad(latest.current.intentions.length - latest.current.intentions.findIndex(item => item.id === intention.id)) }));
+    const shown = t("Intention {number}", { number: pad(latest.current.intentions.length - latest.current.intentions.findIndex(item => item.id === intention.id)) }); showReceipt(shown, null, [shown]);
     setLandedIds([]);
     /* The receipt expires separately from the saved capture and Undo state. */
   };

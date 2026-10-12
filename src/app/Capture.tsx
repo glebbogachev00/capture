@@ -742,21 +742,11 @@ export function Capture() {
               <>
                 <span className="misfiled-q">{t("Then what was it?")}</span>
                 <div className="misfiled-opts">
-                  {(["action", "thread", "intention"] as const)
-                    .filter((k) => k !== misfiled.wrong)
-                    .map((k) => (
-                      <button
-                        key={k}
-                        className="misfiled-btn"
-                        onClick={() => void sortAgainAs(k)}
-                      >
-                        {k === "action"
-                          ? t("An action")
-                          : k === "thread"
-                            ? t("A thread")
-                            : t("An intention")}
-                      </button>
-                    ))}
+                  {/* Always the same four answers, in the same places: the
+                      kind it missed is not always the kind it got wrong. */}
+                  {([["intention", t("An intention")], ["action", t("An action")], ["thread", t("A new thread")]] as const).map(([k, label]) => (
+                    <button key={k} className="misfiled-btn" onClick={() => void sortAgainAs(k, k === "thread")}>{label}</button>
+                  ))}
                   {/* Undo can remove a newly created wrong Thread, so count
                       actual alternatives rather than remaining Threads. */}
                   {hasAlternativeThread(data.threads, misfiled.thread?.id) && (

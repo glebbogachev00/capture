@@ -11,12 +11,16 @@ const raw = "The release handoff needs a clearer owner.";
 const chosen = { id: "capture", name: "Capture", summary: "", frags: [{ id: "seed-c", at: 1, text: "Capture product" }] };
 const wrong = { id: "operations", name: "Operations", summary: "", frags: [{ id: "seed-o", at: 1, text: "General operations" }] };
 
+const sorts: { threads: unknown[] }[] = [];
+
 beforeEach(async () => {
   await set(KEY, JSON.stringify({ ...EMPTY, principles: [], threads: [chosen, wrong] }));
+  sorts.length = 0;
   stubSortFetch(vi.fn(async (input, init) => {
     const url = String(input);
     if (url === "/api/sort") {
       const request = JSON.parse(String(init?.body));
+      sorts.push(request);
       const recovery = {
         clean: raw,
         kind: "thread",
@@ -26,8 +30,9 @@ beforeEach(async () => {
         primaryText: null,
         shelfLife: "keep",
         due: null,
-        threadId: "operations",
-        threadName: null,
+        /* Shown no Threads ("A new thread"), the sorter has to name one. */
+        threadId: request.threads.length ? "operations" : null,
+        threadName: request.threads.length ? null : "Release handoff",
         also: [],
       };
       if (!request.routingPlanVersion) return Response.json(recovery);
@@ -85,4 +90,24 @@ it("keeps the explicitly selected correction destination authoritative for the c
       routing: { kind: "thread", threadId: "capture", threadName: "Capture" },
     }),
   ]));
+});
+
+it("files Undo's \"A new thread\" in a fresh Thread, not one the sorter reuses", async () => {
+  const hook = renderHook(() => useBoard(Date.now()));
+  await waitFor(() => expect(hook.result.current.loaded).toBe(true));
+
+  await act(async () => { await hook.result.current.submit(false, undefined, raw); });
+  await waitFor(() => expect(
+    hook.result.current.data.threads.find((thread) => thread.id === "operations")?.frags.at(-1)?.text
+  ).toBe(raw));
+  await act(async () => { await hook.result.current.undo(); });
+
+  await act(async () => { await hook.result.current.sortAgainAs("thread", true); });
+
+  await waitFor(() => expect(
+    hook.result.current.data.threads.find((thread) => thread.name === "Release handoff")?.frags.map((frag) => frag.text)
+  ).toEqual([raw]));
+  expect(sorts.at(-1)?.threads).toEqual([]);
+  expect(hook.result.current.data.threads.find((thread) => thread.id === "operations")?.frags).toHaveLength(1);
+  expect(hook.result.current.data.threads.find((thread) => thread.id === "capture")?.frags).toHaveLength(1);
 });

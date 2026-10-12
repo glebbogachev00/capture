@@ -1,5 +1,5 @@
 import { t } from "@/lib/i18n";
-import { receiptLines } from "@/lib/receiptCopy";
+import { receiptLabel, receiptLines } from "@/lib/receiptCopy";
 import type { Action } from "@/lib/model";
 
 export function CaptureReceipt({
@@ -33,7 +33,7 @@ export function CaptureReceipt({
   if (!receipt) return null;
   return (
     <div className={`landed capture-receipt${pendingReceipt ? " pending-receipt" : ""}`} role="status">
-      {pendingReceipt || receipt === "Split filed" ? <span>{receipt}</span> : canUndoManual ? <span>{t("Landed in")} <em>{receipt}</em>.</span> : <div className="landed-copy">
+      {pendingReceipt || receipt === "Split filed" ? <span>{receiptLabel(receipt)}</span> : canUndoManual ? <span>{t("Landed in")} <em>{receiptLabel(receipt)}</em>.</span> : <div className="landed-copy">
         <span className="landed-label">{t("Capture sorted this into:")}</span>
         <ul className="landed-list">
           {(lines ?? receiptLines(receipt)).map((line) => <li key={line}>{line}</li>)}

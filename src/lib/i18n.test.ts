@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { _resetLocale, countOf, localeFrom, t, translate } from "./i18n";
 import { RU, RU_PRINCIPLES } from "./i18n.ru";
 import { SEED_PRINCIPLES, shownPrinciple } from "./model";
+import { receiptLabel, receiptLines } from "./receiptCopy";
 
 const source = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
   const path = join(dir, name);
@@ -80,5 +81,13 @@ describe("Russian", () => {
     for (const seed of SEED_PRINCIPLES) expect(RU_PRINCIPLES[seed.name]).toBeDefined();
     expect(shownPrinciple(SEED_PRINCIPLES[6]).name).toBe("Упрощайте");
     expect(shownPrinciple({ ...SEED_PRINCIPLES[6], description: "My own words" }).name).toBe("Simplify");
+  });
+
+  it("reads English receipt tokens and shows them in Russian", () => {
+    vi.stubGlobal("navigator", { languages: ["ru-RU"], language: "ru-RU" });
+    _resetLocale();
+    expect(receiptLines("Спортзал · a new thread")).toEqual(["Новая тема: Спортзал"]);
+    expect(receiptLines("2 actions · a layer on Спортзал")).toEqual(["2 дела", "Добавлено в тему: Спортзал"]);
+    expect(receiptLabel("Actions")).toBe("Дела");
   });
 });

@@ -79,6 +79,7 @@ export type Applied = {
 };
 
 const count = countNoun;
+const englishCount = (n: number) => `${n} action${n === 1 ? "" : "s"}`;
 
 /**
  * Fold a sorted capture into a board, returning the new board plus what it
@@ -247,9 +248,11 @@ function applyPrimary(
         expires: expiryFor(span, due, stamp()),
       })
     );
+    /* `landed` is the receipt token (English, parsed by receiptCopy);
+       `landedLines` is what the banner shows. */
     const plain =
-      count(items.length, "action") +
-      (span ? " · " + t("fades in {left}", { left: left(span) }) : " · " + t("kept"));
+      englishCount(items.length) +
+      (span ? " · fades in " + left(span) : " · kept");
     const plainLines = [
       count(items.length, "action"),
       ...(span ? [t("Available for {left}", { left: left(span) })] : []),
@@ -268,7 +271,7 @@ function applyPrimary(
         ? [...items.map((i) => i.id), shotThreadId]
         : items.map((i) => i.id),
       landed: shotFrag
-        ? plain + " · " + t("picture kept in {name}", { name: shotHome ? shotHome.name : threads[0].name })
+        ? plain + " · picture kept in " + (shotHome ? shotHome.name : threads[0].name)
         : plain,
       landedLines: shotFrag
         ? [...plainLines, t("Picture saved in: {name}", { name: shotHome ? shotHome.name : threads[0].name })]
@@ -332,8 +335,8 @@ function applyPrimary(
          first fragment "a layer on X" describes a history that does not
          exist, and reads as though the capture joined something. */
       landed:
-        count(items.length, "action") +
-        " · " + (home ? t("a layer on {name}", { name: homeName }) : t("a new thread — {name}", { name: homeName })),
+        englishCount(items.length) +
+        (home ? " · a layer on " + homeName : " · a new thread — " + homeName),
       landedLines: [
         count(items.length, "action"),
         home ? t("Added to thread: {name}", { name: homeName }) : t("New thread: {name}", { name: homeName }),
@@ -354,7 +357,7 @@ function applyPrimary(
       targetId: existing.id,
       source: { kind: "thread", id: existing.id, fragId: frag.id },
       landedIds: [existing.id],
-      landed: existing.name + " · " + t("a new layer"),
+      landed: existing.name + " · a new layer",
       landedLines: [t("Added to thread: {name}", { name: existing.name })],
     };
   }
@@ -369,7 +372,7 @@ function applyPrimary(
     targetId: fresh.id,
     source: { kind: "thread", id: fresh.id, fragId: frag.id },
     landedIds: [fresh.id],
-    landed: fresh.name + " · " + t("a new thread"),
+    landed: fresh.name + " · a new thread",
     landedLines: [t("New thread: {name}", { name: fresh.name })],
   };
 }

@@ -7,8 +7,9 @@ import type { Tier } from "./providers";
 
 type Options = { tier: Tier; abortSignal?: AbortSignal };
 
-/** The lines in Russian, or null when the answer cannot be trusted. The note
- * they came from lets the rewrite reuse the person's own words and names. */
+/** The lines in Russian, or null when the answer cannot be trusted; throws
+ * when the provider fails. The note they came from lets the rewrite reuse the
+ * person's own words and names. */
 export async function toRussian(lines: string[], { tier, abortSignal }: Options, note?: string): Promise<string[] | null> {
   const common = {
     model: tier.model,
@@ -23,14 +24,13 @@ export async function toRussian(lines: string[], { tier, abortSignal }: Options,
     maxRetries: 0 as const,
     abortSignal,
   };
-  try {
-    const answer = tier.name === "cerebras"
-      ? (await generateObject({ ...common, output: "no-schema" })).object
-      : (await generateObject({ ...common, schema: ToRussianSchema })).object;
-    return acceptRussian(lines, answer);
-  } catch {
-    return null;
-  }
+  /* A provider error (rate limit, outage) is thrown, so withFallback tries
+     the next provider; swallowing it here left English names whenever the
+     first provider was busy. An answer that fails the check is just null. */
+  const answer = tier.name === "cerebras"
+    ? (await generateObject({ ...common, output: "no-schema" })).object
+    : (await generateObject({ ...common, schema: ToRussianSchema })).object;
+  return acceptRussian(lines, answer);
 }
 
 /** A Russian capture keeps Russian in what the sorter wrote itself: actions
