@@ -1,3 +1,5 @@
+import { deviceLocale, t } from "./i18n";
+import { RU_PRINCIPLES } from "./i18n.ru";
 /**
  * The shape of the board, and the rules that decide what stays on it.
  *
@@ -277,6 +279,15 @@ export const SEED_PRINCIPLES: Principle[] = [
   updatedAt: 0,
 }));
 
+/** A principle as this device shows it: the built-in ones in its language
+ * until the person rewords them. */
+export function shownPrinciple(p: Principle): { name: string; description: string } {
+  const seed = p.builtin ? SEED_PRINCIPLES.find((s) => s.id === p.id) : undefined;
+  const russian = deviceLocale() === "ru" && seed?.name === p.name && seed.description === p.description
+    ? RU_PRINCIPLES[p.name] : undefined;
+  return russian ? { name: russian[0], description: russian[1] } : { name: p.name, description: p.description };
+}
+
 export const EMPTY: Board = {
   actions: [],
   threads: [],
@@ -504,10 +515,10 @@ export const fmtDue = (t: number) =>
 
 export const left = (ms: number) =>
   ms <= 0
-    ? "now"
+    ? t("now")
     : ms >= DAY
-      ? Math.ceil(ms / DAY) + "d"
-      : Math.max(1, Math.ceil(ms / HOUR)) + "h";
+      ? t("{n}d", { n: Math.ceil(ms / DAY) })
+      : t("{n}h", { n: Math.max(1, Math.ceil(ms / HOUR)) });
 
 export async function dropImages(ids: string[] | undefined) {
   /* Through the cache, so a memory copy can never outlive the bytes. */

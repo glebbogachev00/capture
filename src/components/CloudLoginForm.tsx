@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale, useT } from "@/components/LocaleProvider";
 import { completeExplicitAuthentication } from "@/lib/ownership";
 import { useMemo, useState } from "react";
 import type { CloudConfig } from "@/lib/supabase/config";
@@ -13,6 +14,9 @@ type Props = {
 };
 
 export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
+  const t = useT();
+  /* Sign-in errors come from the auth service in English; a Russian reader gets ours. */
+  const russian = useLocale() === "ru";
   const client = useMemo(() => createCloudBrowserClient(config), [config]);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -24,7 +28,7 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
     event.preventDefault();
     const cleanEmail = email.trim();
     if (!cleanEmail) {
-      setError("Enter your email address.");
+      setError(t("Enter your email address."));
       return;
     }
 
@@ -37,14 +41,14 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
       });
 
       if (authError) {
-        setError(authError.message || "We couldn't send the code. Try again.");
+        setError((!russian && authError.message) || t("We couldn't send the code. Try again."));
         return;
       }
 
       setEmail(cleanEmail);
       setStage("code");
     } catch {
-      setError("We couldn't send the code. Try again.");
+      setError(t("We couldn't send the code. Try again."));
     } finally {
       setBusy(false);
     }
@@ -54,7 +58,7 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
     event.preventDefault();
     const cleanCode = code.trim();
     if (!/^\d{6,10}$/.test(cleanCode)) {
-      setError("Enter the verification code from the email.");
+      setError(t("Enter the verification code from the email."));
       return;
     }
 
@@ -68,7 +72,7 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
       });
 
       if (authError) {
-        setError(authError.message || "That code didn't work. Request a new one.");
+        setError((!russian && authError.message) || t("That code didn't work. Request a new one."));
         return;
       }
 
@@ -82,10 +86,10 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
         const destination = await cloudCheckoutDestinationAfterLogin(nextPath);
         window.location.href = destination;
       } catch {
-        setError("You’re signed in. Open Capture and try again.");
+        setError(t("You’re signed in. Open Capture and try again."));
       }
     } catch {
-      setError("We couldn't verify that code. Request a new one.");
+      setError(t("We couldn't verify that code. Request a new one."));
     } finally {
       setBusy(false);
     }
@@ -95,12 +99,12 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
     return (
       <div className="cloud-login">
         <div className="cloud-login-copy">
-          <p className="cloud-login-kicker">Check your email</p>
-          <h1>Your code is waiting.</h1>
-          <p>Enter the code sent to {email}.</p>
+          <p className="cloud-login-kicker">{t("Check your email")}</p>
+          <h1>{t("Your code is waiting.")}</h1>
+          <p>{t("Enter the code sent to {email}.", { email })}</p>
         </div>
         <form onSubmit={verifyCode}>
-          <label htmlFor="capture-code">Verification code</label>
+          <label htmlFor="capture-code">{t("Verification code")}</label>
           <input
             id="capture-code"
             name="code"
@@ -111,11 +115,11 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
             maxLength={10}
             value={code}
             onChange={(event) => setCode(event.target.value)}
-            placeholder="Enter your code"
+            placeholder={t("Enter your code")}
             autoFocus
           />
           <button className="capture-btn" type="submit" disabled={busy}>
-            {busy ? "Checking…" : "Open Capture"}
+            {busy ? t("Checking…") : t("Open Capture")}
           </button>
           <button
             className="cloud-login-link"
@@ -126,7 +130,7 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
               setError("");
             }}
           >
-            Use a different email
+            {t("Use a different email")}
           </button>
           {error && <div className="err" role="alert">{error}</div>}
         </form>
@@ -137,12 +141,12 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
   return (
     <div className="cloud-login">
       <div className="cloud-login-copy">
-        <p className="cloud-login-kicker">Capture Cloud</p>
-        <h1>Your thoughts, wherever you open Capture.</h1>
-        <p>Enter your email. We’ll send a verification code, so there is no password to remember and no link to chase.</p>
+        <p className="cloud-login-kicker">{t("Capture Cloud")}</p>
+        <h1>{t("Your thoughts, wherever you open Capture.")}</h1>
+        <p>{t("Enter your email. We’ll send a verification code, so there is no password to remember and no link to chase.")}</p>
       </div>
       <form onSubmit={sendCode}>
-        <label htmlFor="capture-email">Email</label>
+        <label htmlFor="capture-email">{t("Email")}</label>
         <input
           id="capture-email"
           name="email"
@@ -150,11 +154,11 @@ export function CloudLoginForm({ config, nextPath, onAuthenticated }: Props) {
           autoComplete="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="you@example.com"
+          placeholder={t("you@example.com")}
           autoFocus
         />
         <button className="capture-btn" type="submit" disabled={busy}>
-          {busy ? "Sending…" : "Send code"}
+          {busy ? t("Sending…") : t("Send code")}
         </button>
         {error && <div className="err" role="alert">{error}</div>}
       </form>

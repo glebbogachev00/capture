@@ -23,7 +23,8 @@ export const FORMAT_SYSTEM =
   "breaks and '- ' markers are the only things you may add. No headings, no bold, " +
   "no emphasis. Reply with the formatted text only, no commentary.";
 
-const FILLER = /\b(um+|uh+|erm|you know)\b/i;
+/* Russian fillers too; \b does not see Cyrillic letters, so look for letters around. */
+const FILLER = /\b(um+|uh+|erm|you know)\b|(?<!\p{L})(ну|короче|типа|э+|м+|как бы|это самое)(?!\p{L})/iu;
 const STRUCTURED = /\n\s*\n|^\s*([-*•]|\d+[.)]|#{1,3})\s/m;
 
 /** Worth a model call: long enough to need paragraphs, or carrying filler,
@@ -34,8 +35,13 @@ export function shouldFormat(raw: string): boolean {
   return text.length >= 160 || FILLER.test(text);
 }
 
-const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
-const FILLER_WORDS = new Set(["um", "umm", "uh", "uhh", "erm", "like", "you", "know", "so", "just", "i", "mean"]);
+/* "ещё" and "еще" are one word written two ways; counting them apart rejected
+   good Russian cleanups as invented words. */
+const words = (text: string) => text.toLowerCase().replace(/ё/g, "е").match(/[\p{L}\p{N}']+/gu) ?? [];
+const FILLER_WORDS = new Set([
+  "um", "umm", "uh", "uhh", "erm", "like", "you", "know", "so", "just", "i", "mean",
+  "ну", "короче", "типа", "вот", "как", "бы", "эээ", "ммм", "это", "самое",
+]);
 
 /** Cleanup may remove fillers, restarts and corrected-away words; it may not
  * summarise or add. Measured on the words themselves, not on the layout. */
@@ -100,7 +106,7 @@ export function airy(text: string): string {
  * that is already capitalised or mixed-case is left as it is. */
 export function sentenceCase(text: string): string {
   return text
-    .replace(/(^|[.!?]["”’')\]]*\s+|\n\s*(?:[-*•]\s+)?)([a-z])/g, (match: string, before: string, letter: string, offset: number, all: string) =>
+    .replace(/(^|[.!?]["”’')\]]*\s+|\n\s*(?:[-*•]\s+)?)([a-zа-яё])/g, (match: string, before: string, letter: string, offset: number, all: string) =>
       /\b(e\.g|i\.e|etc|vs|cf|approx)\.\s+$/i.test(all.slice(Math.max(0, offset - 8), offset) + before) ? match : before + letter.toUpperCase())
     .replace(/\bi(?=\b(?:'(?:m|ve|ll|d))?(?![\p{L}\p{N}.\/-]))/gu, "I");
 }

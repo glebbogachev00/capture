@@ -1,5 +1,6 @@
 "use client";
 
+import { deviceLocale, t } from "@/lib/i18n";
 import { useEffect, useRef } from "react";
 import { useOwnedState } from "@/hooks/useOwnedState";
 import type { Board } from "@/lib/model";
@@ -35,7 +36,7 @@ const Text = ({ spans }: { spans: Span[] }) =>
 export function sourceDate(at: number, now: number): string {
   const date = new Date(at);
   const sameYear = date.getFullYear() === new Date(now).getFullYear();
-  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+  return date.toLocaleDateString(deviceLocale() === "ru" ? "ru" : "en-US", { month: "long", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
 }
 
 /**
@@ -62,7 +63,7 @@ export function AskBar({ board, now, query, onQuery, onOpenThread, onOpenIntenti
       if (!navigator.onLine || (lifetime.cloud && !lifetime.owner)) throw new Error("offline");
       lifetime.assertOnline();
     } catch {
-      setAsked({ question, phase: "error", error: "Ask needs the model, and it can't be reached right now. Search still works." });
+      setAsked({ question, phase: "error", error: t("Ask needs the model, and it can't be reached right now. Search still works.") });
       return;
     }
     const context = askContext(board, now);
@@ -109,30 +110,30 @@ export function AskBar({ board, now, query, onQuery, onOpenThread, onOpenIntenti
         type="search"
         value={query}
         onChange={(e) => onQuery(e.target.value)}
-        placeholder="Search, or ask your board a question"
-        aria-label="Search, or ask your board a question"
+        placeholder={t("Search, or ask your board a question")}
+        aria-label={t("Search, or ask your board a question")}
         enterKeyHint="send"
       />
       {query.trim().length >= 2 && (
-        <button type="submit" className="ghost" disabled={current?.phase === "loading"}>Ask</button>
+        <button type="submit" className="ghost" disabled={current?.phase === "loading"}>{t("Ask")}</button>
       )}
-      {!!query && <button type="button" className="ghost" onClick={clear}>Clear</button>}
+      {!!query && <button type="button" className="ghost" onClick={clear}>{t("Clear")}</button>}
     </form>
 
     <p role="status" aria-live="polite" className={styles.visuallyHidden}>
-      {current?.phase === "loading" ? "Reading your board…" : result ? "Answer ready." : ""}
+      {current?.phase === "loading" ? t("Reading your board…") : result ? t("Answer ready.") : ""}
     </p>
     {current?.phase === "loading" && (
       <div className={styles.loading} data-testid="answer-loading" aria-hidden="true">
         <div className={styles.loadingDots}><span /><span /><span /></div>
-        <p>Reading your board…</p>
+        <p>{t("Reading your board…")}</p>
       </div>
     )}
     {current?.phase === "error" && <p className={styles.error} role="alert">{current.error}</p>}
     {result && (
-      <section className={styles.panel} aria-label="Answer">
-        <h3 className={styles.heading}>{result.found ? "From your board" : "Not on your board"}</h3>
-        <div className={styles.body} aria-label="Capture's reading of your notes">
+      <section className={styles.panel} aria-label={t("Answer")}>
+        <h3 className={styles.heading}>{result.found ? t("From your board") : t("Not on your board")}</h3>
+        <div className={styles.body} aria-label={t("Capture's reading of your notes")}>
           {answerBlocks(result.answer).map((block, i) =>
             block.type === "p" ? <p key={i}><Text spans={block.spans} /></p>
               : block.type === "ul" ? <ul key={i}>{block.items.map((item, j) => <li key={j}><Text spans={item} /></li>)}</ul>
@@ -141,24 +142,24 @@ export function AskBar({ board, now, query, onQuery, onOpenThread, onOpenIntenti
         </div>
         {!!result.sources.length && (
           <div className={styles.sources}>
-            <p className={styles.sourcesLabel}>What you recorded</p>
+            <p className={styles.sourcesLabel}>{t("What you recorded")}</p>
             {result.sources.map((source) => (
               <button type="button" key={source.fragId} className={styles.source}
-                aria-label={`Open the note from ${sourceDate(source.at, now)} in ${source.threadName}`}
+                aria-label={t("Open the note from {date} in {thread}", { date: sourceDate(source.at, now), thread: source.threadName })}
                 onClick={() => onOpenThread(source.threadId, source.fragId)}>
                 <span className={styles.sourceMeta}>{sourceDate(source.at, now)} · {source.threadName}</span>
                 {source.quote ? <span className={styles.sourceText}>“{source.quote}”</span>
-                  : source.paraphrase ? <span className={styles.sourceText}><em>{source.paraphrase}</em> <span className={styles.sourceTag}>paraphrase</span></span>
+                  : source.paraphrase ? <span className={styles.sourceText}><em>{source.paraphrase}</em> <span className={styles.sourceTag}>{t("paraphrase")}</span></span>
                     : <span className={styles.sourceText}>{source.excerpt}{source.excerpt.length >= 160 ? "…" : ""}</span>}
               </button>
             ))}
           </div>
         )}
         {!!result.refs.length && (
-          <div className={styles.connections} aria-label="Drawn from">
+          <div className={styles.connections} aria-label={t("Drawn from")}>
             {result.refs.map((ref) => (
               <button type="button" key={`${ref.kind}:${ref.id}`} className={styles.sourceButton}
-                aria-label={`Open ${ref.kind}: ${ref.name}`}
+                aria-label={ref.kind === "thread" ? t("Open thread: {name}", { name: ref.name }) : ref.kind === "intention" ? t("Open intention: {name}", { name: ref.name }) : t("Open action: {name}", { name: ref.name })}
                 onClick={() => ref.kind === "thread" ? onOpenThread(ref.id)
                   : ref.kind === "intention" ? onOpenIntention(ref.id) : onOpenActions()}>
                 {ref.name.length > 48 ? ref.name.slice(0, 47).trimEnd() + "…" : ref.name}
@@ -167,7 +168,7 @@ export function AskBar({ board, now, query, onQuery, onOpenThread, onOpenIntenti
           </div>
         )}
         {!!current?.omitted && (
-          <p className={styles.note}>Your board is large, so its {current.omitted} oldest notes were summarised rather than read.</p>
+          <p className={styles.note}>{t("Your board is large, so its {count} oldest notes were summarised rather than read.", { count: current.omitted })}</p>
         )}
       </section>
     )}

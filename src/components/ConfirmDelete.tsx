@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n";
 import { useSyncExternalStore } from "react";
 import { getDocumentLifetime } from "@/lib/ownership";
 import { createPortal } from "react-dom";
@@ -19,8 +20,8 @@ import { createPortal } from "react-dom";
  */
 export function ConfirmDelete({
   title,
-  hint = "This cannot be undone.",
-  confirmLabel = "Delete for good",
+  hint = t("This cannot be undone."),
+  confirmLabel = t("Delete for good"),
   onConfirm,
   onCancel,
 }: {
@@ -43,7 +44,7 @@ export function ConfirmDelete({
             {confirmLabel}
           </button>
           <button className="ghost" onClick={onCancel}>
-            Keep it
+            {t("Keep it")}
           </button>
         </div>
       </div>

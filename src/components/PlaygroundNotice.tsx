@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n";
 import { cloudPricingHandoff } from "@/lib/cloudCheckoutClient";
 import { QUICKSTART_URL } from "@/lib/playground";
 
@@ -9,19 +10,19 @@ export function PlaygroundNotice() {
   return (
     <aside className="playground-note" aria-labelledby="playground-note-title">
       <div className="playground-note-copy">
-        <strong id="playground-note-title">Choose where to keep your board</strong>
+        <strong id="playground-note-title">{t("Choose where to keep your board")}</strong>
         <span>
-          This playground stays in this browser. Use Cloud to sync across devices.
+          {t("This playground stays in this browser. Use Cloud to sync across devices.")}
         </span>
       </div>
       <div className="playground-note-actions">
         {cloudPricing && (
           <a className="playground-note-action is-primary" href={cloudPricing}>
-            Start with Capture Cloud
+            {t("Start with Capture Cloud")}
           </a>
         )}
         <a className="playground-note-action is-secondary" href={QUICKSTART_URL}>
-          Try Capture Locally
+          {t("Try Capture Locally")}
         </a>
       </div>
     </aside>

@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n";
 import type { ReactElement, ReactNode } from "react";
 import type { Action } from "@/lib/model";
 import type { GroupedActions } from "@/lib/group";
@@ -23,7 +24,7 @@ export function GroupedActionRows({
   if (grouped.groups.length && grouped.rest.length) {
     nodes.push(
       <div className="group-label rest" key="group-rest-label">
-        everything else · {grouped.rest.length}
+        {t("everything else · {count}", { count: grouped.rest.length })}
       </div>
     );
   }

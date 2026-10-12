@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
@@ -124,45 +125,45 @@ export function DestinationPicker({
       }}>
       <header className="destination-picker-header">
         <div>
-          <h2 id={titleId}>Choose a place</h2>
+          <h2 id={titleId}>{t("Choose a place")}</h2>
           <p id={previewId}>{capture.src || capture.text}</p>
         </div>
         <button className="destination-picker-close" type="button"
-          aria-label="Close destination picker" onClick={onClose}>
+          aria-label={t("Close destination picker")} onClick={onClose}>
           <X size={19} strokeWidth={1.8} aria-hidden="true" />
         </button>
       </header>
       <div className="destination-picker-sticky">
-        <input ref={searchRef} type="search" aria-label="Find a thread"
-          placeholder="Find a thread" value={query}
+        <input ref={searchRef} type="search" aria-label={t("Find a thread")}
+          placeholder={t("Find a thread")} value={query}
           onChange={(event) => { setQuery(event.target.value); setNaming(false); }} />
       </div>
       <div className="destination-picker-results">
         <section aria-labelledby={`${titleId}-quick`}>
-          <h3 id={`${titleId}-quick`}>Quick destinations</h3>
+          <h3 id={`${titleId}-quick`}>{t("Quick destinations")}</h3>
           <div className="destination-picker-quick">
-            <button type="button" disabled={busy} onClick={() => choose({ kind: "action" })}>Action</button>
-            <button type="button" disabled={busy} onClick={() => choose({ kind: "intention" })}>Intention</button>
+            <button type="button" disabled={busy} onClick={() => choose({ kind: "action" })}>{t("Action")}</button>
+            <button type="button" disabled={busy} onClick={() => choose({ kind: "intention" })}>{t("Intention")}</button>
           </div>
         </section>
-        <section className="destination-picker-create" aria-label="Create a Thread">
-          <button type="button" disabled={busy} onClick={createThread}>Create new thread</button>
+        <section className="destination-picker-create" aria-label={t("Create a Thread")}>
+          <button type="button" disabled={busy} onClick={createThread}>{t("Create new thread")}</button>
           {naming && <div className="destination-picker-name">
-            <label htmlFor={`${titleId}-name`}>Thread name</label>
+            <label htmlFor={`${titleId}-name`}>{t("Thread name")}</label>
             <div>
               <input ref={nameRef} id={`${titleId}-name`} value={name} maxLength={MAX_THREAD_NAME}
                 onChange={(event) => setName(event.target.value)}
                 onKeyDown={(event) => { if (event.key === "Enter") confirmName(); }} />
-              <button type="button" disabled={busy || !boundedThreadName(name)} onClick={confirmName}>Create Thread</button>
+              <button type="button" disabled={busy || !boundedThreadName(name)} onClick={confirmName}>{t("Create Thread")}</button>
             </div>
           </div>}
         </section>
         <section aria-labelledby={`${titleId}-threads`}>
-          <h3 id={`${titleId}-threads`}>{normalized ? "Matching threads" : "Recent threads"}</h3>
+          <h3 id={`${titleId}-threads`}>{normalized ? t("Matching threads") : t("Recent threads")}</h3>
           <div className="destination-picker-threads">
             {visibleThreads.map((thread) => <button type="button" key={thread.id} disabled={busy}
               onClick={() => choose({ kind: "thread", threadId: thread.id })}>{thread.name}</button>)}
-            {!visibleThreads.length && <p>No matching threads.</p>}
+            {!visibleThreads.length && <p>{t("No matching threads.")}</p>}
           </div>
         </section>
       </div>

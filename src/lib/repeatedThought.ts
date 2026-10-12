@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import type { Board } from "./model";
 import type { Suggestion } from "./boardOps";
 
@@ -32,7 +33,7 @@ export function repeatedThought(before: Board, after: Board, threadIds: string[]
         kind: "duplicate",
         targetId: thread.id,
         targetName: thread.name,
-        reason: "The same words are already in this thread.",
+        reason: t("The same words are already in this thread."),
         sourceId: thread.id,
         sourceKind: "thread",
         sourceFragId: frag.id,

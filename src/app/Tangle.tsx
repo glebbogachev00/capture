@@ -19,6 +19,7 @@
  * out is invisible to the person while an extra one costs a glance.
  */
 
+import { countNoun, t } from "@/lib/i18n";
 import { useState } from "react";
 import { Check, ChevronRight, X } from "lucide-react";
 import type { TangleProposal } from "@/lib/tangle";
@@ -36,7 +37,7 @@ export function TangleCallout({
   return (
     <div className="tangle-callout">
       <button className="tangle-callout-open" onClick={onOpen}>
-        <span className="tangle-callout-label">These two keep getting mixed up</span>
+        <span className="tangle-callout-label">{t("These two keep getting mixed up")}</span>
         {/* One sentence, and it is the offer rather than the evidence. The
             first version said what had happened AND what was proposed, ran
             to three lines above the board, and gave no sign it could be
@@ -47,9 +48,7 @@ export function TangleCallout({
             can carry punctuation: a thread called "Capture." unquoted read
             as "7 notes in Capture. look like…" — a broken sentence. */}
         <span className="tangle-callout-line">
-          {move.length} {move.length === 1 ? "note" : "notes"} in{" "}
-          &ldquo;{pair.fromName}&rdquo; look like they belong in &ldquo;
-          {pair.toName}&rdquo;
+          {t("{count} in “{from}” look like they belong in “{to}”", { count: countNoun(move.length, "note"), from: pair.fromName, to: pair.toName })}
         </span>
       </button>
       <span className="tangle-callout-go" aria-hidden="true">
@@ -58,8 +57,8 @@ export function TangleCallout({
       <button
         className="tangle-callout-x"
         onClick={onDismiss}
-        aria-label="Not now"
-        title="Not now"
+        aria-label={t("Not now")}
+        title={t("Not now")}
       >
         <X size={15} strokeWidth={1.7} />
       </button>
@@ -113,18 +112,14 @@ export function TangleReview({
   return (
     <div>
       <button className="back" onClick={onBack}>
-        ← capture
+        {t("← capture")}
       </button>
 
       <div className="tname" style={{ fontSize: 26, marginBottom: 6 }}>
-        {pair.fromName} and {pair.toName}
+        {t("{from} and {to}", { from: pair.fromName, to: pair.toName })}
       </div>
       <p className="int-note" style={{ marginBottom: 18 }}>
-        You&apos;ve already moved {pair.times}{" "}
-        {pair.times === 1 ? "note" : "notes"} from {pair.fromName} to{" "}
-        {pair.toName}{" "}
-        by hand. These look like they belong there too — untick anything that
-        doesn&apos;t, then move the rest.
+        {t("You’ve already moved {count} from {from} to {to} by hand. These look like they belong there too — untick anything that doesn’t, then move the rest.", { count: countNoun(pair.times, "note"), from: pair.fromName, to: pair.toName })}
       </p>
 
       <div className="tangle-list">
@@ -162,17 +157,14 @@ export function TangleReview({
             {takeName && <Check size={13} strokeWidth={2.4} />}
           </span>
           <span>
-            Rename <b>{pair.fromName}</b> to <b>{rename}</b> — its name is part
-            of why this keeps happening
+            {t("Rename")} <b>{pair.fromName}</b> {t("to")} <b>{rename}</b> {t("— its name is part of why this keeps happening")}
           </span>
         </button>
       )}
 
       {merging && (
         <p className="int-note" style={{ marginTop: 18, marginBottom: 0 }}>
-          Every note is moving, so {pair.fromName} will be absorbed into{" "}
-          {pair.toName} and stop existing. Anything filed under it comes
-          along. Undo puts it back.
+          {t("Every note is moving, so {from} will be absorbed into {to} and stop existing. Anything filed under it comes along. Undo puts it back.", { from: pair.fromName, to: pair.toName })}
         </p>
       )}
 
@@ -183,10 +175,10 @@ export function TangleReview({
           onClick={() => onAccept([...picked], takeName)}
         >
           {!picked.size
-            ? "Rename only"
+            ? t("Rename only")
             : merging
-              ? `Merge ${pair.fromName} into ${pair.toName}`
-              : `Move ${picked.size} to ${pair.toName}`}
+              ? t("Merge {from} into {to}", { from: pair.fromName, to: pair.toName })
+              : t("Move {count} to {to}", { count: picked.size, to: pair.toName })}
         </button>
       </div>
 
@@ -195,8 +187,7 @@ export function TangleReview({
           className="tangle-all"
           onClick={() => onAccept([], takeName, true)}
         >
-          Or merge the whole thread — {rest} more{" "}
-          {rest === 1 ? "note" : "notes"} not listed above
+          {t("Or merge the whole thread — {count} more not listed above", { count: countNoun(rest, "note") })}
         </button>
       )}
     </div>

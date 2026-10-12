@@ -7,6 +7,7 @@
  * keeps the reading experience. No logic changed in the move.
  */
 
+import { countNoun, t } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { Copy, MoreHorizontal } from "lucide-react";
 import { imgLoad, imgNow, imgSave, onImageAvailable } from "@/lib/imgCache";
@@ -20,6 +21,12 @@ import { PublishThreadSheet } from "./PublishThreadSheet";
 import { needsFormatting, sentenceCase } from "@/lib/captureFormat";
 import { ownedFetch } from "@/lib/ownership";
 import { PLAYGROUND } from "@/lib/playground";
+
+/* The cover colours, by name, in the reader's language. */
+const toneName = (tone: string) => ({
+  sage: t("sage"), clay: t("clay"), sand: t("sand"), sky: t("sky"),
+  plum: t("plum"), moss: t("moss"), rose: t("rose"), slate: t("slate"),
+} as Record<string, string>)[tone] ?? tone;
 
 export function ThreadView({
   thread,
@@ -141,7 +148,7 @@ export function ThreadView({
   return (
     <div>
       <button className="back" onClick={onBack}>
-        ← all threads
+        {t("← all threads")}
       </button>
 
       {renaming ? (
@@ -149,7 +156,7 @@ export function ThreadView({
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            aria-label="Thread name"
+            aria-label={t("Thread name")}
             autoFocus
             onKeyDown={(e) => {
               if (e.key === "Enter" && name.trim()) {
@@ -170,7 +177,7 @@ export function ThreadView({
               setRenaming(false);
             }}
           >
-            Save
+            {t("Save")}
           </button>
           <button
             className="ghost"
@@ -179,7 +186,7 @@ export function ThreadView({
               setRenaming(false);
             }}
           >
-            Cancel
+            {t("Cancel")}
           </button>
         </div>
       ) : (
@@ -195,7 +202,7 @@ export function ThreadView({
                 which is the right thing for sending to a person and the wrong
                 thing when you only want to paste this into a chat. */}
             <div className="frag-tools">
-              <button className="copy-btn" onClick={onCopyThread} aria-label="Copy thread">
+              <button className="copy-btn" onClick={onCopyThread} aria-label={t("Copy thread")}>
                 <Copy size={16} strokeWidth={1.6} />
               </button>
               <button
@@ -206,7 +213,7 @@ export function ThreadView({
                   setConfirming(false);
                 }}
                 aria-expanded={more}
-                aria-label={more ? "Fewer options" : "More options"}
+                aria-label={more ? t("Fewer options") : t("More options")}
               >
                 <MoreHorizontal size={16} strokeWidth={1.8} />
               </button>
@@ -216,10 +223,10 @@ export function ThreadView({
           {more && (
             <div className="row-actions">
               <button className="ghost" onClick={onRefreshSummary} disabled={busy}>
-                Refresh summary
+                {t("Refresh summary")}
               </button>
               <button className="ghost" onClick={() => { setName(thread.name); setRenaming(true); }}>
-                Rename
+                {t("Rename")}
               </button>
               <button
                 className="ghost"
@@ -230,7 +237,7 @@ export function ThreadView({
                 }}
                 aria-expanded={pickingCover}
               >
-                Cover
+                {t("Cover")}
               </button>
               {others.length > 0 && (
                 <button
@@ -240,17 +247,17 @@ export function ThreadView({
                     setConfirming(false);
                   }}
                 >
-                  Merge in
+                  {t("Merge in")}
                 </button>
               )}
               {unformatted.length + lowercase.length > 0 && (
                 <button className="ghost" onClick={formatNotes} disabled={formatting}>
-                  {formatting ? "Formatting…" : "Format"}
+                  {formatting ? t("Formatting…") : t("Format")}
                 </button>
               )}
               {!PLAYGROUND && (
                 <button className="ghost" onClick={() => { setPublishing(true); setMore(false); }}>
-                  Publish
+                  {t("Publish")}
                 </button>
               )}
               <button
@@ -260,7 +267,7 @@ export function ThreadView({
                   setMerging(false);
                 }}
               >
-                Delete thread
+                {t("Delete thread")}
               </button>
             </div>
           )}
@@ -271,28 +278,27 @@ export function ThreadView({
       {pickingCover && (
         <div className="shelf cover-picker">
           <span className="cap-hint" style={{ flex: "1 1 100%" }}>
-            A little identity for this thread — a colour, or a picture of your
-            own.
+            {t("A little identity for this thread — a colour, or a picture of your own.")}
           </span>
-          {TONE_NAMES.map((t) => (
+          {TONE_NAMES.map((tone) => (
             <button
-              key={t}
+              key={tone}
               className={
                 "tone-swatch" +
-                (thread.cover === toneValue(t) ? " on" : "")
+                (thread.cover === toneValue(tone) ? " on" : "")
               }
-              style={{ background: TONES[t] }}
-              onClick={() => onSetCover(toneValue(t))}
-              aria-label={"Cover: " + t}
-              title={t}
+              style={{ background: TONES[tone] }}
+              onClick={() => onSetCover(toneValue(tone))}
+              aria-label={t("Cover: {tone}", { tone: toneName(tone) })}
+              title={toneName(tone)}
             />
           ))}
           <button className="ghost" onClick={() => coverFile.current?.click()}>
-            Photo…
+            {t("Photo…")}
           </button>
           {thread.cover && (
             <button className="ghost warn" onClick={() => onSetCover(null)}>
-              None
+              {t("None")}
             </button>
           )}
           <input
@@ -323,28 +329,25 @@ export function ThreadView({
       {merging && (
         <div className="picker">
           <p className="picker-hint">
-            Pick a thread to fold into <b>{thread.name}</b>. Its fragments join
-            this one in date order and the thread itself goes.
+            {t("Pick a thread to fold into")} <b>{thread.name}</b>{t(". Its fragments join this one in date order and the thread itself goes.")}
           </p>
           <ThreadChoices threads={others} onSelect={(id) => {
             onMerge(id);
             setMerging(false);
           }} />
           <button className="ghost" onClick={() => setMerging(false)}>
-            Cancel
+            {t("Cancel")}
           </button>
         </div>
       )}
 
       {confirming && (
         <ConfirmDelete
-          title="Delete this thread?"
+          title={t("Delete this thread?")}
           hint={
             thread.frags.length
-              ? `All ${thread.frags.length} fragment${
-                  thread.frags.length > 1 ? "s go" : " goes"
-                } with it. This cannot be undone.`
-              : "This cannot be undone."
+              ? t("{count} go with it. This cannot be undone.", { count: countNoun(thread.frags.length, "fragment") })
+              : t("This cannot be undone.")
           }
           onConfirm={onDelete}
           onCancel={() => setConfirming(false)}
@@ -353,27 +356,27 @@ export function ThreadView({
 
       {thread.summary && (
         <div className="state">
-          <h4>Where this stands</h4>
+          <h4>{t("Where this stands")}</h4>
           <p>{thread.summary}</p>
           {/* The move, if the thread has one. One line, one tap: it
               becomes an action through the usual sorter. Waved away, it
               stays away until the summary names a different step. */}
           {thread.next && thread.next !== thread.nextDismissed && (
             <div className="next-step">
-              <span className="next-label">Next</span>
+              <span className="next-label">{t("Next")}</span>
               <button
                 className="next-take"
                 onClick={onTakeNext}
                 disabled={busy}
-                title="Add this to your actions"
+                title={t("Add this to your actions")}
               >
                 {thread.next}
               </button>
               <button
                 className="next-dismiss"
                 onClick={onDismissNext}
-                aria-label="Not now"
-                title="Not now"
+                aria-label={t("Not now")}
+                title={t("Not now")}
               >
                 ×
               </button>
@@ -386,9 +389,9 @@ export function ThreadView({
           {fromActions.open.length > 0 && (
             <div className="state-actions">
               <h4>
-                Actions
+                {t("Actions")}
                 {fromActions.done.length > 0 &&
-                  ` · ${fromActions.done.length} done`}
+                  " · " + t("{count} done", { count: fromActions.done.length })}
               </h4>
               <ul>
                 {fromActions.open.map((a) => (
@@ -551,11 +554,11 @@ export function FragView({
     >
       <div className="frag-date">
         {fmt(f.at)}
-        {f.unsorted && <span className="raw">unsorted</span>}
-        {f.resolvedAt && <span className="raw resolved">resolved</span>}
+        {f.unsorted && <span className="raw">{t("unsorted")}</span>}
+        {f.resolvedAt && <span className="raw resolved">{t("resolved")}</span>}
         {!editing && (
           <div className="frag-tools">
-            <button className="copy-btn" onClick={onCopy} aria-label="Copy">
+            <button className="copy-btn" onClick={onCopy} aria-label={t("Copy")}>
               <Copy size={16} strokeWidth={1.6} />
             </button>
             <button
@@ -566,7 +569,7 @@ export function FragView({
                 setConfirming(false);
               }}
               aria-expanded={more}
-              aria-label={more ? "Fewer options" : "More options"}
+              aria-label={more ? t("Fewer options") : t("More options")}
             >
               <MoreHorizontal size={16} strokeWidth={1.8} />
             </button>
@@ -577,10 +580,10 @@ export function FragView({
       {more && !editing && (
         <div className="row-actions">
           <button className="ghost" onClick={() => { setDraft(f.text); setEditing(true); }}>
-            Edit
+            {t("Edit")}
           </button>
           <button className="ghost" onClick={onExtract} disabled={busy}>
-            Make an action
+            {t("Make an action")}
           </button>
           {/* The by-hand label, for what was done in real life without the
               board ever hearing about it. Symmetric on purpose: mislabeling
@@ -590,13 +593,13 @@ export function FragView({
             onClick={() => onResolve(!f.resolvedAt)}
             disabled={busy}
           >
-            {f.resolvedAt ? "Reopen" : "Mark resolved"}
+            {f.resolvedAt ? t("Reopen") : t("Mark resolved")}
           </button>
           {/* A photo usually turns up after the thought does — a screenshot
               of the bug, the receipt, the whiteboard. Attaching one used to
               be possible only in the second the note was written. */}
           <label className="ghost frag-pic">
-            Add an image
+            {t("Add an image")}
             <input
               type="file"
               accept="image/*"
@@ -615,7 +618,7 @@ export function FragView({
               setConfirming(false);
             }}
           >
-            Move
+            {t("Move")}
           </button>
           <button
             className="ghost warn"
@@ -624,14 +627,14 @@ export function FragView({
               setMoving(false);
             }}
           >
-            Delete
+            {t("Delete")}
           </button>
         </div>
       )}
 
       {moving && !editing && (
         <div className="picker">
-          <p className="picker-hint">Move this fragment to:</p>
+          <p className="picker-hint">{t("Move this fragment to:")}</p>
           {/*
             Always offered, not just when there is nowhere else to put it —
             splitting a thread that has drifted into two topics is the common
@@ -644,9 +647,9 @@ export function FragView({
               setMoving(false);
             }}
           >
-            <span className="picker-name">＋ A new thread</span>
+            <span className="picker-name">{t("＋ A new thread")}</span>
             <span className="picker-meta">
-              named from this fragment, rename it after
+              {t("named from this fragment, rename it after")}
             </span>
           </button>
           <ThreadChoices threads={others} onSelect={(id) => {
@@ -654,7 +657,7 @@ export function FragView({
             setMoving(false);
           }} />
           <button className="ghost" onClick={() => setMoving(false)}>
-            Cancel
+            {t("Cancel")}
           </button>
         </div>
       )}
@@ -664,7 +667,7 @@ export function FragView({
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            aria-label="Fragment text"
+            aria-label={t("Fragment text")}
             autoFocus
           />
           <div className="act-meta">
@@ -676,7 +679,7 @@ export function FragView({
                 setEditing(false);
               }}
             >
-              Save
+              {t("Save")}
             </button>
             <button
               className="ghost"
@@ -685,7 +688,7 @@ export function FragView({
                 setEditing(false);
               }}
             >
-              Cancel
+              {t("Cancel")}
             </button>
           </div>
         </div>
@@ -695,8 +698,8 @@ export function FragView({
 
       {confirming && !editing && (
         <ConfirmDelete
-          title="Delete this fragment?"
-          confirmLabel="Delete fragment"
+          title={t("Delete this fragment?")}
+          confirmLabel={t("Delete fragment")}
           onConfirm={onDelete}
           onCancel={() => setConfirming(false)}
         />

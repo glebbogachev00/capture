@@ -6,6 +6,7 @@
  * program: Capture.tsx keeps orchestration only.
  */
 
+import { countNoun, t } from "@/lib/i18n";
 import { fmt, left, type ProfileIdentity } from "@/lib/model";
 import type { Hits } from "@/lib/search";
 import { IntentionCard } from "@/app/Intentions";
@@ -39,8 +40,8 @@ export function SearchResults({
     if (awaitingAnswer) return null;
     return (
       <div className="empty">
-        <p className="big">Nothing by that shape.</p>
-        <p>Search needs every word in one item. For an answer from your whole board, tap Ask.</p>
+        <p className="big">{t("Nothing by that shape.")}</p>
+        <p>{t("Search needs every word in one item. For an answer from your whole board, tap Ask.")}</p>
       </div>
     );
   }
@@ -49,7 +50,7 @@ export function SearchResults({
     <div>
       {!!hits.actions.length && (
         <>
-          <div className="section-label">Actions · {hits.actions.length}</div>
+          <div className="section-label">{t("Actions · {count}", { count: hits.actions.length })}</div>
           {hits.actions.map((a) => {
             const ms = a.expires ? a.expires - now : null;
             return (
@@ -64,12 +65,12 @@ export function SearchResults({
                   </div>
                   <div className="act-meta">
                     <span>{fmt(a.at)}</span>
-                    {a.done && <span>done</span>}
-                    {a.faded && <span>faded</span>}
+                    {a.done && <span>{t("done")}</span>}
+                    {a.faded && <span>{t("faded")}</span>}
                   </div>
                 </div>
                 <span className={"chip" + (!ms ? " kept" : "")}>
-                  {ms === null ? "kept" : left(ms)}
+                  {ms === null ? t("kept") : left(ms)}
                 </span>
               </div>
             );
@@ -80,7 +81,7 @@ export function SearchResults({
 
       {!!hits.threads.length && (
         <>
-          <div className="section-label">Threads · {hits.threads.length}</div>
+          <div className="section-label">{t("Threads · {count}", { count: hits.threads.length })}</div>
           {hits.threads.map(({ thread, frags }) => (
             <div className="thread-hit" key={thread.id}>
               <button
@@ -94,8 +95,8 @@ export function SearchResults({
                 </div>
                 <div className="act-meta" style={{ marginTop: 9 }}>
                   {frags.length
-                    ? `${frags.length} matching note${frags.length === 1 ? "" : "s"}`
-                    : "matches the thread itself"}
+                    ? t("{count} matching", { count: countNoun(frags.length, "note") })
+                    : t("matches the thread itself")}
                 </div>
                 <ProfileSignature profile={profile} />
               </button>
@@ -104,7 +105,7 @@ export function SearchResults({
                   className="frag-hit"
                   key={f.id}
                   onClick={() => onOpenThread(thread.id, f.id)}
-                  title="Jump to this fragment"
+                  title={t("Jump to this fragment")}
                 >
                   <span className="frag-hit-date">{fmt(f.at)}</span>
                   {f.text}
@@ -118,7 +119,7 @@ export function SearchResults({
       {!!hits.intentions.length && (
         <>
           <div className="section-label">
-            Intentions · {hits.intentions.length}
+            {t("Intentions · {count}", { count: hits.intentions.length })}
           </div>
           {hits.intentions.map((i) => (
             <IntentionCard

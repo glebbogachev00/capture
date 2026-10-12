@@ -1,5 +1,6 @@
 "use client";
 
+import { countNoun, t } from "@/lib/i18n";
 import Link from "next/link";
 import { TRIAL_LIMIT, type TrialState } from "@/lib/playground";
 
@@ -17,17 +18,17 @@ export function TrialMeter({
       className={"trial-meter" + (trial.exhausted ? " is-full" : "")}
     >
       <span className="trial-meter-head">
-        <span className="trial-meter-label">Daily trial</span>
+        <span className="trial-meter-label">{t("Daily trial")}</span>
         <strong>
           {trial.exhausted
-            ? "Daily limit reached"
-            : `${trial.remaining} ${trial.remaining === 1 ? "capture" : "captures"} left`}
+            ? t("Daily limit reached")
+            : t("{count} left", { count: countNoun(trial.remaining, "capture") })}
         </strong>
       </span>
       <span
         className="trial-meter-track"
         role="progressbar"
-        aria-label={`Daily trial: ${used} of ${TRIAL_LIMIT} used`}
+        aria-label={t("Daily trial: {used} of {limit} used", { used, limit: TRIAL_LIMIT })}
         aria-valuemin={0}
         aria-valuemax={TRIAL_LIMIT}
         aria-valuenow={used}
@@ -40,15 +41,15 @@ export function TrialMeter({
           />
         ))}
       </span>
-      <strong className="trial-meter-count">{used} / {TRIAL_LIMIT} used</strong>
+      <strong className="trial-meter-count">{t("{used} / {limit} used", { used, limit: TRIAL_LIMIT })}</strong>
       {showCloudUpgrade && (
         <span className="trial-meter-next">
-          <Link href="/pricing">See Capture Cloud</Link>
+          <Link href="/pricing">{t("See Capture Cloud")}</Link>
         </span>
       )}
       {trial.exhausted && (
         <span className="trial-meter-next">
-          Resets tomorrow · <Link href="/install">Install your own</Link>
+          {t("Resets tomorrow ·")} <Link href="/install">{t("Install your own")}</Link>
         </span>
       )}
     </div>

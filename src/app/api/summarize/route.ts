@@ -1,4 +1,6 @@
 import { generateText } from "ai";
+import { needsRussian } from "@/lib/language";
+import { toRussian } from "@/lib/language.server";
 import { z } from "zod";
 import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
@@ -67,7 +69,20 @@ export async function POST(request: Request) {
       });
       return text;
     });
-    const { summary, next, belongs } = splitNext(value);
+    const split = splitNext(value);
+    const { belongs } = split;
+    let { summary, next } = split;
+    /* A Russian Thread gets its summary in Russian. */
+    const source = body.frags.map((frag) => frag.text).join("\n");
+    if (needsRussian(source, summary)) {
+      const lines = [summary, ...(next ? [next] : [])];
+      const russian = await withFallback((tier) => toRussian(lines, { tier }))
+        .then((result) => result.value, () => null);
+      if (russian) {
+        summary = russian[0];
+        if (next) next = russian[1];
+      }
+    }
     return Response.json({ summary, next, belongs, via });
   } catch (error) {
     opsEvent({ event: "managed_ai_route", outcome: "failure", reason: sanitizeProviderError(error), count: "one" });

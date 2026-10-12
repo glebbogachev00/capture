@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { RecoveryDisclosure } from "./RecoveryDisclosure";
 import { IntentionCard } from "@/app/Intentions";
@@ -71,7 +72,7 @@ function IntentionStack({ intentions, profile, onOpen, selected, onSelect }: Pic
     Math.abs((card(index)?.offsetTop ?? 0) - scrollTop) < Math.abs((card(best)?.offsetTop ?? 0) - scrollTop) ? index : best, 0);
   return <div className="intention-showcase-stack" data-stacked={intentions.length > 1}>
     <div className="intention-showcase-viewport" style={fit && { height: fit.height, paddingBottom: fit.tail }} ref={viewport}
-      role="group" aria-label="Pinned intentions" tabIndex={0}
+      role="group" aria-label={t("Pinned intentions")} tabIndex={0}
       onScroll={event => {
         const box = event.currentTarget;
         clearTimeout(settling.current);
@@ -85,7 +86,7 @@ function IntentionStack({ intentions, profile, onOpen, selected, onSelect }: Pic
         event.currentTarget.scrollTo({ top: card(next)?.offsetTop ?? 0, behavior: "smooth" });
       }}>
       {intentions.map((item, index) => <article className="intention-showcase-card" key={item.id}
-        aria-label={`Intention ${item.number}`} aria-hidden={index !== active} inert={index !== active}>
+        aria-label={t("Intention {number}", { number: item.number })} aria-hidden={index !== active} inert={index !== active}>
         <IntentionCard intention={item} hideNumber profile={profile} onOpen={() => onOpen(item.id)} />
       </article>)}
     </div>
@@ -100,13 +101,13 @@ function ShowcasePanel({ intentions, profile, onOpen }: Props) {
   const numbers = intentionDisplayNumbers(intentions);
   const byId = new Map(intentions.map(item => [item.id, { ...item, number: numbers.get(item.id)! }]));
   const selected = [...new Set(profile?.pinnedIntentionIds ?? [])].flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
-  return <section className="intention-showcase" data-collapsed={collapsed} aria-label="Intention showcase">
-    <RecoveryDisclosure label="Intention showcase" count={selected.length} expanded={!collapsed} controls={contentId}
+  return <section className="intention-showcase" data-collapsed={collapsed} aria-label={t("Intention showcase")}>
+    <RecoveryDisclosure label={t("Intention showcase")} count={selected.length} expanded={!collapsed} controls={contentId}
       onToggle={() => update({ open: collapsed })} />
     <div className="intention-showcase-content" id={contentId} hidden={collapsed}>
       {!collapsed && (selected.length ? <IntentionStack key={JSON.stringify(selected.map(item => item.id))} intentions={selected}
         profile={profile} onOpen={onOpen} selected={view.selected} onSelect={id => update({ selected: id })} /> :
-        <p className="intention-showcase-empty">Pin intentions from the Intentions tab to show them here.</p>)}
+        <p className="intention-showcase-empty">{t("Pin intentions from the Intentions tab to show them here.")}</p>)}
     </div>
   </section>;
 }

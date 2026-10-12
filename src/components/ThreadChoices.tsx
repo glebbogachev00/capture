@@ -1,5 +1,6 @@
 "use client";
 
+import { countNoun, t } from "@/lib/i18n";
 import { useState } from "react";
 import type { Thread } from "@/lib/model";
 import styles from "./ThreadChoices.module.css";
@@ -22,8 +23,8 @@ export function ThreadChoices({
       <input
         className={styles.search}
         type="search"
-        aria-label="Search threads"
-        placeholder="Search threads"
+        aria-label={t("Search threads")}
+        placeholder={t("Search threads")}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {
@@ -35,12 +36,12 @@ export function ThreadChoices({
           }
         }}
       />
-      {!matches.length && <p className="picker-hint" role="status">{needle ? "No matching threads." : "No other threads."}</p>}
+      {!matches.length && <p className="picker-hint" role="status">{needle ? t("No matching threads.") : t("No other threads.")}</p>}
       {matches.map((thread) => (
         <button key={thread.id} type="button" className="picker-row" onClick={() => onSelect(thread.id)}>
           <span className="picker-name">{thread.name}</span>
           <span className="picker-meta">
-            {thread.frags.length} {countLabel}{thread.frags.length === 1 ? "" : "s"}
+            {countNoun(thread.frags.length, countLabel)}
           </span>
         </button>
       ))}

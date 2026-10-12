@@ -1,4 +1,6 @@
 "use client";
+import { countNoun, t } from "@/lib/i18n";
+import { serverMessage } from "@/lib/serverMessage";
 import { useOwnedState } from "./useOwnedState";
 import { logoutAndNavigate, ownedFetch as fetch } from "@/lib/ownership";
 /**
@@ -220,7 +222,7 @@ const TANGLE_DISMISSED_KEY = "capture:tangle-dismissed";
    that had not changed. Once a day is more often than the question is. */
 const TANGLE_ASKED_KEY = "capture:tangle-asked-at";
 /** When the record last went out to an agent. Per device, never synced. */
-const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+const count = countNoun;
 
 function createHydrationGate() {
   let resolve!: () => void;
@@ -231,12 +233,12 @@ function createHydrationGate() {
 const reasonOf = (error: unknown) => {
   if (error instanceof CloudQuotaError) return error.message;
   if (error instanceof SortError && error.message) {
-    return playgroundError(error.message) as string;
+    return serverMessage(playgroundError(error.message) as string);
   }
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    return "No connection — nothing was sent. It is saved here; sort it when you are back online.";
+    return t("No connection — nothing was sent. It is saved here; sort it when you are back online.");
   }
-  return "The request didn't complete — connection or a timeout, not the sorter. Saved as it is.";
+  return t("The request didn't complete — connection or a timeout, not the sorter. Saved as it is.");
 };
 
 /* SortResult, LandedSource, Suggestion, applySorted and computeSuggestion now
@@ -281,7 +283,7 @@ export function useBoard(now: number) {
       setLandedIds([]);
       setSuggestion(null);
     });
-  const showReceipt = useCallback((text: string, pendingTargetId: string | null = null, lines = text === "Actions" ? ["Actions"] : receiptLines(text)) => {
+  const showReceipt = useCallback((text: string, pendingTargetId: string | null = null, lines = text === "Actions" ? [t("Actions")] : receiptLines(text)) => {
     setLanded(text);
     setLandedLines(lines);
     pendingReceiptRef.current = pendingTargetId;
@@ -403,7 +405,7 @@ export function useBoard(now: number) {
   };
   const rejectDistillAtLimit = () => {
     if (!trialExhaustedNow()) return false;
-    setDistillErr(`You have used today's ${TRIAL_LIMIT} captures. Come back tomorrow.`);
+    setDistillErr(t("You have used today's {count}. Come back tomorrow.", { count: countNoun(TRIAL_LIMIT, "capture") }));
     return true;
   };
   /* Append a proposal-outcome record to a board about to be committed: what
@@ -584,7 +586,7 @@ export function useBoard(now: number) {
     } catch {
       if (!backupGate.current.isCurrent(generation)) return;
       /* hub unreachable — keep everything local, retry on the next change */
-      setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
+      setSync({ ok: false, at: stamp(), note: t("Hub unreachable — kept locally") });
     }
   }, [adoptSyncState, reconcileImages, lifetime]);
 
@@ -681,7 +683,7 @@ export function useBoard(now: number) {
     } catch {
       if (!backupGate.current.isCurrent(generation)) return { ok: false };
       /* hub unreachable; local state stands */
-      setSync({ ok: false, at: stamp(), note: "Hub unreachable — kept locally" });
+      setSync({ ok: false, at: stamp(), note: t("Hub unreachable — kept locally") });
       return { ok: false };
     }
   }, [adoptSyncState, schedulePush, reconcileImages, lifetime]);
@@ -773,7 +775,7 @@ export function useBoard(now: number) {
       };
     });
     if (durable.status !== "committed") {
-      setErr("Couldn't save Undo. Nothing was changed.");
+      setErr(t("Couldn't save Undo. Nothing was changed."));
       return;
     }
     captureSnapshot.current = null;
@@ -808,7 +810,7 @@ export function useBoard(now: number) {
       ).filter((p): p is { id: string; src: string } => !!p);
       setPics(restored);
     }
-    setNotice("Undone — back to how it was.");
+    setNotice(t("Undone — back to how it was."));
     clearNoticeIn(4000);
     /* Push now, not on the debounce: a pull landing in the debounce window
        would re-merge the hub's copy (which still holds the capture) before
@@ -833,7 +835,7 @@ export function useBoard(now: number) {
    * empty box. Defined fresh each render, it always reads the box as it
    * actually is.
    */
-  const sortAgainAs = async (right: SortKind) => {
+  const sortAgainAs = async (right: SortKind, freshThread = false) => {
     const m = misfiled;
     setMisfiled(null);
     /* The box may have been edited since Undo put the words back; what is
@@ -856,6 +858,7 @@ export function useBoard(now: number) {
          still right here. */
       if (!text.trim()) setText(m.text);
     }
+    freshThreadFor.current = freshThread ? m?.captureId : undefined; // "A new thread": the sorter is shown none to reuse
     await submit(false, right, words || undefined, undefined, m?.captureId);
     /* After the capture lands, not before — the banner says where it went,
        this says why that was the right shape for it. */
@@ -902,7 +905,7 @@ export function useBoard(now: number) {
     }
     await submit(false, "thread", words || undefined, threadId, m?.captureId);
     if (home) {
-      setNotice(`Filed in ${home.name}. It will remember.`);
+      setNotice(t("Filed in {name}. It will remember.", { name: home.name }));
       clearNoticeIn(6000);
     }
   };
@@ -925,7 +928,7 @@ export function useBoard(now: number) {
         );
         if (!await commitLegacyBackup(lifetime, prepared, legacyImages)
           .then(() => true, () => false)) {
-          setErr("Couldn't save that restore. Your existing board is unchanged.");
+          setErr(t("Couldn't save that restore. Your existing board is unchanged."));
           return false;
         }
         latest.current = prepared.board;
@@ -976,7 +979,7 @@ export function useBoard(now: number) {
         return { next: merged, value: true };
       });
       if (durable.status === "committed") return true;
-      setErr("Couldn't save that. Your last capture is still on screen — try again.");
+      setErr(t("Couldn't save that. Your last capture is still on screen — try again."));
       return false;
     },
     [hydrationGate, schedulePush, lifetime, setData, transactDurable]
@@ -998,7 +1001,7 @@ export function useBoard(now: number) {
         /* surfaced below without adopting an unpersisted Board */
       }
       if (!startup) {
-        setErr("Couldn't finish opening your saved board. Nothing new was written.");
+        setErr(t("Couldn't finish opening your saved board. Nothing new was written."));
         hydrationGate.resolve();
         return;
       }
@@ -1256,11 +1259,12 @@ export function useBoard(now: number) {
 
   /** Rewrite a thread's "Where this stands" from its current fragments. */
   const activeSummaries = useRef(0);
+  const freshThreadFor = useRef<string | undefined>(undefined);
   const regenerate = async (board: Board, threadId: string): Promise<Board> => {
     const target = board.threads.find((t) => t.id === threadId);
     if (!target?.frags.length || target.temporaryName) return board;
     activeSummaries.current += 1;
-    setSummarising("Updating what this thread says now");
+    setSummarising(t("Updating what this thread says now"));
     let result = board;
     try {
       /* One retry, because the failure is invisible and permanent: a
@@ -1303,7 +1307,7 @@ export function useBoard(now: number) {
     const target = latest.current.threads.find((t) => t.id === threadId);
     if (!target?.frags.length || target.temporaryName) return;
     setErr("");
-    setBusy("Updating what this thread says now");
+    setBusy(t("Updating what this thread says now"));
     try {
       const sentFingerprint = threadFingerprint(target);
       const out = await requestSummary(target.id, target.name, target.frags);
@@ -1319,10 +1323,10 @@ export function useBoard(now: number) {
           }
         )
       )) return;
-      setNotice("Summary refreshed.");
+      setNotice(t("Summary refreshed."));
       clearNoticeIn(4000);
     } catch (error) {
-      setErr(reasonOf(error) + " The summary was left as it was.");
+      setErr(reasonOf(error) + " " + t("The summary was left as it was."));
     } finally {
       setBusy(null);
     }
@@ -1340,7 +1344,7 @@ export function useBoard(now: number) {
        retry sent it; a Thread chosen up front stays the destination. The older
        sorter (no calendar, so it guessed dates) is kept for photos only. */
     if (sentRecovery && !sentRecovery.imageIds.length && !a.imgs?.length) {
-      if (typeof navigator !== "undefined" && !navigator.onLine) return setErr("Offline. It's saved here and sorts when you're back online.");
+      if (typeof navigator !== "undefined" && !navigator.onLine) return setErr(t("Offline. It's saved here and sorts when you're back online."));
       setErr("");
       if (automaticBudget === undefined) receiptWindow.current!.retire();
       return runPlannedSort(sentRecovery, { force: pinned, threadId: a.threadId, pressed: automaticBudget === undefined });
@@ -1354,7 +1358,7 @@ export function useBoard(now: number) {
       : null;
     setErr("");
     if (automaticBudget === undefined) receiptWindow.current!.retire();
-    if (!attempt) setBusy("Sorting");
+    if (!attempt) setBusy(t("Sorting"));
     try {
       const work = async () => {
         const imageIds = a.imgs ?? [];
@@ -1413,7 +1417,7 @@ export function useBoard(now: number) {
         } : undefined);
         if (durable.status === "failed") {
           if (!attempt?.signal.aborted) {
-            setErr("Couldn't save that sort. It is still safely Unsorted.");
+            setErr(t("Couldn't save that sort. It is still safely Unsorted."));
           }
           return;
         }
@@ -1453,10 +1457,10 @@ export function useBoard(now: number) {
       if (automaticBudget === undefined &&
           (!sentCaptureId || !plannedSortAuthority.current.claimed(sentCaptureId))) {
         setErr(attempt?.signal.aborted
-          ? "Saved here. Sorting is unavailable right now."
+          ? t("Saved here. Sorting is unavailable right now.")
           : error instanceof CloudQuotaError
-          ? a.unsorted ? error.captureMessage : `${error.message} The item is unchanged.`
-          : reasonOf(error) + " It is still here, untouched.");
+          ? a.unsorted ? error.captureMessage : `${error.message} ${t("The item is unchanged.")}`
+          : reasonOf(error) + " " + t("It is still here, untouched."));
       }
     } finally {
       attempt?.finish();
@@ -1474,9 +1478,9 @@ export function useBoard(now: number) {
    * and is therefore the one moment they might want to know it.
    */
   const SHAPE_NOTE: Record<SortKind, string> = {
-    action: "An action, then — there is something to close.",
-    thread: "A thread, then — nothing to close, so it keeps.",
-    intention: "An intention, then — a state, not a task.",
+    action: t("An action, then — there is something to close."),
+    thread: t("A thread, then — nothing to close, so it keeps."),
+    intention: t("An intention, then — a state, not a task."),
   };
 
   const runPlannedSort = async (input: PendingRecoverySnapshot, chosen: { force?: SortKind; threadId?: string; budget?: number; pressed?: boolean } = {}) => {
@@ -1486,7 +1490,7 @@ export function useBoard(now: number) {
     const deadline = Date.now() + (chosen.budget ?? 55_000);
     const attempt = plannedSortAuthority.current.begin(input.captureId, chosen.budget ?? 55_000);
     setAutoSortingIds((ids) => [...new Set([...ids, input.targetId])]);
-    if (pendingReceiptRef.current === input.targetId) showReceipt("Saved. Sorting…", input.targetId);
+    if (pendingReceiptRef.current === input.targetId) showReceipt(t("Saved. Sorting…"), input.targetId);
     try {
       if (input.imageIds.length) {
         const pending = latest.current.actions.find((action) => action.id === input.targetId);
@@ -1496,7 +1500,7 @@ export function useBoard(now: number) {
       }
       const work = async () => {
         const response = await requestBoardSort<{ sort?: { items?: SimpleSortItem[] }; via?: string }>({
-          request: fetch, board: latest.current, raw: input.source, forgottenRules, force,
+          request: fetch, board: freshThreadFor.current === input.captureId ? { ...latest.current, threads: [] } : latest.current, raw: input.source, forgottenRules, force,
           simple: true, captureId: input.captureId, signal: attempt.signal, noteVia, errorFor: (message) => new SortError(message),
         });
       if (!attempt.authoritative()) return;
@@ -1556,7 +1560,7 @@ export function useBoard(now: number) {
         () => lifetime.active && sortMounted.current,
       ).catch(() => {
         if (lifetime.active && captureSnapshot.current?.captureId === input.captureId)
-          setNotice("Intention saved. Details are unavailable right now.");
+          setNotice(t("Intention saved. Details are unavailable right now."));
       });
       for (const id of settled.summaryThreadIds) scheduleSummary(id);
       playgroundUsage.captureSorted(response.via);
@@ -1579,15 +1583,12 @@ export function useBoard(now: number) {
         ...settled.intentionIds,
       ]);
       const lines = [
-        ...(settled.actionIds.length ? ["Actions"] : []),
-        ...settled.summaryThreadIds.flatMap((id) => {
-          const thread = settled.board.threads.find((item) => item.id === id);
-          return thread ? [`Thread: ${thread.name}`] : [];
-        }),
-        ...(settled.intentionIds.length ? ["Intentions"] : []),
+        ...(settled.actionIds.length ? [t("Actions")] : []),
+        ...settled.summaryThreadIds.flatMap((id) => settled.board.threads.filter((item) => item.id === id).map((thread) => t("Thread: {name}", { name: thread.name }))),
+        ...(settled.intentionIds.length ? [t("Intentions")] : []),
       ];
       if (!lines.length && settled.pendingActionIds.length) {
-        showReceipt("Saved. Awaiting sorting or placement", settled.pendingActionIds[0]);
+        showReceipt(t("Saved. Awaiting sorting or placement"), settled.pendingActionIds[0]);
       } else {
         setTab(settled.actionIds.length && !settled.threadIds.length ? "actions" : "threads");
         showReceipt(lines.join(" · "), null, lines);
@@ -1621,13 +1622,13 @@ export function useBoard(now: number) {
         (attempt.authoritative() ||
           (attempt.signal.aborted && !plannedSortAuthority.current.claimed(input.captureId)))
       )
-        setErr("Saved here. Sorting is unavailable right now.");
+        setErr(t("Saved here. Sorting is unavailable right now."));
     } finally {
       attempt.finish();
       setAutoSortingIds((ids) => ids.filter((id) => id !== input.targetId));
       if (sortMounted.current && pendingReceiptRef.current === input.targetId &&
           snapshotMatchesPending(input, latest.current)) {
-        showReceipt("Saved. Awaiting sorting or placement", input.targetId);
+        showReceipt(t("Saved. Awaiting sorting or placement"), input.targetId);
       }
     }
   };
@@ -1652,7 +1653,7 @@ export function useBoard(now: number) {
     if (!existingCaptureId && trialExhaustedNow()) {
       captureGate.current.leave();
       playgroundUsage.trialLimitReached();
-      setErr(`You have used today's ${TRIAL_LIMIT} captures. Your board is still here.`);
+      setErr(t("You have used today's {count}. Your board is still here.", { count: countNoun(TRIAL_LIMIT, "capture") }));
       return;
     }
 
@@ -1728,7 +1729,7 @@ export function useBoard(now: number) {
       captureGate.current.leave();
     }
     if (durable.status !== "committed") {
-      setErr("Couldn't save that. Your capture is still in the composer.");
+      setErr(t("Couldn't save that. Your capture is still in the composer."));
       return;
     }
     const { before, beforeTombstones, staged, recoveryStore } = durable.value;
@@ -1750,7 +1751,7 @@ export function useBoard(now: number) {
     setManualUndo(null);
     setNoticeUndoable(false);
     setCanUndo(true);
-    showReceipt("Saved. Awaiting sorting or placement", staged.target.id);
+    showReceipt(t("Saved. Awaiting sorting or placement"), staged.target.id);
     setText((current) => current === composerText ? "" : current);
     setPics((current) => reconcilePersistedComposerImages(current, composerPics, uid));
     setTranscript((current) => current === composerTranscript ? "" : current);
@@ -1838,7 +1839,7 @@ export function useBoard(now: number) {
         await backupGate.current.trackMutation(dropUnreferencedImages(dup?.imgs));
       }
       setSuggestion(null);
-      setNotice("Removed the duplicate.");
+      setNotice(t("Removed the duplicate."));
       clearNoticeIn(4000);
       return;
     }
@@ -2493,7 +2494,7 @@ export function useBoard(now: number) {
         actions: latest.current.actions.filter((x) => x.id !== p.sourceId),
       })) return false;
       holdImages(a?.imgs);
-      showTidyNotice(`Removed the duplicate of ${p.targetName}.`);
+      showTidyNotice(t("Removed the duplicate of {name}.", { name: p.targetName }));
       return acknowledge();
     } else if (p.kind === "dup_fragment") {
       const out = applyFragDelete(latest.current, p.sourceThreadId!, p.sourceFragId!);
@@ -2501,7 +2502,7 @@ export function useBoard(now: number) {
       holdImages(out.imgs);
       if (out.removedThread) setOpen(null);
       else await regenerate(out.board, p.sourceThreadId!);
-      showTidyNotice(`Removed the duplicate of ${p.targetName}.`);
+      showTidyNotice(t("Removed the duplicate of {name}.", { name: p.targetName }));
       return acknowledge();
     } else if (p.kind === "fold_action") {
       const out = applyActionFold(latest.current, p.sourceId, p.targetId, stamp(), uid);
@@ -2509,8 +2510,8 @@ export function useBoard(now: number) {
       if (!out.already) await regenerate(out.board, p.targetId);
       showTidyNotice(
         out.already
-          ? `${out.threadName} already has this note — task retired.`
-          : `Moved into ${out.threadName}.`,
+          ? t("{name} already has this note — task retired.", { name: out.threadName })
+          : t("Moved into {name}.", { name: out.threadName }),
       );
       return acknowledge();
     } else if (p.kind === "looks_done") {
@@ -2527,8 +2528,8 @@ export function useBoard(now: number) {
       if (!out || !await commit(out.board)) return false;
       showTidyNotice(
         out.tickedActionText
-          ? "Labeled resolved — its action is ticked off too."
-          : "Labeled resolved — the note stays in the thread."
+          ? t("Labeled resolved — its action is ticked off too.")
+          : t("Labeled resolved — the note stays in the thread.")
       );
       return acknowledge();
     } else if (p.kind === "let_go") {
@@ -2551,7 +2552,7 @@ export function useBoard(now: number) {
             : x
         ),
       })) return false;
-      showTidyNotice("Let go — it sits in Faded for two weeks if you want it back.");
+      showTidyNotice(t("Let go — it sits in Faded for two weeks if you want it back."));
       return acknowledge();
     } else if (p.kind === "revisit_intention") {
       /* Saying it is still true IS the revisit. Nothing about the intention
@@ -2569,7 +2570,7 @@ export function useBoard(now: number) {
           x.id === p.sourceId ? { ...x, updatedAt: at } : x
         ),
       })) return false;
-      showTidyNotice("Still yours. It won't ask again for a while.");
+      showTidyNotice(t("Still yours. It won't ask again for a while."));
       return acknowledge();
     } else if (p.kind === "move_fragment" || p.kind === "merge_fragments") {
       const out = applyFragMove(
@@ -2783,7 +2784,7 @@ export function useBoard(now: number) {
         return next ? { next, value: true } : { skip: false };
       });
       if (durable.status !== "committed") {
-        setErr("Couldn't save that. Your last capture is still on screen — try again.");
+        setErr(t("Couldn't save that. Your last capture is still on screen — try again."));
         return false;
       }
       plannedSortAuthority.current.cancel(captureId);
@@ -2810,7 +2811,7 @@ export function useBoard(now: number) {
         return next ? { next, value: true } : { skip: false };
       });
       if (durable.status !== "committed") {
-        setErr("Couldn't save that. Your last capture is still on screen — try again.");
+        setErr(t("Couldn't save that. Your last capture is still on screen — try again."));
         return false;
       }
       plannedSortAuthority.current.cancel(captureId);
@@ -2849,8 +2850,8 @@ export function useBoard(now: number) {
     )) return false;
     setNotice(
       out.already
-        ? `${out.threadName} already has this note — task retired.`
-        : `Moved into ${out.threadName}.`
+        ? t("{name} already has this note — task retired.", { name: out.threadName })
+        : t("Moved into {name}.", { name: out.threadName })
     );
     clearNoticeIn(4500);
     if (!out.already) await regenerate(latest.current, threadId);
@@ -2914,7 +2915,7 @@ export function useBoard(now: number) {
             }
           )
         );
-        setNotice("Fixed a couple of typos.");
+        setNotice(t("Fixed a couple of typos."));
         clearNoticeIn(4000);
       }
     }
@@ -3050,10 +3051,10 @@ export function useBoard(now: number) {
     if (!await commit(next)) return false;
     setNotice(
       out.emptied
-        ? `Moved to ${out.toName}. ${out.fromName} was left empty and removed.`
+        ? t("Moved to {to}. {from} was left empty and removed.", { to: out.toName, from: out.fromName })
         : out.corrected
-          ? `Moved to ${out.toName} — noted for next time.`
-          : `Moved to ${out.toName}.`
+          ? t("Moved to {to} — noted for next time.", { to: out.toName })
+          : t("Moved to {to}.", { to: out.toName })
     );
     clearNoticeIn(4500);
 
@@ -3073,8 +3074,8 @@ export function useBoard(now: number) {
     if (!out || !await commit(out.board)) return;
     setNotice(
       out.tickedActionText
-        ? "Labeled resolved — its action is ticked off too."
-        : "Labeled resolved."
+        ? t("Labeled resolved — its action is ticked off too.")
+        : t("Labeled resolved.")
     );
     clearNoticeIn(4000);
   };
@@ -3089,7 +3090,7 @@ export function useBoard(now: number) {
     const out = applyFragSplit(latest.current, fromId, fragId, uid);
     if (!out || !await commit(out.board)) return false;
     setOpen(out.freshId);
-    setNotice(`Split into a new thread. Rename it if the name is wrong.`);
+    setNotice(t("Split into a new thread. Rename it if the name is wrong."));
     clearNoticeIn(5000);
 
     const afterNew = await regenerate(out.board, out.freshId);
@@ -3103,14 +3104,14 @@ export function useBoard(now: number) {
       ?.frags.find((f) => f.id === fragId);
     if (!frag) return;
     const ok = await copyToClipboard(frag.text, lifetime.assertDisclosure);
-    setNotice(ok ? "Note copied." : "Couldn't reach the clipboard.");
+    setNotice(ok ? t("Note copied.") : t("Couldn't reach the clipboard."));
     clearNoticeIn(3000);
   };
 
   const copyWhole = async (s: { text: string; summary: string } | null) => {
     if (!s) return;
     const ok = await copyToClipboard(s.text, lifetime.assertDisclosure);
-    setNotice(ok ? `Copied — ${s.summary}.` : "Couldn't reach the clipboard.");
+    setNotice(ok ? t("Copied — {summary}.", { summary: s.summary }) : t("Couldn't reach the clipboard."));
     clearNoticeIn(3000);
   };
 
@@ -3134,7 +3135,7 @@ export function useBoard(now: number) {
     const step = thread?.next;
     if (!thread || !step) return;
     setErr("");
-    setBusy("Adding the step");
+    setBusy(t("Adding the step"));
     try {
       const out = await requestSort(step, "action");
       const span = SHELF[(out.shelfLife || "keep") as ShelfLife] ?? null;
@@ -3165,10 +3166,10 @@ export function useBoard(now: number) {
           }
         )
       )) return;
-      setNotice("Added to your actions.");
+      setNotice(t("Added to your actions."));
       clearNoticeIn(5000);
     } catch (error) {
-      setErr(reasonOf(error) + " Nothing was added.");
+      setErr(reasonOf(error) + " " + t("Nothing was added."));
     } finally {
       setBusy(null);
     }
@@ -3195,7 +3196,7 @@ export function useBoard(now: number) {
     if (!frag) return false;
 
     setErr("");
-    setBusy("Finding the action");
+    setBusy(t("Finding the action"));
     try {
       const out = await requestSort(frag.text, "action");
       const items: Action[] = (out.actions?.length ? out.actions : [out.title]).map(
@@ -3228,13 +3229,13 @@ export function useBoard(now: number) {
         )
       )) return false;
       setNotice(
-        `${count(items.length, "action")} taken from this note. The note stays here.`
+        t("{count} taken from this note. The note stays here.", { count: count(items.length, "action") })
       );
       clearNoticeIn(5000);
       setBusy(null);
       return true;
     } catch (error) {
-      setErr(reasonOf(error) + " Nothing was added.");
+      setErr(reasonOf(error) + " " + t("Nothing was added."));
       setBusy(null);
       return false;
     }
@@ -3257,7 +3258,7 @@ export function useBoard(now: number) {
   const mergeThreads = async (intoId: string, fromId: string): Promise<boolean> => {
     const out = applyThreadMerge(latest.current, intoId, fromId);
     if (!out || !await commit(out.board)) return false;
-    setNotice(out.fromName + " folded into " + out.intoName + ".");
+    setNotice(t("{from} folded into {into}.", { from: out.fromName, into: out.intoName }));
     clearNoticeIn(4500);
     await regenerate(out.board, intoId);
     return true;
@@ -3278,7 +3279,7 @@ export function useBoard(now: number) {
     authoritative?: () => boolean,
   ) => {
     setErr("");
-    if (!background) setBusy("Finding the intention");
+    if (!background) setBusy(t("Finding the intention"));
     try {
       const result = await requestIntentionExpansion(
         fetch, rawInput, latest.current.principles, () => latest.current, expectedPending,
@@ -3349,7 +3350,7 @@ export function useBoard(now: number) {
     setDraft(null);
     setPendingSource(null);
     setTab("intentions");
-    showReceipt("Intention " + pad(latest.current.intentions.length - latest.current.intentions.findIndex(item => item.id === intention.id)));
+    const shown = t("Intention {number}", { number: pad(latest.current.intentions.length - latest.current.intentions.findIndex(item => item.id === intention.id)) }); showReceipt(shown, null, [shown]);
     setLandedIds([]);
     /* The receipt expires separately from the saved capture and Undo state. */
   };
@@ -3417,7 +3418,7 @@ export function useBoard(now: number) {
     pendingIntentionSource.current = null;
     setDraft(null);
     if (fromAction || !d?.rawInput.trim()) return;
-    setNotice("Discarded — it's in the record if you want it back");
+    setNotice(t("Discarded — it's in the record if you want it back"));
     clearNoticeIn(6000);
   };
 
@@ -3448,7 +3449,7 @@ export function useBoard(now: number) {
       await expandIntention(rawInput);
       setPendingSource(sourceId);
     } catch (error) {
-      setErr(reasonOf(error) + " Nothing was moved.");
+      setErr(reasonOf(error) + " " + t("Nothing was moved."));
     }
   };
 
@@ -3522,10 +3523,10 @@ export function useBoard(now: number) {
     if (outcome === "cancelled") return;
     setNotice(
       outcome === "shared"
-        ? `Shared — ${shareable.summary}.`
+        ? t("Shared — {summary}.", { summary: shareable.summary })
         : outcome === "copied"
-          ? `Copied to the clipboard — ${shareable.summary}.`
-          : "Couldn't share that."
+          ? t("Copied to the clipboard — {summary}.", { summary: shareable.summary })
+          : t("Couldn't share that.")
     );
     clearNoticeIn(3500);
   };
@@ -3537,7 +3538,7 @@ export function useBoard(now: number) {
   const exportBoard = async () => {
     const operation = backupGate.current.start("export");
     if (!operation) return;
-    setIoNote(null); setIoBusy("Preparing backup…");
+    setIoNote(null); setIoBusy(t("Preparing backup…"));
     try {
       const backup = await createBackupClient(lifetime).exportV3(
         { board: latest.current, tombstones: tombstones.current },
@@ -3545,11 +3546,14 @@ export function useBoard(now: number) {
       );
       downloadJSON(backup, backupFilename());
       setIoNote({
-        text: `Saved ${count(backup.board.actions.length, "action")}, ${count(backup.board.threads.length, "thread")} and ${count(backup.board.intentions.length, "intention")} — with ${count(Object.keys(backup.images).length, "image")} — to a file. Keep it somewhere that isn't this phone.`,
+        text: t("Saved {actions}, {threads} and {intentions} — with {images} — to a file. Keep it somewhere that isn't this phone.", {
+          actions: count(backup.board.actions.length, "action"), threads: count(backup.board.threads.length, "thread"),
+          intentions: count(backup.board.intentions.length, "intention"), images: count(Object.keys(backup.images).length, "image"),
+        }),
         ok: true,
       });
     } catch (error) {
-      setIoNote({ text: error instanceof Error ? error.message : "The download didn't start.", ok: false });
+      setIoNote({ text: error instanceof Error ? error.message : t("The download didn't start."), ok: false });
     } finally {
       backupGate.current.finish(operation);
       setIoBusy(null);
@@ -3577,23 +3581,23 @@ export function useBoard(now: number) {
     setIoNote(null);
     try {
       const raw = await get(snapshotKey(day));
-      if (!raw) throw new Error("That day is not on this device any more.");
+      if (!raw) throw new Error(t("That day is not on this device any more."));
       const result = stampRestoredAdditions(restoreBackup(
         { app: "capture", version: 2, board: hydrate(JSON.parse(raw)) },
         latest.current,
       ), latest.current, Date.now());
       const added =
         result.actions + result.threads + result.intentions + result.principles;
-      if (!await commit(result.board)) throw new Error("That snapshot could not be saved. Your board is unchanged.");
+      if (!await commit(result.board)) throw new Error(t("That snapshot could not be saved. Your board is unchanged."));
       setIoNote({
         text: added
-          ? `Brought back ${count(result.actions, "action")}, ${count(result.threads, "thread")} and ${count(result.intentions, "intention")} from ${snapshotLabel(day)}.`
-          : `Nothing was missing — ${snapshotLabel(day)} is already on the board.`,
+          ? t("Brought back {actions}, {threads} and {intentions} from {day}.", { actions: count(result.actions, "action"), threads: count(result.threads, "thread"), intentions: count(result.intentions, "intention"), day: snapshotLabel(day) })
+          : t("Nothing was missing — {day} is already on the board.", { day: snapshotLabel(day) }),
         ok: true,
       });
     } catch (error) {
       setIoNote({
-        text: error instanceof Error ? error.message : "That snapshot wouldn't open.",
+        text: error instanceof Error ? error.message : t("That snapshot wouldn't open."),
         ok: false,
       });
     }
@@ -3601,13 +3605,13 @@ export function useBoard(now: number) {
   const restoreFromFile = async (file: File): Promise<void> => {
     const reserved = backupGate.current.startRestore();
     if (!reserved) {
-      setIoNote({ text: "Finish the current change before restoring a backup.", ok: false });
+      setIoNote({ text: t("Finish the current change before restoring a backup."), ok: false });
       return;
     }
     let pushAfterRestore = false;
-    setIoNote(null); setIoBusy("Waiting for current changes…");
+    setIoNote(null); setIoBusy(t("Waiting for current changes…"));
     const operation = reserved instanceof Promise ? await reserved : reserved;
-    setIoBusy("Opening backup…");
+    setIoBusy(t("Opening backup…"));
     try {
       const parsed = await readJsonFile(file);
       if ((parsed as { version?: unknown } | null)?.version === 3) {
@@ -3640,17 +3644,18 @@ export function useBoard(now: number) {
       const added = result.actions + result.threads + result.intentions + result.principles;
       const board = added ? withLedger(result.board, {
         id: uid(), at: stamp(), raw: file.name,
-        clean: `Restored ${count(result.actions, "action")}, ${count(result.threads, "thread")} and ${count(result.intentions, "intention")} from a backup.`,
+        clean: t("Restored {actions}, {threads} and {intentions} from a backup.", { actions: count(result.actions, "action"), threads: count(result.threads, "thread"), intentions: count(result.intentions, "intention") }),
         kind: result.actions ? "action" : result.threads ? "thread" : "intention",
         source: "import", targetId: "",
       }) : result.board;
       if (!await commit(board, operation, result.images ?? {})) {
+        /* English on purpose: backupRestoreFailureNotice reads it to say why, in the reader's language. */
         throw new Error("That backup could not be saved. Your existing board is unchanged.");
       }
       setIoNote({
         text: added
-          ? `Restored ${count(result.actions, "action")}, ${count(result.threads, "thread")}, ${count(result.intentions, "intention")} and ${count(result.principles, "principle")}.`
-          : "Nothing new in that file — everything in it was already here.",
+          ? t("Restored {actions}, {threads}, {intentions} and {principles}.", { actions: count(result.actions, "action"), threads: count(result.threads, "thread"), intentions: count(result.intentions, "intention"), principles: count(result.principles, "principle") })
+          : t("Nothing new in that file — everything in it was already here."),
         ok: true,
       });
     } catch (error) {
@@ -3676,20 +3681,18 @@ export function useBoard(now: number) {
               id: uid(),
               at: stamp(),
               raw: file.name,
-              clean: `Brought in ${count(result.added, "intention")} from an intent backup.`,
+              clean: t("Brought in {count} from an intent backup.", { count: count(result.added, "intention") }),
               kind: "intention",
               source: "import",
               targetId: "",
             })
           : result.board
-      )) throw new Error("That import could not be saved. Your board is unchanged.");
+      )) throw new Error(t("That import could not be saved. Your board is unchanged."));
 
-      const parts = [`Brought in ${count(result.added, "intention")}`];
-      if (result.duplicates) parts.push(`${result.duplicates} already here`);
+      const parts = [t("Brought in {count}", { count: count(result.added, "intention") })];
+      if (result.duplicates) parts.push(t("{count} already here", { count: result.duplicates }));
       if (result.malformed) {
-        parts.push(
-          `${result.malformed} could not be read and ${result.malformed === 1 ? "was" : "were"} left out`
-        );
+        parts.push(t("{count} could not be read and left out", { count: result.malformed }));
       }
       if (result.principlesAdded) {
         parts.push(`${count(result.principlesAdded, "new principle")}`);
@@ -3698,7 +3701,7 @@ export function useBoard(now: number) {
     } catch (error) {
       setIoNote({
         text:
-          error instanceof Error ? error.message : "Could not read that file.",
+          error instanceof Error ? error.message : t("Could not read that file."),
         ok: false,
       });
     }
@@ -3865,7 +3868,7 @@ export function useBoard(now: number) {
       // A reply that died mid-stream may have set the flag already; without
       // this the button would glow over a transcript with no assistant turn.
       setDistillReady(false);
-      setDistillErr(reasonOf(error) + " Your words are saved; ask again.");
+      setDistillErr(reasonOf(error) + " " + t("Your words are saved; ask again."));
       // Drop the trailing assistant turn — whether it never produced text or
       // died mid-answer — so a broken partial reply doesn't stay on the
       // transcript. The user's own words were already persisted above.
@@ -3979,7 +3982,7 @@ export function useBoard(now: number) {
       }
       // Computed after the try/catch so it reads the final flag value.
       const skipNote = proofreadSkipped
-        ? " The proofread pass couldn't run — saved as reviewed."
+        ? " " + t("The proofread pass couldn't run — saved as reviewed.")
         : "";
       const source = distillSource(distillSession);
       // The route already reconciles this, but the review screen lets the
@@ -4031,7 +4034,7 @@ export function useBoard(now: number) {
           )
         )) return;
         setNotice(
-          `${count(items.length, "action")} distilled from the conversation.` +
+          t("{count} distilled from the conversation.", { count: count(items.length, "action") }) +
             skipNote
         );
         clearNoticeIn(5000);
@@ -4083,7 +4086,7 @@ export function useBoard(now: number) {
           }
         );
         if (!await commit(next)) return;
-        setNotice("Distilled into a thread." + skipNote);
+        setNotice(t("Distilled into a thread.") + skipNote);
         clearNoticeIn(5000);
         await regenerate(next, thread.id);
         await resetDistill();
@@ -4091,7 +4094,7 @@ export function useBoard(now: number) {
         setTab("threads");
       }
     } catch (error) {
-      setDistillErr(reasonOf(error) + " Nothing was saved.");
+      setDistillErr(reasonOf(error) + " " + t("Nothing was saved."));
     } finally {
       setDistillBusy(false);
       distillBusyRef.current = false;
@@ -4182,14 +4185,14 @@ export function useBoard(now: number) {
     const durable = await transactDurable((current) => ({
       next: applyProfileUpdate(current, update), value: undefined,
     }));
-    if (durable.status === "failed") setErr("Couldn't save that profile change. Try again.");
+    if (durable.status === "failed") setErr(t("Couldn't save that profile change. Try again."));
   };
 
   const guardMutation = createBackupMutationGuard(backupGate.current, () =>
-    setErr("Restore is still finishing. Nothing else was changed."));
+    setErr(t("Restore is still finishing. Nothing else was changed.")));
 
   const leaveSettings = () => backupGate.current.leaveRestore(
-    () => setIoNote({ text: "Restore is still finishing. Stay here until it completes.", ok: false }),
+    () => setIoNote({ text: t("Restore is still finishing. Stay here until it completes."), ok: false }),
     () => { setShowSettings(false); setIoNote(null); },
   );
 
@@ -4340,7 +4343,7 @@ export function useBoard(now: number) {
     restoreSnapshot: guardMutation(restoreSnapshot),
     importBackup: guardMutation(importBackup),
     doShare,
-    sync: ownershipStatus === "offline" ? { ok: false, at: now, note: "Offline — local changes are not synced; AI unavailable" } : sync,
+    sync: ownershipStatus === "offline" ? { ok: false, at: now, note: t("Offline — local changes are not synced; AI unavailable") } : sync,
     syncNow,
     canUndo,
     canUndoManual: !!manualUndo,

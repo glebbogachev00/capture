@@ -9,17 +9,19 @@
  * that a specific pass has finished.
  */
 
+import { t } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 
 /* Roughly one per pass, but written so that arriving early or late at any
    of them is still honest — none of them claims a step has completed. */
-const LINES = [
-  "Reading the board.",
-  "Going thread by thread — it reads a few at a time, so it can read them properly.",
-  "Looking for things sitting in the wrong place.",
-  "Checking whether anything is here twice.",
-  "Still going. This is the slow, careful pass, not the quick one.",
-  "Nearly there.",
+/* A function, so the lines are in the reader's language when shown. */
+const lines = () => [
+  t("Reading the board."),
+  t("Going thread by thread — it reads a few at a time, so it can read them properly."),
+  t("Looking for things sitting in the wrong place."),
+  t("Checking whether anything is here twice."),
+  t("Still going. This is the slow, careful pass, not the quick one."),
+  t("Nearly there."),
 ];
 
 /** Long enough that the lines do not race the passes they describe. */
@@ -30,7 +32,7 @@ export function TidyWaiting() {
 
   useEffect(() => {
     const t = setInterval(
-      () => setI((n) => Math.min(n + 1, LINES.length - 1)),
+      () => setI((n) => Math.min(n + 1, lines().length - 1)),
       EVERY_MS
     );
     return () => clearInterval(t);
@@ -43,12 +45,12 @@ export function TidyWaiting() {
         <span />
         <span />
       </div>
-      <p className="tidy-waiting-line">{LINES[i]}</p>
+      <p className="tidy-waiting-line">{lines()[i]}</p>
       {/* Said once, near the start, because the honest explanation for the
           wait is also the reassuring one. */}
       {i < 3 && (
         <p className="tidy-waiting-why">
-          Tidy is checking the board for duplicate notes, misplaced notes, and notes that may be tasks.
+          {t("Tidy is checking the board for duplicate notes, misplaced notes, and notes that may be tasks.")}
         </p>
       )}
     </div>

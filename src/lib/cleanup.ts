@@ -1,3 +1,4 @@
+import { countNoun, t } from "./i18n";
 import { z } from "zod";
 import type { Board } from "./model";
 import { applyActionFold } from "./actionOps";
@@ -108,7 +109,9 @@ export function removePhotos(board: Board, ids: string[], now: number): CleanupC
     board: { ...board, threads: nextThreads, actions, intentions, ledger },
     imgs: [...gone],
     threads,
-    notice: `Removed ${count} ${count === 1 ? "photo" : "photos"}${notes ? ` and ${notes} photo-only ${notes === 1 ? "note" : "notes"}` : ""}. The words stay.`,
+    notice: notes
+      ? t("Removed {photos} and {notes}. The words stay.", { photos: countNoun(count, "photo"), notes: countNoun(notes, "photo-only note") })
+      : t("Removed {photos}. The words stay.", { photos: countNoun(count, "photo") }),
   };
 }
 

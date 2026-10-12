@@ -1,5 +1,6 @@
 "use client";
 
+import { countNoun, t } from "@/lib/i18n";
 import { getDocumentLifetime } from "@/lib/ownership";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
@@ -31,11 +32,11 @@ function readOpen(key: string): boolean {
 
 function profileLine(threads: Thread[]): string {
   const names = threads.map((thread) => thread.name.replace(/\.$/, ""));
-  if (!names.length) return "Your recurring threads will appear here.";
-  if (names.length === 1) return `Your record keeps returning to ${names[0]}.`;
+  if (!names.length) return t("Your recurring threads will appear here.");
+  if (names.length === 1) return t("Your record keeps returning to {a}.", { a: names[0] });
   if (names.length === 2)
-    return `Your record keeps returning to ${names[0]} and ${names[1]}.`;
-  return `Your record keeps returning to ${names[0]}, ${names[1]}, and ${names[2]}.`;
+    return t("Your record keeps returning to {a} and {b}.", { a: names[0], b: names[1] });
+  return t("Your record keeps returning to {a}, {b}, and {c}.", { a: names[0], b: names[1], c: names[2] });
 }
 
 export function CaptureProfile({
@@ -124,9 +125,9 @@ export function CaptureProfile({
         className="record-profile-toggle"
         onClick={toggle}
         aria-expanded={open}
-        aria-label={`${open ? "Hide" : "Show"} your Capture profile`}
+        aria-label={open ? t("Hide your Capture profile") : t("Show your Capture profile")}
       >
-        <span>Your Capture</span>
+        <span>{t("Your Capture")}</span>
         {open ? (
           <ChevronUp size={21} strokeWidth={1.7} />
         ) : (
@@ -140,7 +141,7 @@ export function CaptureProfile({
             <button
               className="record-profile-photo"
               onClick={() => fileRef.current?.click()}
-              aria-label={imageSrc ? "Change profile image" : "Add profile image"}
+              aria-label={imageSrc ? t("Change profile image") : t("Add profile image")}
             >
               {imageSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -164,22 +165,22 @@ export function CaptureProfile({
               <div className="record-profile-name-row">
                 <input
                   className="record-profile-name"
-                  aria-label="Your name"
+                  aria-label={t("Your name")}
                   value={name}
                   maxLength={48}
-                  placeholder="Your name"
+                  placeholder={t("Your name")}
                   onChange={(event) =>
                     saveName(event.target.value)
                   }
                 />
-                <span className="landed-point" aria-label="Formed from your Capture record">
+                <span className="landed-point" aria-label={t("Formed from your Capture record")}>
                   <i />
                   <i />
                   <i />
                   <b />
                 </span>
               </div>
-              <span className="record-profile-origin">formed from your record</span>
+              <span className="record-profile-origin">{t("formed from your record")}</span>
             </div>
           </div>
 
@@ -187,7 +188,7 @@ export function CaptureProfile({
 
           {!!recurring.length && (
             <div className="record-profile-threads">
-              <div className="record-profile-label">What keeps returning</div>
+              <div className="record-profile-label">{t("What keeps returning")}</div>
               {recurring.map((thread) => (
                 <button
                   key={thread.id}
@@ -196,10 +197,10 @@ export function CaptureProfile({
                 >
                   <span>
                     <b>{thread.name}</b>
-                    <small>{thread.summary || "A thread still taking shape."}</small>
+                    <small>{thread.summary || t("A thread still taking shape.")}</small>
                   </span>
                   <em>
-                    {thread.frags.length} layer{thread.frags.length === 1 ? "" : "s"}
+                    {countNoun(thread.frags.length, "layer")}
                   </em>
                 </button>
               ))}

@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n";
 import { useMemo, useState } from "react";
 import type { Thread } from "@/lib/model";
 import {
@@ -50,14 +51,14 @@ export function PublishThreadSheet({ thread, publisherName }: {
     });
     const hash = parsed.success ? encodeHandoff(parsed.data) : "";
     if (!parsed.success || hash.length > HANDOFF_MAX) {
-      setError("Too long to publish at once. Untick a few notes.");
+      setError(t("Too long to publish at once. Untick a few notes."));
       return;
     }
     window.open(`${PUBLISH_ORIGIN}/publish${hash}`, "_blank", "noopener");
   }
 
   return (
-    <section className="publish-sheet" aria-label="Publish">
+    <section className="publish-sheet" aria-label={t("Publish")}>
       <textarea
         className="publish-title"
         value={title}
@@ -65,7 +66,7 @@ export function PublishThreadSheet({ thread, publisherName }: {
         rows={1}
         ref={grow}
         onChange={(event) => { setTitle(event.target.value.replace(/\n/g, " ")); grow(event.target); }}
-        aria-label="Title"
+        aria-label={t("Title")}
       />
       <textarea
         className="publish-intro"
@@ -74,8 +75,8 @@ export function PublishThreadSheet({ thread, publisherName }: {
         rows={1}
         ref={grow}
         onChange={(event) => { setIntro(event.target.value); grow(event.target); }}
-        placeholder="Add an introduction (optional)"
-        aria-label="Introduction"
+        placeholder={t("Add an introduction (optional)")}
+        aria-label={t("Introduction")}
       />
 
       <div className="publish-notes">
@@ -90,12 +91,12 @@ export function PublishThreadSheet({ thread, publisherName }: {
       {error && <p className="publish-error" role="alert">{error}</p>}
       <div className="publish-bar publish-bar-sticky">
         <button type="button" className="capture-btn" disabled={selected.length === 0 || !title.trim()} onClick={publish}>
-          Publish
+          {t("Publish")}
         </button>
         <button type="button" className="ghost" onClick={() => setPicked(all ? new Set() : new Set(notes.map((frag) => frag.id)))}>
-          {all ? "Clear" : "Select all"}
+          {all ? t("Clear") : t("Select all")}
         </button>
-        <span className="publish-hint">Only ticked notes are shared.</span>
+        <span className="publish-hint">{t("Only ticked notes are shared.")}</span>
       </div>
     </section>
   );

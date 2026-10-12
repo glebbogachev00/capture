@@ -19,6 +19,7 @@
    words in sight no matter how long the conversation grows.
    ============================================================ */
 
+import { t } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { AudioLines, Keyboard, Mic } from "lucide-react";
 import {
@@ -165,16 +166,15 @@ export function DistillView({
   return (
     <div className="distill-view">
       <button className="back" onClick={onBack}>
-        ← capture
+        {t("← capture")}
       </button>
 
       <div className="distill-log">
         {!session.turns.length && (
           <div className="empty">
-            <p className="big">What&apos;s unclear?</p>
+            <p className="big">{t("What's unclear?")}</p>
             <p>
-              Say it however it comes out. The engine will ask what&apos;s
-              missing.
+              {t("Say it however it comes out. The engine will ask what's missing.")}
             </p>
             <div className="distill-starters">
               {STARTERS.map((s) => (
@@ -185,14 +185,14 @@ export function DistillView({
             </div>
           </div>
         )}
-        {session.turns.map((t, i) => {
+        {session.turns.map((turn, i) => {
           const last = i === session.turns.length - 1;
-          const thinking = last && busy && t.role === "assistant" && !t.text;
-          const streaming = last && busy && t.role === "assistant" && !!t.text;
+          const thinking = last && busy && turn.role === "assistant" && !turn.text;
+          const streaming = last && busy && turn.role === "assistant" && !!turn.text;
           return (
-            <div className={"distill-turn " + t.role} key={i}>
+            <div className={"distill-turn " + turn.role} key={i}>
               <span className="distill-who">
-                {t.role === "user" ? "You" : "capture"}
+                {turn.role === "user" ? t("You") : "capture"}
               </span>
               <div className="distill-bubble">
                 {thinking ? (
@@ -202,7 +202,7 @@ export function DistillView({
                     <i />
                   </span>
                 ) : (
-                  (t.role === "assistant" ? distillParagraphs(t.text) : [t.text]).map(
+                  (turn.role === "assistant" ? distillParagraphs(turn.text) : [turn.text]).map(
                     (paragraph, paragraphIndex, paragraphs) => (
                       <p key={paragraphIndex}>
                         {paragraph}
@@ -236,7 +236,7 @@ export function DistillView({
           <textarea
             value={input}
             onChange={(e) => onInput(e.target.value)}
-            placeholder="Say it however it comes out."
+            placeholder={t("Say it however it comes out.")}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSend();
             }}
@@ -246,7 +246,7 @@ export function DistillView({
               <button
                 className={"icon-btn" + (listening ? " live" : "")}
                 onClick={onToggleMic}
-                aria-label="Dictate"
+                aria-label={t("Dictate")}
               >
                 <Mic size={18} strokeWidth={1.7} />
               </button>
@@ -263,11 +263,11 @@ export function DistillView({
                   convo.start();
                 }}
                 disabled={!convo.canDictate || !voice.supported}
-                aria-label="Voice — a spoken conversation"
+                aria-label={t("Voice — a spoken conversation")}
                 title={
                   convo.canDictate && voice.supported
-                    ? "Voice — speak and it answers aloud"
-                    : "Voice isn't supported in this browser"
+                    ? t("Voice — speak and it answers aloud")
+                    : t("Voice isn't supported in this browser")
                 }
               >
                 <AudioLines size={18} strokeWidth={1.7} />
@@ -275,15 +275,15 @@ export function DistillView({
             )}
             <div className="cap-hint">
               {canDictate
-                ? "or tap the mic key on your keyboard"
-                : "tap the mic key on your keyboard to dictate"}
+                ? t("or tap the mic key on your keyboard")
+                : t("tap the mic key on your keyboard to dictate")}
             </div>
             <button
               className="capture-btn"
               onClick={onSend}
               disabled={busy || !input.trim()}
             >
-              {busy ? "…" : "Send"}
+              {busy ? "…" : t("Send")}
             </button>
           </div>
         </div>
@@ -297,14 +297,14 @@ export function DistillView({
           onClick={onSettle}
           disabled={busy || session.turns.length === 0}
         >
-          {busy ? "Distilling…" : ready ? "Distill — it's ready" : "Distill"}
+          {busy ? t("Distilling…") : ready ? t("Distill — it's ready") : t("Distill")}
         </button>
         <button
           className="ghost warn distill-discard"
           onClick={confirm}
           disabled={busy || session.turns.length === 0}
         >
-          Discard
+          {t("Discard")}
         </button>
       </div>
 
@@ -335,12 +335,12 @@ function TalkPad({
   const speaking = convo.speaking;
   const thinking = busy && !speaking;
   const label = speaking
-    ? "Speaking — tap to interrupt"
+    ? t("Speaking — tap to interrupt")
     : thinking
-      ? "Thinking…"
+      ? t("Thinking…")
       : convo.listening
-        ? "Listening — speak now"
-        : "Tap to talk";
+        ? t("Listening — speak now")
+        : t("Tap to talk");
   /* What the mic has heard so far this turn, shown live so the user can
      follow along — and catch a misheard word as it happens instead of
      only after the turn is sent. */
@@ -376,16 +376,16 @@ function TalkPad({
       )}
       <div className="talk-hint">
         {speaking
-          ? "tap to cut in — it stops the moment you do"
+          ? t("tap to cut in — it stops the moment you do")
           : thinking
-            ? "the reply is on its way — it'll speak out loud"
+            ? t("the reply is on its way — it'll speak out loud")
             : convo.listening
-              ? "speak — pause for a moment to send, or tap to send now"
-              : "a spoken conversation. talk, it answers aloud, and the mic comes back on its own."}
+              ? t("speak — pause for a moment to send, or tap to send now")
+              : t("a spoken conversation. talk, it answers aloud, and the mic comes back on its own.")}
       </div>
       <button className="ghost talk-type" onClick={onType} disabled={busy}>
         <Keyboard size={15} strokeWidth={1.8} />
-        type instead
+        {t("type instead")}
       </button>
     </div>
   );
@@ -431,7 +431,7 @@ function DistillReview({
     <div className="distill-review">
       <div className="distill-review-head">
         <button className="back" onClick={onDiscard}>
-          ← keep talking
+          {t("← keep talking")}
         </button>
         {/* The quiet way out: leave without filing anything. Pushed to the
             right edge of the head row, so the review never feels like a
@@ -441,27 +441,26 @@ function DistillReview({
           onClick={onExit}
           disabled={busy}
         >
-          exit without saving →
+          {t("exit without saving →")}
         </button>
       </div>
 
-      <div className="int-eyebrow">Distilled · {settled.kind}</div>
+      <div className="int-eyebrow">{settled.kind === "action" ? t("Distilled · actions") : t("Distilled · thread")}</div>
       <p className="int-note">
-        What the conversation settled into. Edit the wording if it&apos;s off,
-        then save.
+        {t("What the conversation settled into. Edit the wording if it's off, then save.")}
       </p>
 
       <textarea
         className="review-clean"
         value={clean}
         onChange={(e) => setClean(e.target.value)}
-        aria-label="Distilled wording"
+        aria-label={t("Distilled wording")}
       />
 
       {settled.kind === "action" && (
         <>
           <div className="int-block">
-            <h4 className="int-label">Actions</h4>
+            <h4 className="int-label">{t("Actions")}</h4>
             <ul className="int-list">
               {actions.map((a, i) => (
                 <li key={i}>
@@ -471,7 +470,7 @@ function DistillReview({
                     onClick={() =>
                       setActions((x) => x.filter((_, j) => j !== i))
                     }
-                    aria-label={"Remove: " + a}
+                    aria-label={t("Remove: {item}", { item: a })}
                   >
                     ✕
                   </button>
@@ -483,21 +482,21 @@ function DistillReview({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addAction()}
-                placeholder="Add an action"
-                aria-label="Add an action"
+                placeholder={t("Add an action")}
+                aria-label={t("Add an action")}
               />
               <button
                 className="ghost"
                 onClick={addAction}
                 disabled={!draft.trim()}
               >
-                Add
+                {t("Add")}
               </button>
             </div>
           </div>
 
           <div className="int-block">
-            <h4 className="int-label">Shelf life</h4>
+            <h4 className="int-label">{t("Shelf life")}</h4>
             <div className="shelf">
               {(Object.keys(SHELF) as ShelfLife[])
                 .filter((k) => k !== "keep")
@@ -522,7 +521,7 @@ function DistillReview({
                     : undefined
                 }
               >
-                keep
+                {t("keep")}
               </button>
             </div>
           </div>
@@ -535,7 +534,7 @@ function DistillReview({
           onClick={() => onSave(clean.trim(), actions, shelfLife)}
           disabled={busy || !clean.trim()}
         >
-          {busy ? "Polishing…" : "Save"}
+          {busy ? t("Polishing…") : t("Save")}
         </button>
         {/* The hard way out sits beside Save so the two decisions are one
             glance: file it, or forget it entirely. Opens the shared confirm
@@ -545,10 +544,10 @@ function DistillReview({
           onClick={onRequestDiscard}
           disabled={busy}
         >
-          Discard
+          {t("Discard")}
         </button>
         <button className="ghost" onClick={onDiscard} disabled={busy}>
-          Keep talking
+          {t("Keep talking")}
         </button>
       </div>
     </div>
@@ -573,17 +572,16 @@ function DiscardConfirm({
         className="modal-in discard-confirm"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="discard-title">Discard this conversation?</p>
+        <p className="discard-title">{t("Discard this conversation?")}</p>
         <p className="discard-hint">
-          The whole transcript will be erased for good — nothing will be
-          saved, and it can&apos;t be brought back.
+          {t("The whole transcript will be erased for good — nothing will be saved, and it can't be brought back.")}
         </p>
         <div className="tools">
           <button className="ghost warn" onClick={onConfirm}>
-            Discard for good
+            {t("Discard for good")}
           </button>
           <button className="ghost" onClick={onCancel}>
-            Keep it
+            {t("Keep it")}
           </button>
         </div>
       </div>

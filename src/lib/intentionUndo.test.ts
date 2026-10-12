@@ -51,15 +51,15 @@ describe("landing an intention", () => {
        minutes of talking, and the window shut before there was anything to
        read. */
     const landing = hook.slice(
-      hook.indexOf('showReceipt("Intention "'),
-      hook.indexOf('showReceipt("Intention "') + 900
+      hook.indexOf('const shown = t("Intention {number}"'),
+      hook.indexOf('const shown = t("Intention {number}"') + 900
     );
     expect(landing).not.toMatch(/setTimeout\([^)]*setLanded\(null\)/);
   });
 
   it("still offers the undo at all", () => {
     /* The guard above is worthless if the path stops enabling undo. */
-    const before = hook.lastIndexOf("setCanUndo(true)", hook.indexOf('showReceipt("Intention "'));
+    const before = hook.lastIndexOf("setCanUndo(true)", hook.indexOf('const shown = t("Intention {number}"'));
     expect(before).toBeGreaterThan(-1);
   });
 });

@@ -86,3 +86,21 @@ describe("an action that ends on 'it'", () => {
     expect(acceptNamed(note, "Let aside run it", "Let Aside run the Instagram page for Capture and create the Instagram page for Capture")).toBeNull();
   });
 });
+
+describe("Russian actions that lean on their capture", () => {
+  const action = (text: string): SimpleSortItem => ({ kind: "action", text });
+  it("are sent when they say его, их, туда or end on это", () => {
+    expect(pointsBack(action("Отправить его Ане на проверку"))).toBe(true);
+    expect(pointsBack(action("Перенести туда все заметки про ремонт"))).toBe(true);
+    expect(pointsBack(action("Обсудить это"))).toBe(true);
+    expect(pointsBack(action("Купить молоко"))).toBe(false);
+  });
+  it("accept a Russian rewrite in the capture's words, whatever the endings", () => {
+    const note = "Написать пост про новую выставку и отправить его Ане на проверку";
+    expect(acceptNamed(note, "Отправить его Ане на проверку", "Отправить пост о новой выставке Ане на проверку"))
+      .toBe("Отправить пост о новой выставке Ане на проверку");
+    expect(acceptNamed(note, "Отправить его Ане на проверку", "Отправить его Ане")).toBeNull();
+    expect(acceptNamed(note, "Отправить его Ане на проверку", "Позвонить бабушке")).toBeNull();
+  });
+});
+

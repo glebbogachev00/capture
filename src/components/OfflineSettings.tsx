@@ -1,4 +1,5 @@
 "use client";
+import { t } from "@/lib/i18n";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getDocumentLifetime, resumeOfflineIdentity } from "@/lib/ownership";
 import styles from "./OfflineSettings.module.css";
@@ -39,17 +40,17 @@ function useOfflineChoice() {
       // This existing method rechecks online authority at the instant of consent.
       lifetime.keepOffline(enabled);
       dismiss(); setError("");
-    } catch { setError("Could not save offline permission. Verify your account online and retry."); }
+    } catch { setError(t("Could not save offline permission. Verify your account online and retry.")); }
   }
   return { lifetime, enabled: granted === "true", answered: answered === "true" || dismissed, canEnable, error, change, dismiss };
 }
 
 function OfflineDetails() {
   return <details className={styles.details}>
-    <summary>Offline access details</summary>
-    <p>Access lasts until you log out, switch accounts, or disable it in Settings on this device.</p>
-    <p>Capture cannot detect remote account revocation while offline. Access ends when a rejection is received online.</p>
-    <p>Only downloaded photos work offline. Local changes wait to sync. Sync and AI need the same account verified online again.</p>
+    <summary>{t("Offline access details")}</summary>
+    <p>{t("Access lasts until you log out, switch accounts, or disable it in Settings on this device.")}</p>
+    <p>{t("Capture cannot detect remote account revocation while offline. Access ends when a rejection is received online.")}</p>
+    <p>{t("Only downloaded photos work offline. Local changes wait to sync. Sync and AI need the same account verified online again.")}</p>
   </details>;
 }
 
@@ -67,12 +68,12 @@ export function OfflineInvitation({ boardReady }: { boardReady: boolean }) {
   if (!visible) return null;
   return <dialog ref={dialog} className={styles.card} aria-labelledby="offline-invitation-title"
     aria-describedby="offline-invitation-benefit offline-invitation-privacy" onCancel={event => { event.preventDefault(); choice.dismiss(); }}>
-    <h2 id="offline-invitation-title">Enable offline on this device?</h2>
-    <p id="offline-invitation-benefit" className={styles.copy}>Open and edit saved notes without a connection.</p>
-    <p id="offline-invitation-privacy" className={styles.warning}>Shared device? Anyone using this browser could open your saved notes and downloaded photos.</p>
+    <h2 id="offline-invitation-title">{t("Enable offline on this device?")}</h2>
+    <p id="offline-invitation-benefit" className={styles.copy}>{t("Open and edit saved notes without a connection.")}</p>
+    <p id="offline-invitation-privacy" className={styles.warning}>{t("Shared device? Anyone using this browser could open your saved notes and downloaded photos.")}</p>
     <div className={styles.actions}>
-      <button className="capture-btn" type="button" onClick={() => choice.change(true)}>Enable offline</button>
-      <button className="ghost" type="button" onClick={choice.dismiss}>Not now</button>
+      <button className="capture-btn" type="button" onClick={() => choice.change(true)}>{t("Enable offline")}</button>
+      <button className="ghost" type="button" onClick={choice.dismiss}>{t("Not now")}</button>
     </div>
     {choice.error && <p role="alert">{choice.error}</p>}
   </dialog>;
@@ -83,8 +84,8 @@ export function OfflineSettings() {
   if (!choice.lifetime.cloud || !choice.lifetime.owner) return null;
   return <div className="settings-group">
     <label className="settings-copy"><input type="checkbox" checked={choice.enabled} disabled={!choice.canEnable && !choice.enabled}
-      onChange={event => choice.change(event.target.checked)} /> Keep available offline on this device</label>
-    <p className="settings-copy">Shared device? Anyone using this browser could open your saved notes and downloaded photos.</p>
+      onChange={event => choice.change(event.target.checked)} /> {t("Keep available offline on this device")}</label>
+    <p className="settings-copy">{t("Shared device? Anyone using this browser could open your saved notes and downloaded photos.")}</p>
     <OfflineDetails />
     {choice.error && <p role="alert">{choice.error}</p>}
   </div>;

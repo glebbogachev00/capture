@@ -1,5 +1,6 @@
 "use client";
 
+import { countOf, t } from "@/lib/i18n";
 import { useMemo, useState } from "react";
 import { useStoredImage } from "@/hooks/useStoredImage";
 import { stamp } from "@/lib/clock";
@@ -14,11 +15,12 @@ import styles from "./TidyCleanup.module.css";
 
 type Apply = (change: (board: Board) => CleanupChange | null) => Promise<boolean>;
 
-const AGES = [
-  { days: 30, label: "a month", chip: "1 month" },
-  { days: 90, label: "3 months", chip: "3 months" },
-  { days: 180, label: "6 months", chip: "6 months" },
-  { days: 0, label: "any age", chip: "All" },
+/* A function, so the words are in the reader's language when shown. */
+const ages = () => [
+  { days: 30, label: t("a month"), chip: t("1 month") },
+  { days: 90, label: t("3 months"), chip: t("3 months") },
+  { days: 180, label: t("6 months"), chip: t("6 months") },
+  { days: 0, label: t("any age"), chip: t("All") },
 ];
 const GRID_MAX = 60;
 const KEPT_KEY = "capture:cleanup-kept";
@@ -53,11 +55,11 @@ function Thumb({ id, kept, onToggle }: { id: string; kept: boolean; onToggle: ()
   const src = useStoredImage(id);
   return (
     <button type="button" className={`${styles.thumb} ${kept ? styles.kept : ""}`} onClick={onToggle}
-      aria-pressed={kept} aria-label={kept ? "Kept — tap to remove with the rest" : "Will be removed — tap to keep"}>
+      aria-pressed={kept} aria-label={kept ? t("Kept — tap to remove with the rest") : t("Will be removed — tap to keep")}>
       {/* A data: URL from IndexedDB — nothing for next/image to optimise. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {src ? <img src={src} alt="" /> : <span className={styles.missing} />}
-      {kept && <span className={styles.badge}>Keep</span>}
+      {kept && <span className={styles.badge}>{t("Keep")}</span>}
     </button>
   );
 }
@@ -72,7 +74,7 @@ function Confirm({ title, hint, yes, onYes, onNo }: {
         <p className="discard-hint">{hint}</p>
         <div className="tools">
           <button className="ghost warn" onClick={onYes}>{yes}</button>
-          <button className="ghost" onClick={onNo}>Not yet</button>
+          <button className="ghost" onClick={onNo}>{t("Not yet")}</button>
         </div>
       </div>
     </div>
@@ -87,7 +89,7 @@ function OldPhotos({ board, now, onApply }: { board: Board; now: number; onApply
   const photos = useMemo(() => oldPhotos(board, age ? now - age * DAY : Infinity), [board, now, age]);
   if (!any) return null;
   const going = photos.filter((p) => !keep.has(p.id)).map((p) => p.id);
-  const label = AGES.find((a) => a.days === age)!.label;
+  const label = ages().find((a) => a.days === age)!.label;
   const toggle = (id: string) => setKeep((k) => {
     const next = new Set(k);
     if (!next.delete(id)) next.add(id);
@@ -95,11 +97,11 @@ function OldPhotos({ board, now, onApply }: { board: Board; now: number; onApply
   });
 
   return (
-    <section className={styles.section} aria-label="Old photos">
-      <h3 className={styles.title}>Old photos</h3>
-      <div className={styles.ages} role="group" aria-label="Older than">
-        <span className={styles.agesLabel} aria-hidden="true">Older than</span>
-        {AGES.map((a) => (
+    <section className={styles.section} aria-label={t("Old photos")}>
+      <h3 className={styles.title}>{t("Old photos")}</h3>
+      <div className={styles.ages} role="group" aria-label={t("Older than")}>
+        <span className={styles.agesLabel} aria-hidden="true">{t("Older than")}</span>
+        {ages().map((a) => (
           <button key={a.days} type="button" aria-pressed={a.days === age}
             className={`${styles.age} ${a.days === age ? styles.on : ""}`} onClick={() => setAge(a.days)}>
             {a.chip}
@@ -107,30 +109,30 @@ function OldPhotos({ board, now, onApply }: { board: Board; now: number; onApply
         ))}
       </div>
       {!photos.length ? (
-        <p className={styles.hint}>No photos older than {label}.</p>
+        <p className={styles.hint}>{t("No photos older than {age}.", { age: label })}</p>
       ) : (
         <>
           <p className={styles.hint}>
-            {photos.length} {photos.length === 1 ? "photo" : "photos"}. Tap any you want to keep; the words they came with always stay.
+            {t("{count}. Tap any you want to keep; the words they came with always stay.", { count: countOf(photos.length, ["photo", "photos"], ["фото", "фото", "фото"]) })}
           </p>
           <div className={styles.grid}>
             {photos.slice(0, GRID_MAX).map((p) => (
               <Thumb key={p.id} id={p.id} kept={keep.has(p.id)} onToggle={() => toggle(p.id)} />
             ))}
           </div>
-          {photos.length > GRID_MAX && <p className={styles.hint}>…and {photos.length - GRID_MAX} older ones, removed with the rest.</p>}
+          {photos.length > GRID_MAX && <p className={styles.hint}>{t("…and {count} older ones, removed with the rest.", { count: photos.length - GRID_MAX })}</p>}
           <div className="org-approve">
             <button className="suggest-btn suggest-ok" disabled={!going.length} onClick={() => setConfirm(true)}>
-              Remove {going.length} {going.length === 1 ? "photo" : "photos"}
+              {t("Remove {count}", { count: countOf(going.length, ["photo", "photos"], ["фото", "фото", "фото"]) })}
             </button>
           </div>
         </>
       )}
       {confirm && (
         <Confirm
-          title={`Remove ${going.length} ${going.length === 1 ? "photo" : "photos"}?`}
-          hint="They come off the board and out of this device's storage. The notes they came with stay; a note that was only a photo goes with it. You can Undo right after."
-          yes="Remove"
+          title={t("Remove {count}?", { count: countOf(going.length, ["photo", "photos"], ["фото", "фото", "фото"]) })}
+          hint={t("They come off the board and out of this device's storage. The notes they came with stay; a note that was only a photo goes with it. You can Undo right after.")}
+          yes={t("Remove")}
           onNo={() => setConfirm(false)}
           onYes={() => {
             setConfirm(false);
@@ -145,10 +147,11 @@ function OldPhotos({ board, now, onApply }: { board: Board; now: number; onApply
 
 function Row({ p, onDo, onKeep }: { p: OneLinerProposal; onDo: () => void; onKeep: () => void }) {
   const text = <em>{p.item.text}</em>;
+  const to = <em>{p.to?.name}</em>;
   const line = p.verdict === "move"
-    ? <>{p.item.kind === "action" ? "File" : "Move"} {text} {p.item.kind === "action" ? "into" : "to"} <em>{p.to!.name}</em></>
-    : p.item.kind === "action" ? <>Let go of {text}</> : <>Delete {text}</>;
-  const verb = p.verdict === "move" ? (p.item.kind === "action" ? "File" : "Move") : p.item.kind === "action" ? "Let go" : "Delete";
+    ? (p.item.kind === "action" ? <>{t("File")} {text} {t("into")} {to}</> : <>{t("Move")} {text} {t("to")} {to}</>)
+    : p.item.kind === "action" ? <>{t("Let go of")} {text}</> : <>{t("Delete")} {text}</>;
+  const verb = p.verdict === "move" ? (p.item.kind === "action" ? t("File") : t("Move")) : p.item.kind === "action" ? t("Let go") : t("Delete");
   return (
     <div className="org-row">
       <div className="org-body">
@@ -157,7 +160,7 @@ function Row({ p, onDo, onKeep }: { p: OneLinerProposal; onDo: () => void; onKee
       </div>
       <div className="org-actions">
         <button className="suggest-btn suggest-ok" onClick={onDo}>{verb}</button>
-        <button className="suggest-btn" onClick={onKeep}>Keep</button>
+        <button className="suggest-btn" onClick={onKeep}>{t("Keep")}</button>
       </div>
     </div>
   );
@@ -203,29 +206,29 @@ function OneLiners({ board, now, onApply }: { board: Board; now: number; onApply
 
   if (!candidates.length && !rows.length && phase !== "reading") {
     return (
-      <section className={styles.section} aria-label="One-liners">
-        <h3 className={styles.title}>One-liners</h3>
-        <p className={styles.hint}>{phase === "done" ? "Done — every short note left reads as worth keeping." : "No short notes to review."}</p>
+      <section className={styles.section} aria-label={t("One-liners")}>
+        <h3 className={styles.title}>{t("One-liners")}</h3>
+        <p className={styles.hint}>{phase === "done" ? t("Done — every short note left reads as worth keeping.") : t("No short notes to review.")}</p>
       </section>
     );
   }
   return (
-    <section className={styles.section} aria-label="One-liners">
-      <h3 className={styles.title}>One-liners</h3>
+    <section className={styles.section} aria-label={t("One-liners")}>
+      <h3 className={styles.title}>{t("One-liners")}</h3>
       {phase === "reading" ? (
-        <p className={styles.hint} role="status">Reading {candidates.length} short notes against the rest of your board…</p>
+        <p className={styles.hint} role="status">{t("Reading {count} against the rest of your board…", { count: countOf(candidates.length, ["short note", "short notes"], ["короткую заметку", "короткие заметки", "коротких заметок"]) })}</p>
       ) : !rows.length ? (
         <>
           <p className={styles.hint} role="status">
             {phase === "error"
-              ? `The model didn't answer, so nothing was changed.${error ? ` ${error}` : ""} Try again in a moment.`
+              ? t("The model didn't answer, so nothing was changed.{error} Try again in a moment.", { error: error ? ` ${error}` : "" })
               : phase === "done"
-                ? "Done — the rest read as worth keeping."
-                : `${candidates.length} short notes and tasks. The model checks which are leftover noise or filed in the wrong place — you approve each change.`}
+                ? t("Done — the rest read as worth keeping.")
+                : t("{count} and tasks. The model checks which are leftover noise or filed in the wrong place — you approve each change.", { count: countOf(candidates.length, ["short note", "short notes"], ["короткая заметка", "короткие заметки", "коротких заметок"]) })}
           </p>
           {!!candidates.length && (
             <button className="org-more" onClick={() => void run()}>
-              Review {candidates.length} {candidates.length === 1 ? "one-liner" : "one-liners"}
+              {t("Review {count}", { count: countOf(candidates.length, ["one-liner", "one-liners"], ["короткую заметку", "короткие заметки", "коротких заметок"]) })}
             </button>
           )}
         </>
@@ -238,15 +241,15 @@ function OneLiners({ board, now, onApply }: { board: Board; now: number; onApply
             ))}
           </div>
           <div className="org-approve">
-            <button className="suggest-btn suggest-ok" onClick={() => setConfirm(true)}>Approve all ({rows.length})</button>
+            <button className="suggest-btn suggest-ok" onClick={() => setConfirm(true)}>{t("Approve all ({count})", { count: rows.length })}</button>
           </div>
         </>
       )}
       {confirm && (
         <Confirm
-          title={`Apply all ${rows.length}?`}
-          hint="Notes are deleted or moved, tasks are let go (they wait in Faded for two weeks) or filed into their thread — in one go, with one Undo."
-          yes="Approve all"
+          title={t("Apply all {count}?", { count: rows.length })}
+          hint={t("Notes are deleted or moved, tasks are let go (they wait in Faded for two weeks) or filed into their thread — in one go, with one Undo.")}
+          yes={t("Approve all")}
           onNo={() => setConfirm(false)}
           onYes={() => { setConfirm(false); apply(rows); }}
         />
@@ -286,20 +289,20 @@ function SimilarNotes({ board, now, onApply }: { board: Board; now: number; onAp
   };
 
   return (
-    <section className={styles.section} aria-label="Similar notes">
-      <h3 className={styles.title}>Similar notes</h3>
+    <section className={styles.section} aria-label={t("Similar notes")}>
+      <h3 className={styles.title}>{t("Similar notes")}</h3>
       {phase === "reading" ? (
-        <p className={styles.hint} role="status">Reading your threads for notes that say the same thing…</p>
+        <p className={styles.hint} role="status">{t("Reading your threads for notes that say the same thing…")}</p>
       ) : !rows.length ? (
         <>
           <p className={styles.hint} role="status">
             {phase === "error"
-              ? `The model didn't answer, so nothing was changed.${error ? ` ${error}` : ""} Try again in a moment.`
+              ? t("The model didn't answer, so nothing was changed.{error} Try again in a moment.", { error: error ? ` ${error}` : "" })
               : phase === "done"
-                ? "No notes worth combining — each one adds something."
-                : "Notes in one thread that say the same thing, combined into one in your own words. You see each result before it lands."}
+                ? t("No notes worth combining — each one adds something.")
+                : t("Notes in one thread that say the same thing, combined into one in your own words. You see each result before it lands.")}
           </p>
-          {phase !== "done" && <button className="org-more" onClick={() => void run()}>Find similar notes</button>}
+          {phase !== "done" && <button className="org-more" onClick={() => void run()}>{t("Find similar notes")}</button>}
         </>
       ) : (
         <>
@@ -307,30 +310,30 @@ function SimilarNotes({ board, now, onApply }: { board: Board; now: number; onAp
             {rows.map((p) => (
               <div className="org-row" key={p.key}>
                 <div className="org-body">
-                  <span className="org-line">Combine {p.frags.length} notes in <em>{p.threadName}</em></span>
+                  <span className="org-line">{t("Combine {count} in", { count: countOf(p.frags.length, ["note", "notes"], ["заметку", "заметки", "заметок"]) })} <em>{p.threadName}</em></span>
                   <span className="org-why">{p.reason}</span>
-                  <ul className={styles.before} aria-label="Now">
+                  <ul className={styles.before} aria-label={t("Now")}>
                     {p.frags.map((f) => <li key={f.id}>{f.text}</li>)}
                   </ul>
-                  <p className={styles.after}><span>Becomes</span>{p.combined}</p>
+                  <p className={styles.after}><span>{t("Becomes")}</span>{p.combined}</p>
                 </div>
                 <div className="org-actions">
-                  <button className="suggest-btn suggest-ok" onClick={() => apply([p])}>Combine</button>
-                  <button className="suggest-btn" onClick={() => keep(p)}>Keep apart</button>
+                  <button className="suggest-btn suggest-ok" onClick={() => apply([p])}>{t("Combine")}</button>
+                  <button className="suggest-btn" onClick={() => keep(p)}>{t("Keep apart")}</button>
                 </div>
               </div>
             ))}
           </div>
           <div className="org-approve">
-            <button className="suggest-btn suggest-ok" onClick={() => setConfirm(true)}>Combine all ({rows.length})</button>
+            <button className="suggest-btn suggest-ok" onClick={() => setConfirm(true)}>{t("Combine all ({count})", { count: rows.length })}</button>
           </div>
         </>
       )}
       {confirm && (
         <Confirm
-          title={`Combine all ${rows.length}?`}
-          hint="Each group becomes the one note shown under it, with every photo it had — in one go, with one Undo."
-          yes="Combine all"
+          title={t("Combine all {count}?", { count: rows.length })}
+          hint={t("Each group becomes the one note shown under it, with every photo it had — in one go, with one Undo.")}
+          yes={t("Combine all")}
           onNo={() => setConfirm(false)}
           onYes={() => { setConfirm(false); apply(rows); }}
         />

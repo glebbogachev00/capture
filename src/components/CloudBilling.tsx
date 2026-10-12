@@ -1,5 +1,8 @@
 "use client";
 
+import { useT } from "@/components/LocaleProvider";
+import { t as tr } from "@/lib/i18n";
+import { deviceLocale } from "@/lib/i18n";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -34,8 +37,9 @@ export async function fetchCloudSubscription(
   return { response, subscription };
 }
 
+/* The server's own wording is English; a Russian reader gets ours. */
 function messageFrom(body: Record<string, unknown>, fallback: string): string {
-  return typeof body.error === "string" && body.error.length <= 160 ? body.error : fallback;
+  return deviceLocale() !== "ru" && typeof body.error === "string" && body.error.length <= 160 ? body.error : fallback;
 }
 
 export function CloudCheckoutButton({
@@ -47,6 +51,7 @@ export function CloudCheckoutButton({
   children: React.ReactNode;
   autoStart?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -73,17 +78,17 @@ export function CloudCheckoutButton({
         return;
       }
       if (!response.ok) {
-        setNote(messageFrom(body, "Checkout is unavailable right now."));
+        setNote(messageFrom(body, tr("Checkout is unavailable right now.")));
         return;
       }
       const destination = safePolarDestination(body.url);
       if (!destination) {
-        setNote("Checkout returned an invalid destination.");
+        setNote(tr("Checkout returned an invalid destination."));
         return;
       }
       window.location.assign(destination);
     } catch {
-      setNote("Checkout is unavailable right now.");
+      setNote(tr("Checkout is unavailable right now."));
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -109,7 +114,7 @@ export function CloudCheckoutButton({
   return (
     <div className="cloud-action">
       <button className="capture-btn cloud-checkout-btn" onClick={() => void begin()} disabled={busy}>
-        {busy ? "Opening checkout…" : children}
+        {busy ? t("Opening checkout…") : children}
       </button>
       {note && <p className="cloud-action-note" role="status">{note}</p>}
     </div>
@@ -117,6 +122,7 @@ export function CloudCheckoutButton({
 }
 
 export function CloudAccountPanel() {
+  const t = useT();
   const [subscription, setSubscription] = useState<PublicCloudSubscription | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "signed-out" | "unavailable">("loading");
   const [busy, setBusy] = useState(false);
@@ -156,17 +162,17 @@ export function CloudAccountPanel() {
       });
       const body = await responseBody(response);
       if (!response.ok) {
-        setNote(messageFrom(body, "The subscription portal is unavailable right now."));
+        setNote(messageFrom(body, t("The subscription portal is unavailable right now.")));
         return;
       }
       const destination = safePolarDestination(body.url);
       if (!destination) {
-        setNote("The subscription portal returned an invalid destination.");
+        setNote(t("The subscription portal returned an invalid destination."));
         return;
       }
       window.location.assign(destination);
     } catch {
-      setNote("The subscription portal is unavailable right now.");
+      setNote(t("The subscription portal is unavailable right now."));
     } finally {
       setBusy(false);
     }
@@ -180,22 +186,22 @@ export function CloudAccountPanel() {
       if (!result.subscription) throw new Error("status unavailable");
       setSubscription(result.subscription);
     } catch {
-      setNote("Cloud status is unavailable. Your subscription has not been changed.");
+      setNote(t("Cloud status is unavailable. Your subscription has not been changed."));
     } finally {
       setBusy(false);
     }
   };
 
-  if (state === "loading") return <p className="settings-copy">Checking your Cloud access…</p>;
-  if (state === "unavailable") return <p className="settings-copy">Cloud billing is not available on this installation.</p>;
+  if (state === "loading") return <p className="settings-copy">{t("Checking your Cloud access…")}</p>;
+  if (state === "unavailable") return <p className="settings-copy">{t("Cloud billing is not available on this installation.")}</p>;
   if (state === "signed-out") {
-    return <Link className="ghost cloud-inline-link" href="/login?next=%2Fapp">Sign in to Capture Cloud</Link>;
+    return <Link className="ghost cloud-inline-link" href="/login?next=%2Fapp">{t("Sign in to Capture Cloud")}</Link>;
   }
   if (!subscription || (subscription.tier === "free" && !subscription.reconciliationRequired)) {
     return (
       <div className="settings-group cloud-account-copy">
-        <p className="settings-copy">Your board is local. Cloud adds recovery and access across devices.</p>
-        <Link className="capture-btn cloud-inline-link" href="/pricing">See Capture Cloud</Link>
+        <p className="settings-copy">{t("Your board is local. Cloud adds recovery and access across devices.")}</p>
+        <Link className="capture-btn cloud-inline-link" href="/pricing">{t("See Capture Cloud")}</Link>
       </div>
     );
   }
@@ -207,23 +213,26 @@ export function CloudAccountPanel() {
     <div className="settings-group cloud-account-copy">
       <p className="settings-copy">
         {subscription.reconciliationRequired
-          ? "Cloud access is awaiting billing confirmation. Your existing subscription may still be charging; do not purchase again."
+          ? t("Cloud access is awaiting billing confirmation. Your existing subscription may still be charging; do not purchase again.")
           : subscription.accessSource === "complimentary"
-            ? "Complimentary Capture Cloud is active."
-          : `${subscription.plan === "yearly" ? "Yearly" : "Monthly"} Cloud is active${subscription.cancelAtPeriodEnd && end ? ` until ${end}` : "."}`}
+            ? t("Complimentary Capture Cloud is active.")
+          : subscription.cancelAtPeriodEnd && end
+            ? (subscription.plan === "yearly" ? t("Yearly Cloud is active until {end}", { end }) : t("Monthly Cloud is active until {end}", { end }))
+            : (subscription.plan === "yearly" ? t("Yearly Cloud is active.") : t("Monthly Cloud is active."))}
       </p>
       {subscription.canManageBilling !== false && (
         <button className="ghost" onClick={() => void openPortal()} disabled={busy}>
-          {busy ? "Opening…" : "Manage subscription"}
+          {busy ? t("Opening…") : t("Manage subscription")}
         </button>
       )}
-      {subscription.reconciliationRequired && <button className="ghost" onClick={() => void retryStatus()} disabled={busy}>Retry status</button>}
+      {subscription.reconciliationRequired && <button className="ghost" onClick={() => void retryStatus()} disabled={busy}>{t("Retry status")}</button>}
       {note && <p className="cloud-action-note" role="status">{note}</p>}
     </div>
   );
 }
 
 export function CheckoutReturnNotice() {
+  const t = useT();
   const searchParams = useSearchParams();
   // Snapshot during render. If Analytics hydrated first, its history-state
   // handoff contains only a boolean marker, never the checkout identifier.
@@ -257,13 +266,13 @@ export function CheckoutReturnNotice() {
   if (!checkoutReturn) return null;
   return (
     <div className={`cloud-return ${state}`} role="status">
-      <strong>{state === "active" ? "Capture Cloud is active." : state === "delayed" ? "Cloud access is not confirmed." : "Checking checkout status…"}</strong>
+      <strong>{state === "active" ? t("Capture Cloud is active.") : state === "delayed" ? t("Cloud access is not confirmed.") : t("Checking checkout status…")}</strong>
       <span>
         {state === "active"
-          ? "This board can now recover across your devices."
+          ? t("This board can now recover across your devices.")
           : state === "delayed"
-            ? "Check your subscription status in Settings."
-            : "Confirming your Cloud access…"}
+            ? t("Check your subscription status in Settings.")
+            : t("Confirming your Cloud access…")}
       </span>
     </div>
   );

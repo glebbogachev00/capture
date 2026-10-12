@@ -9,6 +9,7 @@
  * leaving — this is a thing to look at, not a thing to work.
  */
 
+import { countNoun, t } from "@/lib/i18n";
 import { useEffect } from "react";
 import { Check, ChevronRight } from "lucide-react";
 import type { DayWrap } from "@/lib/wrap";
@@ -122,9 +123,9 @@ export function WrapView({
   ];
 
   return (
-    <div className="wrap-sheet" role="dialog" aria-label="Daily wrap">
+    <div className="wrap-sheet" role="dialog" aria-label={t("Daily wrap")}>
       <div className="wrap-day">{wrapDayName(wrap.day)}</div>
-      <h2 className="wrap-title">What the day moved</h2>
+      <h2 className="wrap-title">{t("What the day moved")}</h2>
 
       <div className="wrap-counts">
         {counts.map(([k, n]) => (
@@ -137,7 +138,7 @@ export function WrapView({
 
       {!!threads.length && (
         <div className="wrap-card">
-          <div className="wrap-k">where the day went</div>
+          <div className="wrap-k">{t("where the day went")}</div>
           <div className="wrap-bars">
             {shown.map((t) => (
               <div
@@ -156,7 +157,7 @@ export function WrapView({
               >
                 {/* Says how many and how much, never "once each" — that was
                     a guess about counts nobody had checked. */}
-                <div className="wrap-bar-name">{rest.length} more threads</div>
+                <div className="wrap-bar-name">{t("{count} more", { count: countNoun(rest.length, "thread") })}</div>
                 <div className="wrap-k wrap-bar-n">{restN}</div>
               </div>
             )}
@@ -165,7 +166,7 @@ export function WrapView({
       )}
 
       <div className="wrap-line-wrap">
-        <div className="wrap-k">the day in one line</div>
+        <div className="wrap-k">{t("the day in one line")}</div>
         <p className="wrap-line">{wrap.line}</p>
       </div>
 
@@ -184,8 +185,8 @@ export function WrapView({
         <div className="wrap-done">
           <div className="wrap-k">
             {s.finished.length === 1
-              ? "one thing you finished"
-              : `${s.finished.length} things you finished`}
+              ? t("one thing you finished")
+              : t("{count} things you finished", { count: s.finished.length })}
           </div>
           <ul className="wrap-done-list">
             {s.finished.map((f) => (
@@ -200,7 +201,7 @@ export function WrapView({
 
       {!!wrap.tomorrow && (
         <div className="wrap-card wrap-tomorrow">
-          <div className="wrap-k">tomorrow</div>
+          <div className="wrap-k">{t("tomorrow")}</div>
           <div className="wrap-insight-v">{wrap.tomorrow}</div>
         </div>
       )}

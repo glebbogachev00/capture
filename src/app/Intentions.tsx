@@ -1,4 +1,5 @@
 "use client";
+import { countOf, t } from "@/lib/i18n";
 import { OfflineSettings } from "@/components/OfflineSettings";
 import { LegacyImportSettings } from "@/components/LegacyImport";
 import "@/components/IntentionPinCard.css";
@@ -24,6 +25,7 @@ import {
   Pin,
 } from "lucide-react";
 import {
+  shownPrinciple,
   type Intention,
   type Principle,
   type ProfileIdentity,
@@ -52,6 +54,11 @@ import {
   monthLabels,
   recordStats,
 } from "@/lib/record";
+
+/* The Record names what each capture became, in the reader's language. */
+const kindName = (kind: string) => ({
+  action: t("action"), thread: t("thread"), intention: t("intention"), both: t("action and thread"), pending: t("unsorted"),
+} as Record<string, string>)[kind] ?? kind;
 
 const PROFILE_DEFAULTS = {
   name: process.env.NEXT_PUBLIC_CAPTURE_PROFILE_NAME ?? "",
@@ -94,13 +101,13 @@ function EditableList({
       <h4 className="int-label">{label}</h4>
       {note && <p className="int-note">{note}</p>}
       <ul className="int-list">
-        {items.map((t, i) => (
+        {items.map((item, i) => (
           <li key={i}>
-            <span>{t}</span>
+            <span>{item}</span>
             <button
               className="ghost"
               onClick={() => onRemove(i)}
-              aria-label={"Remove: " + t}
+              aria-label={t("Remove: {item}", { item })}
             >
               <X size={16} strokeWidth={2} />
             </button>
@@ -116,7 +123,7 @@ function EditableList({
           aria-label={placeholder}
         />
         <button className="ghost" onClick={commit} disabled={!draft.trim()}>
-          Add
+          {t("Add")}
         </button>
       </div>
     </div>
@@ -149,7 +156,7 @@ export function IntentionDraft({
 
   return (
     <div className="int-draft">
-      <div className="int-eyebrow">New intention</div>
+      <div className="int-eyebrow">{t("New intention")}</div>
 
       {editing ? (
         <textarea
@@ -159,7 +166,7 @@ export function IntentionDraft({
             onChange({ ...draft, expandedIntention: e.target.value })
           }
           onBlur={() => setEditing(false)}
-          aria-label="Expanded intention"
+          aria-label={t("Expanded intention")}
           autoFocus
         />
       ) : (
@@ -170,7 +177,7 @@ export function IntentionDraft({
 
       <div className="act-meta">
         <button className="ghost" onClick={() => setEditing(true)}>
-          Edit wording
+          {t("Edit wording")}
         </button>
         {/* The escape from a wrong classification, asked for three times:
             everything said goes back through the sorter as a thread — the
@@ -178,15 +185,15 @@ export function IntentionDraft({
             wording because that is where the eye goes when the words feel
             wrong. */}
         <button className="ghost" onClick={onThreadInstead} disabled={busy}>
-          It&apos;s a thread, not an intention
+          {t("It's a thread, not an intention")}
         </button>
       </div>
 
       <EditableList
-        label="Recommended actions"
-        note="Taken from the fulfilled state — things you do because this is already so."
+        label={t("Recommended actions")}
+        note={t("Taken from the fulfilled state — things you do because this is already so.")}
         items={draft.recommendedActions}
-        placeholder="Add an action"
+        placeholder={t("Add an action")}
         onAdd={(v) =>
           onChange({
             ...draft,
@@ -204,10 +211,10 @@ export function IntentionDraft({
       />
 
       <EditableList
-        label="Counter-intentions"
-        note="The recurring behaviours pulling against this one."
+        label={t("Counter-intentions")}
+        note={t("The recurring behaviours pulling against this one.")}
         items={draft.counterIntentions}
-        placeholder="Add a counter-intention"
+        placeholder={t("Add a counter-intention")}
         onAdd={(v) =>
           onChange({
             ...draft,
@@ -226,10 +233,10 @@ export function IntentionDraft({
 
       <div className="int-commit">
         <button className="capture-btn" onClick={onSave} disabled={busy}>
-          Save intention
+          {t("Save intention")}
         </button>
         <button className="ghost warn" onClick={onDiscard} disabled={busy}>
-          Discard
+          {t("Discard")}
         </button>
       </div>
     </div>
@@ -260,9 +267,8 @@ export function IntentionCard({
       {!hideNumber && <div className="int-number">({pad(displayNumber)})</div>}
       <div className="int-card-text">{intentionWording(intention.expandedIntention)}</div>
       <div className="act-meta" style={{ marginTop: 9 }}>
-        {intention.recommendedActions.length} action
-        {intention.recommendedActions.length === 1 ? "" : "s"} ·{" "}
-        {intention.counterIntentions.length} counter ·{" "}
+        {countOf(intention.recommendedActions.length, ["action", "actions"], ["дело", "дела", "дел"])} ·{" "}
+        {countOf(intention.counterIntentions.length, ["counter", "counter"], ["помеха", "помехи", "помех"])} ·{" "}
         {fmt(intention.at)}
       </div>
       <ProfileSignature profile={profile} />
@@ -277,8 +283,10 @@ export function IntentionCard({
     <div className={"intention-select-card intention-pin-target" + (pinned ? " is-pinned" : "")}>
       <button className="tcard" onClick={onOpen}>{content}</button>
       <button type="button" className="intention-pin-state" onClick={onTogglePin} aria-pressed={pinned}
-        aria-label={`${pinned ? "Unpin" : "Pin"} intention ${pad(displayNumber)}: ${intentionWording(intention.expandedIntention)}`}>
-        <Pin size={14} aria-hidden="true" />{pinned ? "Pinned" : "Pin"}
+        aria-label={pinned
+          ? t("Unpin intention {number}: {wording}", { number: pad(displayNumber), wording: intentionWording(intention.expandedIntention) })
+          : t("Pin intention {number}: {wording}", { number: pad(displayNumber), wording: intentionWording(intention.expandedIntention) })}>
+        <Pin size={14} aria-hidden="true" />{pinned ? t("Pinned") : t("Pin")}
       </button>
     </div>
   );
@@ -320,7 +328,7 @@ export function IntentionDetail({
   return (
     <div>
       <button className="back" onClick={onBack}>
-        ← all intentions
+        {t("← all intentions")}
       </button>
 
       <div className="int-number">({pad(displayNumber)})</div>
@@ -333,7 +341,7 @@ export function IntentionDetail({
             onChange({ ...intention, expandedIntention: e.target.value })
           }
           onBlur={() => setEditing(false)}
-          aria-label="Expanded intention"
+          aria-label={t("Expanded intention")}
           autoFocus
         />
       ) : (
@@ -342,7 +350,7 @@ export function IntentionDetail({
 
       <div style={{ marginBottom: 18 }}>
         <div className="act-meta">
-          <button className="copy-btn" onClick={onCopy} aria-label="Copy">
+          <button className="copy-btn" onClick={onCopy} aria-label={t("Copy")}>
             <Copy size={16} strokeWidth={1.6} />
           </button>
           <button
@@ -352,7 +360,7 @@ export function IntentionDetail({
               setConfirming(false);
             }}
             aria-expanded={more}
-            aria-label={more ? "Fewer options" : "More options"}
+            aria-label={more ? t("Fewer options") : t("More options")}
           >
             <MoreHorizontal size={16} strokeWidth={1.8} />
           </button>
@@ -361,13 +369,13 @@ export function IntentionDetail({
         {more && (
           <div className="row-actions">
             <button className="ghost" onClick={() => setEditing(true)}>
-              Edit wording
+              {t("Edit wording")}
             </button>
             <button
               className="ghost warn"
               onClick={() => setConfirming((v) => !v)}
             >
-              Delete
+              {t("Delete")}
             </button>
           </div>
         )}
@@ -375,17 +383,17 @@ export function IntentionDetail({
 
       {confirming && (
         <ConfirmDelete
-          title={`Delete intention ${pad(displayNumber)}?`}
+          title={t("Delete intention {number}?", { number: pad(displayNumber) })}
           onConfirm={onDelete}
           onCancel={() => setConfirming(false)}
         />
       )}
 
       <EditableList
-        label="Recommended actions"
-        note="Taken from the fulfilled state — things you do because this is already so."
+        label={t("Recommended actions")}
+        note={t("Taken from the fulfilled state — things you do because this is already so.")}
         items={intention.recommendedActions}
-        placeholder="Add an action"
+        placeholder={t("Add an action")}
         onAdd={(v) =>
           onChange({
             ...intention,
@@ -403,10 +411,10 @@ export function IntentionDetail({
       />
 
       <EditableList
-        label="Counter-intentions"
-        note="The recurring behaviours pulling against this one."
+        label={t("Counter-intentions")}
+        note={t("The recurring behaviours pulling against this one.")}
         items={intention.counterIntentions}
-        placeholder="Add a counter-intention"
+        placeholder={t("Add a counter-intention")}
         onAdd={(v) =>
           onChange({
             ...intention,
@@ -435,7 +443,7 @@ export function IntentionDetail({
             onClick={() => setSaid((v) => !v)}
             aria-expanded={said}
           >
-            {said ? "Hide what you said" : "What you said"}
+            {said ? t("Hide what you said") : t("What you said")}
           </button>
           {said && <p className="int-said-text">{spoken}</p>}
         </div>
@@ -456,7 +464,7 @@ function IntentionImages({ ids }: { ids: string[] }) {
   if (!srcs.length) return null;
   return <div className="intention-images">{srcs.map((src, index) => (
     // eslint-disable-next-line @next/next/no-img-element
-    <img key={ids[index] || index} src={src} alt={`Attached capture ${index + 1}`} />
+    <img key={ids[index] || index} src={src} alt={t("Attached capture {number}", { number: index + 1 })} />
   ))}</div>;
 }
 
@@ -622,7 +630,7 @@ export function RecordScreen({
     return (
       <div>
         <button className="back" onClick={() => setOpenWrap(false)}>
-          ← the record
+          {t("← the record")}
         </button>
         <WrapView wrap={wrap} onSeen={onWrapSeen} />
       </div>
@@ -632,11 +640,11 @@ export function RecordScreen({
   return (
     <div>
       <button className="back" onClick={onBack}>
-        ← capture
+        {t("← capture")}
       </button>
 
       <div className="tname" style={{ fontSize: 26, marginBottom: 10 }}>
-        The record
+        {t("The record")}
       </div>
 
       {/* A call-out, not the reading. The record is a page you come to for
@@ -650,8 +658,8 @@ export function RecordScreen({
 
       {!ledger.length ? (
         <div className="empty record-empty">
-          <p className="big">The record is quiet.</p>
-          <p>Your first capture will leave a trace here.</p>
+          <p className="big">{t("The record is quiet.")}</p>
+          <p>{t("Your first capture will leave a trace here.")}</p>
         </div>
       ) : (
         <>
@@ -659,19 +667,19 @@ export function RecordScreen({
               glanceable first, sentence second. */}
           <div className="record-tiles">
             <div className="record-tile">
-              <span className="record-tile-label">Said</span>
+              <span className="record-tile-label">{t("Said")}</span>
               <b>{stats.total}</b>
             </div>
             <div className="record-tile">
-              <span className="record-tile-label">Actions</span>
+              <span className="record-tile-label">{t("Actions")}</span>
               <b>{stats.actions}</b>
             </div>
             <div className="record-tile">
-              <span className="record-tile-label">Threads</span>
+              <span className="record-tile-label">{t("Threads")}</span>
               <b>{stats.threads}</b>
             </div>
             <div className="record-tile">
-              <span className="record-tile-label">Intentions</span>
+              <span className="record-tile-label">{t("Intentions")}</span>
               <b>{stats.intentions}</b>
             </div>
           </div>
@@ -699,7 +707,7 @@ export function RecordScreen({
                           onDayChange(cell.day);
                           setShowHistory(true);
                         }}
-                        title={`${dayName(cell.day)} · ${cell.count} capture${cell.count === 1 ? "" : "s"}`}
+                        title={`${dayName(cell.day)} · ${countOf(cell.count, ["capture", "captures"], ["запись", "записи", "записей"])}`}
                       />
                     ))}
                   </div>
@@ -715,8 +723,8 @@ export function RecordScreen({
                   something a person can picture. */}
               <p className="record-caption record-profile-caption">
                 {caught
-                  ? `about ${caught.words.toLocaleString()} words caught`
-                  : "the last twelve weeks, day by day"}
+                  ? t("about {count} caught", { count: countOf(caught.words, ["word", "words"], ["слово", "слова", "слов"]).replace(/^\d+/, caught.words.toLocaleString()) })
+                  : t("the last twelve weeks, day by day")}
               </p>
             </div>
             <CaptureProfile
@@ -734,19 +742,19 @@ export function RecordScreen({
               className="record-disclosure"
               onClick={() => setShowHistory((value) => !value)}
               aria-expanded={showHistory}
-              aria-label={`${showHistory ? "Hide" : "Show"} ${
-                today ? "today's history" : `${dayName(day)} history`
-              }`}
+              aria-label={
+                today
+                  ? showHistory ? t("Hide today's history") : t("Show today's history")
+                  : showHistory ? t("Hide {day} history", { day: dayName(day) }) : t("Show {day} history", { day: dayName(day) })
+              }
             >
               <span className="record-disclosure-title">
-                {today ? "Today's history" : dayName(day)}
+                {today ? t("Today's history") : dayName(day)}
               </span>
               <span className="record-disclosure-meta">
                 {selectedCaptures.length
-                  ? `${selectedCaptures.length} capture${
-                      selectedCaptures.length === 1 ? "" : "s"
-                    }`
-                  : "quiet"}
+                  ? countOf(selectedCaptures.length, ["capture", "captures"], ["запись", "записи", "записей"])
+                  : t("quiet")}
               </span>
               {showHistory ? (
                 <ChevronUp size={21} strokeWidth={1.7} />
@@ -759,8 +767,8 @@ export function RecordScreen({
               <div className="record-disclosure-body">
                 {!selectedCaptures.length && (
                   <div className="record-empty-day">
-                    <p>A quiet day.</p>
-                    <span>Choose a green square to see another day.</span>
+                    <p>{t("A quiet day.")}</p>
+                    <span>{t("Choose a green square to see another day.")}</span>
                   </div>
                 )}
                 <ul className="record-log">
@@ -772,7 +780,7 @@ export function RecordScreen({
                       <p className="record-filed">{e.filed || e.said}</p>
                       {e.differs && (
                         <p className="record-said">
-                          <span>said</span> {e.said}
+                          <span>{t("said")}</span> {e.said}
                         </p>
                       )}
                       {e.undone && e.said && (
@@ -780,18 +788,18 @@ export function RecordScreen({
                           className="record-restore"
                           onClick={() => onRestore(e.said)}
                         >
-                          Say it again
+                          {t("Say it again")}
                         </button>
                       )}
                       <p className="record-meta">
-                        {e.kind} · {e.undone && "undone · "}
+                        {kindName(e.kind)} · {e.undone && t("undone") + " · "}
                         {(() => {
                           const home = e.targetId
                             ? threads.find((t) => t.id === e.targetId)
                             : undefined;
                           return home ? (
                             <>
-                              in{" "}
+                              {t("in")}{" "}
                               <button
                                 className="record-home"
                                 onClick={() => onOpenThread(home.id)}
@@ -817,17 +825,17 @@ export function RecordScreen({
                 className="record-disclosure"
                 onClick={() => setShowRules((value) => !value)}
                 aria-expanded={showRules}
-                aria-label={`${showRules ? "Hide" : "Show"} sorting preferences`}
+                aria-label={showRules ? t("Hide sorting preferences") : t("Show sorting preferences")}
               >
                 <span className="record-disclosure-title">
-                  Sorting preferences
+                  {t("Sorting preferences")}
                 </span>
                 <span className="record-disclosure-meta">
                   {rules.length === 1
                     ? rules[0].enabled
-                      ? "on"
-                      : "off"
-                    : `${rules.filter((rule) => rule.enabled).length} on`}
+                      ? t("on")
+                      : t("off")
+                    : t("{count} on", { count: rules.filter((rule) => rule.enabled).length })}
                 </span>
                 {showRules ? (
                   <ChevronUp size={21} strokeWidth={1.7} />
@@ -886,7 +894,7 @@ function SettingsDisclosure({
         className="record-disclosure"
         onClick={onToggle}
         aria-expanded={open}
-        aria-label={`${open ? "Hide" : "Show"} ${title}`}
+        aria-label={open ? t("Hide {title}", { title }) : t("Show {title}", { title })}
       >
         <span className="record-disclosure-title">{title}</span>
         <span className="record-disclosure-meta">{meta}</span>
@@ -966,11 +974,11 @@ export function SettingsScreen({
   return (
     <div>
       <button className="back" onClick={onBack}>
-        ← back
+        {t("← back")}
       </button>
 
       <div className="tname" style={{ fontSize: 26, marginBottom: 18 }}>
-        Settings
+        {t("Settings")}
       </div>
 
       <div className="settings-list">
@@ -978,17 +986,17 @@ export function SettingsScreen({
           <button
             className="record-disclosure"
             onClick={onOpenRecord}
-            aria-label="Open The Record"
+            aria-label={t("Open The Record")}
           >
-            <span className="record-disclosure-title">The Record</span>
-            <span className="record-disclosure-meta">{ledgerCount} said</span>
+            <span className="record-disclosure-title">{t("The Record")}</span>
+            <span className="record-disclosure-meta">{t("{count} said", { count: ledgerCount })}</span>
             <ChevronRight size={21} strokeWidth={1.7} />
           </button>
         </div>
 
         <SettingsDisclosure
-          title="Capture Cloud"
-          meta="plan · billing"
+          title={t("Capture Cloud")}
+          meta={t("plan · billing")}
           open={openSection === "cloud"}
           onToggle={() => toggleSection("cloud")}
         >
@@ -997,38 +1005,38 @@ export function SettingsScreen({
         </SettingsDisclosure>
 
         <SettingsDisclosure
-          title="Your data"
+          title={t("Your data")}
           meta={
             PLAYGROUND
-              ? `${itemCount} item${itemCount === 1 ? "" : "s"}`
+              ? countOf(itemCount, ["item", "items"], ["запись", "записи", "записей"])
               : sync
                 ? sync.ok
-                  ? "synced"
+                  ? t("synced")
                   : sync.imageSync
-                    ? "images pending"
-                    : "offline"
-                : "not synced"
+                    ? t("images pending")
+                    : t("offline")
+                : t("not synced")
           }
           open={openSection === "data"}
           onToggle={() => toggleSection("data")}
         >
           <div className="settings-group">
-            <h4 className="settings-group-title">Backup</h4>
+            <h4 className="settings-group-title">{t("Backup")}</h4>
             <p className="settings-copy">
-              {counts.actions} action{counts.actions === 1 ? "" : "s"},{" "}
-              {counts.threads} thread{counts.threads === 1 ? "" : "s"}, and{" "}
-              {counts.intentions} intention
-              {counts.intentions === 1 ? "" : "s"}. Includes pictures and
-              history.
+              {t("{actions}, {threads} and {intentions}. Includes pictures and history.", {
+                actions: countOf(counts.actions, ["action", "actions"], ["дело", "дела", "дел"]),
+                threads: countOf(counts.threads, ["thread", "threads"], ["тема", "темы", "тем"]),
+                intentions: countOf(counts.intentions, ["intention", "intentions"], ["намерение", "намерения", "намерений"]),
+              })}
             </p>
             <button className="capture-btn" onClick={onExport} disabled={!!ioBusy}>
-              {ioBusy ?? "Download backup"}
+              {ioBusy ?? t("Download backup")}
             </button>
           </div>
 
           {!PLAYGROUND && (
             <div className="settings-group">
-              <h4 className="settings-group-title">Devices</h4>
+              <h4 className="settings-group-title">{t("Devices")}</h4>
               <div className="settings-status">
                 <span
                   className={
@@ -1038,23 +1046,22 @@ export function SettingsScreen({
                 <span>
                   {sync
                     ? sync.ok
-                      ? "Synced " + fmt(sync.at) + "."
+                      ? t("Synced {at}.", { at: fmt(sync.at) })
                       : sync.note + "."
-                    : "This device has not reached the hub yet."}
+                    : t("This device has not reached the hub yet.")}
                 </span>
               </div>
               <button className="ghost" onClick={onSyncNow}>
-                Sync now
+                {t("Sync now")}
               </button>
             </div>
           )}
           <LegacyImportSettings />
           {snapshotDaysList.length > 0 && (
             <div className="settings-group">
-              <h4 className="settings-group-title">Go back a day</h4>
+              <h4 className="settings-group-title">{t("Go back a day")}</h4>
               <p className="settings-copy">
-                Adds missing items from a daily copy. It never removes what is
-                here now.
+                {t("Adds missing items from a daily copy. It never removes what is here now.")}
               </p>
               <div className="snap-row">
                 {snapshotDaysList.map((day) => (
@@ -1071,58 +1078,55 @@ export function SettingsScreen({
           )}
 
           <div className="settings-group">
-            <h4 className="settings-group-title">Restore a Capture backup</h4>
+            <h4 className="settings-group-title">{t("Restore a Capture backup")}</h4>
             <p className="settings-copy">
-              Adds missing data and pictures. Uploading the same backup twice
-              changes nothing the second time.
+              {t("Adds missing data and pictures. Uploading the same backup twice changes nothing the second time.")}
             </p>
             <FileButton
-              label={ioBusy ?? "Upload a Capture backup"}
+              label={ioBusy ?? t("Upload a Capture backup")}
               onFile={onRestore}
               disabled={!!ioBusy}
             />
           </div>
 
           <div className="settings-group">
-            <h4 className="settings-group-title">Import from Intentions</h4>
+            <h4 className="settings-group-title">{t("Import from Intentions")}</h4>
             <p className="settings-copy">
-              Imports intentions from the old Intent app without duplicating
-              existing ones.
+              {t("Imports intentions from the old Intent app without duplicating existing ones.")}
             </p>
-            <FileButton label="Upload an Intent backup" onFile={onImportIntent} />
+            <FileButton label={t("Upload an Intent backup")} onFile={onImportIntent} />
           </div>
           <div className="settings-group">
-            <h4 className="settings-group-title">Copy for your AI</h4>
+            <h4 className="settings-group-title">{t("Copy for your AI")}</h4>
             <p className="settings-copy">
-              Copies every thread, where it stands, and its related actions.
-              Use this when an agent has no Capture context yet.
+              {t("Copies every thread, where it stands, and its related actions. Use this when an agent has no Capture context yet.")}
             </p>
             <button className="ghost" onClick={onCopyBoard}>
-              Copy the whole board
+              {t("Copy the whole board")}
             </button>
           </div>
           <Note note={ioNote} />
         </SettingsDisclosure>
 
         <SettingsDisclosure
-          title="Personalize"
-          meta="cards · intentions"
+          title={t("Personalize")}
+          meta={t("cards · intentions")}
           open={openSection === "personalize"}
           onToggle={() => toggleSection("personalize")}
         >
           <div className="settings-group">
-            <h4 className="settings-group-title">Intention showcase</h4>
+            <h4 className="settings-group-title">{t("Intention showcase")}</h4>
             <ul className="settings-principles">
               <li className={profile?.intentionShowcaseEnabled ? "" : "off"}>
                 <span className="settings-principle-copy">
-                  <span className="settings-principle-name">Show pinned intentions</span>
+                  <span className="settings-principle-name">{t("Show pinned intentions")}</span>
                   <span className="settings-principle-description">
-                    Tap Intention cards to pin or unpin them. Your pins appear below the capture box.
+                    {t("Tap Intention cards to pin or unpin them. Your pins appear below the capture box.")}
                   </span>
                 </span>
                 <button className={"rule-switch" + (profile?.intentionShowcaseEnabled ? " on" : "")}
                   role="switch" aria-checked={!!profile?.intentionShowcaseEnabled}
-                  aria-label="Show intention showcase"
+                  aria-label={t("Show intention showcase")}
                   onClick={() => void onProfileChange(current => ({ ...current,
                     intentionShowcaseEnabled: !current.intentionShowcaseEnabled,
                   }))}><span /></button>
@@ -1130,20 +1134,20 @@ export function SettingsScreen({
             </ul>
           </div>
           <div className="settings-group">
-            <h4 className="settings-group-title">Card signature</h4>
+            <h4 className="settings-group-title">{t("Card signature")}</h4>
             <ul className="settings-principles">
               <li className={profile?.showSignature ? "" : "off"}>
                 <span className="settings-principle-copy">
-                  <span className="settings-principle-name">Show signature</span>
+                  <span className="settings-principle-name">{t("Show signature")}</span>
                   <span className="settings-principle-description">
-                    Shows your profile photo or initials and name at the bottom of Intention and Thread cards.
+                    {t("Shows your profile photo or initials and name at the bottom of Intention and Thread cards.")}
                   </span>
                 </span>
                 <button
                   className={"rule-switch" + (profile?.showSignature ? " on" : "")}
                   role="switch"
                   aria-checked={!!profile?.showSignature}
-                  aria-label="Show signature on intentions and threads"
+                  aria-label={t("Show signature on intentions and threads")}
                   onClick={() =>
                     void onProfileChange((current) => ({
                       ...current,
@@ -1158,25 +1162,24 @@ export function SettingsScreen({
           </div>
 
           <div className="settings-group">
-            <h4 className="settings-group-title">Intention wording</h4>
+            <h4 className="settings-group-title">{t("Intention wording")}</h4>
           <p className="settings-copy">
-            These shape intention wording only. Nothing else in Capture uses
-            them.
+            {t("These shape intention wording only. Nothing else in Capture uses them.")}
           </p>
           <ul className="settings-principles">
-            {principles.map((principle) => (
+            {principles.map((principle) => { const shown = shownPrinciple(principle); return (
               <li key={principle.id} className={principle.enabled ? "" : "off"}>
                 <span className="settings-principle-copy">
-                  <span className="settings-principle-name">{principle.name}</span>
+                  <span className="settings-principle-name">{shown.name}</span>
                   <span className="settings-principle-description">
-                    {principle.description}
+                    {shown.description}
                   </span>
                   {!principle.builtin && (
                     <button
                       className="settings-principle-delete"
                       onClick={() => onDelete(principle.id)}
                     >
-                      Delete
+                      {t("Delete")}
                     </button>
                   )}
                 </span>
@@ -1186,30 +1189,30 @@ export function SettingsScreen({
                   }
                   role="switch"
                   aria-checked={principle.enabled}
-                  aria-label={principle.name}
+                  aria-label={shown.name}
                   onClick={() => onToggle(principle.id)}
                 >
                   <span />
                 </button>
               </li>
-            ))}
+            ); })}
           </ul>
           </div>
 
           <div className="settings-group settings-add-principle">
-            <h4 className="settings-group-title">Add a principle</h4>
+            <h4 className="settings-group-title">{t("Add a principle")}</h4>
             <div className="int-add settings-form">
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Name"
-                aria-label="Principle name"
+                placeholder={t("Name")}
+                aria-label={t("Principle name")}
               />
               <input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="What it means"
-                aria-label="Principle description"
+                placeholder={t("What it means")}
+                aria-label={t("Principle description")}
               />
               <button
                 className="ghost"
@@ -1220,35 +1223,35 @@ export function SettingsScreen({
                   setDescription("");
                 }}
               >
-                Add principle
+                {t("Add principle")}
               </button>
             </div>
           </div>
         </SettingsDisclosure>
 
         <SettingsDisclosure
-          title="Help and account"
-          meta="help · logout"
+          title={t("Help and account")}
+          meta={t("help · logout")}
           open={openSection === "support"}
           onToggle={() => toggleSection("support")}
         >
           <div className="settings-group">
-            <h4 className="settings-group-title">Need help?</h4>
+            <h4 className="settings-group-title">{t("Need help?")}</h4>
             <p className="settings-copy">
-              For account or billing questions, or general help.
+              {t("For account or billing questions, or general help.")}
             </p>
             <a className="ghost" href="mailto:gleb@trycapture.app">
-              Contact support
+              {t("Contact support")}
             </a>
           </div>
 
           <div className="settings-group">
-            <h4 className="settings-group-title">Caught a bug?</h4>
+            <h4 className="settings-group-title">{t("Caught a bug?")}</h4>
             <p className="settings-copy">
-              Say what happened. No GitHub account is needed.
+              {t("Say what happened. No GitHub account is needed.")}
             </p>
             <button className="ghost" onClick={() => setReporting(true)}>
-              Report a bug
+              {t("Report a bug")}
             </button>
             {reporting && (
               <ReportBugForm onClose={() => setReporting(false)} />
@@ -1256,10 +1259,10 @@ export function SettingsScreen({
           </div>
 
           <div className="settings-group">
-            <h4 className="settings-group-title">Session</h4>
-            <p className="settings-copy">Ends this login on this device.</p>
+            <h4 className="settings-group-title">{t("Session")}</h4>
+            <p className="settings-copy">{t("Ends this login on this device.")}</p>
             <button className="ghost warn" onClick={onLogout}>
-              Log out
+              {t("Log out")}
             </button>
           </div>
         </SettingsDisclosure>

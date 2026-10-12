@@ -1,4 +1,5 @@
 "use client";
+import { countNoun, t } from "@/lib/i18n";
 import { ownedFetch as fetch } from "@/lib/ownership";
 /* Capture shell: the composer, board destinations and auxiliary views.
    useBoard owns data and mutations. Components render that state. */
@@ -77,14 +78,17 @@ const GROUP_VIEW_KEY = "capture:groupView:v1";
  *   threads    6/6 → thread
  *   intentions 6/6 → intention
  */
-const TRY = {
+/* Russian has its own pinned examples (4/4 each on 2026-10-12: action +
+   thought, thought, intention), everyday rather than a builder's, and the
+   lines under them describe those. */
+const tryExamples = () => ({
   actions:
-    "uh fix the signup bug before friday and i keep going back and forth on usage based pricing vs seats",
+    t("uh fix the signup bug before friday and i keep going back and forth on usage based pricing vs seats"),
   threads:
-    "been thinking the onboarding is too long, people drop at the third screen but i don't know what to cut",
+    t("been thinking the onboarding is too long, people drop at the third screen but i don't know what to cut"),
   intentions:
-    "from now on i ship the rough version first and fix it in public",
-} as const;
+    t("from now on i ship the rough version first and fix it in public"),
+});
 
 /** How long a ticked action shows itself done before it leaves. Long enough
     to read as a finish, short enough that nobody waits on it. */
@@ -453,7 +457,7 @@ export function Capture() {
           <button
             className="capture-mark"
             onClick={() => setShowRecord(true)}
-            title="The record — everything said, and what became of it"
+            title={t("The record — everything said, and what became of it")}
           >
             capture<span>.</span>
           </button>
@@ -461,9 +465,9 @@ export function Capture() {
             <button
               className="capture-count"
               onClick={() => setShowRecord(true)}
-              title="The record — everything said, and what became of it"
+              title={t("The record — everything said, and what became of it")}
             >
-              {live.length} open · {data.threads.length} threads
+              {t("{open} open · {threads}", { open: live.length, threads: countNoun(data.threads.length, "thread") })}
               {/* The single mark anywhere on the board that yesterday has
                   been read. No line, no card, no banner: the record is
                   where days live, and this says one is waiting. */}
@@ -477,7 +481,7 @@ export function Capture() {
                 the plumbing. */}
             {degraded && (
               <span className="model-note" title={degradedNote(degraded)}>
-                backup model · sorting will be rougher
+                {t("backup model · sorting will be rougher")}
               </span>
             )}
             {!PLAYGROUND && (
@@ -487,13 +491,13 @@ export function Capture() {
                   (sync ? (sync.ok ? " synced" : " sync-bad") : "")
                 }
                 onClick={() => void syncNow()}
-                aria-label="Sync now"
+                aria-label={t("Sync now")}
                 title={
                   sync
                     ? sync.ok
-                      ? "Synced " + fmt(sync.at) + " — tap to sync now"
-                      : (sync.note || "Hub unreachable") + " — tap to retry"
-                    : "Sync this device with the hub"
+                      ? t("Synced {at} — tap to sync now", { at: fmt(sync.at) })
+                      : t("{note} — tap to retry", { note: sync.note || t("Hub unreachable") })
+                    : t("Sync this device with the hub")
                 }
               >
                 <RefreshCw
@@ -509,9 +513,9 @@ export function Capture() {
                 onClick={doShare}
                 disabled={!shareable}
                 aria-label={
-                  shareable ? "Share " + shareable.title : "Nothing to share"
+                  shareable ? t("Share {title}", { title: shareable.title }) : t("Nothing to share")
                 }
-                title={shareable ? "Share " + shareable.title : "Nothing to share"}
+                title={shareable ? t("Share {title}", { title: shareable.title }) : t("Nothing to share")}
               >
                 <Share2 size={18} strokeWidth={1.7} />
               </button>
@@ -533,15 +537,15 @@ export function Capture() {
               }}
               aria-label={
                 tidyCount > 0
-                  ? `Tidy — ${tidyCount} ${tidyCount === 1 ? "suggestion" : "suggestions"} to review`
-                  : "Tidy — scan the board for things worth changing"
+                  ? t("Tidy — {count} to review", { count: countNoun(tidyCount, "suggestion") })
+                  : t("Tidy — scan the board for things worth changing")
               }
               title={
                 (organize ?? []).length > 0
                   ? highOrganize.length > 0
-                    ? `Tidy — ${highOrganize.length} ${highOrganize.length === 1 ? "strong suggestion" : "strong suggestions"} to review`
-                    : `Tidy — ${organize!.length} ${organize!.length === 1 ? "suggestion" : "suggestions"} to review`
-                  : "Scan the board for things to tidy"
+                    ? t("Tidy — {count} to review", { count: countNoun(highOrganize.length, "strong suggestion") })
+                    : t("Tidy — {count} to review", { count: countNoun(organize!.length, "suggestion") })
+                  : t("Scan the board for things to tidy")
               }
             >
               <BrushCleaning size={18} strokeWidth={1.7} />
@@ -555,8 +559,8 @@ export function Capture() {
                 setShowSettings(true);
                 setIoNote(null);
               }}
-              aria-label="Settings and backup"
-              title="Settings and backup"
+              aria-label={t("Settings and backup")}
+              title={t("Settings and backup")}
             >
               <Settings size={18} strokeWidth={1.7} />
             </button>
@@ -598,7 +602,7 @@ export function Capture() {
                which overflowed the box and cut off mid-word — the guidance now
                lives in the empty state, where there is room for it and where
                someone with an empty board is actually looking. */
-            placeholder="Say it however it comes out."
+            placeholder={t("Say it however it comes out.")}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 submit(captureDictated);
@@ -612,13 +616,13 @@ export function Capture() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={p.src} alt="" />
                   <button className="edit" onClick={() => setEditing(p)}>
-                    edit
+                    {t("edit")}
                   </button>
                   <button
                     onClick={() =>
                       setPics((x) => x.filter((y) => y.id !== p.id))
                     }
-                    aria-label="Remove picture"
+                    aria-label={t("Remove picture")}
                   >
                     ✕
                   </button>
@@ -631,8 +635,8 @@ export function Capture() {
             <button
               className="icon-btn"
               onClick={() => fileRef.current?.click()}
-              aria-label="Add a picture"
-              title="Add a picture"
+              aria-label={t("Add a picture")}
+              title={t("Add a picture")}
             >
               <ImageIcon size={18} strokeWidth={1.7} />
             </button>
@@ -649,7 +653,7 @@ export function Capture() {
                 className={"icon-btn" + (listening ? " live" : "")}
                 onClick={toggleMic}
                 disabled={transcribing}
-                aria-label="Dictate"
+                aria-label={t("Dictate")}
               >
                 <Mic size={18} strokeWidth={1.7} />
               </button>
@@ -658,20 +662,20 @@ export function Capture() {
               {PLAYGROUND
                 ? null
                 : transcribing
-                  ? "transcribing…"
+                  ? t("transcribing…")
                   : listening
-                    ? "listening — tap the mic again when you're done"
+                    ? t("listening — tap the mic again when you're done")
                     : canDictate
-                      ? "tap the mic to dictate"
-                      : "tap the mic key on your keyboard to dictate"}
+                      ? t("tap the mic to dictate")
+                      : t("tap the mic key on your keyboard to dictate")}
             </div>
             <button
               className="icon-btn"
               onClick={openDistill}
               disabled={!!trial?.exhausted}
-              aria-label="Distill instead of capture"
+              aria-label={t("Distill instead of capture")}
               aria-describedby={PLAYGROUND ? "trial-meter-status" : undefined}
-              title="Distill instead of capture"
+              title={t("Distill instead of capture")}
             >
               <MessagesSquare size={18} strokeWidth={1.7} />
             </button>
@@ -683,7 +687,7 @@ export function Capture() {
               disabled={!!busy || (!text.trim() && !pics.length) || !!trial?.exhausted}
               aria-describedby={PLAYGROUND ? "trial-meter-status" : undefined}
             >
-              {busy ? "…" : "Capture"}
+              {busy ? "…" : t("Capture")}
             </button>
           </div>
         </div>
@@ -716,7 +720,7 @@ export function Capture() {
           <div className="misfiled">
             {pickingThread ? (
               <>
-                <span className="misfiled-q">Which thread?</span>
+                <span className="misfiled-q">{t("Which thread?")}</span>
                 <div className="picker misfiled-picker">
                   <ThreadChoices
                     threads={data.threads.filter((t) => t.id !== misfiled.thread?.id)}
@@ -730,29 +734,19 @@ export function Capture() {
                     className="ghost"
                     onClick={() => setPickingThread(false)}
                   >
-                    Back
+                    {t("Back")}
                   </button>
                 </div>
               </>
             ) : (
               <>
-                <span className="misfiled-q">Then what was it?</span>
+                <span className="misfiled-q">{t("Then what was it?")}</span>
                 <div className="misfiled-opts">
-                  {(["action", "thread", "intention"] as const)
-                    .filter((k) => k !== misfiled.wrong)
-                    .map((k) => (
-                      <button
-                        key={k}
-                        className="misfiled-btn"
-                        onClick={() => void sortAgainAs(k)}
-                      >
-                        {k === "action"
-                          ? "An action"
-                          : k === "thread"
-                            ? "A thread"
-                            : "An intention"}
-                      </button>
-                    ))}
+                  {/* Always the same four answers, in the same places: the
+                      kind it missed is not always the kind it got wrong. */}
+                  {([["intention", t("An intention")], ["action", t("An action")], ["thread", t("A new thread")]] as const).map(([k, label]) => (
+                    <button key={k} className="misfiled-btn" onClick={() => void sortAgainAs(k, k === "thread")}>{label}</button>
+                  ))}
                   {/* Undo can remove a newly created wrong Thread, so count
                       actual alternatives rather than remaining Threads. */}
                   {hasAlternativeThread(data.threads, misfiled.thread?.id) && (
@@ -760,13 +754,13 @@ export function Capture() {
                       className="misfiled-btn"
                       onClick={() => setPickingThread(true)}
                     >
-                      {misfiled.thread ? "Existing thread" : "Pick a thread"}
+                      {misfiled.thread ? t("Existing thread") : t("Pick a thread")}
                     </button>
                   )}
                   <button
                     className="misfiled-btn misfiled-skip"
                     onClick={dismissMisfiled}
-                    aria-label="Never mind"
+                    aria-label={t("Never mind")}
                   >
                     ×
                   </button>
@@ -780,11 +774,11 @@ export function Capture() {
             <span className="suggest-text">
               {suggestion.kind === "duplicate" ? (
                 <>
-                  This duplicates <em>{suggestion.targetName}</em>?
+                  {t("This duplicates")} <em>{suggestion.targetName}</em>?
                 </>
               ) : (
                 <>
-                  Belongs with <em>{suggestion.targetName}</em>?
+                  {t("Belongs with")} <em>{suggestion.targetName}</em>?
                 </>
               )}
             </span>
@@ -794,11 +788,11 @@ export function Capture() {
                 onClick={() => void acceptSuggestion()}
               >
                 {suggestion.kind === "duplicate"
-                  ? "Remove duplicate"
-                  : suggestion.verb}
+                  ? t("Remove duplicate")
+                  : t(suggestion.verb)}
               </button>
               <button className="suggest-btn" onClick={dismissSuggestion}>
-                {suggestion.kind === "duplicate" ? "Keep both" : "Keep separate"}
+                {suggestion.kind === "duplicate" ? t("Keep both") : t("Keep separate")}
               </button>
             </span>
             <span className="suggest-why">{suggestion.reason}</span>
@@ -811,31 +805,25 @@ export function Capture() {
             <span>{notice}</span>
             {noticeUndoable && (
               <button className="undo-btn" onClick={() => void undo()}>
-                Undo
+                {t("Undo")}
               </button>
             )}
           </div>
         )}
         {swept && !busy && (
           <div className="sweep">
-            Cleanup ran on open.
+            {t("Cleanup ran on open.")}
             {swept.faded
-              ? " " +
-                swept.faded +
-                " action" +
-                (swept.faded > 1 ? "s" : "") +
-                " went stale and moved to Faded — recoverable for two weeks."
+              ? " " + t("{count} went stale and moved to Faded — recoverable for two weeks.", { count: countNoun(swept.faded, "action") })
               : ""}
-            {swept.cleared ? " " + swept.cleared + " cleared for good." : ""}
-            {" Threads were left alone."}
+            {swept.cleared ? " " + t("{count} cleared for good.", { count: swept.cleared }) : ""}
+            {" "}{t("Threads were left alone.")}
           </div>
         )}
 
         {corrupt && (
           <div className="sweep">
-            Your saved board couldn&apos;t be read and has been set aside.
-            Capturing now would overwrite the unreadable copy — restore a
-            backup from Settings to bring it back.
+            {t("Your saved board couldn't be read and has been set aside. Capturing now would overwrite the unreadable copy — restore a backup from Settings to bring it back.")}
           </div>
         )}
 
@@ -1021,19 +1009,19 @@ export function Capture() {
                 className={"tab" + (tab === "actions" ? " on" : "")}
                 onClick={() => setTab("actions")}
               >
-                Actions <b>{live.length}</b>
+                {t("Actions")} <b>{live.length}</b>
               </button>
               <button
                 className={"tab" + (tab === "threads" ? " on" : "")}
                 onClick={() => setTab("threads")}
               >
-                Threads <b>{data.threads.length}</b>
+                {t("Threads")} <b>{data.threads.length}</b>
               </button>
               <button
                 className={"tab" + (tab === "intentions" ? " on" : "")}
                 onClick={() => setTab("intentions")}
               >
-                Intentions <b>{data.intentions.length}</b>
+                {t("Intentions")} <b>{data.intentions.length}</b>
               </button>
               {tab === "actions" && live.length >= 2 && (
                 <button
@@ -1041,11 +1029,11 @@ export function Capture() {
                   role="switch"
                   aria-checked={groupView}
                   onClick={toggleGroupView}
-                  aria-label="Group similar actions"
+                  aria-label={t("Group similar actions")}
                   title={
                     groupView
-                      ? "Back to the flat list"
-                      : "Fold similar actions together"
+                      ? t("Back to the flat list")
+                      : t("Fold similar actions together")
                   }
                 >
                   <Layers size={16} strokeWidth={1.7} />
@@ -1064,7 +1052,7 @@ export function Capture() {
                         note that you can aim a capture yourself, which is
                         both advanced and off-message: the whole pitch is
                         that you do not have to. */}
-                    <p className="big">No open loops.</p>
+                    <p className="big">{t("No open loops.")}</p>
                     {/* One messy sentence explains this app faster than any
                         amount of description. Tapping it fills the box but
                         does not send — the capture is still yours to make.
@@ -1074,14 +1062,14 @@ export function Capture() {
                         shape, never the wording or the thread's name. */}
                     <button
                       className="try-line"
-                      onClick={() => setText(TRY.actions)}
+                      onClick={() => setText(tryExamples().actions)}
                       disabled={!!busy}
                     >
-                      “{TRY.actions}”
+                      “{tryExamples().actions}”
                     </button>
                     <ul className="try-list">
-                      <li>the bug becomes an action, with a shelf life</li>
-                      <li>the pricing question becomes a thread that grows</li>
+                      <li>{t("the bug becomes an action, with a shelf life")}</li>
+                      <li>{t("the pricing question becomes a thread that grows")}</li>
                     </ul>
                   </div>
                 )}
@@ -1089,7 +1077,7 @@ export function Capture() {
                   <>
                     {!grouped.groups.length && !!live.length && (
                       <p className="group-note">
-                        Nothing groups yet — no two actions share a subject.
+                        {t("Nothing groups yet — no two actions share a subject.")}
                       </p>
                     )}
                     <GroupedActionRows grouped={grouped} renderRow={row} />
@@ -1100,7 +1088,7 @@ export function Capture() {
 
                 {!!fadedList.length && (
                   <>
-                    <RecoveryDisclosure label="Faded" count={fadedList.length} expanded={showFaded}
+                    <RecoveryDisclosure label={t("Faded")} count={fadedList.length} expanded={showFaded}
                       controls="faded-actions" onToggle={() => setShowFaded((v) => !v)} />
                     {showFaded && <div id="faded-actions">{fadedList.map((a) => row(a, true))}</div>}
                   </>
@@ -1112,18 +1100,18 @@ export function Capture() {
               <div>
                 {!data.threads.length && loaded && (
                   <div className="empty">
-                    <p className="big">Nothing accumulating yet.</p>
-                    <p>Threads never expire. They just get deeper.</p>
+                    <p className="big">{t("Nothing accumulating yet.")}</p>
+                    <p>{t("Threads never expire. They just get deeper.")}</p>
                     <button
                       className="try-line"
-                      onClick={() => setText(TRY.threads)}
+                      onClick={() => setText(tryExamples().threads)}
                       disabled={!!busy}
                     >
-                      “{TRY.threads}”
+                      “{tryExamples().threads}”
                     </button>
                     <ul className="try-list">
-                      <li>nothing to close, so it keeps — as a thread</li>
-                      <li>“where this stands” gets written underneath it</li>
+                      <li>{t("nothing to close, so it keeps — as a thread")}</li>
+                      <li>{t("“where this stands” gets written underneath it")}</li>
                     </ul>
                   </div>
                 )}
@@ -1142,8 +1130,8 @@ export function Capture() {
                       className="section-label"
                       onClick={() => setShowResting((v) => !v)}
                     >
-                      {showResting ? "▾" : "▸"} Resting · {resting.length} ·
-                      nothing new in two months
+                      {showResting ? "▾" : "▸"}{" "}
+                      {t("Resting · {count} · nothing new in two months", { count: resting.length })}
                     </button>
                     {showResting &&
                       resting.map((t) => (
@@ -1163,18 +1151,18 @@ export function Capture() {
               <div>
                 {!data.intentions.length && loaded && (
                   <div className="empty">
-                    <p className="big">Nothing declared yet.</p>
-                    <p>Not a goal. The state you are choosing to inhabit.</p>
+                    <p className="big">{t("Nothing declared yet.")}</p>
+                    <p>{t("Not a goal. The state you are choosing to inhabit.")}</p>
                     <button
                       className="try-line"
-                      onClick={() => setText(TRY.intentions)}
+                      onClick={() => setText(tryExamples().intentions)}
                       disabled={!!busy}
                     >
-                      “{TRY.intentions}”
+                      “{tryExamples().intentions}”
                     </button>
                     <ul className="try-list">
-                      <li>written as already true, with what pulls against it named</li>
-                      <li>you read it before it lands — nothing is saved unread</li>
+                      <li>{t("written as already true, with what pulls against it named")}</li>
+                      <li>{t("you read it before it lands — nothing is saved unread")}</li>
                     </ul>
                   </div>
                 )}
@@ -1194,9 +1182,9 @@ export function Capture() {
                     setIoNote(null);
                   }}
                 >
-                  Principles ·{" "}
-                  {data.principles.filter((p) => p.enabled).length} active ·
-                  backup
+                  {t("Principles · {count} active · backup", {
+                    count: data.principles.filter((p) => p.enabled).length,
+                  })}
                 </button>
               </div>
             )}

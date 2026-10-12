@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { utilityMetadata } from "@/lib/seo";
 import { CloudCheckoutButton } from "@/components/CloudBilling";
+import { LocaleProvider } from "@/components/LocaleProvider";
 import { SiteNav } from "@/components/SiteNav";
 import { CLOUD_PRICING_SECTION_ID, cloudAccountHandoff } from "@/lib/cloudCheckoutClient";
 import { PLAYGROUND } from "@/lib/playground";
@@ -164,12 +165,15 @@ export default async function PricingPage({
                 <strong>{plan.price}</strong>
                 <span>{plan.note}</span>
                 {plan.plan ? (
+                  <LocaleProvider locale="en">
+                  {/* The pricing page is part of the English site. */}
                   <CloudCheckoutButton
                     plan={plan.plan}
                     autoStart={resumePlan === plan.plan}
                   >
                     {plan.action}
                   </CloudCheckoutButton>
+                  </LocaleProvider>
                 ) : (
                   <div className="cloud-action">
                     <Link className="capture-btn cloud-inline-link" href="/install">{plan.action}</Link>
