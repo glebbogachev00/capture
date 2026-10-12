@@ -1,3 +1,4 @@
+import { countNoun, t as tr } from "./i18n";
 import {
   type Action,
   type Board,
@@ -10,6 +11,11 @@ import { actionsForThread, type DoneItem } from "./threadActions";
 import type { CaptureEntry } from "./ledger";
 import { dayKey } from "./record";
 import { settledLedgerEntries } from "./unsortedOps";
+
+/* What a capture became, in the reader's language. */
+const kindName = (kind: string) => ({
+  action: tr("action"), thread: tr("thread"), intention: tr("intention"), both: tr("action and thread"), pending: tr("unsorted"),
+} as Record<string, string>)[kind] ?? kind;
 
 /**
  * Turning what is on screen into text someone else can read.
@@ -60,18 +66,18 @@ export function shareThread(
   const dates = frags.map((f) => f.at);
   const lines = [`# ${t.name}`, ""];
   lines.push(
-    `${frags.length} fragment${frags.length === 1 ? "" : "s"}${
+    `${countNoun(frags.length, "fragment")}${
       dates.length ? " · " + span(dates) : ""
     }`,
     ""
   );
-  if (t.summary) lines.push("**Where this stands**", "", t.summary, "");
+  if (t.summary) lines.push(`**${tr("Where this stands")}**`, "", t.summary, "");
   lines.push("---", "");
   for (const f of frags) {
     /* The label an agent reads: done and still-open must be tellable
        apart from the text alone. */
     lines.push(
-      `**${shortDate(f.at)}**${f.resolvedAt ? " · resolved" : ""}`,
+      `**${shortDate(f.at)}**${f.resolvedAt ? " · " + tr("resolved") : ""}`,
       "",
       f.text,
       ""
@@ -81,14 +87,14 @@ export function shareThread(
      pasting the thread into an agent is handing over where the thinking
      stands, and the agent's first question is always "so what is next?". */
   if (from && (from.open.length || from.done.length)) {
-    lines.push("", "## Actions from this thread", "");
+    lines.push("", `## ${tr("Actions from this thread")}`, "");
     for (const a of from.open) lines.push(`- [ ] ${a.text}`);
     for (const a of from.done) lines.push(`- [x] ${a.text}`);
   }
   return {
     title: t.name,
     text: lines.join("\n").trimEnd(),
-    summary: `Thread · ${frags.length} fragment${frags.length === 1 ? "" : "s"}`,
+    summary: tr("Thread · {count}", { count: countNoun(frags.length, "fragment") }),
     imgIds: frags.flatMap((f) => f.imgs || []),
   };
 }
@@ -96,19 +102,19 @@ export function shareThread(
 export function shareIntention(i: Intention): Shareable {
   const lines = [`# (${pad(i.number)}) ${i.expandedIntention}`, ""];
   if (i.recommendedActions.length) {
-    lines.push("**Recommended actions**", "");
+    lines.push(`**${tr("Recommended actions")}**`, "");
     for (const a of i.recommendedActions) lines.push(`- ${a}`);
     lines.push("");
   }
   if (i.counterIntentions.length) {
-    lines.push("**Counter-intentions**", "");
+    lines.push(`**${tr("Counter-intentions")}**`, "");
     for (const c of i.counterIntentions) lines.push(`- ${c}`);
     lines.push("");
   }
   return {
-    title: `Intention ${pad(i.number)}`,
+    title: tr("Intention {number}", { number: pad(i.number) }),
     text: lines.join("\n").trimEnd(),
-    summary: "Intention",
+    summary: tr("Intention"),
   };
 }
 
@@ -126,7 +132,7 @@ export function shareIntention(i: Intention): Shareable {
  */
 export function shareAction(a: Action): Shareable {
   const lines = [a.text];
-  if (a.due) lines.push(`Due: ${shortDate(a.due)}`);
+  if (a.due) lines.push(tr("Due: {date}", { date: shortDate(a.due) }));
   /* `src` is the raw capture. It only earns its place when it carries
      something the action text lost — a re-worded one-liner would just be
      the same sentence twice.
@@ -135,59 +141,60 @@ export function shareAction(a: Action): Shareable {
      returns the capture with a full stop added: "Buy running clothes" and
      "Buy running clothes." are not two pieces of information, and the
      first version of this pasted both. */
-  const bare = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  /* Letters of any alphabet: a-z alone made every Russian action "equal" to its capture. */
+  const bare = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
   const raw = (a.src || "").trim();
-  if (raw && bare(raw) !== bare(a.text)) lines.push("", "Context:", raw);
+  if (raw && bare(raw) !== bare(a.text)) lines.push("", tr("Context:"), raw);
   return {
     title: a.text,
     text: lines.join("\n"),
-    summary: "Action",
+    summary: tr("Action"),
   };
 }
 
 export function shareActions(actions: Action[], now: number): Shareable {
-  const lines = [`# Open actions (${actions.length})`, ""];
+  const lines = [`# ${tr("Open actions ({count})", { count: actions.length })}`, ""];
   for (const a of actions) {
     const ms = a.expires ? a.expires - now : null;
-    lines.push(`- [ ] ${a.text} — ${ms === null ? "kept" : left(ms)}`);
+    lines.push(`- [ ] ${a.text} — ${ms === null ? tr("kept") : left(ms)}`);
   }
   return {
-    title: "Open actions",
+    title: tr("Open actions"),
     text: lines.join("\n").trimEnd(),
-    summary: `${actions.length} action${actions.length === 1 ? "" : "s"}`,
+    summary: countNoun(actions.length, "action"),
   };
 }
 
 export function shareThreadList(threads: Thread[], board?: Board): Shareable {
-  const lines = [`# Threads (${threads.length})`, ""];
+  const lines = [`# ${tr("Threads ({count})", { count: threads.length })}`, ""];
   for (const t of threads) {
     const frags = t.frags.filter((frag) => !frag.unsorted);
     const last = frags.at(-1);
     const open = board ? actionsForThread(board, t).open.length : 0;
     lines.push(
-      `- **${t.name}** — ${frags.length} fragment${frags.length === 1 ? "" : "s"}${
-        open ? `, ${open} open action${open === 1 ? "" : "s"}` : ""
-      }${last ? ", last " + shortDate(last.at) : ""}`
+      `- **${t.name}** — ${countNoun(frags.length, "fragment")}${
+        open ? ", " + countNoun(open, "open action") : ""
+      }${last ? ", " + tr("last {at}", { at: shortDate(last.at) }) : ""}`
     );
     const gist = t.summary || last?.text || "";
     if (gist) lines.push(`  ${gist.split("\n")[0].slice(0, 160)}`);
   }
   return {
-    title: "Threads",
+    title: tr("Threads"),
     text: lines.join("\n").trimEnd(),
-    summary: `${threads.length} thread${threads.length === 1 ? "" : "s"}`,
+    summary: countNoun(threads.length, "thread"),
   };
 }
 
 export function shareIntentionList(intentions: Intention[]): Shareable {
-  const lines = [`# Intentions (${intentions.length})`, ""];
+  const lines = [`# ${tr("Intentions ({count})", { count: intentions.length })}`, ""];
   for (const [index, i] of intentions.entries()) {
     lines.push(`- (${pad(intentions.length - index)}) ${i.expandedIntention}`);
   }
   return {
-    title: "Intentions",
+    title: tr("Intentions"),
     text: lines.join("\n").trimEnd(),
-    summary: `${intentions.length} intention${intentions.length === 1 ? "" : "s"}`,
+    summary: countNoun(intentions.length, "intention"),
   };
 }
 
@@ -325,7 +332,7 @@ export function shareRecordDay(
   if (!rows.length) return null;
 
   const date = new Date(`${day}T12:00:00`).getTime();
-  const lines = [`# The record — ${shortDate(date)}`, ""];
+  const lines = [`# ${tr("The record — {date}", { date: shortDate(date) })}`, ""];
   /* Photos go along as files in the share sheet; the row says it had them,
      so the text alone still shows a picture belonged to that capture. */
   const imgIds: string[] = [];
@@ -339,15 +346,15 @@ export function shareRecordDay(
       minute: "2-digit",
     });
     lines.push(
-      `- ${time} · ${entry.kind}${entry.undone ? " · undone" : ""}${
-        photos ? ` · ${photos} photo${photos === 1 ? "" : "s"}` : ""
+      `- ${time} · ${kindName(entry.kind)}${entry.undone ? " · " + tr("undone") : ""}${
+        photos ? " · " + countNoun(photos, "photo") : ""
       }: ${filed || said}`
     );
     /* The raw transcript is audit context, not a second rendering of the
        same sentence. Preserve it unless a deliberately surface-only compare
        proves it adds no words or meaning. */
     if (filed && said && !sameSurfaceText(filed, said)) {
-      lines.push(`  said: ${said}`);
+      lines.push(`  ${tr("said:")} ${said}`);
     }
   }
 
@@ -357,7 +364,7 @@ export function shareRecordDay(
        blank preserves that one-title contract while clipboard fallback still
        receives the heading and date in `text`. */
     title: "",
-    summary: `${rows.length} capture${rows.length === 1 ? "" : "s"}`,
+    summary: countNoun(rows.length, "capture"),
     text: lines.join("\n"),
     ...(imgIds.length ? { imgIds } : {}),
   };

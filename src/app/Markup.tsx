@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
@@ -117,13 +118,13 @@ export function Markup({
               className={"swatch" + (c === color ? " on" : "")}
               style={{ background: c }}
               onClick={() => setColor(c)}
-              aria-label={"Draw in " + c}
+              aria-label={t("Draw in {color}", { color: c })}
             />
           ))}
           <button
             className="icon-btn"
             onClick={() => setRot((r) => (r + 90) % 360)}
-            aria-label="Rotate"
+            aria-label={t("Rotate")}
           >
             ⟳
           </button>
@@ -133,19 +134,19 @@ export function Markup({
               strokes.current.pop();
               paint();
             }}
-            aria-label="Undo"
+            aria-label={t("Undo")}
           >
             ↶
           </button>
           <div style={{ flex: 1 }} />
           <button className="ghost" onClick={onClose}>
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             className="capture-btn"
             onClick={() => onSave(ref.current!.toDataURL("image/jpeg", 0.82))}
           >
-            Save markup
+            {t("Save markup")}
           </button>
         </div>
       </div>

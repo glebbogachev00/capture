@@ -1,5 +1,6 @@
 "use client";
 
+import { countNoun, t } from "@/lib/i18n";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { RecoveryDisclosure } from "./RecoveryDisclosure";
@@ -64,12 +65,12 @@ export function UnsortedCaptures({
   if (!items.length) return null;
 
   return (
-    <section className="unsorted-captures" aria-label="Unsorted captures">
-      <RecoveryDisclosure label="Unsorted" count={items.length} expanded={expanded}
+    <section className="unsorted-captures" aria-label={t("Unsorted captures")}>
+      <RecoveryDisclosure label={t("Unsorted")} count={items.length} expanded={expanded}
         controls="unsorted-capture-list" onToggle={() => setExpanded((open) => !open)} />
       {expanded && <div id="unsorted-capture-list" className="unsorted-panel">
-        <p className="unsorted-status">Saved. Sort later or choose a place.</p>
-        <div className="unsorted-track" role="list" aria-label="Unsorted captures">
+        <p className="unsorted-status">{t("Saved. Sort later or choose a place.")}</p>
+        <div className="unsorted-track" role="list" aria-label={t("Unsorted captures")}>
           {items.map((item) => <WaitingCapture key={item.id} item={item} busy={busy}
             finalizing={finalizingIds.includes(item.id)} canSort={canSort}
             onSort={onSort} onManualSort={onManualSort} onChoosePlace={onChoosePlace}
@@ -151,27 +152,27 @@ function WaitingCapture({ item, busy, finalizing, canSort, onSort, onManualSort,
         <summary>
           <span className="unsorted-preview">{source}</span>
           {!!item.imgs?.length && <span className="unsorted-photo-count">
-            {item.imgs.length} {item.imgs.length === 1 ? "photo" : "photos"}
+            {countNoun(item.imgs.length, "photo")}
           </span>}
         </summary>
         {editing && <div className="unsorted-edit">
-          <textarea aria-label="Edit unsorted capture" value={text}
+          <textarea aria-label={t("Edit unsorted capture")} value={text}
             onChange={(event) => setText(event.target.value)} />
           <div className="unsorted-actions">
             <button type="button" onClick={() => {
               void Promise.resolve(onEdit(item.id, text)).then((saved) => {
                 if (saved) setEditing(false);
               });
-            }} disabled={cardBusy || !text.trim()}>Save</button>
+            }} disabled={cardBusy || !text.trim()}>{t("Save")}</button>
             <button className="ghost" type="button" onClick={() => {
               setText(source); setEditing(false);
-            }}>Cancel</button>
+            }}>{t("Cancel")}</button>
           </div>
         </div>}
         {!!images.length && <div className="unsorted-images">
           {images.map((src, index) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={item.imgs?.[index] || index} src={src} alt={`Attached capture ${index + 1}`} />
+            <img key={item.imgs?.[index] || index} src={src} alt={t("Attached capture {number}", { number: index + 1 })} />
           ))}
         </div>}
       </details>
@@ -183,26 +184,26 @@ function WaitingCapture({ item, busy, finalizing, canSort, onSort, onManualSort,
             onClick={(event) => {
               setMore(false);
               onChoosePlace?.(item, event.currentTarget);
-            }}>Choose a place</button>}
-          <button ref={moreRef} className="unsorted-more" type="button" aria-label="More" aria-expanded={more}
+            }}>{t("Choose a place")}</button>}
+          <button ref={moreRef} className="unsorted-more" type="button" aria-label={t("More")} aria-expanded={more}
             disabled={finalizing} onClick={() => {
               setMore((open) => !open);
               setConfirmDelete(false);
             }}><MoreHorizontal size={18} strokeWidth={1.8} aria-hidden="true" /></button>
         </div>
 
-        {more && <div ref={menuRef} className="unsorted-more-menu" role="group" aria-label="More options">
+        {more && <div ref={menuRef} className="unsorted-more-menu" role="group" aria-label={t("More options")}>
           {canSort && <button type="button" disabled={cardBusy}
-            onClick={() => void retry()}>Sort now</button>}
+            onClick={() => void retry()}>{t("Sort now")}</button>}
           <button type="button" disabled={cardBusy} onClick={() => {
             setText(source); setEditing(true); setMore(false);
-          }}>Edit</button>
+          }}>{t("Edit")}</button>
           {confirmDelete ? <>
-            <button className="warn" type="button" aria-label="Delete capture" disabled={cardBusy}
-              onClick={() => void onDelete(item)}>Delete</button>
-            <button type="button" onClick={() => setConfirmDelete(false)}>Cancel</button>
+            <button className="warn" type="button" aria-label={t("Delete capture")} disabled={cardBusy}
+              onClick={() => void onDelete(item)}>{t("Delete")}</button>
+            <button type="button" onClick={() => setConfirmDelete(false)}>{t("Cancel")}</button>
           </> : <button className="warn" type="button" disabled={cardBusy}
-            onClick={() => setConfirmDelete(true)}>Delete</button>}
+            onClick={() => setConfirmDelete(true)}>{t("Delete")}</button>}
         </div>}
       </>}
     </article>

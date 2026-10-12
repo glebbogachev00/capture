@@ -28,6 +28,7 @@
  * Nothing is applied here; the hook decides how a proposal becomes a change.
  */
 
+import { t as tr } from "./i18n";
 import type { Action, Board, Thread } from "./model";
 import {
   bestActionDuplicate,
@@ -339,8 +340,8 @@ function staleProposals(
       targetId: a.id,
       targetName: NAME(a.text),
       reason: overdue
-        ? `its own deadline passed ${days} days ago and it is still open`
-        : `kept for ${days} days without being closed — nothing will fade it`,
+        ? tr("its own deadline passed {days} days ago and it is still open", { days })
+        : tr("kept for {days} days without being closed — nothing will fade it", { days }),
       score: 40 + Math.min(days, 40),
       origin: "local",
     });
@@ -366,7 +367,7 @@ function staleProposals(
       sourceName: name,
       targetId: oldest.id,
       targetName: name,
-      reason: `declared ${weeks} weeks ago and untouched since`,
+      reason: tr("declared {weeks} weeks ago and untouched since", { weeks }),
       score: 30 + Math.min(weeks, 30),
       origin: "local",
     });
@@ -445,7 +446,7 @@ export function scanResolved(
         sourceFragId: f.id,
         targetId: t.id,
         targetName: t.name,
-        reason: `you ticked off "${NAME(receipt.text)}"`,
+        reason: tr('you ticked off "{name}"', { name: NAME(receipt.text) }),
         score: 150,
         origin: "local",
       });
@@ -538,7 +539,7 @@ export function scanBoard(
       sourceName: NAME(a.text),
       targetId: dup.id,
       targetName: NAME(dup.name),
-      reason: `both say "${phraseAsWritten(phrase, a.text)}"`,
+      reason: tr('both say "{phrase}"', { phrase: phraseAsWritten(phrase, a.text) }),
       score: 100 + phraseWords(phrase) * 10,
       origin: "local",
     });
@@ -581,7 +582,7 @@ export function scanBoard(
           sourceFragId: f.id,
           targetId: dup.threadId,
           targetName: NAME(dup.threadName),
-          reason: `a fragment there already says "${phraseAsWritten(phrase, f.text)}"`,
+          reason: tr('a fragment there already says "{phrase}"', { phrase: phraseAsWritten(phrase, f.text) }),
           score: 85,
           origin: "local",
         });
@@ -601,7 +602,7 @@ export function scanBoard(
         targetName:
           NAME(dup.name) +
           (crossThread ? ` (in "${dup.threadName}")` : ""),
-        reason: `both say "${phraseAsWritten(phrase, f.text)}"`,
+        reason: tr('both say "{phrase}"', { phrase: phraseAsWritten(phrase, f.text) }),
         score: 100 + phraseWords(phrase) * 10,
         origin: "local",
       });
@@ -633,7 +634,7 @@ export function scanBoard(
          already over there, so the evidence has to come from over there —
          quoting the action's own wording made a two-word overlap read as
          a sentence the thread had never said. */
-      reason: `that thread already says "${phraseAsWritten(phrase, threadOwnTextById(board, hit.id))}"`,
+      reason: tr('that thread already says "{phrase}"', { phrase: phraseAsWritten(phrase, threadOwnTextById(board, hit.id)) }),
       score: 90 + phraseWords(phrase) * 10,
       origin: "local",
     });
@@ -667,7 +668,7 @@ export function scanBoard(
         sourceFragId: f.id,
         targetId: home.id,
         targetName: NAME(home.name),
-        reason: `that thread already says "${phraseAsWritten(phrase, threadOwnTextById(board, home.id))}"`,
+        reason: tr('that thread already says "{phrase}"', { phrase: phraseAsWritten(phrase, threadOwnTextById(board, home.id)) }),
         score: 80 + phraseWords(phrase) * 10,
         origin: "local",
       });
@@ -715,7 +716,7 @@ export function scanBoard(
         sourceFragId: f.id,
         targetId: t.id,
         targetName: NAME(t.name),
-        reason: `it shares nothing with the rest of "${NAME(t.name)}"`,
+        reason: tr('it shares nothing with the rest of "{name}"', { name: NAME(t.name) }),
         score: 60,
         origin: "local",
       });
@@ -754,7 +755,7 @@ export function scanBoard(
         sourceFragId: f.id,
         targetId: t.id,
         targetName: "an action",
-        reason: `reads as a task: "${f.text.slice(0, 60)}"`,
+        reason: tr('reads as a task: "{text}"', { text: f.text.slice(0, 60) }),
         score: 70,
         origin: "local",
       });

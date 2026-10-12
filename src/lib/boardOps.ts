@@ -8,6 +8,7 @@
  * was this shape of logic), so it earns direct unit tests.
  */
 
+import { countNoun, t } from "./i18n";
 import { stamp } from "./clock";
 import { expiryFor, parseDue } from "./due";
 import {
@@ -77,7 +78,7 @@ export type Applied = {
   alsoLanded?: { threadId: string; fragId: string; text: string }[];
 };
 
-const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+const count = countNoun;
 
 /**
  * Fold a sorted capture into a board, returning the new board plus what it
@@ -142,7 +143,7 @@ function foldAlso(
       : undefined;
     if (home) {
       names.push(home.name);
-      destinationLines.push(`Added to thread: ${home.name}`);
+      destinationLines.push(t("Added to thread: {name}", { name: home.name }));
       alsoLanded.push({ threadId: home.id, fragId: frag.id, text: frag.text });
       board = {
         ...board,
@@ -161,7 +162,7 @@ function foldAlso(
       frags: [frag],
     };
     names.push(fresh.name);
-    destinationLines.push(`New thread: ${fresh.name}`);
+    destinationLines.push(t("New thread: {name}", { name: fresh.name }));
     landedIds.push(fresh.id);
     alsoLanded.push({ threadId: fresh.id, fragId: frag.id, text: frag.text });
     board = { ...board, threads: [fresh, ...board.threads] };
@@ -247,13 +248,11 @@ function applyPrimary(
       })
     );
     const plain =
-      items.length +
-      " action" +
-      (items.length > 1 ? "s" : "") +
-      (span ? " · fades in " + left(span) : " · kept");
+      count(items.length, "action") +
+      (span ? " · " + t("fades in {left}", { left: left(span) }) : " · " + t("kept"));
     const plainLines = [
       count(items.length, "action"),
-      ...(span ? [`Available for ${left(span)}`] : []),
+      ...(span ? [t("Available for {left}", { left: left(span) })] : []),
     ];
     return {
       next: { ...board, actions: [...items, ...board.actions], threads },
@@ -269,12 +268,10 @@ function applyPrimary(
         ? [...items.map((i) => i.id), shotThreadId]
         : items.map((i) => i.id),
       landed: shotFrag
-        ? plain +
-          " · picture kept in " +
-          (shotHome ? shotHome.name : threads[0].name)
+        ? plain + " · " + t("picture kept in {name}", { name: shotHome ? shotHome.name : threads[0].name })
         : plain,
       landedLines: shotFrag
-        ? [...plainLines, `Picture saved in: ${shotHome ? shotHome.name : threads[0].name}`]
+        ? [...plainLines, t("Picture saved in: {name}", { name: shotHome ? shotHome.name : threads[0].name })]
         : plainLines,
     };
   }
@@ -336,10 +333,10 @@ function applyPrimary(
          exist, and reads as though the capture joined something. */
       landed:
         count(items.length, "action") +
-        (home ? " · a layer on " + homeName : " · a new thread — " + homeName),
+        " · " + (home ? t("a layer on {name}", { name: homeName }) : t("a new thread — {name}", { name: homeName })),
       landedLines: [
         count(items.length, "action"),
-        home ? `Added to thread: ${homeName}` : `New thread: ${homeName}`,
+        home ? t("Added to thread: {name}", { name: homeName }) : t("New thread: {name}", { name: homeName }),
       ],
     };
   }
@@ -357,8 +354,8 @@ function applyPrimary(
       targetId: existing.id,
       source: { kind: "thread", id: existing.id, fragId: frag.id },
       landedIds: [existing.id],
-      landed: existing.name + " · a new layer",
-      landedLines: [`Added to thread: ${existing.name}`],
+      landed: existing.name + " · " + t("a new layer"),
+      landedLines: [t("Added to thread: {name}", { name: existing.name })],
     };
   }
   const fresh: Thread = {
@@ -372,8 +369,8 @@ function applyPrimary(
     targetId: fresh.id,
     source: { kind: "thread", id: fresh.id, fragId: frag.id },
     landedIds: [fresh.id],
-    landed: fresh.name + " · a new thread",
-    landedLines: [`New thread: ${fresh.name}`],
+    landed: fresh.name + " · " + t("a new thread"),
+    landedLines: [t("New thread: {name}", { name: fresh.name })],
   };
 }
 

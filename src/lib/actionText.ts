@@ -24,9 +24,16 @@ export const SPLIT_ACTION_SYSTEM =
 export const SplitActionSchema = z.object({ tasks: z.array(z.string()).min(1).max(4) });
 
 const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
-/* Word forms count as the same word: methods/method, selecting/select, enabling/enable, weekly/week. */
-const stem = (word: string) => word.length > 4 ? word.replace(/(ing|ed|es|ly|s)$/, "").replace(/e$/, "") : word;
-const SMALL = new Set(["a", "an", "the", "and", "or", "to", "for", "of", "on", "in", "with", "my", "it", "its", "be", "is"]);
+/* Word forms count as the same word: methods/method, selecting/select, enabling/enable, weekly/week.
+   Russian changes its endings far more (выставку/выставке, новую/новой), so a
+   Russian word is matched on its first three letters. */
+const stem = (word: string) => /[\u0400-\u04ff]/.test(word)
+  ? word.replace(/ё/g, "е").slice(0, 3)
+  : word.length > 4 ? word.replace(/(ing|ed|es|ly|s)$/, "").replace(/e$/, "") : word;
+const SMALL = new Set([
+  "a", "an", "the", "and", "or", "to", "for", "of", "on", "in", "with", "my", "it", "its", "be", "is",
+  "и", "в", "во", "на", "с", "со", "к", "ко", "по", "для", "о", "об", "у", "из", "от", "до", "за", "а", "мой", "моя", "мои",
+]);
 
 /** The tasks may only use the action's own words, each short and non-empty;
  * otherwise the action stays as it was. */
@@ -47,19 +54,21 @@ export function acceptTasks(original: string, tasks: string[]): string[] | null 
    them. "This" and "that" count only as the last word ("check that the build
    passes" is fine). Long actions explain their own "it" ("allow them to post
    instead"), so they are left alone. */
-const POINTS_BACK = new Set(["it", "them", "this", "that"]);
+const POINTS_BACK = new Set(["it", "them", "this", "that", "это", "этого"]);
+/* Russian "it"/"them"/"there": отправить его Ане, перенести туда заметки. */
+const LEANS = new Set(["it", "them", "его", "её", "ее", "их", "туда"]);
 export function pointsBack(item: SimpleSortItem): boolean {
   if (item.kind !== "action" || item.existingActionId) return false;
   const own: string[] = words(item.text);
   return own.length >= 2 && own.length <= 8
-    && (own.includes("it") || own.includes("them") || POINTS_BACK.has(own.at(-1)!));
+    && (own.some((word) => LEANS.has(word)) || POINTS_BACK.has(own.at(-1)!));
 }
 
 export const NAME_IT_SYSTEM =
   "This to-do item came from the note below, but a word in it like \"it\" or \"them\" only " +
   "makes sense with the note. Rewrite just this one item, in at most eight words, so it says " +
-  "what that word means. Use the note's own words; leave out every other task in the note. " +
-  "Return JSON: {\"task\": string}.";
+  "what that word means. Use the note's own words, in the note's language; leave out every " +
+  "other task in the note. Return JSON: {\"task\": string}.";
 
 export const NameItSchema = z.object({ task: z.string() });
 

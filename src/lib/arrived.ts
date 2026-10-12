@@ -1,3 +1,4 @@
+import { countNoun, t } from "./i18n";
 import type { Board } from "./model";
 
 /**
@@ -35,20 +36,18 @@ export function arrivedIn(before: Board, after: Board): Arrived {
 /** One plain sentence, or null when nothing arrived worth saying. */
 export function arrivedNote(a: Arrived): string | null {
   const parts: string[] = [];
-  const plural = (n: number, one: string, many: string) =>
-    `${n} ${n === 1 ? one : many}`;
-  if (a.actions) parts.push(plural(a.actions, "action", "actions"));
+  if (a.actions) parts.push(countNoun(a.actions, "action"));
   /* A brand-new thread arrives with its fragments; naming both would
      double-count the same words, so a new thread speaks for them.
      "Fragment", not "note": everywhere else that counts these — the share
      sheet, the thread card — calls them fragments, and this notice was the
      last place still calling them something else. */
-  if (a.threads) parts.push(plural(a.threads, "thread", "threads"));
-  else if (a.frags) parts.push(plural(a.frags, "fragment", "fragments"));
+  if (a.threads) parts.push(countNoun(a.threads, "thread"));
+  else if (a.frags) parts.push(countNoun(a.frags, "fragment"));
   if (!parts.length) return null;
   const list =
     parts.length === 1
       ? parts[0]
-      : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
-  return `${list} arrived from your other device.`;
+      : parts.slice(0, -1).join(", ") + " " + t("and") + " " + parts[parts.length - 1];
+  return t("{list} arrived from your other device.", { list });
 }

@@ -27,23 +27,25 @@
  * Each row carries a chip saying which pass found it.
  */
 
+import { countNoun, t } from "@/lib/i18n";
 import { useState, type ReactNode } from "react";
 import { TidyWaiting } from "./TidyWaiting";
 import type { OrganizeKind, OrganizeProposal } from "@/lib/organize";
 import { splitProposals } from "@/lib/organize";
 
-const YES_LABEL: Record<OrganizeKind, string> = {
-  dup_action: "Delete",
-  dup_fragment: "Delete",
-  merge_fragments: "Merge",
-  fold_action: "File",
-  move_fragment: "Move",
-  split_fragment: "Split out",
-  extract_action: "Make action",
-  let_go: "Let go",
-  revisit_intention: "Still true",
-  looks_done: "Mark resolved",
-};
+/* A function, so the labels are in the reader's language when shown. */
+const yesLabel = (): Record<OrganizeKind, string> => ({
+  dup_action: t("Delete"),
+  dup_fragment: t("Delete"),
+  merge_fragments: t("Merge"),
+  fold_action: t("File"),
+  move_fragment: t("Move"),
+  split_fragment: t("Split out"),
+  extract_action: t("Make action"),
+  let_go: t("Let go"),
+  revisit_intention: t("Still true"),
+  looks_done: t("Mark resolved"),
+});
 
 /**
  * The row's sentence: what will happen, to which card, if you tap yes.
@@ -57,7 +59,7 @@ function Ask({ p }: { p: OrganizeProposal }) {
   if (p.kind === "dup_action" || p.kind === "dup_fragment") {
     return (
       <span className="org-line">
-        Delete <em>{p.sourceName}</em>
+        {t("Delete")} <em>{p.sourceName}</em>
       </span>
     );
   }
@@ -66,21 +68,21 @@ function Ask({ p }: { p: OrganizeProposal }) {
        proposes, so it is the only one phrased as one. */
     return (
       <span className="org-line">
-        Still choosing <em>{p.sourceName}</em>?
+        {t("Still choosing")} <em>{p.sourceName}</em>?
       </span>
     );
   }
   if (p.kind === "let_go") {
     return (
       <span className="org-line">
-        Let go of <em>{p.sourceName}</em>
+        {t("Let go of")} <em>{p.sourceName}</em>
       </span>
     );
   }
   if (p.kind === "extract_action") {
     return (
       <span className="org-line">
-        Make an action out of <em>{p.sourceName}</em>
+        {t("Make an action out of")} <em>{p.sourceName}</em>
       </span>
     );
   }
@@ -90,36 +92,35 @@ function Ask({ p }: { p: OrganizeProposal }) {
        answer is: nowhere. The note stays; it gets a label. */
     return (
       <span className="org-line">
-        Label <em>{p.sourceName}</em> resolved — a later note says it
-        happened. The note stays in <em>{p.targetName}</em>
+        {t("Label")} <em>{p.sourceName}</em> {t("resolved — a later note says it happened. The note stays in")} <em>{p.targetName}</em>
       </span>
     );
   }
   if (p.kind === "merge_fragments") {
     return (
       <span className="org-line">
-        Merge <em>{p.sourceName}</em> into <em>{p.targetName}</em>
+        {t("Merge")} <em>{p.sourceName}</em> {t("into")} <em>{p.targetName}</em>
       </span>
     );
   }
   if (p.kind === "move_fragment") {
     return (
       <span className="org-line">
-        Move <em>{p.sourceName}</em> to <em>{p.targetName}</em>
+        {t("Move")} <em>{p.sourceName}</em> {t("to")} <em>{p.targetName}</em>
       </span>
     );
   }
   if (p.kind === "split_fragment") {
     return (
       <span className="org-line">
-        Give <em>{p.sourceName}</em> its own thread — it shares nothing with{" "}
+        {t("Give")} <em>{p.sourceName}</em> {t("its own thread — it shares nothing with")}{" "}
         <em>{p.targetName}</em>
       </span>
     );
   }
   return (
     <span className="org-line">
-      File <em>{p.sourceName}</em> into <em>{p.targetName}</em>
+      {t("File")} <em>{p.sourceName}</em> {t("into")} <em>{p.targetName}</em>
     </span>
   );
 }
@@ -156,14 +157,14 @@ export function OrganizeScreen({
   return (
     <div>
       <button className="back" onClick={onBack}>
-        ← capture
+        {t("← capture")}
       </button>
 
       {/* "Tidy", not "Organize": the icon is a brush, the prompt constant
           is TIDY, the fixtures are tidyCases and the route calls itself the
           tidy engine. The screen was the only thing using another word. */}
       <div className="tname" style={{ fontSize: 26, marginBottom: 6 }}>
-        Tidy
+        {t("Tidy")}
       </div>
 
       {proposals.length === 0 ? (
@@ -172,8 +173,8 @@ export function OrganizeScreen({
         ) : (
         <p className="int-note">
           {aiStatus === "offline"
-              ? "The board couldn't be read just now — this pass needs the model, and it didn't answer. Try again in a moment."
-              : "Nothing worth changing — the board reads clean."}
+              ? t("The board couldn't be read just now — this pass needs the model, and it didn't answer. Try again in a moment.")
+              : t("Nothing worth changing — the board reads clean.")}
         </p>
         )
       ) : (
@@ -181,8 +182,7 @@ export function OrganizeScreen({
           {aiStatus === "thinking" && <TidyWaiting />}
           {aiStatus === "offline" && (
             <p className="org-status">
-              Only what the dates alone can tell — the reading pass
-              couldn&apos;t run just now.
+              {t("Only what the dates alone can tell — the reading pass couldn't run just now.")}
             </p>
           )}
 
@@ -192,9 +192,9 @@ export function OrganizeScreen({
                 {p.origin === "ai" && (
                   <span
                     className="org-chip"
-                    title="Found by the model — the same idea in different words"
+                    title={t("Found by the model — the same idea in different words")}
                   >
-                    AI
+                    {t("AI")}
                   </span>
                 )}
                 <div className="org-body">
@@ -206,7 +206,7 @@ export function OrganizeScreen({
                     className="suggest-btn suggest-ok"
                     onClick={() => onAccept(p.id)}
                   >
-                    {YES_LABEL[p.kind]}
+                    {yesLabel()[p.kind]}
                   </button>
                   {/* "Keep" read as "keep this card" — which is also what
                       the other button does to one of the two. This one
@@ -215,7 +215,7 @@ export function OrganizeScreen({
                     className="suggest-btn"
                     onClick={() => onDismiss(p.id)}
                   >
-                    Leave it
+                    {t("Leave it")}
                   </button>
                 </div>
               </div>
@@ -225,10 +225,8 @@ export function OrganizeScreen({
           {medium.length > 0 && (
             <button className="org-more" onClick={() => setShowMore(!showMore)}>
               {showMore
-                ? "Hide less certain suggestions"
-                : `Show ${medium.length} ${
-                    medium.length === 1 ? "suggestion" : "suggestions"
-                  } I'm less sure about`}
+                ? t("Hide less certain suggestions")
+                : t("Show {count} I'm less sure about", { count: countNoun(medium.length, "suggestion") })}
             </button>
           )}
 
@@ -237,7 +235,7 @@ export function OrganizeScreen({
               className="suggest-btn suggest-ok"
               onClick={() => setShowApprove(true)}
             >
-              Approve all ({proposals.length})
+              {t("Approve all ({count})", { count: proposals.length })}
             </button>
           </div>
         </>
@@ -252,14 +250,10 @@ export function OrganizeScreen({
             onClick={(e) => e.stopPropagation()}
           >
             <p className="discard-title">
-              Approve all {proposals.length}{" "}
-              {proposals.length === 1 ? "suggestion" : "suggestions"}?
+              {t("Approve all {count}?", { count: countNoun(proposals.length, "suggestion") })}
             </p>
             <p className="discard-hint">
-              Duplicates get removed, fragments move to the thread they belong
-              with, and tasks lift out as actions — all automatically, in one
-              go. Each change is applied on its own, so keep anything
-              you&apos;re not sure about.
+              {t("Duplicates get removed, fragments move to the thread they belong with, and tasks lift out as actions — all automatically, in one go. Each change is applied on its own, so keep anything you're not sure about.")}
             </p>
             <div className="tools">
               <button
@@ -269,10 +263,10 @@ export function OrganizeScreen({
                   onApproveAll();
                 }}
               >
-                Approve all
+                {t("Approve all")}
               </button>
               <button className="ghost" onClick={() => setShowApprove(false)}>
-                Not yet
+                {t("Not yet")}
               </button>
             </div>
           </div>

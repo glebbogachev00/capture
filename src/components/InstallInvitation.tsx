@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Check, Download, Share, SquarePlus, X } from "lucide-react";
 
@@ -84,8 +85,8 @@ export function InstallInvitation({
         className="install-invite-trigger"
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Add Capture to Home Screen"
-        title="Add Capture to Home Screen"
+        aria-label={t("Add Capture to Home Screen")}
+        title={t("Add Capture to Home Screen")}
       >
         <Download size={20} strokeWidth={1.8} />
       </button>
@@ -101,44 +102,44 @@ export function InstallInvitation({
             <button
               className="install-invite-close"
               type="button"
-              aria-label="Close"
+              aria-label={t("Close")}
               onClick={() => setOpen(false)}
             >
               <X size={18} strokeWidth={1.7} />
             </button>
 
-            <p className="install-invite-kicker">Add to Home Screen</p>
-            <h2 id="install-invite-title">Keep Capture close.</h2>
+            <p className="install-invite-kicker">{t("Add to Home Screen")}</p>
+            <h2 id="install-invite-title">{t("Keep Capture close.")}</h2>
 
             <ol className="install-invite-steps">
               <li>
                 <span className="install-invite-step-icon"><Share size={19} /></span>
                 <span className="install-invite-step-copy">
-                  <span className="install-invite-step-heading"><b>1</b><strong>Open Share</strong></span>
-                  <small>Tap Share, or choose Share from the browser menu.</small>
+                  <span className="install-invite-step-heading"><b>1</b><strong>{t("Open Share")}</strong></span>
+                  <small>{t("Tap Share, or choose Share from the browser menu.")}</small>
                 </span>
               </li>
               <li>
                 <span className="install-invite-step-icon"><SquarePlus size={19} /></span>
                 <span className="install-invite-step-copy">
-                  <span className="install-invite-step-heading"><b>2</b><strong>Add to Home Screen</strong></span>
-                  <small>Scroll through the actions if needed.</small>
+                  <span className="install-invite-step-heading"><b>2</b><strong>{t("Add to Home Screen")}</strong></span>
+                  <small>{t("Scroll through the actions if needed.")}</small>
                 </span>
               </li>
               <li>
                 <span className="install-invite-step-icon"><Check size={19} /></span>
                 <span className="install-invite-step-copy">
-                  <span className="install-invite-step-heading"><b>3</b><strong>Tap Add</strong></span>
-                  <small>Keep “Open as Web App” on if shown.</small>
+                  <span className="install-invite-step-heading"><b>3</b><strong>{t("Tap Add")}</strong></span>
+                  <small>{t("Keep “Open as Web App” on if shown.")}</small>
                 </span>
               </li>
             </ol>
 
             <p className="install-invite-help">
-              Can’t find “Add to Home Screen”? Open this page in Safari and try again.
+              {t("Can’t find “Add to Home Screen”? Open this page in Safari and try again.")}
             </p>
             <button className="install-invite-later" type="button" onClick={dismiss}>
-              Not now
+              {t("Not now")}
             </button>
           </section>
         </div>

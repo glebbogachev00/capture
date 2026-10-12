@@ -1,4 +1,5 @@
 import { generateText } from "ai";
+import { speechLanguage } from "@/lib/speechLanguage";
 import { clientIp } from "@/lib/clientIp";
 import { transcribeRateLimit } from "@/lib/limiter";
 import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
@@ -65,7 +66,8 @@ async function transcribeLocal(
 async function transcribeGroq(
   audio: ArrayBuffer,
   contentType: string,
-  apiKey: string
+  apiKey: string,
+  language?: string
 ): Promise<string> {
   const form = new FormData();
   form.append(
@@ -75,6 +77,7 @@ async function transcribeGroq(
   );
   form.append("model", GROQ_MODEL);
   form.append("response_format", "json");
+  if (language) form.append("language", language);
   const res = await fetch(GROQ_URL, {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}` },
@@ -142,7 +145,7 @@ export async function POST(request: Request) {
     const groqKey = process.env.GROQ_API_KEY;
     try {
       if (!groqKey) throw new Error("no GROQ_API_KEY");
-      raw = (await transcribeGroq(audio, contentType, groqKey)).trim();
+      raw = (await transcribeGroq(audio, contentType, groqKey, speechLanguage(request.headers.get("x-capture-lang")))).trim();
     } catch {
       try {
         raw = (await transcribeLocal(audio, contentType, 55_000)).trim();

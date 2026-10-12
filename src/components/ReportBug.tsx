@@ -1,4 +1,5 @@
 "use client";
+import { deviceLocale, t } from "@/lib/i18n";
 import { getDocumentLifetime, ownedFetch as fetch } from "@/lib/ownership";
 
 import { useState, useSyncExternalStore } from "react";
@@ -72,9 +73,9 @@ export function ReportBugForm({ onClose }: { onClose: () => void }) {
         return;
       }
       const out = (await res.json().catch(() => ({}))) as { error?: string };
-      setErr(out.error || "That didn't send. Try again in a moment.");
+      setErr((deviceLocale() === "en" && out.error) || t("That didn't send. Try again in a moment."));
     } catch {
-      setErr("That didn't send. Try again in a moment.");
+      setErr(t("That didn't send. Try again in a moment."));
     } finally {
       setBusy(false);
     }
@@ -86,10 +87,10 @@ export function ReportBugForm({ onClose }: { onClose: () => void }) {
       <div className="modal-in bug-modal" onClick={(e) => e.stopPropagation()}>
         {done ? (
           <>
-            <p className="discard-title">Caught.</p>
+            <p className="discard-title">{t("Caught.")}</p>
             <p className="discard-hint">
-              {done.number ? `Filed as #${done.number}. ` : "Filed. "}
-              Thanks — it is on the pile that actually gets read.
+              {done.number ? t("Filed as #{number}.", { number: done.number }) : t("Filed.")}{" "}
+              {t("Thanks — it is on the pile that actually gets read.")}
             </p>
             <div className="tools">
               {done.url && (
@@ -99,17 +100,17 @@ export function ReportBugForm({ onClose }: { onClose: () => void }) {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  See it
+                  {t("See it")}
                 </a>
               )}
               <button className="ghost" onClick={onClose}>
-                Done
+                {t("Done")}
               </button>
             </div>
           </>
         ) : (
           <>
-            <p className="discard-title">Caught a bug?</p>
+            <p className="discard-title">{t("Caught a bug?")}</p>
             {/* One box, like the rest of the app. The split into "what
                 happened" and "what you expected" was form-thinking: two
                 rectangles to fill in, when the placeholder asks for both in
@@ -118,7 +119,7 @@ export function ReportBugForm({ onClose }: { onClose: () => void }) {
               className="bug-field"
               rows={5}
               autoFocus
-              placeholder="It did this, and I expected…"
+              placeholder={t("It did this, and I expected…")}
               value={what}
               onChange={(e) => setWhat(e.target.value)}
             />
@@ -132,7 +133,7 @@ export function ReportBugForm({ onClose }: { onClose: () => void }) {
                 {busy ? "Sending…" : "Send it"}
               </button>
               <button className="ghost" onClick={onClose}>
-                Never mind
+                {t("Never mind")}
               </button>
             </div>
 
@@ -150,7 +151,7 @@ export function ReportBug() {
   return (
     <>
       <p className="report-bug">
-        <button onClick={() => setOpen(true)}>Caught a bug? Capture it.</button>
+        <button onClick={() => setOpen(true)}>{t("Caught a bug? Capture it.")}</button>
       </p>
       {open && <ReportBugForm onClose={() => setOpen(false)} />}
     </>

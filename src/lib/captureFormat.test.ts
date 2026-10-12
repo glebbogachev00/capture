@@ -96,3 +96,30 @@ describe("Format on older notes settles after one press", () => {
     expect(needsFormatting("First thing on my mind today. Second thing that came up on the walk. Third idea about the launch plan. Fourth and last point, which keeps the block going for a while here.")).toBe(true);
   });
 });
+
+describe("Russian dictation", () => {
+  const raw = "ну короче я сегодня гуляла в парке и подумала что было бы классно начать вести дневник благодарности каждый вечер записывать три вещи за которые я благодарна и еще надо купить красивый блокнот для этого";
+  const cleaned = "Я сегодня гуляла в парке и подумала, что было бы классно начать вести дневник благодарности.\n\nКаждый вечер записывать три вещи, за которые я благодарна.\n\nИ ещё надо купить красивый блокнот для этого.";
+
+  it("keeps a good cleanup that drops ну/короче and writes ещё with ё", () => {
+    expect(keepsTheWords(raw, cleaned)).toBe(true);
+  });
+
+  it("is sent for cleanup when it carries Russian filler, even when short", () => {
+    expect(shouldFormat("ну короче купить молоко")).toBe(true);
+    expect(shouldFormat("Купить молоко")).toBe(false);
+    expect(shouldFormat("Нужно купить молоко")).toBe(false);
+  });
+
+  it("still refuses a cleanup that drops real words", () => {
+    expect(keepsTheWords(raw, "Начать вести дневник благодарности.")).toBe(false);
+  });
+});
+
+describe("sentence case in Russian", () => {
+  it("starts each Russian sentence with a capital", () => {
+    expect(sentenceCase("я сегодня гуляла в парке. каждый вечер записывать три вещи.")).toBe("Я сегодня гуляла в парке. Каждый вечер записывать три вещи.");
+    expect(sentenceCase("ещё надо купить блокнот")).toBe("Ещё надо купить блокнот");
+  });
+});
+

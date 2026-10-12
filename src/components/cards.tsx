@@ -8,7 +8,8 @@
  * shrinks.)
  */
 
-import { memo, useEffect, useState } from "react";
+import { countNoun, t } from "@/lib/i18n";
+import { memo, useEffect, useState, useMemo } from "react";
 import { Check, MoreHorizontal } from "lucide-react";
 import { useStoredImage } from "@/hooks/useStoredImage";
 import { parseCover, toneColour, type Cover } from "@/lib/cover";
@@ -100,7 +101,7 @@ export const Row = memo(function Row({
       <button
         className={"box" + (ticked ? " done" : "")}
         onClick={tick}
-        aria-label="Mark done"
+        aria-label={t("Mark done")}
       >
         {ticked && <Check size={13} strokeWidth={3} />}
       </button>
@@ -110,7 +111,7 @@ export const Row = memo(function Row({
             className="act-edit"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            aria-label="Action text"
+            aria-label={t("Action text")}
             autoFocus
             onBlur={commit}
             onKeyDown={(e) => {
@@ -137,40 +138,40 @@ export const Row = memo(function Row({
               board until its date, and never leaves the app. */}
           {!!a.due && !faded && (
             <span className={"due" + (a.due - now < DAY ? " soon" : "")}>
-              due {fmtDue(a.due)}
+              {t("due {date}", { date: fmtDue(a.due) })}
             </span>
           )}
           {/* The picture lives on a thread fragment, not here — this is the
               way back to it, so a screenshot is never a thing you captured
               and then could not find. */}
           {!!onOpenShot && (
-            <button className="shot-link" onClick={onOpenShot} title="Open the note holding this picture">
+            <button className="shot-link" onClick={onOpenShot} title={t("Open the note holding this picture")}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
                 <rect x="3" y="5" width="18" height="14" rx="2" />
                 <circle cx="8.5" cy="10" r="1.6" />
                 <path d="M21 16l-5-5-6 6" />
               </svg>
-              picture
+              {t("picture")}
             </button>
           )}
-          {a.unsorted && <span className="raw">unsorted</span>}
+          {a.unsorted && <span className="raw">{t("unsorted")}</span>}
           {faded && (
             <span>
-              faded · clears in {left((a.fadedAt || now) + GRACE - now)}
+              {t("faded · clears in {left}", { left: left((a.fadedAt || now) + GRACE - now) })}
             </span>
           )}
         </div>
 
         {shelfOpen && (
           <div className="shelf action-shelf">
-            <button onClick={() => onSetShelf(DAY, "hours")}>1 day</button>
-            <button onClick={() => onSetShelf(7 * DAY, "days")}>1 week</button>
+            <button onClick={() => onSetShelf(DAY, "hours")}>{t("1 day")}</button>
+            <button onClick={() => onSetShelf(7 * DAY, "days")}>{t("1 week")}</button>
             <button onClick={() => onSetShelf(30 * DAY, "weeks")}>
-              1 month
+              {t("1 month")}
             </button>
-            <button onClick={() => onSetShelf(null, "keep")}>keep</button>
+            <button onClick={() => onSetShelf(null, "keep")}>{t("keep")}</button>
             <button className="warn" onClick={onRemove}>
-              delete now
+              {t("delete now")}
             </button>
           </div>
         )}
@@ -179,16 +180,16 @@ export const Row = memo(function Row({
         <button
           className={"chip" + (!ms ? " kept" : ms < DAY ? " soon" : "")}
           onClick={onShelfClick}
-          aria-label="Change shelf life"
+          aria-label={t("Change shelf life")}
         >
-          {ms === null ? "kept" : left(ms)}
+          {ms === null ? t("kept") : left(ms)}
         </button>
         {!editing && (
           <button
             className={"more-btn" + (more ? " open" : "")}
             onClick={() => setMore((v) => !v)}
             aria-expanded={more}
-            aria-label={more ? "Fewer options" : "More options"}
+            aria-label={more ? t("Fewer options") : t("More options")}
           >
             <MoreHorizontal size={16} strokeWidth={1.8} />
           </button>
@@ -197,35 +198,35 @@ export const Row = memo(function Row({
       {more && !editing && (
         <div className="row-actions">
           <button className="ghost" onClick={() => setEditing(true)}>
-            Edit
+            {t("Edit")}
           </button>
           {/* Tried on the meta line as a one-tap chip and it read as
               clutter on a row that is otherwise just words and a date.
               Back here with the other per-card verbs: a tap further away,
               but the list stays a list. */}
           <button className="ghost" onClick={onCopy}>
-            Copy
+            {t("Copy")}
           </button>
           {a.unsorted && (
             <button className="ghost" onClick={onResort} disabled={busy}>
-              Sort now
+              {t("Sort now")}
             </button>
           )}
           {faded ? (
             <button className="ghost" onClick={onRestore}>
-              Restore
+              {t("Restore")}
             </button>
           ) : (
             <>
               <button className="ghost" onClick={onMakeThread}>
-                Make a thread
+                {t("Make a thread")}
               </button>
               <button
                 className="ghost"
                 onClick={onMakeIntention}
                 disabled={busy}
               >
-                Make an intention
+                {t("Make an intention")}
               </button>
             </>
           )}
@@ -261,27 +262,28 @@ export const Row = memo(function Row({
  * minute and a half — a line that never gets read is not fun, it is
  * furniture. Anything not listed here keeps its plain label.
  */
-const BUSY_LINES: Record<string, string[]> = {
-  Sorting: [
-    "Reading it back.",
-    "Deciding what this is — a task, a thought, or a declaration.",
-    "Weighing which thread it belongs with.",
-    "A new thread is the expensive answer, so it argues itself out of one first.",
-    "Taking its time — long thoughts take longer.",
-    "Still on it. The words are safe either way.",
+/* Keyed by the label as shown, so it matches in either language. */
+const busyLines = (): Record<string, string[]> => ({
+  [t("Sorting")]: [
+    t("Reading it back."),
+    t("Deciding what this is — a task, a thought, or a declaration."),
+    t("Weighing which thread it belongs with."),
+    t("A new thread is the expensive answer, so it argues itself out of one first."),
+    t("Taking its time — long thoughts take longer."),
+    t("Still on it. The words are safe either way."),
   ],
-  "Finding the intention": [
-    "Reading it back.",
-    "Listening for the state underneath the words.",
-    "Writing it as already true.",
-    "Naming what pulls against it — that part takes the longest.",
-    "Still on it. You read everything before it lands.",
+  [t("Finding the intention")]: [
+    t("Reading it back."),
+    t("Listening for the state underneath the words."),
+    t("Writing it as already true."),
+    t("Naming what pulls against it — that part takes the longest."),
+    t("Still on it. You read everything before it lands."),
   ],
-};
+});
 const BUSY_EVERY_MS = 3_500;
 
 export function BusyLine({ label }: { label: string }) {
-  const lines = BUSY_LINES[label];
+  const lines = useMemo(() => busyLines()[label], [label]);
   /* The label is the reset: a new job remounts the counter via key below,
      so no state needs writing inside the effect. */
   const [i, setI] = useState(0);
@@ -320,7 +322,7 @@ export function CoverBand({ cover }: { cover: Cover }) {
 }
 
 export function TCard({
-  t,
+  t: thread,
   resting,
   landed,
   profile,
@@ -333,9 +335,9 @@ export function TCard({
   profile?: ProfileIdentity;
   onOpen: () => void;
 }) {
-  const last = t.frags.at(-1);
-  const bars = t.frags.slice(-22);
-  const cover = parseCover(t.cover);
+  const last = thread.frags.at(-1);
+  const bars = thread.frags.slice(-22);
+  const cover = parseCover(thread.cover);
   return (
     <button
       className={
@@ -350,9 +352,9 @@ export function TCard({
           top, colour or photo. Threads without one look exactly as they
           always have, so a quiet board stays quiet. */}
       {cover && <CoverBand cover={cover} />}
-      <div className="tname">{t.name}</div>
+      <div className="tname">{thread.name}</div>
       <div className="tsum">
-        {t.summary || (last?.text || "").slice(0, 120) + "…"}
+        {thread.summary || (last?.text || "").slice(0, 120) + "…"}
       </div>
       <div className="sed">
         {bars.map((f, i, arr) => (
@@ -374,8 +376,8 @@ export function TCard({
             thread accumulates, and this is the line that should agree with
             them. The data model still calls them frags — this is what the
             thread looks like, not what it is stored as. */}
-        {t.frags.length} layer{t.frags.length > 1 ? "s" : ""}
-        {last ? " · last " + fmt(last.at) : ""}
+        {countNoun(thread.frags.length, "layer")}
+        {last ? " · " + t("last {at}", { at: fmt(last.at) }) : ""}
       </div>
       <ProfileSignature profile={profile} />
     </button>

@@ -1,11 +1,13 @@
 "use client";
 
+import { useT } from "@/components/LocaleProvider";
 import { useSearchParams } from "next/navigation";
 import { completeExplicitAuthentication } from "@/lib/ownership";
 import { safeNext } from "@/lib/safeNext";
 import { useState } from "react";
 
 export function LoginForm() {
+  const t = useT();
   const params = useSearchParams();
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
@@ -21,7 +23,7 @@ export function LoginForm() {
     ) as HTMLInputElement | null;
     const value = field?.value ?? password;
     if (!value) {
-      setErr("Enter the password");
+      setErr(t("Enter the password"));
       return;
     }
     setBusy(true);
@@ -40,10 +42,10 @@ export function LoginForm() {
         window.location.href = safeNext(params.get("next"));
         return;
       }
-      const body = await res.json().catch(() => ({}));
-      setErr(body.error || "Wrong password");
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      setErr(res.status === 429 || body.error === "rate limited" ? t("Too many attempts — wait a minute and try again.") : t("Wrong password"));
     } catch {
-      setErr("Couldn't reach the server.");
+      setErr(t("Couldn't reach the server."));
     }
     setBusy(false);
   }
@@ -55,12 +57,12 @@ export function LoginForm() {
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         name="password"
-        placeholder="Password"
-        aria-label="Password"
+        placeholder={t("Password")}
+        aria-label={t("Password")}
         autoFocus
       />
       <button className="capture-btn" type="submit" disabled={busy}>
-        {busy ? "…" : "Open"}
+        {busy ? "…" : t("Open")}
       </button>
       {err && <div className="err">{err}</div>}
     </form>

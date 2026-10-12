@@ -73,7 +73,8 @@ export function useRecordedDictation(
         setTranscribing(true);
         void fetch("/api/transcribe", {
           method: "POST",
-          headers: { "content-type": blob.type },
+          /* The phone's language, so a short Russian clip is heard as Russian. */
+          headers: { "content-type": blob.type, "x-capture-lang": navigator.language || "" },
           body: blob,
         })
           .then(async (res) => {

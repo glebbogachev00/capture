@@ -52,6 +52,7 @@ import { SEMANTIC_KIND_BOUNDARY } from "@/lib/semanticKindBoundary";
 import { shouldFormat } from "@/lib/captureFormat";
 import { formatCapture } from "@/lib/captureFormat.server";
 import { tightenActions } from "@/lib/actionText.server";
+import { inCaptureLanguage } from "@/lib/language.server";
 import { SIMPLE_SORT_VERSION, generateSimpleSort, normalizeSimpleSort, simpleSortPrompt } from "@/lib/simpleSort";
 import { parseSortImageDataUrl } from "@/lib/sortImageDataUrl";
 
@@ -645,8 +646,12 @@ export async function POST(request: Request) {
         ), preferredFor("sort"), { abortSignal: planningAbortSignal });
       /* A run-on action becomes its separate short tasks (only long ones are
          sent), and a short one ending on "it" says what it is. */
-      const items = await withFallback((tier) => tightenActions(value, { tier, abortSignal: planningAbortSignal, raw }), preferredFor("sort"), { abortSignal: planningAbortSignal })
+      /* A Russian capture keeps Russian in what the sorter wrote itself; first,
+         so the steps below read Russian ("отправить его Ане" gets its "его"). */
+      const local = await withFallback((tier) => inCaptureLanguage(value, raw, { tier, abortSignal: planningAbortSignal }), preferredFor("sort"), { abortSignal: planningAbortSignal })
         .then((result) => result.value, () => value);
+      const items = await withFallback((tier) => tightenActions(local, { tier, abortSignal: planningAbortSignal, raw }), preferredFor("sort"), { abortSignal: planningAbortSignal })
+        .then((result) => result.value, () => local);
       return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items }, via });
     } catch (e) {
       const { message, status } = explain(e);

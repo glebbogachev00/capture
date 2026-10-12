@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { z } from "zod";
 import type { Board, Frag } from "./model";
 import { day } from "./ask";
@@ -155,6 +156,6 @@ export function applyCombine(board: Board, proposals: CombineProposal[], now: nu
     board: next,
     imgs: [],
     threads: [...threads],
-    notice: `Combined ${folded} notes into ${combined}.`,
+    notice: t("Combined {folded} notes into {combined}.", { folded, combined }),
   };
 }

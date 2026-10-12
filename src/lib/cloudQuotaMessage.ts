@@ -1,15 +1,17 @@
+import { t } from "./i18n";
+
 export class CloudQuotaError extends Error {
   constructor(readonly resetAt: number | null) {
     const time = resetAt === null ? null : new Intl.DateTimeFormat(undefined, {
       month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
     }).format(Math.ceil(resetAt / 60_000) * 60_000);
-    super(time ? `Your AI allowance resets ${time}.` : "Your AI allowance is used up. The reset time is unavailable.");
+    super(time ? t("Your AI allowance resets {time}.", { time }) : t("Your AI allowance is used up. The reset time is unavailable."));
     this.name = "CloudQuotaError";
   }
   get captureMessage() {
-    return `Saved in Unsorted. ${this.message} ${this.resetAt === null
-      ? "You can choose a place now."
-      : "Choose a place now, or retry after that."}`;
+    return `${t("Saved in Unsorted.")} ${this.message} ${this.resetAt === null
+      ? t("You can choose a place now.")
+      : t("Choose a place now, or retry after that.")}`;
   }
 }
 

@@ -1,3 +1,5 @@
+import { countNoun, t } from "./i18n";
+
 export type BackupRestoreNotice = {
   title?: string;
   text: string;
@@ -18,8 +20,7 @@ type RestoredCounts = {
 
 export type BackupRestoreScope = "cloud" | "local";
 
-const amount = (value: number, singular: string, plural = `${singular}s`) =>
-  `${value} ${value === 1 ? singular : plural}`;
+const amount = (value: number, noun: string) => countNoun(value, noun);
 
 export function backupRestoreSuccessNotice(
   counts: RestoredCounts,
@@ -27,9 +28,9 @@ export function backupRestoreSuccessNotice(
 ): BackupRestoreNotice {
   if (!counts.added) {
     return {
-      title: "Backup already here",
-      text: "Nothing new was added.",
-      details: [amount(counts.images, "picture") + " verified"],
+      title: t("Backup already here"),
+      text: t("Nothing new was added."),
+      details: [t("{count} verified", { count: amount(counts.images, "picture") })],
       ok: true,
     };
   }
@@ -42,16 +43,16 @@ export function backupRestoreSuccessNotice(
     counts.principles && amount(counts.principles, "principle"),
   ].filter(Boolean).join(" · ");
   const details = [
-    board && `Board: ${board}`,
-    counts.history ? `History: ${amount(counts.history, "record")}` : "",
-    `Pictures: ${amount(counts.images, "picture")} verified`,
+    board && t("Board: {items}", { items: board }),
+    counts.history ? t("History: {count}", { count: amount(counts.history, "record") }) : "",
+    t("Pictures: {count} verified", { count: amount(counts.images, "picture") }),
   ].filter(Boolean) as string[];
 
   return {
-    title: "Backup restored",
+    title: t("Backup restored"),
     text: scope === "cloud"
-      ? "The backup was added without removing anything already in Capture Cloud."
-      : "The backup was added without removing anything already on this device.",
+      ? t("The backup was added without removing anything already in Capture Cloud.")
+      : t("The backup was added without removing anything already on this device."),
     details,
     ok: true,
   };
@@ -59,16 +60,16 @@ export function backupRestoreSuccessNotice(
 
 export function backupRestoreCloudSavedNotice(): BackupRestoreNotice {
   return {
-    title: "Backup restored to Capture Cloud",
-    text: "This device could not refresh its local copy. Reload Capture to open the restored board.",
+    title: t("Backup restored to Capture Cloud"),
+    text: t("This device could not refresh its local copy. Reload Capture to open the restored board."),
     ok: true,
   };
 }
 
 export function backupRestoreCloudUnconfirmedNotice(): BackupRestoreNotice {
   return {
-    title: "Check Capture Cloud before retrying",
-    text: "Capture could not confirm whether the restore finished. Reload Capture and check your board before trying this backup again.",
+    title: t("Check Capture Cloud before retrying"),
+    text: t("Capture could not confirm whether the restore finished. Reload Capture and check your board before trying this backup again."),
     ok: false,
   };
 }
@@ -79,25 +80,25 @@ export function backupRestoreFailureNotice(error: unknown): BackupRestoreNotice 
   let text: string;
 
   if (/different account owner/i.test(message)) {
-    text = "This Cloud backup belongs to another account. Sign in to the account that created it, then try again.";
+    text = t("This Cloud backup belongs to another account. Sign in to the account that created it, then try again.");
   } else if (/Cloud backup can only be restored/i.test(message)) {
-    text = "This file came from Capture Cloud. Sign in to the account that created it, then try again.";
+    text = t("This file came from Capture Cloud. Sign in to the account that created it, then try again.");
   } else if (name === "QuotaExceededError" || /disk full|enough (free )?storage|could not be saved/i.test(message)) {
-    text = "This device does not have enough free storage for the backup.";
+    text = t("This device does not have enough free storage for the backup.");
   } else if (name === "AbortError" || /verify your account|verification pending|lifetime ended/i.test(message)) {
-    text = "Capture could not confirm this Cloud account. Check your connection, reload, then try again.";
+    text = t("Capture could not confirm this Cloud account. Check your connection, reload, then try again.");
   } else if (/JSON|complete Capture backup|unreadable|invalid owner scope|is not a Capture backup/i.test(message)) {
-    text = "This file is not a complete, readable Capture backup.";
+    text = t("This file is not a complete, readable Capture backup.");
   } else if (/image|picture/i.test(message) && /missing|corrupt|verif/i.test(message)) {
-    text = "One or more pictures in this backup could not be verified.";
+    text = t("One or more pictures in this backup could not be verified.");
   } else {
-    text = "Capture could not restore this backup. Check your connection, then try again.";
+    text = t("Capture could not restore this backup. Check your connection, then try again.");
   }
 
   return {
-    title: "Backup not restored",
+    title: t("Backup not restored"),
     text,
-    details: ["Your existing board was not changed."],
+    details: [t("Your existing board was not changed.")],
     ok: false,
   };
 }

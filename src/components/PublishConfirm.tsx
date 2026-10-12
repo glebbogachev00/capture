@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/LocaleProvider";
+import { t as tr } from "@/lib/i18n";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { CloudLoginForm } from "./CloudLoginForm";
 import { PublicThreadView } from "./PublicThreadView";
@@ -45,11 +47,13 @@ const noSubscribe = () => () => {};
 
 /** Reads the handoff from this tab, so it renders in the browser only. */
 export function PublishConfirm({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
+  const t = useT();
   const inBrowser = useSyncExternalStore(noSubscribe, () => true, () => false);
-  return inBrowser ? <PublishFlow cloudConfig={cloudConfig} /> : <p className="publish-note">Checking your Capture Cloud account…</p>;
+  return inBrowser ? <PublishFlow cloudConfig={cloudConfig} /> : <p className="publish-note">{t("Checking your Capture Cloud account…")}</p>;
 }
 
 function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
+  const t = useT();
   const [draft, setDraft] = useState<PublicThreadInput | null>(readDraft);
   const [owner, setOwner] = useState<string | null | undefined>(undefined);
   const [identityAttempt, setIdentityAttempt] = useState(0);
@@ -83,7 +87,7 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
       .catch(() => {
         if (!live) return;
         setOwner(null);
-        setError("Couldn't reach Capture Cloud. Check your connection and reload.");
+        setError(tr("Couldn't reach Capture Cloud. Check your connection and reload."));
       });
     return () => { live = false; };
   }, [identityAttempt]);
@@ -95,13 +99,13 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
       .then(async (response) => {
         if (!live) return;
         if (!response.ok) {
-          setError("Couldn't load your published threads.");
+          setError(tr("Couldn't load your published threads."));
           return;
         }
         const body = await response.json();
         if (live) setThreads(body.threads as Listed[]);
       })
-      .catch(() => { if (live) setError("Couldn't load your published threads."); });
+      .catch(() => { if (live) setError(tr("Couldn't load your published threads.")); });
     return () => { live = false; };
   }, [owner, listVersion]);
 
@@ -120,7 +124,7 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(response.status === 429 ? "Too many changes just now. Try again in a minute." : "Couldn't publish. Nothing was made public.");
+        setError(response.status === 429 ? t("Too many changes just now. Try again in a minute.") : t("Couldn't publish. Nothing was made public."));
         return;
       }
       setPublished({ ...(body.thread as OwnedPublicThread), url: body.url as string });
@@ -138,7 +142,7 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
     try {
       const response = await fetch(`${API}?token=${encodeURIComponent(token)}`, { method: "DELETE", headers: headers() });
       if (!response.ok && response.status !== 404) {
-        setError("Couldn't unpublish. The link still works; try again.");
+        setError(t("Couldn't unpublish. The link still works; try again."));
         return;
       }
       setConfirming(null);
@@ -158,15 +162,15 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
   };
   const failure = error && <p className="publish-error" role="alert">{error}</p>;
 
-  if (owner === undefined) return <p className="publish-note">Checking your account…</p>;
+  if (owner === undefined) return <p className="publish-note">{t("Checking your account…")}</p>;
 
   if (owner === null) {
     return (
       <div className="publish-flow">
-        <h2 className="publish-heading">Sign in to publish</h2>
+        <h2 className="publish-heading">{t("Sign in to publish")}</h2>
         {cloudConfig
           ? <div className="publish-login"><CloudLoginForm config={cloudConfig} onAuthenticated={() => { setOwner(undefined); setIdentityAttempt((attempt) => attempt + 1); }} /></div>
-          : <p className="publish-note">Capture Cloud isn&apos;t available right now.</p>}
+          : <p className="publish-note">{t("Capture Cloud isn't available right now.")}</p>}
         {failure}
       </div>
     );
@@ -180,10 +184,10 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
         {failure}
         <div className="publish-bar publish-bar-sticky">
           <button type="button" className="capture-btn" disabled={busy || threads === null} onClick={publish}>
-            {existing ? "Update" : "Publish"}
+            {existing ? t("Update") : t("Publish")}
           </button>
-          <button type="button" className="ghost" disabled={busy} onClick={discard}>Cancel</button>
-          {existing && <span className="publish-hint">Replaces what&apos;s at your existing link.</span>}
+          <button type="button" className="ghost" disabled={busy} onClick={discard}>{t("Cancel")}</button>
+          {existing && <span className="publish-hint">{t("Replaces what's at your existing link.")}</span>}
         </div>
       </div>
     );
@@ -194,16 +198,16 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
     return (
       <div className="publish-flow">
         <section className="publish-done" aria-live="polite">
-          <h2 className="publish-heading">Published</h2>
+          <h2 className="publish-heading">{t("Published")}</h2>
           <div className="publish-link-row">
-            <input readOnly value={published.url} aria-label="Link" onFocus={(event) => event.currentTarget.select()} />
+            <input readOnly value={published.url} aria-label={t("Link")} onFocus={(event) => event.currentTarget.select()} />
             <button type="button" className="capture-btn" onClick={() => copyLink(published.url)}>
-              {copied === published.url ? "Copied" : "Copy link"}
+              {copied === published.url ? t("Copied") : t("Copy link")}
             </button>
           </div>
-          {copied === `failed:${published.url}` && <p className="publish-note">Couldn&apos;t copy. Select the link above.</p>}
+          {copied === `failed:${published.url}` && <p className="publish-note">{t("Couldn't copy. Select the link above.")}</p>}
         </section>
-        <button type="button" className="publish-quiet" onClick={() => setPublished(null)}>All published threads</button>
+        <button type="button" className="publish-quiet" onClick={() => setPublished(null)}>{t("All published threads")}</button>
       </div>
     );
   }
@@ -211,10 +215,10 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
   // 3. Everything published from this account.
   return (
     <div className="publish-flow">
-      <h2 className="publish-heading">Published</h2>
+      <h2 className="publish-heading">{t("Published")}</h2>
       {failure}
-      {threads === null ? <p className="publish-note">Loading…</p> : threads.length === 0 ? (
-        <p className="publish-note">Nothing yet. Publish a thread from Capture.</p>
+      {threads === null ? <p className="publish-note">{t("Loading…")}</p> : threads.length === 0 ? (
+        <p className="publish-note">{t("Nothing yet. Publish a thread from Capture.")}</p>
       ) : (
         <ul className="publish-list">
           {threads.map((thread) => (
@@ -224,14 +228,14 @@ function PublishFlow({ cloudConfig }: { cloudConfig: CloudConfig | null }) {
               <div className="publish-list-actions">
                 {confirming === thread.token ? (
                   <>
-                    <button type="button" className="ghost warn" disabled={busy} onClick={() => unpublish(thread.token)}>Unpublish</button>
-                    <button type="button" className="ghost" onClick={() => setConfirming(null)}>Keep</button>
-                    <p className="publish-note">The link stops working at once. Copies already saved can&apos;t be recalled.</p>
+                    <button type="button" className="ghost warn" disabled={busy} onClick={() => unpublish(thread.token)}>{t("Unpublish")}</button>
+                    <button type="button" className="ghost" onClick={() => setConfirming(null)}>{t("Keep")}</button>
+                    <p className="publish-note">{t("The link stops working at once. Copies already saved can't be recalled.")}</p>
                   </>
                 ) : (
                   <>
-                    <button type="button" className="ghost" onClick={() => copyLink(thread.url)}>{copied === thread.url ? "Copied" : "Copy link"}</button>
-                    <button type="button" className="ghost" onClick={() => setConfirming(thread.token)}>Unpublish</button>
+                    <button type="button" className="ghost" onClick={() => copyLink(thread.url)}>{copied === thread.url ? t("Copied") : t("Copy link")}</button>
+                    <button type="button" className="ghost" onClick={() => setConfirming(thread.token)}>{t("Unpublish")}</button>
                   </>
                 )}
               </div>
