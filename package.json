@@ -24,7 +24,8 @@
     "setup": "node scripts/setup.mjs",
     "setup:cerebras": "node scripts/setup-cerebras.mjs",
     "setup:openrouter": "node scripts/setup-openrouter.mjs",
-    "probe:credits": "node scripts/probe-credits.mjs"
+    "probe:credits": "node scripts/probe-credits.mjs",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@ai-sdk/cerebras": "^3.0.45",
@@ -48,6 +49,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^20",
     "@types/react": "^19",

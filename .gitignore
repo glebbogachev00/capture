@@ -64,3 +64,8 @@ outputs/
 
 # Supabase CLI link/cache state is machine-local.
 supabase/.temp/
+
+# Playwright
+/test-results/
+/playwright-report/
+/.e2e-data/
