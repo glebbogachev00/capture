@@ -168,3 +168,35 @@ describe("search", () => {
     expect(result.total).toBe(0);
   });
 });
+
+describe("close spellings", () => {
+  const b = board({
+    actions: [action({ id: "dentist", text: "Call the dentist about Tuesday" })],
+    threads: [thread({ id: "music", name: "Murakami", frags: [frag({ id: "m1", text: "Wind-Up Bird Chronicle notes" })] })],
+  });
+
+  it("finds a typo only when nothing matches exactly, and says so", () => {
+    const hits = search(b, "dentsit");
+    expect(hits.actions.map((a) => a.id)).toEqual(["dentist"]);
+    expect(hits.close).toBe(true);
+    expect(search(b, "Murakmi").threads.map((t) => t.thread.id)).toEqual(["music"]);
+    expect(search(b, "chronicel notes").threads[0].frags.map((f) => f.id)).toEqual(["m1"]);
+  });
+
+  it("never mixes close matches into exact results", () => {
+    const hits = search(b, "dentist");
+    expect(hits.close).toBeUndefined();
+    expect(hits.total).toBe(1);
+  });
+
+  it("keeps short words exact and refuses words more than a typo away", () => {
+    expect(search(b, "dentsit cat").total).toBe(0);
+    expect(search(b, "dancing").total).toBe(0);
+    expect(search(b, "dentsit plumber").total).toBe(0);
+  });
+
+  it("reads Russian too", () => {
+    const ru = board({ actions: [action({ id: "ru", text: "Позвонить стоматологу" })] });
+    expect(search(ru, "стамотологу").actions.map((a) => a.id)).toEqual(["ru"]);
+  });
+});
