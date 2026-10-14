@@ -47,6 +47,7 @@ export function DistillView({
   canDictate,
   listening,
   onToggleMic,
+  micProblem,
   onSend,
   onSendText,
   onSettle,
@@ -66,6 +67,7 @@ export function DistillView({
   canDictate: boolean;
   listening: boolean;
   onToggleMic: () => void;
+  micProblem?: string | null;
   onSend: () => void;
   onSendText: (text: string) => void;
   onSettle: () => void;
@@ -274,7 +276,9 @@ export function DistillView({
               </button>
             )}
             <div className="cap-hint">
-              {canDictate
+              {micProblem
+                ? micProblem
+                : canDictate
                 ? t("or tap the mic key on your keyboard")
                 : t("tap the mic key on your keyboard to dictate")}
             </div>

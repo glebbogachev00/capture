@@ -379,7 +379,7 @@ export function Capture() {
      Read through the ref by useRecordedDictation, so the destination is always
      the one that is current when a result lands. Dictation attribution follows
      the draft's transcript when moving between Capture and Distill. */
-  const { canDictate, listening, transcribing, toggleMic } =
+  const { canDictate, listening, transcribing, toggleMic, problem: micProblem, canDiscard, discard } =
     useRecordedDictation((t, raw) => {
     if (distillOpen) {
       setDistillTranscript((x) => appendDictationTranscript(x, t, raw));
@@ -579,6 +579,7 @@ export function Capture() {
             canDictate={canDictate}
             listening={listening}
             onToggleMic={toggleMic}
+            micProblem={micProblem}
             onSend={() => sendDistill()}
             onSendText={(t) => sendDistill(t)}
             onSettle={settleDistill}
@@ -661,6 +662,8 @@ export function Capture() {
             <div className="cap-hint">
               {PLAYGROUND
                 ? null
+                : micProblem && !transcribing
+                  ? <>{micProblem}{canDiscard && <> <button className="cap-hint-discard" onClick={discard}>{t("Discard")}</button></>}</>
                 : transcribing
                   ? t("transcribing…")
                   : listening
