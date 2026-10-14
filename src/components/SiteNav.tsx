@@ -21,7 +21,8 @@ export function SiteNav({
   homeHref = "/",
   loginHref = cloudAccountHandoff(),
 }: {
-  current: SiteSection;
+  /** The section being shown; none on a page that is not one (a 404). */
+  current?: SiteSection;
   homeHref?: string;
   loginHref?: string | null;
 }) {
