@@ -1,4 +1,6 @@
 import { NoProvidersError } from "./providers";
+import { currentOwnTier } from "./ownTier.server";
+import { OWN_KEY_PROVIDER_NAMES } from "./ownAiKey";
 
 /**
  * Turn a model failure into something worth reading.
@@ -70,6 +72,22 @@ export function explain(error: unknown): { message: string; status: number } {
         "No model provider is configured on the server. Add an API key and redeploy.",
       status: 503,
     };
+  }
+
+  /* A member's own key: say so in their terms, never as server setup. */
+  const own = currentOwnTier();
+  if (own) {
+    const ownName = OWN_KEY_PROVIDER_NAMES[own.provider];
+    const { text, status } = unwrap(error);
+    if (status === 401 || status === 403 || text.includes("api key") || text.includes("api_key") || text.includes("unauthenticated")) {
+      return { message: `Your ${ownName} key was refused. Check it in Settings, under Capture Cloud.`, status: 502 };
+    }
+    if (status === 402 || text.includes("payment") || text.includes("billing") || text.includes("credit")) {
+      return { message: `Your ${ownName} account needs credit before it will answer.`, status: 502 };
+    }
+    if (status === 429 || text.includes("rate limit") || text.includes("quota")) {
+      return { message: `${ownName} is rate-limiting your key. Try again shortly.`, status: 429 };
+    }
   }
 
   const via = providerOf(error);

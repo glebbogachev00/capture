@@ -1,6 +1,7 @@
 import "server-only";
 
 import { ownerPrecondition } from "@/lib/ownerPrecondition";
+import type { OwnTier } from "@/lib/ownTier.server";
 
 export type CloudQuotaScope = "managed_ai" | "board_read" | "board_write" | "backup_read" | "publish";
 export type CloudQuotaPolicy = {
@@ -16,6 +17,8 @@ export type CloudAuthorization =
       admissionId?: string;
       releaseExternalWork?: (signal?: AbortSignal) => Promise<void>;
       acquireDeferredManagedAiAdmission?: () => Promise<DeferredManagedAiAdmission | null>;
+      /** The member's own AI key: their provider, no managed allowance. */
+      ownTier?: OwnTier;
     };
 
 
@@ -61,6 +64,7 @@ export async function authorizeCloudRequest(
   request: Request,
   scope: CloudQuotaScope,
   deps: CloudRequestGuardDependencies,
+  ownTier?: OwnTier | null,
 ): Promise<CloudAuthorization | Response> {
   if (!deps.isCloudHost()) return { mode: "non-cloud" };
   if (!deps.isConfigured()) return cloudAuthorizationUnavailable();
@@ -82,6 +86,12 @@ export async function authorizeCloudRequest(
     // their own durable quota; board writes and managed AI keep billing checks.
     if (scope !== "backup_read" && scope !== "publish" && deps.requiresEntitlement() && !await deps.hasEntitlement(identity)) {
       return json({ error: "capture cloud access required" }, 402);
+    }
+
+    /* With their own key a member still needs Cloud, but the AI is theirs:
+       no managed allowance, no managed concurrency slot. */
+    if (scope === "managed_ai" && ownTier) {
+      return { mode: "cloud", ownerId: identity.userId, ownTier };
     }
 
     const quota = await deps.consumeQuota(identity.userId, cloudQuotaPolicy(scope));

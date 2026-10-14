@@ -76,7 +76,8 @@ describe("managed AI route authorization coverage", () => {
       it(`${method} /api/${route} calls the shared guard before body, limiter, or provider work`, () => {
         expect(source).toContain('from "@/lib/cloudRequestGuard.server"');
         const body = handlerBody(source, method);
-        const guard = body.indexOf("await authorizeManagedAiRequest(request)");
+        /* Voice also passes which own keys it accepts. */
+        const guard = body.indexOf("await authorizeManagedAiRequest(request");
         const admission = body.search(/withManagedAiAdmission\(\w+/);
         expect(guard).toBeGreaterThan(0);
         expect(admission).toBeGreaterThan(guard);

@@ -7147,3 +7147,25 @@ body {
   font-size: 11px;
   color: var(--muted);
 }
+
+/* A member's own AI key: one field and its button on a row. */
+.own-key {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+.own-key-row {
+  display: flex;
+  gap: 8px;
+}
+.own-key-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--paper);
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
