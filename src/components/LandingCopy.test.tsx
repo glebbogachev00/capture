@@ -136,7 +136,7 @@ describe("Landing copy within the existing page", () => {
       "capture-head site-head", "site-hero site-hero-split", "site-card site-demo hero-clip", "demo-reel",
       "use-cases", "site-card site-day", "writing", "site-card site-writing", "maker", "site-card site-note",
       "site-card site-problem", "three-kinds", "site-kind-grid", "feature-chapter", "how-to", "site-card site-voice",
-      "ownership", "site-card site-proof",
+      "ownership", "site-card site-proof", "site-footer",
     ]);
     const source = readFileSync("src/app/Landing.tsx", "utf8");
     expect(source).toContain("<LandingMotion />");
