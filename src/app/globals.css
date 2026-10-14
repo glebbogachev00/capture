@@ -2341,7 +2341,6 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin: 0 0 16px;
-  max-width: 460px;
 }
 .record-tile {
   background: var(--card);
@@ -2440,10 +2439,11 @@ body {
 }
 /* The profile is an extension of the heat map, not another page. The title
    survives when collapsed; the chevron is the only control. */
+/* Full column width, like everything else on the page: capped narrower, it
+   stopped short of the right edge on a desktop. */
 .record-profile-stack {
   display: block;
   width: 100%;
-  max-width: 460px;
   margin-bottom: 18px;
 }
 .record-profile-stack .record-frame {
