@@ -682,6 +682,8 @@ export const RU: Record<string, string> = {
   "Thread: {name}": "Тема: {name}",
   "Actions — waiting to be sorted": "Дела — ждут разбора",
   "Split filed": "Разложено по частям",
+  "The microphone is blocked. Allow it for this site in your browser settings.": "Микрофон заблокирован. Разрешите его для этого сайта в настройках браузера.",
+  "Couldn't transcribe. The recording is kept: tap the mic to try again.": "Не удалось распознать. Запись сохранена — нажмите на микрофон, чтобы повторить.",
   "Hub unreachable — kept locally": "Сервер недоступен — сохранено на устройстве",
   "Couldn't save Undo. Nothing was changed.": "Не удалось сохранить отмену. Ничего не изменилось.",
   "Undone — back to how it was.": "Отменено — всё как было.",

@@ -122,6 +122,16 @@ body {
   color: var(--muted);
   line-height: 1.35;
 }
+.cap-hint-discard {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
 .trial-meter {
   display: grid;
   grid-template-columns: minmax(100px, 1fr) auto;
