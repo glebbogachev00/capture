@@ -32,3 +32,18 @@ test.describe("on a Russian phone", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "ru");
   });
 });
+
+test("search finds a note even with a typo, and says the match is close", async ({ page }) => {
+  await page.goto("/app");
+  await page.getByPlaceholder("Say it however it comes out.").fill("Call the dentist about the crown");
+  await page.getByRole("button", { name: "Capture", exact: true }).click();
+  await expect(page.getByText("Saved. Awaiting sorting or placement")).toBeVisible();
+
+  /* An Unsorted capture is not searched; place it as an action first. */
+  await page.getByRole("button", { name: "Choose a place" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Action", exact: true }).click();
+
+  await page.getByRole("searchbox").fill("dentsit");
+  await expect(page.getByText("No exact match — close spellings:")).toBeVisible();
+  await expect(page.getByText("Call the dentist about the crown").first()).toBeVisible();
+});
