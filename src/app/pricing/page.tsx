@@ -185,15 +185,6 @@ export default async function PricingPage({
         </section>
 
         <section className="funding-card supporter-card">
-          <p className="funding-card-label">Supporter program</p>
-          <h2>Optional support. No locked thinking features.</h2>
-          <p>
-            Supporters can give once or recur. They help keep the free system
-            strong. They do not get exclusive thinking features.
-          </p>
-        </section>
-
-        <section className="funding-card supporter-card">
           <p className="funding-card-label">AI use</p>
           <h2>Managed AI should not make thinking feel metered.</h2>
           <p>
