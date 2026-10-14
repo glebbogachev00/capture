@@ -530,6 +530,8 @@ export const RU: Record<string, string> = {
   "See it": "Посмотреть",
   "Done": "Готово",
   "It did this, and I expected…": "Случилось вот что, а я ждал(а)…",
+  "Reports are public on GitHub, so leave out anything private.": "Сообщения публикуются на GitHub — не пишите ничего личного.",
+  "Send it": "Отправить",
   "Caught a bug? Capture it.": "Нашли ошибку? Опишите её.",
   // components/SearchResults.tsx
   "No exact match — close spellings:": "Точных совпадений нет — похожие написания:",

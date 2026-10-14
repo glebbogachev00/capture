@@ -175,6 +175,9 @@ export function sitemapFor(playground: boolean): MetadataRoute.Sitemap {
           changeFrequency: "weekly",
           priority: 0.8,
         },
+        { url: new URL("pricing", SITE_URL).toString(), changeFrequency: "monthly", priority: 0.7 },
+        { url: new URL("privacy", SITE_URL).toString(), changeFrequency: "yearly", priority: 0.3 },
+        { url: new URL("terms", SITE_URL).toString(), changeFrequency: "yearly", priority: 0.3 },
         ...ARTICLES.map((article) => ({
           url: new URL(`writing/${article.slug}`, SITE_URL).toString(),
           lastModified: article.publishedAt,

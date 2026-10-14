@@ -79,7 +79,7 @@ describe("TryCapture search identity", () => {
     expect(sitemapFor(false)).toEqual([]);
   });
 
-  it("lists the public landing, install, writing index, and every article", () => {
+  it("lists the public landing, install, writing index, pricing, privacy, terms, and every article", () => {
     const urls = sitemapFor(true).map((entry) => entry.url);
     expect(urls).toContain(SITE);
     expect(urls).toContain("https://www.trycapture.app/install");
@@ -87,7 +87,10 @@ describe("TryCapture search identity", () => {
     expect(urls).toContain(
       "https://www.trycapture.app/writing/software-i-can-use-while-running"
     );
-    expect(urls).toHaveLength(3 + ARTICLES.length);
+    expect(urls).toContain("https://www.trycapture.app/pricing");
+    expect(urls).toContain("https://www.trycapture.app/privacy");
+    expect(urls).toContain("https://www.trycapture.app/terms");
+    expect(urls).toHaveLength(6 + ARTICLES.length);
   });
 
   it("gives the writing index and each article a canonical search identity", () => {

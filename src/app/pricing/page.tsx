@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiteFooter } from "@/components/SiteFooter";
 import { utilityMetadata } from "@/lib/seo";
 import { CloudCheckoutButton } from "@/components/CloudBilling";
 import { LocaleProvider } from "@/components/LocaleProvider";
@@ -201,6 +202,7 @@ export default async function PricingPage({
             bring their own key and keep going.
           </p>
         </section>
+        <SiteFooter />
       </div>
     </main>
   );

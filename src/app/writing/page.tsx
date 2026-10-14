@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SiteFooter } from "@/components/SiteFooter";
 import { ARTICLES } from "@/content/articles";
 import { SHARED_THREADS } from "@/content/sharedThreads";
 import { PublicThreadCard, SharedThreadCard } from "@/components/PublicThreadArticle";
@@ -76,6 +77,7 @@ export default function WritingPage() {
             .
           </p>
         </section>
+        <SiteFooter />
       </div>
     </main>
   );
