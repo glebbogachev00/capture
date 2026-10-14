@@ -532,6 +532,7 @@ export const RU: Record<string, string> = {
   "It did this, and I expected…": "Случилось вот что, а я ждал(а)…",
   "Caught a bug? Capture it.": "Нашли ошибку? Опишите её.",
   // components/SearchResults.tsx
+  "No exact match — close spellings:": "Точных совпадений нет — похожие написания:",
   "Nothing by that shape.": "Ничего не нашлось.",
   "Search needs every word in one item. For an answer from your whole board, tap Ask.": "Поиск ищет записи, где есть все слова сразу. Чтобы получить ответ по всем записям, нажмите «Спросить».",
   "Actions · {count}": "Дела · {count}",

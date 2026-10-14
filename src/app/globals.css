@@ -7140,3 +7140,10 @@ body {
   overflow: hidden;
   cursor: pointer;
 }
+
+.search-close {
+  margin: 0 0 8px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--muted);
+}

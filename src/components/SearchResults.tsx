@@ -48,6 +48,7 @@ export function SearchResults({
 
   return (
     <div>
+      {hits.close && <p className="search-close">{t("No exact match — close spellings:")}</p>}
       {!!hits.actions.length && (
         <>
           <div className="section-label">{t("Actions · {count}", { count: hits.actions.length })}</div>
