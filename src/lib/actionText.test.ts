@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptNamed, acceptTasks, isRunOnAction, pointsBack, splitActions } from "./actionText";
+import { acceptInContext, acceptNamed, acceptTasks, isRunOnAction, needsContext, placeInContext, pointsBack, splitActions } from "./actionText";
 import type { SimpleSortItem } from "./simpleSort";
 
 const runOn = "Create a Retake account on mail.com using my Apple account, set up Facebook integration, configure automation, and assign a specific personality and content type.";
@@ -104,3 +104,67 @@ describe("Russian actions that lean on their capture", () => {
   });
 });
 
+
+describe("several actions from one capture", () => {
+  const note = "Post an article on X about running and another one about manifestation, using the Transurfing book as a reference";
+  const items = ["Post an article on X about running", "Post another one about manifestation", "Use the Transurfing book as a reference"];
+
+  it("is sent only with two or more new actions", () => {
+    const action = (text: string, extra: Partial<SimpleSortItem> = {}): SimpleSortItem => ({ kind: "action", text, ...extra });
+    expect(needsContext([action("A b"), action("C d")])).toBe(true);
+    expect(needsContext([action("A b"), action("C d", { existingActionId: "a1" })])).toBe(false);
+    expect(needsContext([action("A b"), { kind: "thought", text: "x", threads: [{ id: "t" }] }])).toBe(false);
+  });
+
+  it("accepts lines in the note's own words that each stand alone", () => {
+    expect(acceptInContext(note, items, [
+      { text: "Post an article on X about running", from: [1] },
+      { text: "post an article on X about manifestation using the Transurfing book.", from: [2, 3] },
+    ])).toEqual([
+      { text: "Post an article on X about running", from: [0] },
+      { text: "Post an article on X about manifestation using the Transurfing book", from: [1, 2] },
+    ]);
+  });
+
+  it("refuses invented words, more lines than before, long lines, or losing most of the list", () => {
+    expect(acceptInContext(note, items, [{ text: "Post a thread on Instagram about running", from: [1] }])).toBeNull();
+    expect(acceptInContext(note, items.slice(0, 2), [
+      { text: "Post about running", from: [1] }, { text: "Post about manifestation", from: [2] }, { text: "Post on X", from: [1] },
+    ])).toBeNull();
+    expect(acceptInContext(note, items, [{ text: note, from: [1, 2, 3] }])).toBeNull();
+    expect(acceptInContext(note, items, [{ text: "Post an article on X about running", from: [1] }])).toBeNull();
+    expect(acceptInContext(note, items, [{ text: "Post an article on X about running", from: [7] }])).toBeNull();
+  });
+
+  it("refuses an answer that quietly loses an item, but takes one it names as dropped", () => {
+    const two = ["Create video of Wien's recent project", "Create video introducing Startup Foundation"];
+    const wien = "Create video of Wien's recent project and also create a video for introducing Startup Foundation";
+    expect(acceptInContext(wien, two, [{ text: "Create video introducing Startup Foundation", from: [2] }])).toBeNull();
+    expect(acceptInContext("Publish it. Let's find.", ["Publish the posts", "Find the third thing"],
+      [{ text: "Publish the posts", from: [1] }], [2])).toEqual([{ text: "Publish the posts", from: [0] }]);
+  });
+
+  it("allows a spelling fix and a possessive of the note's own words", () => {
+    expect(acceptInContext("Write a post about Intetion on X and use the Transurfing book", ["Write a post about Intetion on X", "Use the Transurfing book"],
+      [{ text: "Write a post about Intention on X using the Transurfing book", from: [1, 2] }]))
+      .toEqual([{ text: "Write a post about Intention on X using the Transurfing book", from: [0, 1] }]);
+    expect(acceptInContext("Post for TechTutor on Facebook and record student programs", ["Post on Facebook", "Record student programs"],
+      [{ text: "Post on TechTutor's Facebook", from: [1] }, { text: "Record student programs", from: [2] }])).not.toBeNull();
+  });
+
+  it("puts the rewritten actions where the first stood, with their due dates", () => {
+    const thought: SimpleSortItem = { kind: "thought", text: "Context.", threads: [{ id: "t" }] };
+    const repeat: SimpleSortItem = { kind: "action", text: "Email Mia", existingActionId: "a1" };
+    const first: SimpleSortItem = { kind: "action", text: "Post about running", due: "2026-10-16" };
+    const second: SimpleSortItem = { kind: "action", text: "Post about manifestation" };
+    expect(placeInContext([thought, first, repeat, second], [
+      { text: "Post on X about running", from: [0] },
+      { text: "Post on X about manifestation", from: [1] },
+    ])).toEqual([
+      thought,
+      { kind: "action", text: "Post on X about running", due: "2026-10-16" },
+      { kind: "action", text: "Post on X about manifestation" },
+      repeat,
+    ]);
+  });
+});
