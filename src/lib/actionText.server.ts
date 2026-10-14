@@ -2,20 +2,51 @@ import "server-only";
 
 import { generateObject } from "ai";
 import {
-  NAME_IT_SYSTEM, NameItSchema, SPLIT_ACTION_SYSTEM, SplitActionSchema, acceptNamed, acceptTasks, isRunOnAction, pointsBack, splitActions,
+  IN_CONTEXT_SYSTEM, InContextSchema, NAME_IT_SYSTEM, NameItSchema, SPLIT_ACTION_SYSTEM, SplitActionSchema,
+  acceptInContext, acceptNamed, acceptTasks, inContextPrompt, isRunOnAction, needsContext, placeInContext, pointsBack, splitActions,
 } from "./actionText";
 import type { SimpleSortItem } from "./simpleSort";
 import type { Tier } from "./providers";
 
 /** Only run-on actions are sent, one small call each; anything that fails or
- * does not pass acceptTasks stays exactly as the sorter wrote it. Then an
- * action that ends on "it" gets one small call to say what "it" is. */
+ * does not pass acceptTasks stays exactly as the sorter wrote it. Several
+ * actions from one capture are then rewritten to stand alone, in one call.
+ * Last, an action that ends on "it" gets one small call to say what "it" is. */
 export async function tightenActions(
   items: SimpleSortItem[],
   { tier, abortSignal, raw }: { tier: Tier; abortSignal?: AbortSignal; raw?: string },
 ): Promise<SimpleSortItem[]> {
   const split = await splitRunOns(items, { tier, abortSignal });
-  return raw ? nameWhatItIs(split, { tier, abortSignal, raw }) : split;
+  if (!raw) return split;
+  return nameWhatItIs(await inContext(split, { tier, abortSignal, raw }), { tier, abortSignal, raw });
+}
+
+async function inContext(
+  items: SimpleSortItem[],
+  { tier, abortSignal, raw }: { tier: Tier; abortSignal?: AbortSignal; raw: string },
+): Promise<SimpleSortItem[]> {
+  if (!needsContext(items)) return items;
+  const texts = items.filter((item) => item.kind === "action" && !item.existingActionId).map((item) => item.text);
+  try {
+    const common = {
+      model: tier.model,
+      system: IN_CONTEXT_SYSTEM,
+      prompt: inContextPrompt(raw, texts),
+      providerOptions: tier.providerOptions,
+      maxOutputTokens: 2_000,
+      temperature: 0,
+      maxRetries: 0 as const,
+      abortSignal,
+    };
+    const answer = tier.name === "cerebras"
+      ? (await generateObject({ ...common, output: "no-schema" })).object
+      : (await generateObject({ ...common, schema: InContextSchema })).object;
+    const parsed = InContextSchema.safeParse(answer);
+    const tasks = parsed.success ? acceptInContext(raw, texts, parsed.data.tasks, parsed.data.dropped) : null;
+    return tasks ? placeInContext(items, tasks) : items;
+  } catch {
+    return items; /* Keep the actions as written. */
+  }
 }
 
 async function splitRunOns(

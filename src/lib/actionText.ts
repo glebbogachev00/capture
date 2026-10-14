@@ -27,9 +27,11 @@ const words = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? 
 /* Word forms count as the same word: methods/method, selecting/select, enabling/enable, weekly/week.
    Russian changes its endings far more (выставку/выставке, новую/новой), so a
    Russian word is matched on its first three letters. */
-const stem = (word: string) => /[\u0400-\u04ff]/.test(word)
-  ? word.replace(/ё/g, "е").slice(0, 3)
-  : word.length > 4 ? word.replace(/(ing|ed|es|ly|s)$/, "").replace(/e$/, "") : word;
+const stem = (word: string) => {
+  if (/[\u0400-\u04ff]/.test(word)) return word.replace(/ё/g, "е").slice(0, 3);
+  const bare = word.replace(/['’]s$/, "");
+  return bare.length > 4 ? bare.replace(/(ing|ed|es|ly|s)$/, "").replace(/e$/, "") : bare.replace(/(?<=..)e$/, "");
+};
 const SMALL = new Set([
   "a", "an", "the", "and", "or", "to", "for", "of", "on", "in", "with", "my", "it", "its", "be", "is",
   "и", "в", "во", "на", "с", "со", "к", "ко", "по", "для", "о", "об", "у", "из", "от", "до", "за", "а", "мой", "моя", "мои",
@@ -96,4 +98,105 @@ export function splitActions(
     if (item.existingActionId) return [{ ...item, text: tasks[0] }];
     return tasks.map((text) => ({ kind: "action" as const, text, ...(item.due ? { due: item.due } : {}) }));
   });
+}
+
+/* Several actions from one capture are read one at a time on a list, but the
+   sorter writes them as a set: context said once ("on X", "for TechBash")
+   stays on the first line, a detail ("use the book as a reference") becomes a
+   line of its own, and a task said twice is listed twice. One small call
+   rewrites the set so each line stands alone. */
+export const needsContext = (items: SimpleSortItem[]) =>
+  items.filter((item) => item.kind === "action" && !item.existingActionId).length >= 2;
+
+export const IN_CONTEXT_SYSTEM =
+  "These to-do items were written from the note below. Each will be read on its own on a list, " +
+  "without the note. Rewrite them so each one stands alone:\n" +
+  "- Context the note gives once (where, for which project, about what) goes into every item it " +
+  "applies to: \"Post an article on X about running\" and \"Post an article on X about manifestation\".\n" +
+  "- An item that only adds a detail to another item (a reference to use, who to include) is " +
+  "folded into that item.\n" +
+  "- Two items that are the same task become one.\n" +
+  "- An item that is not a task still to do (already done, or a filler phrase) is dropped.\n" +
+  "Never add a task, and never drop a real one. Use the note's own words, in the note's language; " +
+  "each item is a short imperative of at most twelve words. Return JSON: {\"tasks\": [{\"text\": " +
+  "string, \"from\": number[]}], \"dropped\": number[]}: from lists the numbers of the items each " +
+  "task came from, and dropped the numbers of the items left out. Every number appears once.";
+
+export const InContextSchema = z.object({
+  tasks: z.array(z.object({ text: z.string(), from: z.array(z.number()) })).min(1).max(12),
+  dropped: z.array(z.number()),
+});
+
+export const inContextPrompt = (note: string, items: string[]) =>
+  `Note: ${note}\n\nItems:\n${items.map((text, index) => `${index + 1}. ${text}`).join("\n")}`;
+
+/** The rewritten set may only use the note's words (or a spelling fix of
+ * one), each line short, never more lines than before. Every item must be
+ * accounted for, kept or named as dropped, and at most half are dropped;
+ * otherwise the actions stay as the sorter wrote them. */
+export function acceptInContext(
+  note: string,
+  items: string[],
+  tasks: { text: string; from: number[] }[],
+  dropped: number[] = [],
+): { text: string; from: number[] }[] | null {
+  if (!tasks.length || tasks.length > items.length) return null;
+  const source = new Set([...words(note), ...items.flatMap(words)].map(stem));
+  const known = (word: string) => SMALL.has(word) || source.has(stem(word)) || spelledLike(word, source);
+  const kept = new Set<number>();
+  const out: { text: string; from: number[] }[] = [];
+  for (const task of tasks) {
+    const clean = task.text.trim().replace(/\s+/g, " ").replace(/\.+$/, "");
+    const own = words(clean);
+    if (own.length < 2 || own.length > ACTION_WORD_LIMIT) return null;
+    if (!own.every(known)) return null;
+    const from = [...new Set(task.from.map((n) => n - 1))].filter((index) => Number.isInteger(index) && index >= 0 && index < items.length);
+    if (!from.length) return null;
+    from.forEach((index) => kept.add(index));
+    out.push({ text: clean.charAt(0).toUpperCase() + clean.slice(1), from });
+  }
+  const left = new Set(dropped.map((n) => n - 1));
+  if (!items.every((_, index) => kept.has(index) || left.has(index))) return null;
+  return kept.size * 2 >= items.length ? out : null;
+}
+
+/* "Intention" for a typed "Intetion": a word of five letters or more, one or
+   two letters off a word the note has, starting with the same letter. */
+function spelledLike(word: string, source: Set<string>): boolean {
+  if (word.length < 5) return false;
+  for (const known of source) {
+    if (known[0] !== word[0] || Math.abs(known.length - word.length) > 2 || known.length < 4) continue;
+    if (distance(stem(word), known) <= 2) return true;
+  }
+  return false;
+}
+
+function distance(a: string, b: string): number {
+  let row = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) {
+      next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    row = next;
+  }
+  return row[b.length];
+}
+
+/** Put the rewritten actions where the first one stood. Each keeps the due
+ * date of the first item it came from that had one; a repeat of an existing
+ * action was never sent and stays as it is. */
+export function placeInContext(
+  items: SimpleSortItem[],
+  tasks: { text: string; from: number[] }[],
+): SimpleSortItem[] {
+  const sent = items.filter((item) => item.kind === "action" && !item.existingActionId);
+  const rewritten: SimpleSortItem[] = tasks.map((task) => {
+    const due = task.from.map((index) => sent[index]?.due).find(Boolean);
+    return { kind: "action", text: task.text, ...(due ? { due } : {}) };
+  });
+  const at = items.indexOf(sent[0]);
+  const rest = items.filter((item) => !sent.includes(item));
+  const before = items.slice(0, at).filter((item) => !sent.includes(item)).length;
+  return [...rest.slice(0, before), ...rewritten, ...rest.slice(before)];
 }
