@@ -205,6 +205,30 @@ describe("Your voice", () => {
     expect(body.words).toBeGreaterThanOrEqual(5_000);
     expect(body.recurring).toEqual(["Capture."]);
     expect(onProfileChange.mock.calls[0][0]({ name: "Gleb" })).toEqual({ name: "Gleb", voice });
+    await waitFor(() => expect(localStorage.getItem("capture:voice:next")).toBe("0"));
+  });
+
+  it("asks again on the next visit when a reading was cut off, but waits hours after one that failed", async () => {
+    const next = () => Number(localStorage.getItem("capture:voice:next"));
+    const view = (fetchMock: typeof fetch) => {
+      vi.stubGlobal("fetch", fetchMock);
+      return render(<CaptureProfile threads={threads} onOpenThread={() => {}} defaults={{ name: "Gleb", image: "" }}
+        profile={{ name: "Gleb" }} onProfileChange={vi.fn().mockResolvedValue(undefined)} ledger={spoken(200)} />);
+    };
+    const cutOff = vi.fn<typeof fetch>(async () => { throw new TypeError("network connection was lost"); });
+    view(cutOff).unmount();
+    await waitFor(() => expect(cutOff).toHaveBeenCalledTimes(1));
+    expect(next() - Date.now()).toBeLessThanOrEqual(3 * 60_000);
+    /* While that reading could still be running, another visit does not start a second. */
+    const meanwhile = vi.fn<typeof fetch>();
+    view(meanwhile).unmount();
+    expect(meanwhile).not.toHaveBeenCalled();
+    /* Once its time is up, the next visit asks again. */
+    localStorage.setItem("capture:voice:next", String(Date.now() - 1));
+    const failed = vi.fn<typeof fetch>(async () => Response.json({ error: "no" }, { status: 502 }));
+    view(failed);
+    await waitFor(() => expect(next() - Date.now()).toBeGreaterThan(5 * 60 * 60_000));
+    expect(failed).toHaveBeenCalledTimes(1);
   });
 
   it("does not ask before there is enough to hear", async () => {

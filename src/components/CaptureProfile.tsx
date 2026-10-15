@@ -23,9 +23,18 @@ import { ownedFetch } from "@/lib/ownership";
 import type { CaptureEntry } from "@/lib/ledger";
 import { spokenNotes, spokenWords, voiceDue, voiceSample } from "@/lib/voice";
 
-/* A reading that failed waits before this device tries again. */
-const VOICE_RETRY_MS = 6 * 60 * 60_000;
-const VOICE_TRIED_KEY = "capture:voice:tried";
+/* When this device may ask for a reading again. A reading takes about
+   twenty seconds; one cut off (the page closed, the server restarted) is
+   asked again on the next visit once its own time is up. Only an answer that
+   says it failed waits hours. */
+const VOICE_RUNNING_MS = 3 * 60_000;
+const VOICE_FAILED_MS = 6 * 60 * 60_000;
+const VOICE_NEXT_KEY = "capture:voice:next";
+const voiceWaitUntil = (until: number) => {
+  try {
+    window.localStorage.setItem(VOICE_NEXT_KEY, String(until));
+  } catch { /* storage unavailable: this visit only */ }
+};
 
 /** Read how this person talks when there is enough and it is due, then keep
  * it on the profile. Quiet: nothing shows until a reading exists. */
@@ -42,10 +51,9 @@ function useVoiceReading(
     const words = spokenWords(notes);
     if (!voiceDue(profile?.voice, words)) return;
     try {
-      const tried = Number(window.localStorage.getItem(VOICE_TRIED_KEY) || 0);
-      if (Date.now() - tried < VOICE_RETRY_MS) return;
-      window.localStorage.setItem(VOICE_TRIED_KEY, String(Date.now()));
+      if (Date.now() < Number(window.localStorage.getItem(VOICE_NEXT_KEY) || 0)) return;
     } catch { /* storage unavailable: try once this visit */ }
+    voiceWaitUntil(Date.now() + VOICE_RUNNING_MS);
     started.current = true;
     void ownedFetch("/api/voice", {
       method: "POST",
@@ -53,11 +61,12 @@ function useVoiceReading(
       body: JSON.stringify({ sample: voiceSample(notes), words, recurring: recurring.map((thread) => thread.name) }),
     })
       .then(async (response) => {
-        if (!response.ok) return;
-        const { voice } = (await response.json()) as { voice?: ProfileIdentity["voice"] };
-        if (voice) await onProfileChange((current) => ({ ...current, voice }));
+        const { voice } = response.ok ? ((await response.json()) as { voice?: ProfileIdentity["voice"] }) : {};
+        if (!voice) return voiceWaitUntil(Date.now() + VOICE_FAILED_MS);
+        await onProfileChange((current) => ({ ...current, voice }));
+        voiceWaitUntil(0);
       })
-      .catch(() => { /* the next visit after the wait tries again */ });
+      .catch(() => { /* cut off: the next visit asks again once its time is up */ });
   }, [ledger, recurring, profile?.voice, onProfileChange]);
 }
 
