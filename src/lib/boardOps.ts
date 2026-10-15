@@ -49,7 +49,21 @@ export type SortResult = {
     | null;
   /** Which model tier sorted it — recorded in the capture ledger. */
   via?: string;
+  /** One sentence describing each attached photo, in attachment order. */
+  photoNotes?: string[] | null;
 };
+
+const withNotes = (imgIds: string[], out: SortResult) => {
+  const imgNotes = photoNotesFor(imgIds, out.photoNotes);
+  return imgNotes ? { imgNotes } : {};
+};
+
+/** Each photo's description by its id, or nothing when there are none. */
+export function photoNotesFor(imgIds: string[], notes: string[] | null | undefined): Record<string, string> | undefined {
+  if (!notes?.length || notes.length !== imgIds.length) return undefined;
+  const pairs = imgIds.map((id, index) => [id, notes[index]?.trim().slice(0, 400) ?? ""] as const).filter(([, note]) => note);
+  return pairs.length ? Object.fromEntries(pairs) : undefined;
+}
 
 /** What a capture just landed as — the thing a suggestion would act on. */
 export type LandedSource = {
@@ -201,7 +215,7 @@ function applyPrimary(
        capture opens one, because a screenshot with no home is a screenshot
        you will never see again. */
     const shotFrag: Frag | null = imgIds.length
-      ? { id: uid(), at, text: out.clean, imgs: imgIds }
+      ? { id: uid(), at, text: out.clean, imgs: imgIds, ...withNotes(imgIds, out) }
       : null;
     const shotHome = shotFrag
       ? board.threads.find((x) => x.id === out.threadId)
@@ -299,7 +313,7 @@ function applyPrimary(
       due,
       expires: expiryFor(span, due, stamp()),
     }));
-    const bothFrag: Frag = { id: uid(), at, text: thinking, imgs: imgIds };
+    const bothFrag: Frag = { id: uid(), at, text: thinking, imgs: imgIds, ...withNotes(imgIds, out) };
     const home = board.threads.find((x) => x.id === out.threadId);
     const threads = home
       ? board.threads.map((x) =>
@@ -344,7 +358,7 @@ function applyPrimary(
     };
   }
 
-  const frag: Frag = { id: uid(), at, text: thinking, imgs: imgIds };
+  const frag: Frag = { id: uid(), at, text: thinking, imgs: imgIds, ...withNotes(imgIds, out) };
   const existing = board.threads.find((x) => x.id === out.threadId);
   if (existing) {
     return {

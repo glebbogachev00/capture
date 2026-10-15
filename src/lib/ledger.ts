@@ -89,6 +89,8 @@ export type CaptureEntry = {
       the evidence, so a bad transcription can never be the only record. */
   transcript?: string;
   imgs?: string[];
+  /** One sentence describing each photo, by image id. */
+  imgNotes?: Record<string, string>;
   /** Explicit Thread context selected when the capture was saved. */
   openThreadId?: string;
   /** Shared by every entry one capture wrote.

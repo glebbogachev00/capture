@@ -140,6 +140,8 @@ export type SortedFacts = {
   at: number;
   dictated: boolean;
   imgIds: string[];
+  /** One sentence describing each photo, by image id. */
+  imgNotes?: Record<string, string>;
   transcript?: string;
   captureId: string;
   kind: "action" | "thread" | "intention" | "both";
@@ -175,6 +177,7 @@ export function recordSortedCapture(
     modelVia: f.via,
     transcript: f.transcript || undefined,
     imgs: f.imgIds.length ? f.imgIds : undefined,
+    ...(f.imgNotes ? { imgNotes: f.imgNotes } : {}),
   });
   for (const piece of f.also) {
     next = withLedger(next, {

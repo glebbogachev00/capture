@@ -93,6 +93,9 @@ export type Frag = {
   at: number;
   text: string;
   imgs?: string[];
+  /** One sentence describing a photo, by image id, written when it was
+      sorted. Shares carry these instead of the photos' bytes. */
+  imgNotes?: Record<string, string>;
   /** As above: saved verbatim, never cleaned up. */
   unsorted?: boolean;
   /** The note asked for something and the board's later notes say it

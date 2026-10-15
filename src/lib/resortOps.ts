@@ -2,7 +2,7 @@ import type { CaptureOrigin, SaveDraftInput } from "./intentionOps";
 import type { CaptureEntry } from "./ledger";
 import { sourceOf } from "./ledger";
 import type { Action, Board, Principle } from "./model";
-import { applySorted, type Applied, type SortResult } from "./boardOps";
+import { applySorted, photoNotesFor, type Applied, type SortResult } from "./boardOps";
 import type { SortKind } from "./refiled";
 import { semanticSortContext } from "./sortContext";
 import { recordSortedCapture } from "./settle";
@@ -202,6 +202,7 @@ export function recordResortedCapture(
       at: pending?.at ?? action.at,
       dictated: pending?.source === "dictated",
       imgIds: action.imgs || [],
+      imgNotes: photoNotesFor(action.imgs || [], out.photoNotes),
       transcript: pending?.transcript,
       captureId: pending?.captureId ?? pending?.id ?? mkId(),
       kind: out.kind,

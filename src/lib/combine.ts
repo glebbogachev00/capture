@@ -135,13 +135,16 @@ export function applyCombine(board: Board, proposals: CombineProposal[], now: nu
     const keep = p.frags[p.frags.length - 1];
     const gone = new Set(p.frags.slice(0, -1).map((f) => f.id));
     const imgs = [...new Set(p.frags.flatMap((f) => f.imgs ?? []))];
+    /* The photos' descriptions come along with the photos. */
+    const imgNotes = Object.assign({}, ...p.frags.map((f) => f.imgNotes ?? {})) as Record<string, string>;
     next = {
       ...next,
       threads: next.threads.map((x) => x.id !== t.id ? x : {
         ...x,
         updatedAt: now,
         frags: x.frags.filter((f) => !gone.has(f.id)).map((f) => f.id !== keep.id ? f : {
-          ...f, text: p.combined, ...(imgs.length ? { imgs } : {}), updatedAt: now,
+          ...f, text: p.combined, ...(imgs.length ? { imgs } : {}),
+          ...(Object.keys(imgNotes).length ? { imgNotes } : {}), updatedAt: now,
         }),
       }),
       actions: next.actions.map((a) => a.shot && gone.has(a.shot.fragId)
