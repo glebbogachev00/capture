@@ -2,14 +2,17 @@
 
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { KEY_PROVIDERS, type AiConnection, type KeyProvider } from "@/lib/aiProviders";
+import {
+  KEY_PROVIDERS, SUBSCRIPTIONS, providerName,
+  type AiConnection, type AiSettingsView, type KeyProvider, type SubscriptionProvider,
+} from "@/lib/aiProviders";
 import { t } from "@/lib/i18n";
 import { uid } from "@/lib/model";
 import { clearLegacyOwnKey, readLegacyOwnKey } from "@/lib/ownAiKey";
 import { getDocumentLifetime, ownedFetch as fetch } from "@/lib/ownership";
 
-type View = { mode: "local" | "cloud"; connections: AiConnection[] };
-type Row = { id: string; model: string; key?: string };
+type View = AiSettingsView & { mode: "local" | "cloud" };
+type Row = { id: string; model: string; key?: string; provider?: SubscriptionProvider };
 type State = "loading" | "ready" | "needs-cloud" | "signed-out" | "unavailable";
 
 const json = { "content-type": "application/json" };
@@ -33,7 +36,8 @@ export function AiModels({ onCount }: { onCount?: (count: number) => void }) {
     if (count !== undefined) onCount?.(count);
   }, [count, onCount]);
 
-  const apply = (next: View) => setView(next);
+  /* A save answers with the list only; the Mac's subscriptions stay as last checked. */
+  const apply = (next: View) => setView((current) => ({ ...next, subscriptions: next.subscriptions ?? current?.subscriptions }));
 
   const save = async (rows: Row[]) => {
     const response = await fetch("/api/ai-settings", { method: "PUT", headers: json, body: JSON.stringify({ connections: rows }) });
@@ -42,6 +46,11 @@ export function AiModels({ onCount }: { onCount?: (count: number) => void }) {
   };
 
   const rowsOf = (connections: AiConnection[]): Row[] => connections.map(({ id, model }) => ({ id, model }));
+
+  const refresh = async () => {
+    const response = await fetch("/api/ai-settings");
+    if (response.ok) apply(await response.json());
+  };
 
   useEffect(() => {
     let stopped = false;
@@ -116,6 +125,9 @@ export function AiModels({ onCount }: { onCount?: (count: number) => void }) {
 
   const remove = (id: string) => run(() => save(rowsOf(view!.connections).filter((row) => row.id !== id)));
 
+  const addSubscription = (provider: SubscriptionProvider) =>
+    run(() => save([...rowsOf(view!.connections), { id: uid(), provider, model: SUBSCRIPTIONS[provider].defaultModel }]));
+
   const commitModel = (id: string) => {
     const model = editing[id]?.trim();
     setEditing((current) => {
@@ -152,11 +164,11 @@ export function AiModels({ onCount }: { onCount?: (count: number) => void }) {
       {!!view.connections.length && (
         <ol className="ai-model-list">
           {view.connections.map((row, index) => {
-            const name = KEY_PROVIDERS[row.provider].name;
+            const name = providerName(row.provider);
             return (
               <li key={row.id} className="ai-model-row">
                 <span className="ai-model-name">
-                  {name} <small>…{row.hint}</small>
+                  {name} {row.hint && <small>…{row.hint}</small>}
                 </span>
                 <input
                   className="ai-model-pick"
@@ -187,6 +199,39 @@ export function AiModels({ onCount }: { onCount?: (count: number) => void }) {
             );
           })}
         </ol>
+      )}
+      {view.subscriptions && (
+        <div className="ai-subscriptions">
+          {(Object.keys(view.subscriptions) as SubscriptionProvider[])
+            .filter((provider) => !view.connections.some((row) => row.provider === provider))
+            .map((provider) => {
+              const status = view.subscriptions![provider];
+              const { name, signIn } = SUBSCRIPTIONS[provider];
+              return (
+                <div key={provider} className="ai-subscription">
+                  <span className="ai-model-name">{name}</span>
+                  {status.signedIn ? (
+                    <>
+                      <span className="settings-copy">
+                        {status.plan ? t("Signed in on this Mac ({plan}).", { plan: status.plan }) : t("Signed in on this Mac.")}{" "}
+                        {t("Used for summaries, Tidy and other background work; sorting, Ask and Distill stay on faster AI.")}
+                      </span>
+                      <button className="ghost" disabled={busy} onClick={() => void addSubscription(provider)}>{t("Add")}</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="settings-copy">
+                        {status.installed
+                          ? t("Not signed in. On this Mac, run {command} in Terminal, then check again.", { command: signIn })
+                          : t("Its app isn't installed on this Mac.")}
+                      </span>
+                      {status.installed && <button className="ghost" disabled={busy} onClick={() => void run(refresh)}>{t("Check again")}</button>}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+        </div>
       )}
       <div className="own-key-row">
         <input

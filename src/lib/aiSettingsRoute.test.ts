@@ -2,6 +2,14 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/subscriptions.server", () => ({
+  subscriptionStatus: async () => ({
+    "claude-subscription": { installed: true, signedIn: true, plan: "pro" },
+    "chatgpt-subscription": { installed: true, signedIn: false },
+  }),
+  subscriptionModel: () => ({}),
+}));
 import { GET, PUT } from "@/app/api/ai-settings/route";
 
 const CLAUDE = "sk-ant-api03-" + "b".repeat(40);
@@ -13,7 +21,10 @@ beforeEach(() => vi.stubEnv("SYNC_DATA_DIR", mkdtempSync(path.join(tmpdir(), "ca
 afterEach(() => vi.unstubAllEnvs());
 
 it("adds keys, never returns them, and keeps the order it is given", async () => {
-  expect(await get()).toEqual({ mode: "local", connections: [] });
+  expect(await get()).toEqual({ mode: "local", connections: [], subscriptions: {
+    "claude-subscription": { installed: true, signedIn: true, plan: "pro" },
+    "chatgpt-subscription": { installed: true, signedIn: false },
+  } });
   expect((await put([{ id: "one", model: "claude-haiku-5-5", key: CLAUDE }, { id: "two", model: "openai/gpt-oss-120b", key: GROQ }])).status).toBe(200);
   const body = await get();
   expect(JSON.stringify(body)).not.toContain(CLAUDE);
@@ -32,4 +43,11 @@ it("refuses rows it cannot trust", async () => {
   expect((await put([{ id: "one", model: "bad model name!", key: GROQ }])).status).toBe(400);
   expect((await put("nope")).status).toBe(400);
   expect((await get()).connections).toEqual([]);
+});
+
+it("adds a subscription on a self-hosted Capture, with no key", async () => {
+  expect((await put([{ id: "sub", provider: "claude-subscription", model: "claude-haiku-5-5" }])).status).toBe(200);
+  expect((await get()).connections).toEqual([{ id: "sub", provider: "claude-subscription", model: "claude-haiku-5-5", hint: "" }]);
+  expect((await put([{ id: "sub", model: "claude-sonnet-5-5" }])).status).toBe(200);
+  expect((await get()).connections[0].model).toBe("claude-sonnet-5-5");
 });

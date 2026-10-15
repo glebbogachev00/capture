@@ -17,6 +17,7 @@ import { createCloudServerClient } from "@/lib/supabase/server";
 import { hasCurrentCloudAccess } from "@/lib/cloudAccess.server";
 import { withOwnAi, type OwnAi, type OwnTier } from "@/lib/ownTier.server";
 import { cloudKeysAvailable, loadAiSettings, tiersFor } from "@/lib/aiSettings.server";
+import { isSubscription } from "@/lib/aiProviders";
 import { PUBLIC_SITE } from "@/lib/publicSite";
 
 export type CloudServerClient = Awaited<ReturnType<typeof createCloudServerClient>>;
@@ -123,6 +124,10 @@ export async function createCloudGuardServerContext(): Promise<CloudGuardServerC
     },
   };
 }
+
+/** For routes a person waits on (sorting, Ask, Distill): a subscription's
+ * app takes 10–35 seconds an answer, so those routes skip it. */
+export const liveAi = (tier: OwnTier) => !isSubscription(tier.provider);
 
 /** The AI a person connected that this route can use, or null. */
 async function ownAiFor(ownerId: string | null, accepts: (tier: OwnTier) => boolean, fallback: boolean): Promise<OwnAi | null> {

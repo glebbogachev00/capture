@@ -1,7 +1,7 @@
 import "server-only";
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { KeyProvider } from "@/lib/aiProviders";
+import type { AiProvider } from "@/lib/aiProviders";
 import type { Tier } from "@/lib/providers";
 
 /**
@@ -10,7 +10,7 @@ import type { Tier } from "@/lib/providers";
  * its own providers behind them as a safety net; Capture Cloud does not, so
  * a member's own AI never draws on the managed allowance.
  */
-export type OwnTier = Tier & { provider: KeyProvider; apiKey: string };
+export type OwnTier = Tier & { provider: AiProvider; apiKey: string };
 export type OwnAi = { tiers: OwnTier[]; fallback: boolean };
 
 const ownAi = new AsyncLocalStorage<OwnAi>();

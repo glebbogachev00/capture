@@ -1,6 +1,7 @@
-import { isKeyProvider, providerOfKey, validModel } from "@/lib/aiProviders";
+import { isKeyProvider, isSubscription, providerOfKey, validModel } from "@/lib/aiProviders";
 import { loadAiSettings, saveAiSettings, viewOf, type StoredConnection } from "@/lib/aiSettings.server";
 import { authorizeAiSettingsRequest } from "@/lib/cloudRequestGuard.server";
+import { subscriptionStatus } from "@/lib/subscriptions.server";
 
 /**
  * The AI a person connected: read as a list without keys, and replaced as a
@@ -15,7 +16,10 @@ export async function GET(request: Request) {
   const who = await authorizeAiSettingsRequest(request);
   if (who instanceof Response) return who;
   try {
-    return Response.json({ mode: mode(), ...viewOf(await loadAiSettings(who.ownerId)) }, { headers });
+    const view = viewOf(await loadAiSettings(who.ownerId));
+    /* Subscriptions are the Mac's own apps: a self-hosted Capture only. */
+    const subscriptions = who.ownerId === null ? await subscriptionStatus() : undefined;
+    return Response.json({ mode: mode(), ...view, ...(subscriptions ? { subscriptions } : {}) }, { headers });
   } catch {
     return Response.json({ error: "ai settings unavailable" }, { status: 503, headers });
   }
@@ -32,7 +36,7 @@ export async function PUT(request: Request) {
     const stored = new Map((await loadAiSettings(who.ownerId)).connections.map((row) => [row.id, row]));
     const next: StoredConnection[] = [];
     for (const row of rows) {
-      const { id, model, key } = (row ?? {}) as Record<string, unknown>;
+      const { id, model, key, provider } = (row ?? {}) as Record<string, unknown>;
       if (typeof id !== "string" || !/^[\w-]{1,40}$/.test(id) || !validModel(model)) {
         return Response.json({ error: "bad request" }, { status: 400, headers });
       }
@@ -43,7 +47,13 @@ export async function PUT(request: Request) {
         continue;
       }
       const existing = stored.get(id);
-      if (!existing || !isKeyProvider(existing.provider)) return Response.json({ error: "unknown connection" }, { status: 400, headers });
+      if (!existing && isSubscription(provider) && who.ownerId === null) {
+        next.push({ id, provider, model, key: "", hint: "" });
+        continue;
+      }
+      if (!existing || !(isKeyProvider(existing.provider) || isSubscription(existing.provider))) {
+        return Response.json({ error: "unknown connection" }, { status: 400, headers });
+      }
       next.push({ ...existing, model });
     }
     await saveAiSettings(who.ownerId, { connections: next });

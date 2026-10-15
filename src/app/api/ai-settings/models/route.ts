@@ -1,4 +1,4 @@
-import { defaultModel, providerOfKey } from "@/lib/aiProviders";
+import { SUBSCRIPTIONS, defaultModel, isSubscription, providerOfKey } from "@/lib/aiProviders";
 import { loadAiSettings, modelsFor } from "@/lib/aiSettings.server";
 import { authorizeAiSettingsRequest } from "@/lib/cloudRequestGuard.server";
 
@@ -12,6 +12,11 @@ export async function POST(request: Request) {
   let key = typeof body.key === "string" ? body.key.trim() : "";
   if (!key && typeof body.id === "string") {
     const stored = (await loadAiSettings(who.ownerId).catch(() => ({ connections: [] }))).connections.find((row) => row.id === body.id);
+    /* A subscription's models are the ones its app offers. */
+    if (stored && isSubscription(stored.provider)) {
+      const { models, defaultModel: usual } = SUBSCRIPTIONS[stored.provider];
+      return Response.json({ provider: stored.provider, models, defaultModel: usual }, { headers });
+    }
     key = stored?.key ?? "";
   }
   const provider = providerOfKey(key);

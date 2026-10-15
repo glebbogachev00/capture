@@ -10,9 +10,10 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  isKeyProvider, providerOfKey, validModel,
+  isKeyProvider, isSubscription, providerOfKey, validModel,
   type AiConnection, type AiSettingsView, type KeyProvider,
 } from "@/lib/aiProviders";
+import { subscriptionModel } from "@/lib/subscriptions.server";
 import type { Tier } from "@/lib/providers";
 import type { OwnTier } from "@/lib/ownTier.server";
 import { getCloudConfig } from "@/lib/supabase/config";
@@ -32,14 +33,19 @@ export type StoredSettings = { connections: StoredConnection[] };
 const EMPTY: StoredSettings = { connections: [] };
 const MAX_CONNECTIONS = 8;
 
-/** Keep only well-formed connections whose key matches their provider. */
-export function cleanSettings(value: unknown): StoredSettings {
+/** Keep only well-formed connections whose key matches their provider.
+ * Subscriptions (no key) are kept only on a self-hosted Capture. */
+export function cleanSettings(value: unknown, selfHosted = false): StoredSettings {
   const list = (value as { connections?: unknown })?.connections;
   if (!Array.isArray(list)) return EMPTY;
   const connections: StoredConnection[] = [];
   for (const item of list.slice(0, MAX_CONNECTIONS)) {
     const { id, provider, model, key } = (item ?? {}) as Record<string, unknown>;
     if (typeof id !== "string" || !/^[\w-]{1,40}$/.test(id)) continue;
+    if (isSubscription(provider)) {
+      if (selfHosted && validModel(model)) connections.push({ id, provider, model, key: "", hint: "" });
+      continue;
+    }
     if (!isKeyProvider(provider) || !validModel(model) || typeof key !== "string") continue;
     if (providerOfKey(key) !== provider) continue;
     connections.push({ id, provider, model, key: key.trim(), hint: key.trim().slice(-4) });
@@ -57,7 +63,7 @@ const localFile = () => path.join(process.env.SYNC_DATA_DIR || path.join(process
 
 async function loadLocal(): Promise<StoredSettings> {
   try {
-    return cleanSettings(JSON.parse(await readFile(localFile(), "utf8")));
+    return cleanSettings(JSON.parse(await readFile(localFile(), "utf8")), true);
   } catch {
     return EMPTY;
   }
@@ -139,7 +145,7 @@ export function tiersFor(settings: StoredSettings): OwnTier[] {
     name: `own-${provider}`,
     provider,
     apiKey: key,
-    model: modelFor(provider, model, key),
+    model: isSubscription(provider) ? subscriptionModel(provider, model) : modelFor(provider, model, key),
     ...(provider === "cerebras" ? { providerOptions: { cerebras: { reasoningEffort: "low" } } } : {}),
   }));
 }

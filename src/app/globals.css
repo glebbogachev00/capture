@@ -7279,3 +7279,19 @@ body {
   .ai-model-tools { grid-area: tools; }
   .ai-model-pick { grid-area: pick; }
 }
+
+/* Subscriptions on the Mac: name, what is true now, one button. */
+.ai-subscriptions {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+.ai-subscription {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  align-items: center;
+}
+.ai-subscription .ai-model-name { grid-area: auto; grid-column: 1; grid-row: 1; }
+.ai-subscription .settings-copy { grid-column: 1; grid-row: 2; margin: 0; font-size: 13px; }
+.ai-subscription button { grid-column: 2; grid-row: 1 / span 2; }

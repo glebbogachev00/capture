@@ -62,3 +62,26 @@ it("says plainly when connecting AI needs Cloud", async () => {
   render(<AiModels />);
   await screen.findByText("Connecting your own AI is part of Capture Cloud.");
 });
+
+it("offers a subscription signed in on this Mac, and says how to sign in to the other", async () => {
+  let saved: unknown;
+  vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === "PUT") saved = JSON.parse(String(init.body)).connections;
+    return Response.json({
+      mode: "local",
+      connections: init?.method === "PUT" ? [{ id: "x", provider: "claude-subscription", model: "claude-haiku-5-5", hint: "" }] : [],
+      ...(init?.method === "PUT" ? {} : { subscriptions: {
+        "claude-subscription": { installed: true, signedIn: true, plan: "pro" },
+        "chatgpt-subscription": { installed: true, signedIn: false },
+      } }),
+    });
+  }));
+  render(<AiModels />);
+  await screen.findByText(/Signed in on this Mac \(pro\)/);
+  expect(screen.getByText(/run codex login in Terminal/)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy();
+  fireEvent.click(screen.getAllByRole("button", { name: "Add" })[0]);
+  await waitFor(() => expect(saved).toEqual([{ id: expect.any(String), provider: "claude-subscription", model: "claude-haiku-5-5" }]));
+  await screen.findByLabelText("Model for Claude subscription");
+  expect(screen.getByText(/run codex login in Terminal/)).toBeTruthy();
+});

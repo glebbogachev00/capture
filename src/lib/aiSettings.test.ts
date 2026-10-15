@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { defaultModel, providerOfKey } from "./aiProviders";
 import { cleanSettings, loadAiSettings, saveAiSettings, seal, tiersFor, unseal, viewOf } from "./aiSettings.server";
 import { authorizeCloudRequest, type CloudRequestGuardDependencies } from "./cloudRequestGuard";
-import { authorizeManagedAiRequest, scheduleManagedAiDeferredWork, withManagedAiAdmission } from "./cloudRequestGuard.server";
+import { authorizeManagedAiRequest, liveAi, scheduleManagedAiDeferredWork, withManagedAiAdmission } from "./cloudRequestGuard.server";
 import { currentOwnAi, withOwnAi } from "./ownTier.server";
 import { chain } from "./providers";
 
@@ -70,6 +70,13 @@ describe("stored settings", () => {
     expect(await loadAiSettings(null)).toEqual(settings);
   });
 
+  it("keep subscriptions only on a self-hosted Capture", () => {
+    const row = { connections: [{ id: "sub", provider: "claude-subscription", model: "claude-haiku-5-5" }] };
+    expect(cleanSettings(row).connections).toEqual([]);
+    expect(cleanSettings(row, true).connections).toEqual([{ id: "sub", provider: "claude-subscription", model: "claude-haiku-5-5", key: "", hint: "" }]);
+    expect(tiersFor(cleanSettings(row, true)).map((tier) => tier.name)).toEqual(["own-claude-subscription"]);
+  });
+
   it("become tiers in the person's order", () => {
     expect(tiersFor(settings).map((tier) => [tier.name, tier.provider])).toEqual([["own-anthropic", "anthropic"], ["own-groq", "groq"]]);
   });
@@ -95,6 +102,14 @@ describe("at request time", () => {
     expect(authorization).toMatchObject({ mode: "non-cloud", ownAi: { fallback: true } });
     const voice = await authorizeManagedAiRequest(new Request("https://capture.test/api/transcribe"), (tier) => tier.provider === "openai");
     expect(voice).toEqual({ mode: "non-cloud" });
+  });
+
+  it("keeps a subscription out of the routes a person waits on", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "capture-ai-"));
+    vi.stubEnv("SYNC_DATA_DIR", dir);
+    await saveAiSettings(null, cleanSettings({ connections: [{ id: "sub", provider: "claude-subscription", model: "claude-haiku-5-5" }] }, true));
+    expect(await authorizeManagedAiRequest(new Request("https://capture.test/api/sort"), liveAi)).toEqual({ mode: "non-cloud" });
+    expect(await authorizeManagedAiRequest(new Request("https://capture.test/api/summarize"))).toMatchObject({ ownAi: { tiers: [{ name: "own-claude-subscription" }] } });
   });
 
   function dependencies(overrides: Partial<CloudRequestGuardDependencies> = {}): CloudRequestGuardDependencies {

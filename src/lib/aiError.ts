@@ -1,6 +1,6 @@
 import { NoProvidersError } from "./providers";
 import { currentOwnAi } from "./ownTier.server";
-import { KEY_PROVIDERS } from "./aiProviders";
+import { providerName } from "./aiProviders";
 
 /**
  * Turn a model failure into something worth reading.
@@ -79,7 +79,7 @@ export function explain(error: unknown): { message: string; status: number } {
      speaks when the person's AI was all there was (Capture Cloud). */
   const own = currentOwnAi();
   if (own && !own.fallback) {
-    const names = [...new Set(own.tiers.map((tier) => KEY_PROVIDERS[tier.provider].name))];
+    const names = [...new Set(own.tiers.map((tier) => providerName(tier.provider)))];
     const ownName = names.length === 1 ? `Your ${names[0]} key` : "Your AI keys";
     const { text, status } = unwrap(error);
     if (status === 401 || status === 403 || text.includes("api key") || text.includes("api_key") || text.includes("unauthenticated")) {

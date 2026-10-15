@@ -33,16 +33,50 @@ export function providerOfKey(key: string | null | undefined): KeyProvider | nul
   return null;
 }
 
+/* A subscription signed in on the Mac a self-hosted Capture runs on, used
+   through that Mac's own command-line app. Never on Capture Cloud. */
+export type SubscriptionProvider = "claude-subscription" | "chatgpt-subscription";
+export type AiProvider = KeyProvider | SubscriptionProvider;
+
+export const SUBSCRIPTIONS: Record<SubscriptionProvider, { name: string; defaultModel: string; models: string[]; signIn: string }> = {
+  "claude-subscription": {
+    name: "Claude subscription",
+    defaultModel: "claude-haiku-5-5",
+    models: ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"],
+    signIn: "claude auth login",
+  },
+  "chatgpt-subscription": {
+    name: "ChatGPT subscription",
+    defaultModel: "default",
+    models: ["default"],
+    signIn: "codex login",
+  },
+};
+
+export const isSubscription = (value: unknown): value is SubscriptionProvider =>
+  typeof value === "string" && value in SUBSCRIPTIONS;
+
+/** The name a provider is shown by. */
+export const providerName = (provider: AiProvider) =>
+  isSubscription(provider) ? SUBSCRIPTIONS[provider].name : KEY_PROVIDERS[provider].name;
+
 /** One connected AI, as the browser sees it: never the key. */
 export type AiConnection = {
   id: string;
-  provider: KeyProvider;
+  provider: AiProvider;
   model: string;
   /** The key's last four characters, so two keys can be told apart. */
   hint: string;
 };
 
-export type AiSettingsView = { connections: AiConnection[] };
+/** Whether a subscription's app is on this Mac and signed in. */
+export type SubscriptionStatus = { installed: boolean; signedIn: boolean; plan?: string };
+
+export type AiSettingsView = {
+  connections: AiConnection[];
+  /** Self-hosted only. */
+  subscriptions?: Record<SubscriptionProvider, SubscriptionStatus>;
+};
 
 /** A model id is a short, plain identifier. */
 export const validModel = (model: unknown): model is string =>

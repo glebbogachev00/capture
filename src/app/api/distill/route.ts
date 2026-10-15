@@ -3,7 +3,7 @@ import { z } from "zod";
 import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
-import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
+import { authorizeManagedAiRequest, liveAi, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { NoProvidersError, chain, sanitizeProviderError, withFallback } from "@/lib/providers";
 import { opsEvent } from "@/lib/opsEvent.server";
 import { countAssistantQuestions, resolveSettled } from "@/lib/distill";
@@ -197,7 +197,7 @@ function transcript(turns: { role: string; text: string }[]) {
 }
 
 export async function POST(request: Request) {
-  const authorization = await authorizeManagedAiRequest(request);
+  const authorization = await authorizeManagedAiRequest(request, liveAi);
   if (authorization instanceof Response) return authorization;
   return withManagedAiAdmission(authorization, async () => {
   // Distill spends real model quota; a single client can't run it in a loop.
