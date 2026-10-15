@@ -40,6 +40,7 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { ReportBugForm } from "@/components/ReportBug";
 import { ProfileSignature } from "@/components/ProfileSignature";
 import { CaptureProfile } from "@/components/CaptureProfile";
+import { VoiceSection } from "@/components/VoiceSection";
 import { CloudAccountPanel } from "@/components/CloudBilling";
 import { AiModels, useAiModelsAvailable } from "@/components/AiModels";
 import { PLAYGROUND } from "@/lib/playground";
@@ -735,7 +736,6 @@ export function RecordScreen({
               profile={profile}
               onProfileChange={onProfileChange}
               migrationReady={profileMigrationReady}
-              ledger={ledger}
             />
           </div>
 
@@ -820,6 +820,8 @@ export function RecordScreen({
               </div>
             )}
           </div>
+
+          <VoiceSection threads={threads} ledger={ledger} voice={profile?.voice} onProfileChange={onProfileChange} />
 
           {rules.length > 0 && (
             <div className="record-section">

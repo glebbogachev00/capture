@@ -7333,10 +7333,15 @@ body {
 .ai-subscription button { grid-column: 2; grid-row: 1 / span 2; }
 
 /* Your voice: how you talk, then a note or two said the way you would. */
-.record-profile-voice {
-  margin-top: 18px;
+.record-voice {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+}
+.record-voice-waiting {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--muted);
 }
 .record-voice-patterns {
   margin: 0;

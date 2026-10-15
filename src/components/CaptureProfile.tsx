@@ -19,56 +19,6 @@ import {
 import { imgSave } from "@/lib/imgCache";
 import { useStoredImage } from "@/hooks/useStoredImage";
 import { shrinkFile } from "@/lib/shrink";
-import { ownedFetch } from "@/lib/ownership";
-import type { CaptureEntry } from "@/lib/ledger";
-import { spokenNotes, spokenWords, voiceDue, voiceSample } from "@/lib/voice";
-
-/* When this device may ask for a reading again. A reading takes about
-   twenty seconds; one cut off (the page closed, the server restarted) is
-   asked again on the next visit once its own time is up. Only an answer that
-   says it failed waits hours. */
-const VOICE_RUNNING_MS = 3 * 60_000;
-const VOICE_FAILED_MS = 6 * 60 * 60_000;
-const VOICE_NEXT_KEY = "capture:voice:next";
-const voiceWaitUntil = (until: number) => {
-  try {
-    window.localStorage.setItem(VOICE_NEXT_KEY, String(until));
-  } catch { /* storage unavailable: this visit only */ }
-};
-
-/** Read how this person talks when there is enough and it is due, then keep
- * it on the profile. Quiet: nothing shows until a reading exists. */
-function useVoiceReading(
-  ledger: CaptureEntry[] | undefined,
-  recurring: Thread[],
-  profile: ProfileIdentity | undefined,
-  onProfileChange: ((profile: ProfileUpdate) => Promise<void>) | undefined,
-) {
-  const started = useRef(false);
-  useEffect(() => {
-    if (started.current || !ledger || !onProfileChange) return;
-    const notes = spokenNotes(ledger);
-    const words = spokenWords(notes);
-    if (!voiceDue(profile?.voice, words)) return;
-    try {
-      if (Date.now() < Number(window.localStorage.getItem(VOICE_NEXT_KEY) || 0)) return;
-    } catch { /* storage unavailable: try once this visit */ }
-    voiceWaitUntil(Date.now() + VOICE_RUNNING_MS);
-    started.current = true;
-    void ownedFetch("/api/voice", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sample: voiceSample(notes), words, recurring: recurring.map((thread) => thread.name) }),
-    })
-      .then(async (response) => {
-        const { voice } = response.ok ? ((await response.json()) as { voice?: ProfileIdentity["voice"] }) : {};
-        if (!voice) return voiceWaitUntil(Date.now() + VOICE_FAILED_MS);
-        await onProfileChange((current) => ({ ...current, voice }));
-        voiceWaitUntil(0);
-      })
-      .catch(() => { /* cut off: the next visit asks again once its time is up */ });
-  }, [ledger, recurring, profile?.voice, onProfileChange]);
-}
 
 function readSaved(key: string): ProfileDefaults {
   if (typeof window === "undefined" || getDocumentLifetime().cloud) return EMPTY_PROFILE_IDENTITY;
@@ -97,7 +47,6 @@ export function CaptureProfile({
   onProfileChange,
   migrationReady = true,
   storageKey = "capture:profile:v1",
-  ledger,
 }: {
   threads: Thread[];
   onOpenThread: (id: string) => void;
@@ -107,8 +56,6 @@ export function CaptureProfile({
   migrationReady?: boolean;
   /** Kept for the open preference and one-time migration of v1 local data. */
   storageKey?: string;
-  /** The Record, whose spoken words the voice is read from. */
-  ledger?: CaptureEntry[];
 }) {
   const [open, setOpen] = useState(() => readOpen(storageKey));
   const [legacy] = useState(() => readSaved(storageKey));
@@ -120,7 +67,6 @@ export function CaptureProfile({
   const migrationStarted = useRef(false);
   const recurring = useMemo(() => recurringThreads(threads, 3), [threads]);
   const name = profile?.name ?? (legacy.name || defaults.name);
-  useVoiceReading(ledger, recurring, profile, onProfileChange);
 
 
   /* A profile created before board sync lived only in localStorage. Move it
@@ -257,24 +203,6 @@ export function CaptureProfile({
                     {countNoun(thread.frags.length, "layer")}
                   </em>
                 </button>
-              ))}
-            </div>
-          )}
-
-          {!!profile?.voice?.patterns.length && (
-            <div className="record-profile-voice">
-              <div className="record-profile-label">{t("Your voice")}</div>
-              <ul className="record-voice-patterns">
-                {profile.voice.patterns.map((pattern) => <li key={pattern}>{pattern}</li>)}
-              </ul>
-              {!!profile.voice.phrases.length && (
-                <p className="record-voice-phrases">{profile.voice.phrases.map((phrase) => `“${phrase}”`).join(" · ")}</p>
-              )}
-              {profile.voice.samples.map((sample) => (
-                <blockquote key={sample.about} className="record-voice-sample">
-                  <small>{sample.about}</small>
-                  {sample.text}
-                </blockquote>
               ))}
             </div>
           )}
