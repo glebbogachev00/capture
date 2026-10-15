@@ -4,14 +4,14 @@ import { modelRateLimit } from "@/lib/limiter";
 import { authorizeManagedAiRequest, liveAi, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { withFallback } from "@/lib/providers";
 import { preferredFor } from "@/lib/routing";
-import { needsFormatting } from "@/lib/captureFormat";
-import { formatCapture } from "@/lib/captureFormat.server";
+import { needsFormatting, needsHeadings } from "@/lib/captureFormat";
+import { formatCapture, headCapture } from "@/lib/captureFormat.server";
 
 /**
  * Format notes that were captured before automatic formatting: the same
- * cleanup and layout every new capture gets at sort time. Notes that need
- * nothing are returned untouched without a model call; a failed or doubtful
- * answer returns the note as it was.
+ * cleanup, layout and headings every new capture gets at sort time. Notes
+ * that need nothing are returned untouched without a model call; a failed or
+ * doubtful answer returns the note as it was.
  */
 
 export const runtime = "nodejs";
@@ -45,9 +45,15 @@ export async function POST(request: Request) {
       while (next < texts.length) {
         const index = next++;
         const raw = texts[index];
-        if (!needsFormatting(raw)) continue;
-        texts[index] = await withFallback((tier) => formatCapture(raw, { tier, abortSignal: signal }), preferredFor("sort"), { abortSignal: signal })
-          .then((result) => result.value, () => raw);
+        const laidOut = needsFormatting(raw)
+          ? await withFallback((tier) => formatCapture(raw, { tier, abortSignal: signal }), preferredFor("sort"), { abortSignal: signal })
+            .then((result) => result.value, () => raw)
+          : raw;
+        /* Headings are a finish, not the job: without them the note still lands. */
+        texts[index] = needsHeadings(laidOut)
+          ? await withFallback((tier) => headCapture(laidOut, { tier, abortSignal: signal }), preferredFor("sort"), { abortSignal: signal })
+            .then((result) => result.value, () => laidOut)
+          : laidOut;
       }
     };
     await Promise.all(Array.from({ length: 3 }, worker));

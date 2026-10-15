@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 
 /**
  * Untrusted note text → React elements. A tiny Markdown subset (headings,
- * quotes, lists, *emphasis*, **strong**, [label](url) and bare links) and
- * nothing else: no HTML is ever interpreted, and only http(s) links become
- * links, opened without referrer or opener.
+ * quotes, bulleted and numbered lists, *emphasis*, **strong**, [label](url)
+ * and bare links) and nothing else: no HTML is ever interpreted, and only
+ * http(s) links become links, opened without referrer or opener.
  */
 
 const LINK = /\[([^\]\n]{1,300})\]\((https?:\/\/[^\s)]{1,2000})\)|(https?:\/\/[^\s<>"')\]]{1,2000})|\*\*([^*\n]{1,500})\*\*|\*([^*\n]{1,500})\*|_([^_\n]{1,500})_/g;
@@ -57,6 +57,9 @@ export function lines(text: string, keyPrefix: string): ReactNode[] {
   );
 }
 
+const BULLET = /^[-*•]\s+/;
+const NUMBERED = /^\d{1,3}[.)]\s+/;
+
 export function PublicThreadText({ text }: { text: string }) {
   const blocks = text.replace(/\r\n?/g, "\n").split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   return (
@@ -73,10 +76,24 @@ export function PublicThreadText({ text }: { text: string }) {
         if (rows.every((row) => /^>\s?/.test(row))) {
           return <blockquote key={key}>{lines(rows.map((row) => row.replace(/^>\s?/, "")).join("\n"), key)}</blockquote>;
         }
-        if (rows.every((row) => /^[-*]\s+/.test(row))) {
-          return <ul key={key}>{rows.map((row, item) => <li key={`${key}-${item}`}>{inline(row.replace(/^[-*]\s+/, ""), `${key}-${item}`)}</li>)}</ul>;
+        /* A lead-in line and the list under it, or a list on its own. */
+        const runs: { kind: "p" | "ul" | "ol"; rows: string[] }[] = [];
+        for (const row of rows) {
+          const kind = BULLET.test(row) ? "ul" : NUMBERED.test(row) ? "ol" : "p";
+          const last = runs.at(-1);
+          if (last?.kind === kind) last.rows.push(row);
+          else runs.push({ kind, rows: [row] });
         }
-        return <p key={key}>{lines(block, key)}</p>;
+        return runs.map(({ kind, rows: run }, part) => {
+          const runKey = `${key}-${part}`;
+          if (kind === "p") return <p key={runKey}>{lines(run.join("\n"), runKey)}</p>;
+          const items = run.map((row, item) => (
+            <li key={`${runKey}-${item}`}>{inline(row.replace(kind === "ul" ? BULLET : NUMBERED, ""), `${runKey}-${item}`)}</li>
+          ));
+          return kind === "ul"
+            ? <ul key={runKey}>{items}</ul>
+            : <ol key={runKey} start={Number(run[0].match(/^\d+/)![0])}>{items}</ol>;
+        });
       })}
     </>
   );

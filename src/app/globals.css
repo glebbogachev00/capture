@@ -1324,12 +1324,52 @@ body {
   row-gap: 8px;
   flex-wrap: wrap;
 }
-.frag p {
+/* A note reads like a well-written long post: paragraphs with air between
+   them, a quiet serif heading where it turns, lists that look like lists. */
+.frag-text {
   margin: 0 0 12px;
   padding-top: 18px;
   font-size: 15px;
   line-height: 1.6;
-  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.frag-text p,
+.frag-text ul,
+.frag-text ol,
+.frag-text blockquote {
+  margin: 0 0 0.85em;
+}
+.frag-text > :last-child {
+  margin-bottom: 0;
+}
+.frag-text ul,
+.frag-text ol {
+  padding-left: 1.3em;
+}
+.frag-text li + li {
+  margin-top: 0.25em;
+}
+.frag-text h3,
+.frag-text h4 {
+  margin: 1.5em 0 0.45em;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 17.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  font-variation-settings: "SOFT" 30;
+}
+.frag-text > h3:first-child,
+.frag-text > h4:first-child {
+  margin-top: 0;
+}
+.frag-text blockquote {
+  padding-left: 12px;
+  border-left: 2px solid var(--rule);
+  color: var(--muted);
+}
+.frag-text a {
+  color: var(--accent);
 }
 .frag img {
   max-width: 100%;
@@ -2312,10 +2352,6 @@ body {
   border-radius: 9px;
   padding: 6px 10px;
   outline: none;
-}
-/* Fragment text keeps the blank lines and bullets the model wrote. */
-.frag p {
-  white-space: pre-wrap;
 }
 
 /* ---------------------------------------------------------------

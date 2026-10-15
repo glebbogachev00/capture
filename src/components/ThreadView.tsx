@@ -18,7 +18,8 @@ import type { DoneItem } from "@/lib/threadActions";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { ThreadChoices } from "./ThreadChoices";
 import { PublishThreadSheet } from "./PublishThreadSheet";
-import { needsFormatting, sentenceCase } from "@/lib/captureFormat";
+import { PublicThreadText } from "./PublicThreadText";
+import { needsFormatting, needsHeadings, sentenceCase } from "@/lib/captureFormat";
 import { ownedFetch } from "@/lib/ownership";
 import { PLAYGROUND } from "@/lib/playground";
 
@@ -27,6 +28,25 @@ const toneName = (tone: string) => ({
   sage: t("sage"), clay: t("clay"), sand: t("sand"), sky: t("sky"),
   plum: t("plum"), moss: t("moss"), rose: t("rose"), slate: t("slate"),
 } as Record<string, string>)[tone] ?? tone;
+
+/* Long notes already asked for headings, on this device, so Format settles
+   after one press. Keyed by the text too: an edited note may be asked again. */
+const HEADINGS_TRIED = "capture:headings:tried";
+const headingsKey = (id: string, text: string) => `${id}:${text.length}`;
+function readHeadingsTried(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(HEADINGS_TRIED) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+function rememberHeadingsTried(keys: string[]): Set<string> {
+  const next = [...new Set([...readHeadingsTried(), ...keys])].slice(-2_000);
+  try {
+    localStorage.setItem(HEADINGS_TRIED, JSON.stringify(next));
+  } catch { /* still settled for this visit */ }
+  return new Set(next);
+}
 
 export function ThreadView({
   thread,
@@ -95,12 +115,15 @@ export function ThreadView({
   const [formatting, setFormatting] = useState(false);
   /* Notes captured before automatic formatting: cleaned up and laid out the
      same way new captures are. Only notes that still need it are sent. */
-  const unformatted = thread.frags.filter((frag) => needsFormatting(frag.text));
+  const [tried, setTried] = useState(readHeadingsTried);
+  const unformatted = thread.frags.filter((frag) =>
+    needsFormatting(frag.text) || (needsHeadings(frag.text) && !tried.has(headingsKey(frag.id, frag.text))));
   /* Notes that only need capitals are fixed here, without a model call. */
-  const lowercase = thread.frags.filter((frag) => !needsFormatting(frag.text) && sentenceCase(frag.text) !== frag.text);
+  const lowercase = thread.frags.filter((frag) => !unformatted.includes(frag) && sentenceCase(frag.text) !== frag.text);
   const formatNotes = async () => {
     setFormatting(true);
     const edits = lowercase.map((frag) => ({ fragId: frag.id, text: sentenceCase(frag.text) }));
+    const settled: string[] = [];
     try {
       const batches: typeof unformatted[] = [];
       for (const frag of unformatted) {
@@ -117,12 +140,16 @@ export function ThreadView({
         if (!response.ok) break;
         const { texts } = (await response.json()) as { texts: string[] };
         batch.forEach((frag, index) => {
-          if (typeof texts[index] === "string" && texts[index] !== frag.text) edits.push({ fragId: frag.id, text: texts[index] });
+          const text = typeof texts[index] === "string" ? texts[index] : frag.text;
+          if (text !== frag.text) edits.push({ fragId: frag.id, text });
+          /* A long note the model read as one thought is not offered again. */
+          settled.push(headingsKey(frag.id, text));
         });
       }
     } catch {
       /* Whatever came back is still applied below; the rest stays as it was. */
     }
+    if (settled.length) setTried(rememberHeadingsTried(settled));
     /* One save for every note, so the summary is refreshed once. */
     if (edits.length) {
       if (onEditFrags) await onEditFrags(edits);
@@ -693,7 +720,7 @@ export function FragView({
           </div>
         </div>
       ) : (
-        <p>{f.text}</p>
+        <div className="frag-text"><PublicThreadText text={f.text} /></div>
       )}
 
       {confirming && !editing && (

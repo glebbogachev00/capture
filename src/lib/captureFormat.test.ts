@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { CLEANUP_SYSTEM } from "./dictationCleanup";
-import { FORMAT_SYSTEM, airy, keepsTheWords, needsFormatting, sentenceCase, shouldFormat } from "./captureFormat";
+import {
+  FORMAT_SYSTEM, airy, firstJsonObject, keepsTheWords, needsFormatting, needsHeadings, numberedParagraphs, placeHeadings,
+  sentenceCase, shouldFormat,
+} from "./captureFormat";
 
 const dictated =
   "Um, so, I think one of my biggest worries right now is, uh, that I have so many ideas and main things that I can build. " +
@@ -123,3 +126,53 @@ describe("sentence case in Russian", () => {
   });
 });
 
+
+describe("headings on long notes", () => {
+  const paragraph = (topic: string) =>
+    `This part is about ${topic} and it goes on for a while, because I keep thinking out loud about it. ` +
+    `There is a lot to say about ${topic}, so I say it, and then I say a bit more about why ${topic} matters to me right now.`;
+  const note = ["launch", "launch", "pricing", "pricing", "the team", "the team"].map(paragraph).join("\n\n");
+
+  it("are only for long notes laid out in paragraphs and not headed yet", () => {
+    expect(needsHeadings(note)).toBe(true);
+    expect(needsHeadings(paragraph("launch"))).toBe(false);
+    expect(needsHeadings(note.replace(/\n\n/g, " "))).toBe(false);
+    expect(needsHeadings(`### Launch\n\n${note}`)).toBe(false);
+  });
+
+  it("number the paragraphs for the model", () => {
+    expect(numberedParagraphs("One.\n\nTwo.")).toBe("[1] One.\n\n[2] Two.");
+  });
+
+  it("go between paragraphs and never change a word of the note", () => {
+    const out = placeHeadings(note, { headings: [{ before: 1, title: "The launch" }, { before: 3, title: "pricing i’m sure of." }, { before: 5, title: "Who builds it" }] });
+    expect(out.split("\n\n").filter((block) => block.startsWith("### "))).toEqual(["### The launch", "### Pricing I’m sure of", "### Who builds it"]);
+    expect(out.split("\n\n").filter((block) => !block.startsWith("### ")).join("\n\n")).toBe(note);
+  });
+
+  it("keep a part at least two paragraphs, and drop titles that do not hold up", () => {
+    const out = placeHeadings(note, { headings: [
+      { before: 1, title: "The launch" }, { before: 2, title: "Too soon" }, { before: 3, title: "**Pricing**" },
+      { before: 3, title: "A title that runs on far too long to be a heading" }, { before: 4, title: "Pricing" }, { before: 6, title: "Last line alone" },
+    ] });
+    expect(out.split("\n\n").filter((block) => block.startsWith("### "))).toEqual(["### The launch", "### Pricing"]);
+  });
+
+  it("leave the note as it was when there is less than two parts, or the first starts late", () => {
+    expect(placeHeadings(note, { headings: [{ before: 1, title: "Everything" }] })).toBe(note);
+    expect(placeHeadings(note, { headings: [{ before: 4, title: "Pricing" }, { before: 6, title: "Team" }] })).toBe(note);
+    expect(placeHeadings(note, { headings: [] })).toBe(note);
+    expect(placeHeadings(note, "nonsense")).toBe(note);
+  });
+
+  it("read the JSON out of a chatty answer", () => {
+    expect(firstJsonObject('Sure: {"headings": []} hope that helps')).toEqual({ headings: [] });
+    expect(firstJsonObject("no json here")).toBeNull();
+  });
+
+  it("stay on their own line through layout and capitals", () => {
+    const headed = `### the launch\n\nfirst point here. second point here.\n\n### pricing\nThird point here.`;
+    expect(airy(headed)).toBe("### the launch\n\nfirst point here. second point here.\n\n### pricing\n\nThird point here.");
+    expect(sentenceCase("### the launch\n\nfirst point.")).toBe("### The launch\n\nFirst point.");
+  });
+});
