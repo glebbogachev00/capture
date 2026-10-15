@@ -5201,7 +5201,6 @@ body {
    much is inside, and gives the chevron a full-width touch target. */
 .record-section {
   width: 100%;
-  max-width: 460px;
   margin-top: 18px;
 }
 .record-disclosure {
