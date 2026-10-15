@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiteFooter } from "@/components/SiteFooter";
 import { CopyPrompt } from "@/components/CopyPrompt";
 import { GROQ_KEYS_URL, SETUP_GUIDE_URL } from "@/lib/install";
 import { PUBLIC_SITE } from "@/lib/publicSite";
@@ -107,6 +108,7 @@ export default function InstallPage() {
             </a>
           </p>
         </section>
+        <SiteFooter />
       </div>
     </main>
   );

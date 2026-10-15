@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiteFooter } from "@/components/SiteFooter";
 import Image from "next/image";
 import { MessagesSquare, Share2 } from "lucide-react";
 import { PLAYGROUND, TRIAL_LIMIT } from "@/lib/playground";
@@ -537,6 +538,7 @@ export function Landing() {
             </Link>
           </div>
         </section>
+        <SiteFooter />
       </div>
     </main>
   );

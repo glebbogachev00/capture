@@ -123,6 +123,7 @@ export function ReportBugForm({ onClose }: { onClose: () => void }) {
               value={what}
               onChange={(e) => setWhat(e.target.value)}
             />
+            <p className="discard-hint">{t("Reports are public on GitHub, so leave out anything private.")}</p>
             {!!err && <p className="bug-err">{err}</p>}
             <div className="tools">
               <button
@@ -130,7 +131,7 @@ export function ReportBugForm({ onClose }: { onClose: () => void }) {
                 onClick={send}
                 disabled={!what.trim() || busy}
               >
-                {busy ? "Sending…" : "Send it"}
+                {busy ? t("Sending…") : t("Send it")}
               </button>
               <button className="ghost" onClick={onClose}>
                 {t("Never mind")}
