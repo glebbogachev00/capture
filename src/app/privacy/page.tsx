@@ -45,10 +45,11 @@ export default function PrivacyPage() {
         needs is sent to the provider handling it: Groq, Cerebras, Mistral,
         Google (Gemini) or OpenRouter (and the model provider it routes to).
         Voice is transcribed by Groq; reading aloud uses Microsoft&rsquo;s
-        text-to-speech. Each processes it under its own API terms. If you add
-        your own AI key in Capture Cloud, requests go to that provider under
-        your account; the key stays on your device and passes through our server
-        with each AI request without being stored.
+        text-to-speech. Each processes it under its own API terms. If you connect
+        your own AI key, requests go to that provider under your account. In
+        Capture Cloud the key is stored encrypted with your account so every
+        device can use it, is never shown back in full, and is deleted when you
+        remove it or your account.
       </p>
 
       <h2>Payments</h2>

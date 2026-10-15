@@ -4,7 +4,7 @@ import { clientIp } from "@/lib/clientIp";
 import { transcribeRateLimit } from "@/lib/limiter";
 import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { withFallback } from "@/lib/providers";
-import { currentOwnTier } from "@/lib/ownTier.server";
+import { currentOwnAi } from "@/lib/ownTier.server";
 import { CLEANUP_SYSTEM } from "@/lib/dictationCleanup";
 import { opsEvent } from "@/lib/opsEvent.server";
 
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
   try {
     raw = (await transcribeLocal(audio, contentType)).trim();
   } catch {
-    const groqKey = currentOwnTier()?.apiKey ?? process.env.GROQ_API_KEY;
+    const groqKey = currentOwnAi()?.tiers.find((tier) => tier.provider === "groq")?.apiKey ?? process.env.GROQ_API_KEY;
     try {
       if (!groqKey) throw new Error("no GROQ_API_KEY");
       raw = (await transcribeGroq(audio, contentType, groqKey, speechLanguage(request.headers.get("x-capture-lang")))).trim();

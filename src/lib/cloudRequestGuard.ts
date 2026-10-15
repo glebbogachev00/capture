@@ -1,7 +1,7 @@
 import "server-only";
 
 import { ownerPrecondition } from "@/lib/ownerPrecondition";
-import type { OwnTier } from "@/lib/ownTier.server";
+import type { OwnAi } from "@/lib/ownTier.server";
 
 export type CloudQuotaScope = "managed_ai" | "board_read" | "board_write" | "backup_read" | "publish";
 export type CloudQuotaPolicy = {
@@ -10,15 +10,15 @@ export type CloudQuotaPolicy = {
 export type CloudQuotaResult = { allowed: boolean; retryAfterSec: number };
 export type DeferredManagedAiAdmission = { release: (signal?: AbortSignal) => Promise<void> };
 export type CloudAuthorization =
-  | { mode: "non-cloud" }
+  | { mode: "non-cloud"; ownAi?: OwnAi }
   | {
       mode: "cloud";
       ownerId: string;
       admissionId?: string;
       releaseExternalWork?: (signal?: AbortSignal) => Promise<void>;
       acquireDeferredManagedAiAdmission?: () => Promise<DeferredManagedAiAdmission | null>;
-      /** The member's own AI key: their provider, no managed allowance. */
-      ownTier?: OwnTier;
+      /** The member's own AI: their providers, no managed allowance. */
+      ownAi?: OwnAi;
     };
 
 
@@ -64,7 +64,7 @@ export async function authorizeCloudRequest(
   request: Request,
   scope: CloudQuotaScope,
   deps: CloudRequestGuardDependencies,
-  ownTier?: OwnTier | null,
+  ownAiFor?: (ownerId: string) => Promise<OwnAi | null>,
 ): Promise<CloudAuthorization | Response> {
   if (!deps.isCloudHost()) return { mode: "non-cloud" };
   if (!deps.isConfigured()) return cloudAuthorizationUnavailable();
@@ -90,9 +90,8 @@ export async function authorizeCloudRequest(
 
     /* With their own key a member still needs Cloud, but the AI is theirs:
        no managed allowance, no managed concurrency slot. */
-    if (scope === "managed_ai" && ownTier) {
-      return { mode: "cloud", ownerId: identity.userId, ownTier };
-    }
+    const ownAi = scope === "managed_ai" && ownAiFor ? await ownAiFor(identity.userId) : null;
+    if (ownAi) return { mode: "cloud", ownerId: identity.userId, ownAi };
 
     const quota = await deps.consumeQuota(identity.userId, cloudQuotaPolicy(scope));
     if (!quota.allowed) {

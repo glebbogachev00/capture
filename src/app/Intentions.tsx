@@ -41,6 +41,7 @@ import { ReportBugForm } from "@/components/ReportBug";
 import { ProfileSignature } from "@/components/ProfileSignature";
 import { CaptureProfile } from "@/components/CaptureProfile";
 import { CloudAccountPanel } from "@/components/CloudBilling";
+import { AiModels } from "@/components/AiModels";
 import { PLAYGROUND } from "@/lib/playground";
 import { imgLoad, imgNow } from "@/lib/imgCache";
 import type { CaptureEntry } from "@/lib/ledger";
@@ -964,8 +965,9 @@ export function SettingsScreen({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [openSection, setOpenSection] = useState<
-    "cloud" | "data" | "personalize" | "support" | null
+    "cloud" | "ai" | "data" | "personalize" | "support" | null
   >(null);
+  const [aiCount, setAiCount] = useState<number | null>(null);
   const [reporting, setReporting] = useState(false);
   const itemCount = counts.actions + counts.threads + counts.intentions;
   const toggleSection = (section: NonNullable<typeof openSection>) =>
@@ -1003,6 +1005,17 @@ export function SettingsScreen({
           <CloudAccountPanel />
           <OfflineSettings />
         </SettingsDisclosure>
+
+        {!PLAYGROUND && (
+          <SettingsDisclosure
+            title={t("AI models")}
+            meta={aiCount ? t("{count} connected", { count: aiCount }) : t("keys · order")}
+            open={openSection === "ai"}
+            onToggle={() => toggleSection("ai")}
+          >
+            <AiModels onCount={setAiCount} />
+          </SettingsDisclosure>
+        )}
 
         <SettingsDisclosure
           title={t("Your data")}
