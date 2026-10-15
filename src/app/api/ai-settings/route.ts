@@ -18,7 +18,8 @@ export async function GET(request: Request) {
   try {
     const view = viewOf(await loadAiSettings(who.ownerId));
     /* Subscriptions are the Mac's own apps: a self-hosted Capture only. */
-    const subscriptions = who.ownerId === null ? await subscriptionStatus() : undefined;
+    const quick = new URL(request.url).searchParams.has("quick");
+    const subscriptions = who.ownerId === null && !quick ? await subscriptionStatus() : undefined;
     return Response.json({ mode: mode(), ...view, ...(subscriptions ? { subscriptions } : {}) }, { headers });
   } catch {
     return Response.json({ error: "ai settings unavailable" }, { status: 503, headers });

@@ -41,7 +41,7 @@ import { ReportBugForm } from "@/components/ReportBug";
 import { ProfileSignature } from "@/components/ProfileSignature";
 import { CaptureProfile } from "@/components/CaptureProfile";
 import { CloudAccountPanel } from "@/components/CloudBilling";
-import { AiModels } from "@/components/AiModels";
+import { AiModels, useAiModelsAvailable } from "@/components/AiModels";
 import { PLAYGROUND } from "@/lib/playground";
 import { imgLoad, imgNow } from "@/lib/imgCache";
 import type { CaptureEntry } from "@/lib/ledger";
@@ -967,7 +967,9 @@ export function SettingsScreen({
   const [openSection, setOpenSection] = useState<
     "cloud" | "ai" | "data" | "personalize" | "support" | null
   >(null);
+  const aiModels = useAiModelsAvailable();
   const [aiCount, setAiCount] = useState<number | null>(null);
+  const connectedAi = aiCount ?? aiModels.count;
   const [reporting, setReporting] = useState(false);
   const itemCount = counts.actions + counts.threads + counts.intentions;
   const toggleSection = (section: NonNullable<typeof openSection>) =>
@@ -1006,10 +1008,10 @@ export function SettingsScreen({
           <OfflineSettings />
         </SettingsDisclosure>
 
-        {!PLAYGROUND && (
+        {!PLAYGROUND && aiModels.available && (
           <SettingsDisclosure
             title={t("AI models")}
-            meta={aiCount ? t("{count} connected", { count: aiCount }) : t("keys · order")}
+            meta={connectedAi ? t("{count} connected", { count: connectedAi }) : t("keys · order")}
             open={openSection === "ai"}
             onToggle={() => toggleSection("ai")}
           >

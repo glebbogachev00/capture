@@ -252,3 +252,26 @@ export function AiModels({ onCount }: { onCount?: (count: number) => void }) {
     </div>
   );
 }
+
+/** Whether connecting AI is possible here, and how many are connected, so
+ * Settings shows the section only where it works (not on a Cloud deployment
+ * that has not been set up for it). */
+export function useAiModelsAvailable(): { available: boolean; count: number | null } {
+  const [state, setState] = useState<{ available: boolean; count: number | null }>({ available: false, count: null });
+  useEffect(() => {
+    let stopped = false;
+    void fetch("/api/ai-settings?quick")
+      .then(async (response) => {
+        if (stopped) return;
+        if (response.ok) {
+          const view = (await response.json()) as View;
+          if (!stopped) setState({ available: true, count: view.connections.length });
+        } else if (response.status === 401 || response.status === 402) {
+          setState({ available: true, count: null });
+        }
+      })
+      .catch(() => {});
+    return () => { stopped = true; };
+  }, []);
+  return state;
+}

@@ -85,3 +85,15 @@ it("offers a subscription signed in on this Mac, and says how to sign in to the 
   await screen.findByLabelText("Model for Claude subscription");
   expect(screen.getByText(/run codex login in Terminal/)).toBeTruthy();
 });
+
+it("keeps the section out of Settings where connecting AI isn't set up", async () => {
+  const { renderHook } = await import("@testing-library/react");
+  const { useAiModelsAvailable } = await import("./AiModels");
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "ai settings not configured" }, { status: 503 })));
+  const hidden = renderHook(() => useAiModelsAvailable());
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(hidden.result.current.available).toBe(false);
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ mode: "local", connections: [{ id: "a", provider: "groq", model: "m", hint: "abcd" }] })));
+  const shown = renderHook(() => useAiModelsAvailable());
+  await waitFor(() => expect(shown.result.current).toEqual({ available: true, count: 1 }));
+});
