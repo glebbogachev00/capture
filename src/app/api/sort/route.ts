@@ -663,6 +663,9 @@ export async function POST(request: Request) {
      own bounded call and preserve attachment order in the sort evidence;
      never drop extras or ask one caption to invent a combined meaning. */
   let raw = body.raw;
+  /* One sentence per photo, kept so the board can describe each photo
+     wherever it is shared without sending the photo itself. */
+  let photoNotes: string[] | undefined;
   if (body.imgs?.length) {
     if (!visionChain().length) {
       return Response.json({ error: "The sort didn't go through." }, { status: 503 });
@@ -672,6 +675,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "The sort didn't go through." }, { status: 503 });
     }
     raw = mergeCaptions(body.raw, captions as string[]);
+    photoNotes = captions as string[];
   }
 
   try {
@@ -1032,6 +1036,7 @@ export async function POST(request: Request) {
       ...value,
       ...reconciled,
       ...(routingPlan ? { routingPlan, recovery } : {}),
+      ...(photoNotes ? { photoNotes } : {}),
       via: finalVia,
       routing: finalRouting,
     });

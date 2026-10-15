@@ -858,6 +858,8 @@ export const RU: Record<string, string> = {
   "Intentions ({count})": "Намерения ({count})",
   "The record — {date}": "Журнал — {date}",
   "said:": "сказано:",
+  "Photo: {note}": "Фото: {note}",
+  "Photo": "Фото",
   // lib/arrived.ts
   "and": "и",
   "{list} arrived from your other device.": "С другого устройства: {list}.",

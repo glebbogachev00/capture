@@ -58,6 +58,14 @@ export type Shareable = {
   files?: File[];
 };
 
+/* A photo travels as the sentence that describes it, written when it was
+   sorted: an agent or a person reading the text knows what the picture
+   showed, and nothing heavy is sent. A photo with no description is still
+   marked, so the text never pretends it wasn't there. */
+function photoLines(imgs: string[] | undefined, notes: Record<string, string> | undefined): string[] {
+  return (imgs ?? []).map((id) => notes?.[id] ? tr("Photo: {note}", { note: notes[id] }) : tr("Photo"));
+}
+
 export function shareThread(
   t: Thread,
   from?: { open: Action[]; done: DoneItem[] }
@@ -80,6 +88,7 @@ export function shareThread(
       `**${shortDate(f.at)}**${f.resolvedAt ? " · " + tr("resolved") : ""}`,
       "",
       f.text,
+      ...photoLines(f.imgs, f.imgNotes),
       ""
     );
   }
@@ -356,6 +365,7 @@ export function shareRecordDay(
     if (filed && said && !sameSurfaceText(filed, said)) {
       lines.push(`  ${tr("said:")} ${said}`);
     }
+    for (const line of photoLines(entry.imgs, entry.imgNotes)) lines.push(`  ${line}`);
   }
 
   return {
