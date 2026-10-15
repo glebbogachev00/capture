@@ -4,6 +4,7 @@ import { clientIp } from "@/lib/clientIp";
 import { transcribeRateLimit } from "@/lib/limiter";
 import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { withFallback } from "@/lib/providers";
+import { currentOwnTier } from "@/lib/ownTier.server";
 import { CLEANUP_SYSTEM } from "@/lib/dictationCleanup";
 import { opsEvent } from "@/lib/opsEvent.server";
 
@@ -117,7 +118,9 @@ async function cleanUp(raw: string): Promise<string> {
 }
 
 export async function POST(request: Request) {
-  const authorization = await authorizeManagedAiRequest(request);
+  /* Voice is transcribed by Groq, so only a Groq key of the member's own
+     replaces managed transcription; any other key leaves voice managed. */
+  const authorization = await authorizeManagedAiRequest(request, (tier) => tier.provider === "groq");
   if (authorization instanceof Response) return authorization;
   return withManagedAiAdmission(authorization, async () => {
   const gate = transcribeRateLimit(clientIp(request));
@@ -142,7 +145,7 @@ export async function POST(request: Request) {
   try {
     raw = (await transcribeLocal(audio, contentType)).trim();
   } catch {
-    const groqKey = process.env.GROQ_API_KEY;
+    const groqKey = currentOwnTier()?.apiKey ?? process.env.GROQ_API_KEY;
     try {
       if (!groqKey) throw new Error("no GROQ_API_KEY");
       raw = (await transcribeGroq(audio, contentType, groqKey, speechLanguage(request.headers.get("x-capture-lang")))).trim();
