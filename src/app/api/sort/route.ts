@@ -49,8 +49,8 @@ import {
   requiresPlannedActionIdentity,
 } from "@/lib/plannedActionIdentity";
 import { SEMANTIC_KIND_BOUNDARY } from "@/lib/semanticKindBoundary";
-import { shouldFormat } from "@/lib/captureFormat";
-import { formatCapture } from "@/lib/captureFormat.server";
+import { needsHeadings, shouldFormat } from "@/lib/captureFormat";
+import { formatCapture, headCapture } from "@/lib/captureFormat.server";
 import { tightenActions } from "@/lib/actionText.server";
 import { inCaptureLanguage } from "@/lib/language.server";
 import { SIMPLE_SORT_VERSION, generateSimpleSort, normalizeSimpleSort, simpleSortPrompt } from "@/lib/simpleSort";
@@ -648,11 +648,20 @@ export async function POST(request: Request) {
          sent), and a short one ending on "it" says what it is. */
       /* A Russian capture keeps Russian in what the sorter wrote itself; first,
          so the steps below read Russian ("отправить его Ане" gets its "его"). */
+      /* A long note gets its headings as it will sit in its thread, alongside
+         the steps below; a note those steps reword keeps its plain layout. */
+      const headed = new Map(value.filter((item) => item.kind === "thought" && needsHeadings(item.text)).map((item) => [item.text,
+        withFallback((tier) => headCapture(item.text, { tier, abortSignal: planningAbortSignal }), preferredFor("sort"), { abortSignal: planningAbortSignal })
+          .then((result) => result.value, () => item.text)]));
       const local = await withFallback((tier) => inCaptureLanguage(value, raw, { tier, abortSignal: planningAbortSignal }), preferredFor("sort"), { abortSignal: planningAbortSignal })
         .then((result) => result.value, () => value);
       const items = await withFallback((tier) => tightenActions(local, { tier, abortSignal: planningAbortSignal, raw }), preferredFor("sort"), { abortSignal: planningAbortSignal })
         .then((result) => result.value, () => local);
-      return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items }, via });
+      const finished = await Promise.all(items.map(async (item) => {
+        const heading = item.kind === "thought" ? headed.get(item.text) : undefined;
+        return heading ? { ...item, text: await heading } : item;
+      }));
+      return Response.json({ sort: { version: SIMPLE_SORT_VERSION, items: finished }, via });
     } catch (e) {
       const { message, status } = explain(e);
       return Response.json({ error: message }, { status });

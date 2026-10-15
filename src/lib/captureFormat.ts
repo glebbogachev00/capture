@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { CLEANUP_SYSTEM } from "./dictationCleanup";
 
 /**
@@ -70,7 +71,14 @@ export function airy(text: string): string {
   type Block = { list: boolean; parts: string[] };
   const fits = (parts: string[]) => parts.length <= 3 && wordCount(parts.join(" ")) <= 60;
   const blocks: Block[] = [];
-  for (const paragraph of text.split(/\n{2,}/)) {
+  for (let paragraph of text.split(/\n{2,}/)) {
+    /* A heading stays on its own line, never joined to a paragraph. */
+    const heading = paragraph.match(/^#{1,3}\s+[^\n]+/);
+    if (heading) {
+      blocks.push({ list: true, parts: [heading[0]] });
+      paragraph = paragraph.slice(heading[0].length).trim();
+      if (!paragraph) continue;
+    }
     if (/^\s*([-*•]|\d+[.)])\s/m.test(paragraph)) { blocks.push({ list: true, parts: [paragraph] }); continue; }
     const parts = sentences(paragraph.replace(/\s*\n\s*/g, " "));
     // Split anything long into groups of two or three sentences.
@@ -106,7 +114,7 @@ export function airy(text: string): string {
  * that is already capitalised or mixed-case is left as it is. */
 export function sentenceCase(text: string): string {
   return text
-    .replace(/(^|[.!?]["”’')\]]*\s+|\n\s*(?:[-*•]\s+)?)([a-zа-яё])/g, (match: string, before: string, letter: string, offset: number, all: string) =>
+    .replace(/(^(?:#{1,3}\s+)?|[.!?]["”’')\]]*\s+|\n\s*(?:[-*•]\s+|#{1,3}\s+)?)([a-zа-яё])/g, (match: string, before: string, letter: string, offset: number, all: string) =>
       /\b(e\.g|i\.e|etc|vs|cf|approx)\.\s+$/i.test(all.slice(Math.max(0, offset - 8), offset) + before) ? match : before + letter.toUpperCase())
     .replace(/\bi(?=\b(?:'(?:m|ve|ll|d))?(?![\p{L}\p{N}.\/-]))/gu, "I");
 }
@@ -121,3 +129,69 @@ export function needsFormatting(text: string): boolean {
   return FILLER.test(one) || sentences(one).length > 3 || wordCount(one) > 60;
 }
 
+
+/* Headings: a long note that moves through several parts gets a short
+   heading at each one, like a well-written long post. The model only names
+   the parts; code puts the headings between paragraphs, so not one of the
+   note's own words can change. */
+
+export const HEADINGS_MIN_WORDS = 220;
+
+const blocksOf = (text: string) => text.trim().split(/\n{2,}/);
+
+/** Long, laid out in paragraphs, and not headed yet. */
+export function needsHeadings(text: string): boolean {
+  if (/^#{1,3}\s+\S/m.test(text) || wordCount(text) < HEADINGS_MIN_WORDS) return false;
+  return blocksOf(text).length >= 4;
+}
+
+export const HEADINGS_SYSTEM =
+  "Below is one note, split into numbered paragraphs. If it moves through several distinct parts, name " +
+  "each part with a short heading, the way a well-written long post would. Return JSON " +
+  "{\"headings\": [{\"before\": number, \"title\": string}]}: \"before\" is the number of the paragraph " +
+  "where that part starts, and the first part starts at 1. Each part is at least two paragraphs. Titles " +
+  "are 1 to 5 words, plain, sentence case, no punctuation at the end, in the note's language, naming " +
+  "what that part is about in the writer's own terms. If the note is really one thought, return " +
+  "{\"headings\": []}.";
+
+/** The note with numbered paragraphs, for HEADINGS_SYSTEM. */
+export const numberedParagraphs = (text: string) => blocksOf(text).map((block, index) => `[${index + 1}] ${block}`).join("\n\n");
+
+const HeadingsSchema = z.object({
+  headings: z.array(z.object({ before: z.number(), title: z.string() })),
+});
+
+/** The headings that hold up, placed between the note's paragraphs: short
+ * plain titles, at least two paragraphs to a part, the first part near the
+ * top, and at least two parts. Anything less leaves the note as it was. */
+export function placeHeadings(text: string, answer: unknown): string {
+  const parsed = HeadingsSchema.safeParse(answer);
+  if (!parsed.success) return text;
+  const blocks = blocksOf(text);
+  const titles = new Map<number, string>();
+  for (const { before, title } of parsed.data.headings) {
+    const index = before - 1;
+    const clean = sentenceCase(title.trim().replace(/^#+\s*/, "").replace(/[.:;,!]+$/, ""));
+    if (!Number.isInteger(index) || index < 0 || index > blocks.length - 2) continue;
+    if (!clean || clean.length > 48 || wordCount(clean) > 6 || /[*_#`[\]<>\n]/.test(clean)) continue;
+    if (!titles.has(index)) titles.set(index, clean);
+  }
+  const starts: number[] = [];
+  for (const start of [...titles.keys()].sort((a, b) => a - b)) {
+    if (!starts.length || start - starts.at(-1)! >= 2) starts.push(start);
+  }
+  if (starts.length < 2 || starts[0] > 2) return text;
+  return blocks.flatMap((block, index) => (starts.includes(index) ? [`### ${titles.get(index)}`, block] : [block])).join("\n\n");
+}
+
+/** The first JSON object in a model's answer, or null. */
+export function firstJsonObject(answer: string): unknown {
+  const start = answer.indexOf("{");
+  const end = answer.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(answer.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}

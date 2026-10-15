@@ -29,4 +29,10 @@ describe("untrusted note text on a public page", () => {
       "<p>In <em>Origins of Oakley</em>, a <strong>real</strong> advantage.<br/>Next line.</p>",
     ].join(""));
   });
+
+  it("shows a lead-in line with its list, and numbered lists as numbered", () => {
+    expect(html("Three things:\n- one\n- two\n\n3. third\n4. fourth")).toBe(
+      "<p>Three things:</p><ul><li>one</li><li>two</li></ul><ol start=\"3\"><li>third</li><li>fourth</li></ol>",
+    );
+  });
 });
