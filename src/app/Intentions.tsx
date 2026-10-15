@@ -735,6 +735,7 @@ export function RecordScreen({
               profile={profile}
               onProfileChange={onProfileChange}
               migrationReady={profileMigrationReady}
+              ledger={ledger}
             />
           </div>
 

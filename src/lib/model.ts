@@ -204,8 +204,19 @@ export type Completion = {
 
 /** The personal identity shown in Capture. The image bytes stay in the
     existing image store; the synced board carries only their immutable id. */
+/** How a person talks, read from their own words (lib/voice). */
+export type VoiceReading = {
+  patterns: string[];
+  phrases: string[];
+  samples: { about: string; text: string }[];
+  /** How many spoken words it was read from; it reads again as they grow. */
+  words: number;
+  at: number;
+};
+
 export type ProfileIdentity = {
   name: string;
+  voice?: VoiceReading;
   imageId?: string;
   showSignature?: boolean;
   intentionShowcaseEnabled?: boolean;

@@ -340,6 +340,8 @@ export const RU: Record<string, string> = {
   "Your name": "Ваше имя",
   "Formed from your Capture record": "Собрано из ваших записей",
   "formed from your record": "собрано из ваших записей",
+  "Your voice": "Ваш голос",
+  "How I talk": "Как я говорю",
   "What keeps returning": "К чему вы возвращаетесь",
   "A thread still taking shape.": "Тема ещё складывается.",
   // components/CaptureReceipt.tsx

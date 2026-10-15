@@ -38,6 +38,7 @@ const managedRoutes: Record<string, string[]> = {
   wrap: ["POST"],
   transcribe: ["POST"],
   tts: ["GET", "POST"],
+  voice: ["POST"],
 };
 
 function handlerBody(source: string, method: string): string {
