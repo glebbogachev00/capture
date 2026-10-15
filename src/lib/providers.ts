@@ -1,7 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { cerebras } from "@ai-sdk/cerebras";
 import { createGroq, groq } from "@ai-sdk/groq";
-import { currentOwnTier } from "@/lib/ownTier.server";
+import { currentOwnAi } from "@/lib/ownTier.server";
 import { mistral } from "@ai-sdk/mistral";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
@@ -26,8 +26,13 @@ export type Tier = {
 };
 
 export function chain(): Tier[] {
-  const own = currentOwnTier();
-  if (own) return [own];
+  const own = currentOwnAi();
+  if (own) return own.fallback ? [...own.tiers, ...managedChain()] : own.tiers;
+  return managedChain();
+}
+
+/** The providers this Capture runs on, from its own keys. */
+function managedChain(): Tier[] {
   const tiers: Tier[] = [];
 
   // Most capture calls are small, frequent, and latency-sensitive — every

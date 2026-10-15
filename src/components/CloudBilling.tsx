@@ -10,8 +10,6 @@ import type { PolarPlan } from "@/lib/polar";
 import type { PublicCloudSubscription } from "@/lib/cloudSubscription";
 import { cloudCheckoutHandoff, safePolarDestination } from "@/lib/cloudCheckoutClient";
 import { hasCheckoutReturnState } from "@/lib/urlPrivacy";
-import { getDocumentLifetime } from "@/lib/ownership";
-import { OWN_KEY_PROVIDER_NAMES, clearOwnKey, ownKeyProvider, readOwnKey, saveOwnKey } from "@/lib/ownAiKey";
 
 export { safePolarDestination } from "@/lib/cloudCheckoutClient";
 
@@ -229,51 +227,6 @@ export function CloudAccountPanel() {
       )}
       {subscription.reconciliationRequired && <button className="ghost" onClick={() => void retryStatus()} disabled={busy}>{t("Retry status")}</button>}
       {note && <p className="cloud-action-note" role="status">{note}</p>}
-      <OwnAiKey />
-    </div>
-  );
-}
-
-/** One optional field: a member's own AI key, kept on this device only. */
-function OwnAiKey() {
-  const t = useT();
-  const owner = getDocumentLifetime().owner;
-  const [saved, setSaved] = useState(() => ownKeyProvider(readOwnKey(owner)));
-  const [draft, setDraft] = useState("");
-  const [refused, setRefused] = useState(false);
-  if (!owner) return null;
-  const save = () => {
-    const provider = saveOwnKey(owner, draft);
-    setRefused(!provider);
-    if (provider) {
-      setSaved(provider);
-      setDraft("");
-    }
-  };
-  return (
-    <div className="own-key">
-      <p className="settings-copy">
-        {saved
-          ? t("Using your own {provider} key on this device. Cloud's AI allowance doesn't apply.", { provider: OWN_KEY_PROVIDER_NAMES[saved] })
-          : t("Need more AI than Cloud includes? Add your own OpenRouter, Groq or Cerebras key. It stays on this device.")}
-      </p>
-      {saved ? (
-        <button className="ghost" onClick={() => { clearOwnKey(owner); setSaved(null); }}>{t("Remove key")}</button>
-      ) : (
-        <div className="own-key-row">
-          <input
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder={t("Your AI key")}
-            aria-label={t("Your AI key")}
-            value={draft}
-            onChange={(event) => { setDraft(event.target.value); setRefused(false); }}
-          />
-          <button className="ghost" onClick={save} disabled={!draft.trim()}>{t("Save")}</button>
-        </div>
-      )}
-      {refused && <p className="cloud-action-note" role="status">{t("That isn't an OpenRouter, Groq or Cerebras key.")}</p>}
     </div>
   );
 }

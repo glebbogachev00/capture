@@ -1,6 +1,6 @@
 import { NoProvidersError } from "./providers";
-import { currentOwnTier } from "./ownTier.server";
-import { OWN_KEY_PROVIDER_NAMES } from "./ownAiKey";
+import { currentOwnAi } from "./ownTier.server";
+import { providerName } from "./aiProviders";
 
 /**
  * Turn a model failure into something worth reading.
@@ -74,19 +74,22 @@ export function explain(error: unknown): { message: string; status: number } {
     };
   }
 
-  /* A member's own key: say so in their terms, never as server setup. */
-  const own = currentOwnTier();
-  if (own) {
-    const ownName = OWN_KEY_PROVIDER_NAMES[own.provider];
+  /* AI the person connected: say so in their terms, never as server setup.
+     On a self-hosted Capture its own providers answered last, so this only
+     speaks when the person's AI was all there was (Capture Cloud). */
+  const own = currentOwnAi();
+  if (own && !own.fallback) {
+    const names = [...new Set(own.tiers.map((tier) => providerName(tier.provider)))];
+    const ownName = names.length === 1 ? `Your ${names[0]} key` : "Your AI keys";
     const { text, status } = unwrap(error);
     if (status === 401 || status === 403 || text.includes("api key") || text.includes("api_key") || text.includes("unauthenticated")) {
-      return { message: `Your ${ownName} key was refused. Check it in Settings, under Capture Cloud.`, status: 502 };
+      return { message: `${ownName} ${names.length === 1 ? "was" : "were"} refused. Check ${names.length === 1 ? "it" : "them"} in Settings, under AI models.`, status: 502 };
     }
     if (status === 402 || text.includes("payment") || text.includes("billing") || text.includes("credit")) {
-      return { message: `Your ${ownName} account needs credit before it will answer.`, status: 502 };
+      return { message: `${names.length === 1 ? `Your ${names[0]} account needs` : "Your AI accounts need"} credit before ${names.length === 1 ? "it" : "they"} will answer.`, status: 502 };
     }
     if (status === 429 || text.includes("rate limit") || text.includes("quota")) {
-      return { message: `${ownName} is rate-limiting your key. Try again shortly.`, status: 429 };
+      return { message: `${names.length === 1 ? names[0] : "Your AI providers"} ${names.length === 1 ? "is" : "are"} rate-limiting your key. Try again shortly.`, status: 429 };
     }
   }
 

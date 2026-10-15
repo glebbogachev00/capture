@@ -5,7 +5,7 @@ import { explain } from "@/lib/aiError";
 import { captionPrompt, mergeCaptions, tidyCaption } from "@/lib/caption";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
-import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
+import { authorizeManagedAiRequest, liveAi, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import {
   sanitizeProviderError,
   visionChain,
@@ -582,7 +582,7 @@ function routingPlanPrompt(
 export async function POST(request: Request) {
   const planningDeadlineAt = Date.now() + PLANNING_DEADLINE_MS;
   const planningAbortSignal = AbortSignal.timeout(PLANNING_DEADLINE_MS);
-  const authorization = await authorizeManagedAiRequest(request);
+  const authorization = await authorizeManagedAiRequest(request, liveAi);
   if (authorization instanceof Response) return authorization;
   return withManagedAiAdmission(authorization, async () => {
   // Sorting spends real model quota; a single client can't run it in a loop.

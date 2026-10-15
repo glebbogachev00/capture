@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
-import { authorizeManagedAiRequest, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
+import { authorizeManagedAiRequest, liveAi, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
 import { withFallback } from "@/lib/providers";
 import { preferredFor } from "@/lib/routing";
 import { scheduleJevJudgeShadow } from "@/lib/jevJudgeShadow";
@@ -122,7 +122,7 @@ function render(
 }
 
 export async function POST(request: Request) {
-  const authorization = await authorizeManagedAiRequest(request);
+  const authorization = await authorizeManagedAiRequest(request, liveAi);
   if (authorization instanceof Response) return authorization;
   return withManagedAiAdmission(authorization, async () => {
   const gate = modelRateLimit(clientIp(request));

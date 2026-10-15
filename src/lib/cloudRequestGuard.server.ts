@@ -15,7 +15,10 @@ import { getCloudConfig } from "@/lib/supabase/config";
 import { identityFromClaims } from "@/lib/supabase/identity";
 import { createCloudServerClient } from "@/lib/supabase/server";
 import { hasCurrentCloudAccess } from "@/lib/cloudAccess.server";
-import { ownTierFrom, withOwnTier, type OwnTier } from "@/lib/ownTier.server";
+import { withOwnAi, type OwnAi, type OwnTier } from "@/lib/ownTier.server";
+import { cloudKeysAvailable, loadAiSettings, tiersFor } from "@/lib/aiSettings.server";
+import { isSubscription } from "@/lib/aiProviders";
+import { PUBLIC_SITE } from "@/lib/publicSite";
 
 export type CloudServerClient = Awaited<ReturnType<typeof createCloudServerClient>>;
 
@@ -122,17 +125,32 @@ export async function createCloudGuardServerContext(): Promise<CloudGuardServerC
   };
 }
 
+/** For routes a person waits on (sorting, Ask, Distill): a subscription's
+ * app takes 10–35 seconds an answer, so those routes skip it. */
+export const liveAi = (tier: OwnTier) => !isSubscription(tier.provider);
+
+/** The AI a person connected that this route can use, or null. */
+async function ownAiFor(ownerId: string | null, accepts: (tier: OwnTier) => boolean, fallback: boolean): Promise<OwnAi | null> {
+  const tiers = tiersFor(await loadAiSettings(ownerId)).filter(accepts);
+  return tiers.length ? { tiers, fallback } : null;
+}
+
 export async function authorizeManagedAiRequest(
   request: Request,
-  /** Which own keys this route can use; voice needs a Groq key. */
+  /** Which connected AI this route can use; voice needs a Groq key. */
   accepts: (tier: OwnTier) => boolean = () => true,
 ): Promise<CloudAuthorization | Response> {
   // Avoid initializing Cloud adapters on self-hosted/playground deployments.
-  if (process.env.CAPTURE_CLOUD !== "1") return { mode: "non-cloud" };
+  if (process.env.CAPTURE_CLOUD !== "1") {
+    /* A self-hosted Capture uses the AI its owner connected, with its own
+       providers behind them. The public trial never has any. */
+    if (PUBLIC_SITE) return { mode: "non-cloud" };
+    const ownAi = await ownAiFor(null, accepts, true).catch(() => null);
+    return ownAi ? { mode: "non-cloud", ownAi } : { mode: "non-cloud" };
+  }
   try {
     const { guard } = await createCloudGuardServerContext();
-    const own = ownTierFrom(request);
-    return authorizeCloudRequest(request, "managed_ai", guard, own && accepts(own) ? own : null);
+    return authorizeCloudRequest(request, "managed_ai", guard, (owner) => ownAiFor(owner, accepts, false));
   } catch {
     return cloudAuthorizationUnavailable();
   }
@@ -142,8 +160,8 @@ export async function withManagedAiAdmission<T>(
   authorization: CloudAuthorization,
   work: () => Promise<T>,
 ): Promise<T> {
+  if (authorization.ownAi) return withOwnAi(authorization.ownAi, work);
   if (authorization.mode === "non-cloud") return work();
-  if (authorization.ownTier) return withOwnTier(authorization.ownTier, work);
   if (!authorization.admissionId || !authorization.releaseExternalWork) {
     throw new Error("Cloud external-work admission unavailable");
   }
@@ -177,7 +195,7 @@ export async function scheduleManagedAiDeferredWork(input: {
 
   let lease: { release: () => Promise<void> };
   try {
-    if (input.authorization.mode === "non-cloud" || input.authorization.ownTier) {
+    if (input.authorization.mode === "non-cloud" || input.authorization.ownAi) {
       lease = { release: async () => {} };
     } else {
       const acquire = input.authorization.acquireDeferredManagedAiAdmission;
@@ -212,8 +230,8 @@ export async function scheduleManagedAiDeferredWork(input: {
     try {
       /* Work that finishes after the response still uses the member's own
          key; it never falls back to managed AI. */
-      const own = input.authorization.mode === "cloud" ? input.authorization.ownTier : undefined;
-      await (own ? withOwnTier(own, input.work) : input.work());
+      const own = input.authorization.ownAi;
+      await (own ? withOwnAi(own, input.work) : input.work());
     } catch (error) {
       try { input.onError(error); } catch {}
     } finally {
@@ -229,5 +247,23 @@ export async function scheduleManagedAiDeferredWork(input: {
     await releaseOnce();
     try { input.onError(error); } catch {}
     return false;
+  }
+}
+
+/** Who a request to change connected AI is for: the Cloud member, or the
+ * self-hosted owner (null). The public trial has no connected AI. */
+export async function authorizeAiSettingsRequest(request: Request): Promise<{ ownerId: string | null } | Response> {
+  if (process.env.CAPTURE_CLOUD !== "1") {
+    return PUBLIC_SITE ? Response.json({ error: "not available" }, { status: 404 }) : { ownerId: null };
+  }
+  try {
+    const { guard } = await createCloudGuardServerContext();
+    const authorization = await authorizeCloudRequest(request, "board_write", guard);
+    if (authorization instanceof Response) return authorization;
+    if (authorization.mode !== "cloud") return cloudAuthorizationUnavailable();
+    if (!cloudKeysAvailable()) return Response.json({ error: "ai settings not configured" }, { status: 503 });
+    return { ownerId: authorization.ownerId };
+  } catch {
+    return cloudAuthorizationUnavailable();
   }
 }
