@@ -1,9 +1,11 @@
+import { voiceForAgents } from "./voice";
 import { countNoun, t as tr } from "./i18n";
 import {
   type Action,
   type Board,
   type Intention,
   type Thread,
+  type VoiceReading,
   left,
   pad,
 } from "./model";
@@ -68,7 +70,8 @@ function photoLines(imgs: string[] | undefined, notes: Record<string, string> | 
 
 export function shareThread(
   t: Thread,
-  from?: { open: Action[]; done: DoneItem[] }
+  from?: { open: Action[]; done: DoneItem[] },
+  voice?: VoiceReading,
 ): Shareable {
   const frags = t.frags.filter((frag) => !frag.unsorted);
   const dates = frags.map((f) => f.at);
@@ -100,6 +103,9 @@ export function shareThread(
     for (const a of from.open) lines.push(`- [ ] ${a.text}`);
     for (const a of from.done) lines.push(`- [x] ${a.text}`);
   }
+  /* How the author talks, for an agent that writes from this thread. */
+  const howITalk = voiceForAgents(voice, `## ${tr("How I talk")}`);
+  if (howITalk.length) lines.push("", ...howITalk);
   return {
     title: t.name,
     text: lines.join("\n").trimEnd(),
@@ -223,7 +229,7 @@ export function shareableFor(
     const t = board.threads.find((x) => x.id === view.id);
     /* The same document the thread's own Copy produces: the standing, and
        the actions that belong with it. Two doors, one paste. */
-    return t ? shareThread(t, actionsForThread(board, t)) : null;
+    return t ? shareThread(t, actionsForThread(board, t), board.profile?.voice) : null;
   }
   if (view.kind === "intention") {
     const i = board.intentions.find((x) => x.id === view.id);
@@ -470,6 +476,9 @@ export function shareRecordSince(board: Board, since: number): Shareable | null 
  */
 export function shareRecord(board: Board, recentLimit = 15): Shareable {
   const lines: string[] = ["# Capture board", ""];
+  /* Before the notes, so an agent writing from them writes like their author. */
+  const voice = voiceForAgents(board.profile?.voice, "## How I talk");
+  if (voice.length) lines.push(...voice, "");
 
   if (board.threads.length) {
     lines.push("## Threads");

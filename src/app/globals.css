@@ -7295,3 +7295,43 @@ body {
 .ai-subscription .ai-model-name { grid-area: auto; grid-column: 1; grid-row: 1; }
 .ai-subscription .settings-copy { grid-column: 1; grid-row: 2; margin: 0; font-size: 13px; }
 .ai-subscription button { grid-column: 2; grid-row: 1 / span 2; }
+
+/* Your voice: how you talk, then a note or two said the way you would. */
+.record-profile-voice {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+.record-voice-patterns {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+.record-voice-phrases {
+  margin: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.record-voice-sample {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 2px solid var(--accent);
+  background: var(--paper);
+  border-radius: 0 10px 10px 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+.record-voice-sample small {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
