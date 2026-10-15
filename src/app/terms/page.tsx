@@ -11,8 +11,8 @@ export default function TermsPage() {
     <LegalPage title="Terms" updated="October 15, 2026">
       <p>
         These terms cover using Capture: the free trial on trycapture.app, the
-        self-hosted app, and Capture Cloud. Capture is made and run by Gleb
-        Bogachev ([COUNTRY]). By using it, you agree to them. Questions:{" "}
+        self-hosted app, and Capture Cloud. Capture is run from Vietnam. By using
+        it, you agree to them. Questions:{" "}
         <a href="mailto:gleb@trycapture.app">gleb@trycapture.app</a>.
       </p>
 
@@ -27,7 +27,7 @@ export default function TermsPage() {
       <p>
         Capture Cloud signs you in with a code sent to your email. Keep access to
         that email secure; anyone who can read it can sign in as you. You must be
-        at least [MINIMUM AGE] to use Capture.
+        at least 13 to use Capture.
       </p>
 
       <h2>Your content</h2>
@@ -89,7 +89,7 @@ export default function TermsPage() {
       <p>
         If these terms change in a way that matters, the date at the top changes
         and Cloud users are told. These terms are governed by the laws of
-        [COUNTRY].
+        Vietnam.
       </p>
     </LegalPage>
   );

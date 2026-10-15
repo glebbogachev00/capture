@@ -1,3 +1,5 @@
+import { OWN_KEY_HEADER, carriesOwnKey, readOwnKey } from "@/lib/ownAiKey";
+
 /** One owner for one document. A revoked lifetime can never be granted again.
  * The owner is a precondition, NOT authentication. Only the server chooses paths.
  */
@@ -166,6 +168,9 @@ export class OwnershipLifetime {
     }
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
     if (api) headers.set(OWNER_HEADER, this.owner ?? "anonymous");
+    /* A member's own AI key goes with AI requests only. */
+    const ownKey = api && carriesOwnKey(path) ? readOwnKey(this.owner) : null;
+    if (ownKey) headers.set(OWN_KEY_HEADER, ownKey);
     const callerSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
     const signal = callerSignal ? AbortSignal.any([callerSignal, this.controller.signal]) : this.controller.signal;
     this.assert();

@@ -10,7 +10,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage title="Privacy" updated="October 15, 2026">
       <p>
-        Capture is made and run by Gleb Bogachev ([COUNTRY]). This page says what
+        Capture is run from Vietnam. This page says what
         Capture keeps, where it goes, and how to get it back or have it erased.
         Questions: <a href="mailto:gleb@trycapture.app">gleb@trycapture.app</a>.
       </p>
@@ -46,7 +46,9 @@ export default function PrivacyPage() {
         Google (Gemini) or OpenRouter (and the model provider it routes to).
         Voice is transcribed by Groq; reading aloud uses Microsoft&rsquo;s
         text-to-speech. Each processes it under its own API terms. If you add
-        your own AI key, requests go to that provider under your account.
+        your own AI key in Capture Cloud, requests go to that provider under
+        your account; the key stays on your device and passes through our server
+        with each AI request without being stored.
       </p>
 
       <h2>Payments</h2>
@@ -92,7 +94,7 @@ export default function PrivacyPage() {
       </p>
 
       <h2>Children</h2>
-      <p>Capture is not meant for anyone under [MINIMUM AGE].</p>
+      <p>Capture is not meant for anyone under 13.</p>
 
       <h2>Changes</h2>
       <p>

@@ -1,6 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { cerebras } from "@ai-sdk/cerebras";
 import { createGroq, groq } from "@ai-sdk/groq";
+import { currentOwnTier } from "@/lib/ownTier.server";
 import { mistral } from "@ai-sdk/mistral";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
@@ -25,6 +26,8 @@ export type Tier = {
 };
 
 export function chain(): Tier[] {
+  const own = currentOwnTier();
+  if (own) return [own];
   const tiers: Tier[] = [];
 
   // Most capture calls are small, frequent, and latency-sensitive — every

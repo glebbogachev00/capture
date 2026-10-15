@@ -15,6 +15,7 @@ import { getCloudConfig } from "@/lib/supabase/config";
 import { identityFromClaims } from "@/lib/supabase/identity";
 import { createCloudServerClient } from "@/lib/supabase/server";
 import { hasCurrentCloudAccess } from "@/lib/cloudAccess.server";
+import { ownTierFrom, withOwnTier, type OwnTier } from "@/lib/ownTier.server";
 
 export type CloudServerClient = Awaited<ReturnType<typeof createCloudServerClient>>;
 
@@ -123,12 +124,15 @@ export async function createCloudGuardServerContext(): Promise<CloudGuardServerC
 
 export async function authorizeManagedAiRequest(
   request: Request,
+  /** Which own keys this route can use; voice needs a Groq key. */
+  accepts: (tier: OwnTier) => boolean = () => true,
 ): Promise<CloudAuthorization | Response> {
   // Avoid initializing Cloud adapters on self-hosted/playground deployments.
   if (process.env.CAPTURE_CLOUD !== "1") return { mode: "non-cloud" };
   try {
     const { guard } = await createCloudGuardServerContext();
-    return authorizeCloudRequest(request, "managed_ai", guard);
+    const own = ownTierFrom(request);
+    return authorizeCloudRequest(request, "managed_ai", guard, own && accepts(own) ? own : null);
   } catch {
     return cloudAuthorizationUnavailable();
   }
@@ -139,6 +143,7 @@ export async function withManagedAiAdmission<T>(
   work: () => Promise<T>,
 ): Promise<T> {
   if (authorization.mode === "non-cloud") return work();
+  if (authorization.ownTier) return withOwnTier(authorization.ownTier, work);
   if (!authorization.admissionId || !authorization.releaseExternalWork) {
     throw new Error("Cloud external-work admission unavailable");
   }
@@ -172,7 +177,7 @@ export async function scheduleManagedAiDeferredWork(input: {
 
   let lease: { release: () => Promise<void> };
   try {
-    if (input.authorization.mode === "non-cloud") {
+    if (input.authorization.mode === "non-cloud" || input.authorization.ownTier) {
       lease = { release: async () => {} };
     } else {
       const acquire = input.authorization.acquireDeferredManagedAiAdmission;
@@ -205,7 +210,10 @@ export async function scheduleManagedAiDeferredWork(input: {
     await Promise.resolve();
     if (!handedOff) return;
     try {
-      await input.work();
+      /* Work that finishes after the response still uses the member's own
+         key; it never falls back to managed AI. */
+      const own = input.authorization.mode === "cloud" ? input.authorization.ownTier : undefined;
+      await (own ? withOwnTier(own, input.work) : input.work());
     } catch (error) {
       try { input.onError(error); } catch {}
     } finally {
