@@ -9,10 +9,12 @@ import type { SyncState } from "@/lib/sync";
 vi.doMock("react", () => React);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-async function openBoard(owner: string, read: () => Promise<Response>) {
+/** `owner` null opens a self-hosted Capture, the owner's own Mac. */
+async function openBoard(owner: string | null, read: () => Promise<Response>) {
   vi.resetModules(); localStorage.clear();
   const own = await import("@/lib/ownership");
-  own.installDocumentLifetime({ owner, expiresAt: Date.now() + 60000 });
+  if (owner === null) own.installDocumentLifetime();
+  else own.installDocumentLifetime({ owner, expiresAt: Date.now() + 60000 });
   const { EMPTY, KEY } = await import("@/lib/model");
   const { TOMBSTONE_KEY } = await import("@/lib/sync");
   const storage = await import("@/lib/storage");
@@ -130,4 +132,32 @@ it("reconnect merges the remote history before sending retained local edits", as
     expect(board.ledger).toEqual(expect.arrayContaining([...saved.ledger, ...remote.ledger]));
     expect(board.completions).toEqual(saved.completions);
   }
+});
+
+it("a push cut off mid-request is sent on the next good pull, even when that pull brings nothing new", async () => {
+  const { EMPTY } = await import("@/lib/model");
+  const { hook, posts, network } = await openBoard("cut-off-push", async () => Response.json({ board: EMPTY, tombstones: [], rev: 1 }));
+  /* First open: the hub lacks this device's notes, so they are sent. */
+  await waitFor(() => expect(posts).toHaveLength(1), { timeout: 2500 });
+  let cutOff = true;
+  vi.stubGlobal("fetch", vi.fn(async (input: unknown, init?: RequestInit) => {
+    if (init?.method === "POST" && cutOff) throw new TypeError("The network connection was lost.");
+    if (init?.method !== "POST") return Response.json({ unchanged: true });
+    return network(input, init);
+  }));
+  await act(async () => { await hook.result.current.renameThread("local-thread", "Captured then pocketed"); });
+  await waitFor(() => expect(hook.result.current.sync?.ok).toBe(false), { timeout: 2500 });
+  expect(posts).toHaveLength(1);
+  cutOff = false;
+  /* Back on screen: the pull finds nothing new on the hub, and still sends. */
+  act(() => window.dispatchEvent(new Event("focus")));
+  await waitFor(() => expect(posts).toHaveLength(2), { timeout: 2500 });
+  expect(posts[1].board.threads[0].name).toBe("Captured then pocketed");
+});
+
+it("a fresh start on a self-hosted Capture sends what the hub lacks, though the failed push is long forgotten", async () => {
+  const { EMPTY } = await import("@/lib/model");
+  const { posts, saved } = await openBoard(null, async () => Response.json({ board: EMPTY, tombstones: [], rev: 1 }));
+  await waitFor(() => expect(posts).toHaveLength(1), { timeout: 2500 });
+  expect(posts[0].board.ledger).toEqual(saved.ledger);
 });

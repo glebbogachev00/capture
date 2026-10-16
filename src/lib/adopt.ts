@@ -36,6 +36,14 @@ export type Adoption = {
   tombstones: Tombstone[];
   /** Did adopting actually change this device's state? */
   changed: boolean;
+  /** Does this device hold something the hub does not have yet? A push
+      cut off mid-request (the phone locked, the hub briefly unreachable)
+      leaves a capture only on this device. A pull that brings nothing new
+      used to send nothing, so it waited there until some other change
+      happened. The hook remembers a failed push until the next good pull;
+      this catches the same thing after a fresh start, when that memory is
+      gone. */
+  hubBehind: boolean;
   /** What to tell the person, when additions arrived — null otherwise. */
   note: string | null;
 };
@@ -45,6 +53,9 @@ export function adoptHubState(local: SyncState, remote: SyncState): Adoption {
   const changed =
     boardSignature(merged.board, merged.tombstones) !==
     boardSignature(local.board, local.tombstones ?? []);
+  const hubBehind =
+    boardSignature(merged.board, merged.tombstones) !==
+    boardSignature(remote.board, remote.tombstones ?? []);
   const note = changed
     ? arrivedNote(arrivedIn(local.board, merged.board))
     : null;
@@ -52,6 +63,7 @@ export function adoptHubState(local: SyncState, remote: SyncState): Adoption {
     board: merged.board,
     tombstones: merged.tombstones,
     changed,
+    hubBehind,
     note,
   };
 }
