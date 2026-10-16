@@ -518,6 +518,7 @@ export function useBoard(now: number) {
   // Saved Cloud edits must wait for a successful read/merge, including after
   // reconnect. A failed read must not consume this pending work.
   const offlineChangesPending = useRef(lifetime.cloud && lifetime.owner !== null);
+  const unsentChanges = useRef(false); // a failed push: send on the next good pull (Adoption.hubBehind)
 
   const adoptSyncState = useCallback((
     remote: SyncState,
@@ -580,12 +581,13 @@ export function useBoard(now: number) {
       if (durable.status === "failed") throw new Error("sync persistence failed");
       const adopted = durable.value;
       hubRev.current = stored.rev ?? null;
+      unsentChanges.current = false;
       const images = await reconcileImages(adopted.board);
       if (!backupGate.current.isCurrent(generation)) return;
       setSync(imageSyncStatus(images));
     } catch {
       if (!backupGate.current.isCurrent(generation)) return;
-      /* hub unreachable — keep everything local, retry on the next change */
+      unsentChanges.current = true; // hub unreachable: kept locally, sent on the next good pull
       setSync({ ok: false, at: stamp(), note: t("Hub unreachable — kept locally") });
     }
   }, [adoptSyncState, reconcileImages, lifetime]);
@@ -643,7 +645,7 @@ export function useBoard(now: number) {
         const images = await reconcileImages(latest.current);
         if (!backupGate.current.isCurrent(generation)) return { ok: false };
         setSync(imageSyncStatus(images));
-        if (offlineChangesPending.current) {
+        if (offlineChangesPending.current || unsentChanges.current) {
           offlineChangesPending.current = false;
           schedulePush();
         }
@@ -678,7 +680,7 @@ export function useBoard(now: number) {
       setSync(imageSyncStatus(images));
       const pending = offlineChangesPending.current;
       offlineChangesPending.current = false;
-      if (changed || pending) schedulePush();
+      if (changed || pending || unsentChanges.current || adopted.hubBehind) schedulePush();
       return { ok: true, changed };
     } catch {
       if (!backupGate.current.isCurrent(generation)) return { ok: false };

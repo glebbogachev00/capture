@@ -30,6 +30,16 @@ describe("adopting the hub's copy", () => {
     expect(out.board.actions.map((a) => a.id)).toContain("mid");
   });
 
+  it("knows when the hub lacks something this device holds, so a cut-off push is sent again", () => {
+    const capture = act("seventh", "Write the article about pricing", 3000);
+    const hub = state({ actions: [act("a1", "Prepare the one-to-one class", 100)] });
+    const phone = state({ actions: [act("a1", "Prepare the one-to-one class", 100), capture] });
+    expect(adoptHubState(phone, hub).hubBehind).toBe(true);
+    expect(adoptHubState(phone, phone).hubBehind).toBe(false);
+    /* The other way round is an arrival, not something to send. */
+    expect(adoptHubState(hub, phone)).toMatchObject({ hubBehind: false, changed: true });
+  });
+
   it("the other device's additions arrive, with a sentence about them", () => {
     const local = state({ actions: [act("a1", "Prepare the one-to-one class", 100)] });
     const remote = state({
