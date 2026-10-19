@@ -45,6 +45,24 @@ export function semanticSiblingNames(threads: Thread[], targetId: string): strin
     .map((thread) => thread.name);
 }
 
+/* What the person said there last, in their own words. A summary is the
+   thread's account of itself and two threads on one subject read alike in
+   it; the latest note is often exactly what the next capture continues. */
+const LATEST = 160;
+export function latestNote(thread: Thread): string {
+  const last = thread.frags.filter((frag) => !frag.unsorted).reduce<Thread["frags"][number] | undefined>(
+    (latest, frag) => (!latest || frag.at > latest.at ? frag : latest), undefined);
+  if (!last) return "";
+  return brief(last.text.replace(/^#{1,3}\s+.*$/gm, "").replace(/\s+/g, " "), LATEST);
+}
+
+/** Each routing candidate's latest note, for the filing check only
+ * (lib/secondLook). The sort itself never sees these: more context there
+ * reshuffled which tasks it picked out. */
+export function latestNotes(threads: Thread[]): Record<string, string> {
+  return Object.fromEntries(semanticThreads(threads).map((t) => [t.id, latestNote(t)]).filter(([, note]) => note));
+}
+
 export function threadBriefs(
   threads: Thread[]
 ): { id: string; name: string; about: string }[] {

@@ -1,7 +1,7 @@
 import type { Board } from "./model";
 import { deriveCorrectionExamples } from "./correctionExamples";
 import { seriesFor } from "./series";
-import { threadBriefs } from "./threadBrief";
+import { latestNotes, threadBriefs } from "./threadBrief";
 import { settledLedgerEntries } from "./unsortedOps";
 
 /** Build every Thread-derived field sent to Sort from the same routability
@@ -45,5 +45,5 @@ export function semanticSortContext(
     disabledCorrectionKeys,
   );
 
-  return { threads, recent, series, correctionExamples };
+  return { threads, latest: latestNotes(board.threads), recent, series, correctionExamples };
 }

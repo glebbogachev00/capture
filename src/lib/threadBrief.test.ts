@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Thread } from "./model";
-import { brief, briefLength, semanticSiblingNames, threadBriefs } from "./threadBrief";
+import { brief, briefLength, semanticSiblingNames, threadBriefs, latestNotes } from "./threadBrief";
 
 describe("what the sorter is told about each thread", () => {
   it("spends the budget across the board, within bounds", () => {
@@ -27,6 +27,22 @@ describe("what the sorter is told about each thread", () => {
     expect(threadBriefs([temporary])).toEqual([]);
     expect(threadBriefs([{ ...temporary, name: "Release planning", temporaryName: undefined }]))
       .toEqual([{ id: "temporary", name: "Release planning", about: "" }]);
+  });
+
+  it("keeps each thread's latest note apart from its description, without headings", () => {
+    const thread: Thread = {
+      id: "writing", name: "Writing", summary: "Article ideas for X.",
+      frags: [
+        { id: "old", at: 1, text: "An older idea about pricing." },
+        { id: "new", at: 5, text: "### Article ideas overview\n\nOkay, another article idea. " + "It keeps going about founders and demos. ".repeat(8) },
+        { id: "unsorted", at: 9, text: "Not placed yet.", unsorted: true },
+      ],
+    };
+    expect(threadBriefs([thread])[0].about).toBe("Article ideas for X.");
+    const { writing } = latestNotes([thread, { id: "empty", name: "Empty", summary: "", frags: [] }]);
+    expect(writing.startsWith("Okay, another article idea.")).toBe(true);
+    expect(writing.length).toBeLessThanOrEqual(161);
+    expect(Object.keys(latestNotes([thread, { id: "empty", name: "Empty", summary: "", frags: [] }]))).toEqual(["writing"]);
   });
 
   it("excludes temporary and target Threads from summary sibling context until rename", () => {

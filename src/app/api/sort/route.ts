@@ -54,6 +54,7 @@ import { formatCapture, headCapture } from "@/lib/captureFormat.server";
 import { tightenActions } from "@/lib/actionText.server";
 import { inCaptureLanguage } from "@/lib/language.server";
 import { SIMPLE_SORT_VERSION, generateSimpleSort, normalizeSimpleSort, simpleSortPrompt } from "@/lib/simpleSort";
+import { fileThought, fileThoughts } from "@/lib/secondLook.server";
 import { parseSortImageDataUrl } from "@/lib/sortImageDataUrl";
 
 /**
@@ -203,6 +204,9 @@ const Body = z.object({
   routingPlanVersion: z.literal(1).optional(),
   /** The one-call sorter (lib/simpleSort). */
   sortVersion: z.literal(SIMPLE_SORT_VERSION).optional(),
+  /** Simple sorter only: each thread's latest note, for the second look
+      before a thought starts a new thread (lib/secondLook). */
+  latest: z.record(z.string().max(100), z.string().max(400)).optional(),
   /** The person's Date#getTimezoneOffset(), so "Friday" means their Friday. */
   tzOffset: z.number().int().min(-900).max(900).optional(),
   /** Existing open Actions are candidates only for dedicated identity adjudication. */
@@ -639,11 +643,17 @@ export async function POST(request: Request) {
       const prompt = simpleSortPrompt({
         raw, threads: body.threads, actions: body.actions, corrections: body.correctionExamples, force: body.force, now, tzOffset: body.tzOffset,
       });
-      const { value, via } = await withFallback(async (tier) =>
+      const { value: sorted, via } = await withFallback(async (tier) =>
         normalizeSimpleSort(
           await generateSimpleSort({ tier, prompt, abortSignal: planningAbortSignal }),
           { threads: body.threads, actions: body.actions, force: body.force, raw, now, tzOffset: body.tzOffset },
         ), preferredFor("sort"), { abortSignal: planningAbortSignal });
+      /* A thought about to start a new thread gets a second look against what
+         each thread holds now (lib/secondLook). */
+      const filing = { threads: body.threads, latest: body.latest ?? {} };
+      const value = await fileThoughts(sorted, filing, (note) =>
+        withFallback((tier) => fileThought(note, raw, filing, { tier, abortSignal: planningAbortSignal }), preferredFor("sort"), { abortSignal: planningAbortSignal })
+          .then((result) => result.value));
       /* A run-on action becomes its separate short tasks (only long ones are
          sent), and a short one ending on "it" says what it is. */
       /* A Russian capture keeps Russian in what the sorter wrote itself; first,
