@@ -42,7 +42,7 @@ export async function requestBoardSort<T = SortResult>(options: {
       threads: context.threads,
       ...(options.simple || options.captureId ? {
         captureId: options.captureId,
-        ...(options.simple ? { sortVersion: 2, tzOffset: new Date().getTimezoneOffset() } : { routingPlanVersion: 1 }),
+        ...(options.simple ? { sortVersion: 2, tzOffset: new Date().getTimezoneOffset(), latest: context.latest } : { routingPlanVersion: 1 }),
         actions: options.board.actions
           .filter((action) => !action.unsorted && !action.done && !action.faded)
           .slice(0, 400)
