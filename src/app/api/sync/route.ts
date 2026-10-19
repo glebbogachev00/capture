@@ -11,6 +11,17 @@ import {
   GET as getCloudBoard,
   PUT as putCloudBoard,
 } from "@/app/api/cloud/board/route";
+import { POST as sortCapture } from "@/app/api/sort/route";
+import { finishAbandonedSorts } from "@/lib/hubFinishesSorts.server";
+
+/* An always-on hub with its own disk (a self-hosted Capture) finishes sorts
+   a device abandoned; any device checking in is the moment to look. Never on
+   serverless, where work after the response is cut off. */
+function finishAbandoned(request: Request) {
+  if (usingBlob()) return;
+  const origin = new URL(request.url).origin;
+  void finishAbandonedSorts((input, init) => sortCapture(new Request(new URL(String(input), origin), init)));
+}
 
 /** Why the hub could not store the board, in terms of the thing to fix.
     Serverless hosts have no writable disk, so a deployment without a blob
@@ -81,6 +92,7 @@ export async function GET(request: Request) {
      of the whole board — the client polls every 10s, and almost every poll
      finds nothing new. Any mismatch (including a reset hub) falls through
      to the full payload. */
+  finishAbandoned(request);
   const known = new URL(request.url).searchParams.get("rev");
   if (known !== null && Number(known) === stored.rev) {
     return NextResponse.json({ unchanged: true, rev: stored.rev });
@@ -142,6 +154,7 @@ export async function POST(request: Request) {
       board: hydrate(candidate.board),
       tombstones,
     });
+    finishAbandoned(request);
     return NextResponse.json(stored);
   } catch {
     /* Keep provider details out of logs while preserving an actionable,
