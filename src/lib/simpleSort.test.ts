@@ -48,6 +48,9 @@ describe("normalizeSimpleSort", () => {
   it("refuses a thought with nowhere to go and an unknown id without a name", () => {
     expect(() => normalizeSimpleSort({ items: [item({ kind: "thought", text: "Somewhere" })] }, { threads })).toThrow();
     expect(() => normalizeSimpleSort({ items: [item({ kind: "thought", text: "x", threadIds: ["gone"] })] }, { threads })).toThrow();
+    /* A model that names many threads still sorts: the first real one wins. */
+    expect(normalizeSimpleSort({ items: [item({ kind: "thought", text: "Retake records it.", threadIds: ["gone", "a", "b", "c", "d", "retake", "ovid"] })] }, { threads })
+      .map((sorted) => sorted.threads)).toEqual([[{ id: "retake" }]]);
     expect(() => normalizeSimpleSort({ items: [] }, { threads })).toThrow();
   });
 
