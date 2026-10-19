@@ -12,6 +12,7 @@ export const OPS_EVENT_NAMES = [
   "cloud_board_write",
   "self_hosted_sync_read",
   "self_hosted_sync_write",
+  "self_hosted_sort_finish",
   "billing_checkout",
   "billing_portal",
   "billing_webhook",
