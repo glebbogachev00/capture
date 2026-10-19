@@ -27,12 +27,14 @@ export const SimpleSortSchema = z.object({
 });
 
 /** What is accepted back: a model may leave out a null field, or name one
- * thread as threadId. */
+ * thread as threadId. A thought keeps one thread, the first real one named,
+ * so a model that lists many is fine: refusing more than four threw the whole
+ * sort away (once for Cerebras, twice for Haiku 5.5, on 46 real captures). */
 const Answer = z.object({
   items: z.array(z.object({
     kind: z.enum(["action", "thought", "intention"]),
     text: z.string().trim().min(1).max(20_000),
-    threadIds: z.array(z.string().max(100)).max(4).nullish(),
+    threadIds: z.array(z.string().max(100)).max(60).nullish(),
     threadId: z.string().max(100).nullish(),
     newThread: z.string().trim().max(100).nullish(),
     due: z.string().max(40).nullish(),
