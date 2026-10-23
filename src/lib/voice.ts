@@ -45,7 +45,8 @@ export const spokenWords = (notes: { text: string }[]) => notes.reduce((sum, not
 /** Whether a (new) reading is due: first at the bar, then as the words grow. */
 export function voiceDue(voice: VoiceReading | undefined, words: number): boolean {
   if (words < VOICE_MIN_WORDS) return false;
-  return !voice || words >= voice.words * VOICE_GROWTH;
+  /* A reading from before viewpoint existed is read once more. */
+  return !voice || !voice.viewpoint || words >= voice.words * VOICE_GROWTH;
 }
 
 /** Notes spread evenly across time until the budget is spent. */
@@ -62,10 +63,11 @@ export function voiceSample(notes: { text: string }[], budget = VOICE_SAMPLE_WOR
 
 export const VOICE_SYSTEM =
   "Below are someone's own notes, mostly spoken aloud and transcribed, separated by ---. Describe how " +
-  "this person talks, so an AI can write in their voice and they recognise themselves in it. Listen for " +
+  "this person talks and thinks, so an AI can write in their voice and they recognise themselves in it. Listen for " +
   "how they open a thought, how long their sentences run, the small words they lean on, how they correct " +
   "themselves, and how they land. Return JSON {\"patterns\": string[], \"phrases\": string[], " +
-  "\"samples\": [{\"about\": string, \"text\": string}]}:\n" +
+  "\"samples\": [{\"about\": string, \"text\": string}], \"viewpoint\": [{\"claim\": string, \"words\": string}], " +
+  "\"onThePage\": string[]}:\n" +
   "- patterns: 4 to 6 short plain sentences starting with \"You\" (speaking to this person), each one " +
   "something you can actually see in many of the notes. Specific to this person; nothing that would be " +
   "true of anyone.\n" +
@@ -73,12 +75,20 @@ export const VOICE_SYSTEM =
   "- samples: 2 short new notes, 60 to 120 words each, written as this person in the first person (\"I\"), " +
   "the way they would say it out loud: their openers, their rhythm, their fillers. Each about one of the " +
   "subjects given; \"about\" is that subject. New sentences only, never copied from the notes.\n" +
+  "- viewpoint: 3 to 6 things this person believes or argues again and again (about their work, building, " +
+  "how to live), each {\"claim\": the position in one short plain sentence, \"words\": the exact phrase from " +
+  "the notes where they say it}. Only positions you can see in several notes, never generic advice.\n" +
+  "- onThePage: 3 to 5 short instructions for writing as this person rather than speaking: what of their " +
+  "voice to keep on the page (directness, the words they use, how they argue) and which spoken habits to " +
+  "drop (fillers, check-ins, restarts).\n" +
   "Write in the language the notes are in.";
 
 export const VoiceSchema = z.object({
   patterns: z.array(z.string()),
   phrases: z.array(z.string()),
   samples: z.array(z.object({ about: z.string(), text: z.string() })),
+  viewpoint: z.array(z.object({ claim: z.string(), words: z.string() })).optional(),
+  onThePage: z.array(z.string()).optional(),
 });
 
 const normal = (text: string) => text.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ");
@@ -108,7 +118,14 @@ export function acceptVoice(answer: unknown, source: string, words: number, now:
     .map(({ about, text }) => ({ about: about.trim().slice(0, 80), text: text.trim() }))
     .filter(({ about, text }) => about && wordsIn(text) >= 25 && wordsIn(text) <= 220 && !copies(text, source))
     .slice(0, 2);
-  return { patterns: patterns.slice(0, 6), phrases, samples, words, at: now };
+  /* A belief counts only where the notes really say it. */
+  const viewpoint = (parsed.data.viewpoint ?? [])
+    .map(({ claim, words: quoted }) => ({ claim: claim.trim(), words: quoted.trim().replace(/^["“]|["”]$/g, "") }))
+    .filter(({ claim, words: quoted }) => claim.length >= 10 && claim.length <= 160 && quoted.length >= 3 && quoted.length <= 200 &&
+      said.includes(normal(quoted)))
+    .slice(0, 6);
+  const onThePage = (parsed.data.onThePage ?? []).map((line) => line.trim()).filter((line) => line.length >= 10 && line.length <= 180).slice(0, 5);
+  return { patterns: patterns.slice(0, 6), phrases, samples, viewpoint, onThePage, words, at: now };
 }
 
 /** "How I talk", for an agent writing on this person's behalf. */

@@ -209,6 +209,12 @@ export type VoiceReading = {
   patterns: string[];
   phrases: string[];
   samples: { about: string; text: string }[];
+  /** What they believe and argue again and again, each with the exact words
+   * from their notes where they say it. Missing on readings made before. */
+  viewpoint?: { claim: string; words: string }[];
+  /** How to keep their voice on the page: what to keep, what spoken habits
+   * to drop. For an agent writing as them. */
+  onThePage?: string[];
   /** How many spoken words it was read from; it reads again as they grow. */
   words: number;
   at: number;

@@ -114,6 +114,15 @@ export function VoiceSection({
               {!!voice.phrases.length && (
                 <p className="record-voice-phrases">{voice.phrases.map((phrase) => `“${phrase}”`).join(" · ")}</p>
               )}
+              {/* What an agent drafting as you is told you stand for. */}
+              {!!voice.viewpoint?.length && (
+                <>
+                  <div className="record-profile-label">{t("What you believe")}</div>
+                  <ul className="record-voice-patterns">
+                    {voice.viewpoint.map(({ claim }) => <li key={claim}>{claim}</li>)}
+                  </ul>
+                </>
+              )}
               {voice.samples.map((sample) => (
                 <blockquote key={sample.about} className="record-voice-sample">
                   <small>{sample.about}</small>

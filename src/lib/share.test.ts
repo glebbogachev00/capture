@@ -118,7 +118,7 @@ describe("the record as a document an agent can pick up cold", () => {
       1
     );
     expect(out.text).toContain("undone");
-    expect(out.text).not.toContain("old");
+    expect(out.text).not.toMatch(/\bold\b/);
   });
 });
 
