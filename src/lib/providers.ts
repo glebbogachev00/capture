@@ -2,6 +2,7 @@ import { google } from "@ai-sdk/google";
 import { cerebras } from "@ai-sdk/cerebras";
 import { createGroq, groq } from "@ai-sdk/groq";
 import { currentOwnAi } from "@/lib/ownTier.server";
+import { budgeted } from "@/lib/evalBudget.server";
 import { mistral } from "@ai-sdk/mistral";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
@@ -27,8 +28,9 @@ export type Tier = {
 
 export function chain(): Tier[] {
   const own = currentOwnAi();
-  if (own) return own.fallback ? [...own.tiers, ...managedChain()] : own.tiers;
-  return managedChain();
+  /* Outside the app (tests, scripts) paid calls stop at a daily ceiling. */
+  if (own) return budgeted(own.fallback ? [...own.tiers, ...managedChain()] : own.tiers);
+  return budgeted(managedChain());
 }
 
 /** The providers this Capture runs on, from its own keys. */
