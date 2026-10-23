@@ -4,6 +4,7 @@ import { explain } from "@/lib/aiError";
 import { clientIp } from "@/lib/clientIp";
 import { modelRateLimit } from "@/lib/limiter";
 import { authorizeManagedAiRequest, liveAi, withManagedAiAdmission } from "@/lib/cloudRequestGuard.server";
+import { currentUsage, metered } from "@/lib/aiUsage.server";
 import { NoProvidersError, chain, sanitizeProviderError, withFallback } from "@/lib/providers";
 import { opsEvent } from "@/lib/opsEvent.server";
 import { countAssistantQuestions, resolveSettled } from "@/lib/distill";
@@ -261,8 +262,11 @@ export async function POST(request: Request) {
     // producing a single chunk is replaced by the next one; a tier that dies
     // mid-answer ends the reply instead — retrying would interleave a second
     // provider's text into a partial first one.
+    /* The reply streams after this request returns; its usage is counted
+       against the same account and written when the stream ends. */
+    const usage = currentUsage();
     async function* streamWithFallback(): AsyncGenerator<string> {
-      const tiers = chain();
+      const tiers = chain().map((tier) => metered(tier, usage));
       if (!tiers.length) throw new NoProvidersError();
 
       let emitted = false;
@@ -354,6 +358,7 @@ export async function POST(request: Request) {
           controller.error(new Error("distill stream unavailable"));
         } finally {
           controller.close();
+          usage?.flush();
         }
       },
     });
