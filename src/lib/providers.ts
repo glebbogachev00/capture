@@ -3,6 +3,7 @@ import { cerebras } from "@ai-sdk/cerebras";
 import { createGroq, groq } from "@ai-sdk/groq";
 import { currentOwnAi } from "@/lib/ownTier.server";
 import { budgeted } from "@/lib/evalBudget.server";
+import { metered } from "@/lib/aiUsage.server";
 import { mistral } from "@ai-sdk/mistral";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { ProviderOptions } from "@ai-sdk/provider-utils";
@@ -346,7 +347,7 @@ export async function withFallback<T>(
       try {
         return {
           ok: true,
-          value: await attempt(tier),
+          value: await attempt(metered(tier)),
           via: tier.name,
           fallbackReason: preferredFailureReason,
         };

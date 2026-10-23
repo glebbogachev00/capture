@@ -1,4 +1,5 @@
 import "server-only";
+import { withUsage } from "@/lib/aiUsage.server";
 
 import { randomUUID } from "node:crypto";
 
@@ -156,10 +157,17 @@ export async function authorizeManagedAiRequest(
   }
 }
 
+/** A Cloud member's AI calls inside `work` are counted for that account
+ * (lib/aiUsage); elsewhere nothing is counted. */
+function counted<T>(authorization: CloudAuthorization, work: () => Promise<T>): () => Promise<T> {
+  return authorization.mode === "cloud" ? () => withUsage(authorization.ownerId, work) : work;
+}
+
 export async function withManagedAiAdmission<T>(
   authorization: CloudAuthorization,
-  work: () => Promise<T>,
+  plain: () => Promise<T>,
 ): Promise<T> {
+  const work = counted(authorization, plain);
   if (authorization.ownAi) return withOwnAi(authorization.ownAi, work);
   if (authorization.mode === "non-cloud") return work();
   if (!authorization.admissionId || !authorization.releaseExternalWork) {
@@ -231,7 +239,8 @@ export async function scheduleManagedAiDeferredWork(input: {
       /* Work that finishes after the response still uses the member's own
          key; it never falls back to managed AI. */
       const own = input.authorization.ownAi;
-      await (own ? withOwnAi(own, input.work) : input.work());
+      const work = counted(input.authorization, async () => { await input.work(); });
+      await (own ? withOwnAi(own, work) : work());
     } catch (error) {
       try { input.onError(error); } catch {}
     } finally {
