@@ -198,6 +198,7 @@ export function Capture() {
     live,
     unsorted: pendingCaptures,
     autoSortingIds = [],
+    waitingIds = [],
     fadedList,
     active,
     resting,
@@ -964,7 +965,7 @@ export function Capture() {
           <>
             <IntentionShowcase intentions={data.intentions} profile={data.profile}
               onProfileChange={updateProfile} onOpen={setOpenIntention} />
-            <UnsortedCaptures items={unsorted} pendingEntries={data.ledger} busy={!!busy} finalizingIds={finalizingUnsortedIds} threads={data.threads}
+            <UnsortedCaptures items={unsorted} waitingIds={waitingIds} pendingEntries={data.ledger} busy={!!busy} finalizingIds={finalizingUnsortedIds} threads={data.threads}
               onSort={(action) => void resort(action)} onManualSort={manualSort} onManualSplit={manualSplit}
               onChoosePlace={openPlacePicker} onEdit={editUnsorted} onDelete={removeUnsorted} />
             <AskBar board={data} now={now} query={query} onQuery={setQuery} onAnswering={setAnswering}

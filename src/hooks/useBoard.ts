@@ -182,6 +182,7 @@ import type { PlannedSettlementResult } from "@/lib/plannedRoutingSettlement";
 import { useManualFiling } from "./useManualFiling";
 import { MANUAL_ROUTING_UNDO_KEY } from "@/lib/manualRoutingUndo";
 import { finalizingPendingTargetIds, PlannedSortAuthority } from "@/lib/plannedSortAuthority";
+import { WAITING_TO_SORT, useWaitingCaptures } from "./useWaitingCaptures";
 import { applyThreadRename } from "@/lib/threadRename";
 import {
   captureUndoSnapshot,
@@ -1485,12 +1486,15 @@ export function useBoard(now: number) {
     intention: t("An intention, then — a state, not a task."),
   };
 
+  const waiting = useWaitingCaptures({ loaded, actions: data.actions, board: () => latest.current, sort: (snapshot) => runPlannedSort(snapshot), request: fetch,
+    onHold: (id) => { if (pendingReceiptRef.current === id) showReceipt(WAITING_TO_SORT(), id); } });
   const runPlannedSort = async (input: PendingRecoverySnapshot, chosen: { force?: SortKind; threadId?: string; budget?: number; pressed?: boolean } = {}) => {
     const force = chosen.force ?? input.force;
-    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    if ((typeof navigator !== "undefined" && !navigator.onLine) || (!chosen.pressed && waiting.holdIfDown(input.targetId))) return;
     if (!sortMounted.current || !lifetime.active || !snapshotMatchesPending(input, latest.current)) return;
     const deadline = Date.now() + (chosen.budget ?? 55_000);
     const attempt = plannedSortAuthority.current.begin(input.captureId, chosen.budget ?? 55_000);
+    const unwatch = waiting.watch(input.targetId, () => plannedSortAuthority.current.cancel(input.captureId));
     setAutoSortingIds((ids) => [...new Set([...ids, input.targetId])]);
     if (pendingReceiptRef.current === input.targetId) showReceipt(t("Saved. Sorting…"), input.targetId);
     try {
@@ -1599,6 +1603,7 @@ export function useBoard(now: number) {
       };
       await attempt.run(work());
     } catch (error) {
+      if (await waiting.heldAfter(error, input.targetId)) return; /* unreachable, not failed: it sorts on reconnect */
       if (error instanceof CloudQuotaError) {
         if (attempt.authoritative() && snapshotMatchesPending(input, latest.current))
           setErr(error.captureMessage);
@@ -1612,25 +1617,20 @@ export function useBoard(now: number) {
         await runPlannedSort(input, { ...chosen, budget: remaining });
         return;
       }
-      const stillPending = latest.current.ledger.some((entry) =>
-        entry.kind === "pending" &&
-        !entry.undone &&
-        (entry.captureId ?? entry.id) === input.captureId &&
-        (entry.pendingRevision ?? 1) === input.revision
-      );
       if (
-        stillPending &&
+        snapshotMatchesPending(input, latest.current) &&
         pendingReceiptRef.current !== input.targetId &&
         (attempt.authoritative() ||
           (attempt.signal.aborted && !plannedSortAuthority.current.claimed(input.captureId)))
       )
         setErr(t("Saved here. Sorting is unavailable right now."));
     } finally {
+      unwatch();
       attempt.finish();
       setAutoSortingIds((ids) => ids.filter((id) => id !== input.targetId));
       if (sortMounted.current && pendingReceiptRef.current === input.targetId &&
           snapshotMatchesPending(input, latest.current)) {
-        showReceipt(t("Saved. Awaiting sorting or placement"), input.targetId);
+        showReceipt(waiting.receiptFor(input.targetId, t("Saved. Awaiting sorting or placement")), input.targetId);
       }
     }
   };
@@ -4215,7 +4215,7 @@ export function useBoard(now: number) {
     err,
     landed, landedLines,
     pendingReceiptId,
-    autoSortingIds,
+    autoSortingIds, waitingIds: waiting.waitingIds,
     landedIds,
     summarising,
     suggestion,

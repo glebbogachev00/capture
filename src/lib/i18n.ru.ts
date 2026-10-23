@@ -678,6 +678,7 @@ export const RU: Record<string, string> = {
   "Unsorted captures": "Неразобранные записи",
   "Unsorted": "Неразобранное",
   "Saved. Sort later or choose a place.": "Сохранено. Разберите позже или выберите место сами.",
+  "Saved on this device. It sorts as soon as Capture reconnects.": "Сохранено на этом устройстве. Разберётся, как только Capture снова будет на связи.",
   "Edit unsorted capture": "Изменить неразобранную запись",
   "More": "Ещё",
   "Sort now": "Разобрать сейчас",
