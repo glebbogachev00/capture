@@ -22,11 +22,13 @@ describe("the words a voice is read from", () => {
   });
 
   it("are read once there is enough, then again as they grow", () => {
-    const voice = { patterns: [], phrases: [], samples: [], words: 8_000, at: 1 } as VoiceReading;
+    const voice = { patterns: [], phrases: [], samples: [], viewpoint: [], words: 8_000, at: 1 } as VoiceReading;
     expect(voiceDue(undefined, VOICE_MIN_WORDS - 1)).toBe(false);
     expect(voiceDue(undefined, VOICE_MIN_WORDS)).toBe(true);
     expect(voiceDue(voice, 9_000)).toBe(false);
     expect(voiceDue(voice, 10_000)).toBe(true);
+    /* A reading made before viewpoint existed is read once more, then not again. */
+    expect(voiceDue({ ...voice, viewpoint: undefined }, 9_000)).toBe(true);
   });
 
   it("are sampled across time within the budget", () => {

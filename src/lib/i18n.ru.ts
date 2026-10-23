@@ -341,6 +341,7 @@ export const RU: Record<string, string> = {
   "Formed from your Capture record": "Собрано из ваших записей",
   "formed from your record": "собрано из ваших записей",
   "Your voice": "Ваш голос",
+  "What you believe": "Во что вы верите",
   "Show your voice": "Показать ваш голос",
   "Hide your voice": "Скрыть ваш голос",
   "reading…": "читаю…",

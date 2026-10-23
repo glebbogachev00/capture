@@ -1,4 +1,5 @@
 import { voiceForAgents } from "./voice";
+import { writingForAgents } from "./writingBrief";
 import { countNoun, t as tr } from "./i18n";
 import {
   type Action,
@@ -72,6 +73,8 @@ export function shareThread(
   t: Thread,
   from?: { open: Action[]; done: DoneItem[] },
   voice?: VoiceReading,
+  /** For an agent (Copy), not a person (the share sheet): add how to write as me. */
+  forAgent = false,
 ): Shareable {
   const frags = t.frags.filter((frag) => !frag.unsorted);
   const dates = frags.map((f) => f.at);
@@ -104,8 +107,10 @@ export function shareThread(
     for (const a of from.done) lines.push(`- [x] ${a.text}`);
   }
   /* How the author talks, for an agent that writes from this thread. */
-  const howITalk = voiceForAgents(voice, `## ${tr("How I talk")}`);
-  if (howITalk.length) lines.push("", ...howITalk);
+  /* For an agent: how to write as me, not my spoken habits, which it copied
+     into the page. For a person: how I talk, as before. */
+  const voiceLines = forAgent ? writingForAgents(voice, "## How to write as me") : voiceForAgents(voice, `## ${tr("How I talk")}`);
+  if (voiceLines.length) lines.push("", ...voiceLines);
   return {
     title: t.name,
     text: lines.join("\n").trimEnd(),
@@ -479,6 +484,7 @@ export function shareRecord(board: Board, recentLimit = 15): Shareable {
   /* Before the notes, so an agent writing from them writes like their author. */
   const voice = voiceForAgents(board.profile?.voice, "## How I talk");
   if (voice.length) lines.push(...voice, "");
+  lines.push(...writingForAgents(board.profile?.voice, "## How to write as me"), "");
 
   if (board.threads.length) {
     lines.push("## Threads");

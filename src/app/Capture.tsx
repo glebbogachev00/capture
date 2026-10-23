@@ -930,7 +930,7 @@ export function Capture() {
             onMoveFrag={(fragId, toId) => moveFrag(thread.id, fragId, toId)}
             onMoveFragToNew={(fragId) => moveFragToNew(thread.id, fragId)}
             onCopyThread={() =>
-              copyWhole(shareThread(thread, actionsForThread(data, thread), data.profile?.voice))
+              copyWhole(shareThread(thread, actionsForThread(data, thread), data.profile?.voice, true))
             }
             fromActions={actionsForThread(data, thread)}
             onCopyFrag={(fragId) => copyFragment(thread.id, fragId)}
