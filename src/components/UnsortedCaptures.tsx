@@ -14,6 +14,7 @@ import type { ManualSplitSegment } from "@/lib/manualSplitSettlement";
 import { IMG } from "@/lib/model";
 import { getDocumentLifetime } from "@/lib/ownership";
 import { get } from "@/lib/storage";
+import { WAITING_TO_SORT } from "@/hooks/useWaitingCaptures";
 
 function subscribeToSortReadiness(notify: () => void) {
   const stop = getDocumentLifetime().subscribe(notify);
@@ -32,6 +33,8 @@ function canSortNow() {
 
 type UnsortedCapturesProps = {
   items: Action[];
+  /** Saved here, waiting for the server to answer before they sort. */
+  waitingIds?: string[];
   pendingEntries?: CaptureEntry[];
   busy: boolean;
   finalizingIds?: string[];
@@ -52,6 +55,7 @@ type UnsortedCapturesProps = {
 /** Preserved captures waiting for classification, separate from real Actions. */
 export function UnsortedCaptures({
   items,
+  waitingIds = [],
   busy,
   finalizingIds = [],
   onSort,
@@ -63,13 +67,18 @@ export function UnsortedCaptures({
   const canSort = useSyncExternalStore(subscribeToSortReadiness, canSortNow, () => false);
   const [expanded, setExpanded] = useState(false);
   if (!items.length) return null;
+  /* A capture waiting for the server says so even with the list closed: it
+     must never look lost, or it gets said twice. */
+  const waiting = items.some((item) => waitingIds.includes(item.id));
+  const status = waiting ? WAITING_TO_SORT() : t("Saved. Sort later or choose a place.");
 
   return (
     <section className="unsorted-captures" aria-label={t("Unsorted captures")}>
       <RecoveryDisclosure label={t("Unsorted")} count={items.length} expanded={expanded}
         controls="unsorted-capture-list" onToggle={() => setExpanded((open) => !open)} />
+      {waiting && !expanded && <p className="unsorted-status" role="status">{status}</p>}
       {expanded && <div id="unsorted-capture-list" className="unsorted-panel">
-        <p className="unsorted-status">{t("Saved. Sort later or choose a place.")}</p>
+        <p className="unsorted-status" role={waiting ? "status" : undefined}>{status}</p>
         <div className="unsorted-track" role="list" aria-label={t("Unsorted captures")}>
           {items.map((item) => <WaitingCapture key={item.id} item={item} busy={busy}
             finalizing={finalizingIds.includes(item.id)} canSort={canSort}
