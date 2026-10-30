@@ -1,5 +1,6 @@
 import { appendLedger, type CaptureEntry, type CaptureSource } from "./ledger";
 import {
+  TEMPORARY_THREAD_PREFIX,
   nextNumber,
   type Action,
   type Board,
@@ -96,7 +97,7 @@ function conflict(
  * routing boundary is attached to it. */
 export function temporaryThreadTitle(source: string): string {
   const opening = source.trim().split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
-  return `Temporary — ${opening || "New thread"}`;
+  return `${TEMPORARY_THREAD_PREFIX}${opening || "New thread"}`;
 }
 
 /** Resolve an on-screen pending envelope to its immutable identity before
@@ -304,10 +305,12 @@ export function settleManualRouting(
         : thread);
       target = { kind: "thread", id: selectedThread.id, fragId, created: false };
     } else {
+      const named = destination.threadName?.trim().slice(0, 100);
       const thread: Thread = {
         id: artifactId,
-        name: destination.threadName?.trim().slice(0, 100) || temporaryThreadTitle(source),
-        temporaryName: true,
+        name: named || temporaryThreadTitle(source),
+        /* Only a placeholder name is temporary; a name the person gave is real. */
+        ...(named ? {} : { temporaryName: true }),
         summary: "",
         frags: [frag],
         updatedAt: now,

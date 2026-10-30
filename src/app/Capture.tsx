@@ -50,6 +50,7 @@ import { ReportBug } from "@/components/ReportBug";
 import { PlaygroundNotice } from "@/components/PlaygroundNotice";
 import { TrialMeter } from "@/components/TrialMeter";
 import { UnsortedCaptures } from "@/components/UnsortedCaptures";
+import { useMissingSummaries } from "@/hooks/useMissingSummaries";
 import { useDestinationPicker } from "@/components/DestinationPicker";
 import { RecoveryDisclosure } from "@/components/RecoveryDisclosure";
 import { InstallInvitation } from "@/components/InstallInvitation";
@@ -199,6 +200,7 @@ export function Capture() {
     unsorted: pendingCaptures,
     autoSortingIds = [],
     waitingIds = [],
+    scheduleSummary,
     fadedList,
     active,
     resting,
@@ -280,6 +282,7 @@ export function Capture() {
     toggleLearnedRule,
   } = useBoard(now);
   const intentionNumbers = useMemo(() => intentionDisplayNumbers(data.intentions), [data.intentions]);
+  useMissingSummaries(loaded, data.threads, scheduleSummary);
   const unsorted = pendingCaptures.filter((capture) => !autoSortingIds.includes(capture.id));
   const { openPlacePicker, picker } = useDestinationPicker(data.threads, finalizingUnsortedIds, manualSort);
   /* The rollback days, read when Settings opens — a list this short is

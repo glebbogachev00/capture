@@ -25,8 +25,13 @@ export function boardAt(board: Board, c: Case): Board {
   const key = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 60);
   return {
     ...board,
-    threads: board.threads.map((t) => ({ ...t, frags: t.frags.filter((f) => f.at < c.at && key(f.text) !== key(c.raw)) })),
+    /* Threads that existed then, with the notes they had then. */
+    threads: board.threads.filter((t) => !t.frags.length || t.frags.some((f) => f.at < c.at))
+      .map((t) => ({ ...t, frags: t.frags.filter((f) => f.at < c.at && key(f.text) !== key(c.raw)) })),
     actions: board.actions.filter((a) => (a.at ?? 0) < c.at),
+    ledger: board.ledger.filter((l) => l.at < c.at),
+    /* Corrections made before it, never the one made to this capture. */
+    corrections: (board.corrections ?? []).filter((x) => x.at < c.at && key(x.context ?? "") !== key(c.raw)),
   };
 }
 

@@ -18,7 +18,7 @@
  * last few wraps ride along to the model as context.
  */
 
-import type { Board, Completion } from "./model";
+import { isTemporaryThread, type Board, type Completion } from "./model";
 import { dayKey } from "./record";
 import type { CaptureEntry } from "./ledger";
 import { settledLedgerEntries } from "./unsortedOps";
@@ -78,11 +78,11 @@ export { dayKey };
 /** The ledger entries that count for a day: what was said, and still stands. */
 function entriesFor(board: Board, day: string): CaptureEntry[] {
   const temporaryThreads = new Set(
-    board.threads.filter((thread) => thread.temporaryName).map((thread) => thread.id),
+    board.threads.filter(isTemporaryThread).map((thread) => thread.id),
   );
   const temporaryFragments = new Set(
     board.threads
-      .filter((thread) => thread.temporaryName)
+      .filter(isTemporaryThread)
       .flatMap((thread) => thread.frags.map((frag) => frag.id)),
   );
   const excludedCaptures = new Set(

@@ -1,4 +1,5 @@
 import type { CorrectionEntry } from "./ledger";
+import { isTemporaryThread } from "./model";
 
 export const CORRECTION_EXAMPLES_CAP = 5;
 const CORRECTION_THREAD_NAME_MAX = 100;
@@ -29,7 +30,7 @@ export function deriveCorrectionExamples(
 ): CorrectionExample[] {
   const disabled = new Set(disabledKeys);
   const existingThreads = new Map(
-    threads.filter((thread) => !thread.temporaryName)
+    threads.filter((thread) => !isTemporaryThread(thread))
       .map((thread) => [thread.id, thread.name]),
   );
 

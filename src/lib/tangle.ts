@@ -25,7 +25,7 @@
  * question is only ever which FRAGMENTS sit in the wrong one.
  */
 
-import type { Board } from "./model";
+import { isTemporaryThread, type Board } from "./model";
 
 /** Below this a pair is coincidence, not a pattern. */
 export const MIN_CONFUSIONS = 3;
@@ -56,7 +56,7 @@ export function confusedPairs(
   board: Board,
   min: number = MIN_CONFUSIONS
 ): ConfusedPair[] {
-  const semanticThreads = board.threads.filter((thread) => !thread.temporaryName);
+  const semanticThreads = board.threads.filter((thread) => !isTemporaryThread(thread));
   const names = new Map(semanticThreads.map((t) => [t.id, t.name]));
   /* Where each fragment lives now — the person's own final answer. Temporary
      display-only Threads and their contents are not semantic evidence. */
