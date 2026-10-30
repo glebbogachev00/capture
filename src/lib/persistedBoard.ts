@@ -160,6 +160,7 @@ const PersistedCorrectionEntrySchema = z.object({
     kind: z.enum(["action", "thread", "intention"]),
     threadId: text.optional(),
     threadName: text.optional(),
+    fromThreadId: text.optional(),
   }).optional(),
   rule: text.optional(),
 }).passthrough();

@@ -166,6 +166,11 @@ export type CorrectionEntry = {
     kind: "action" | "thread" | "intention";
     threadId?: string;
     threadName?: string;
+    /** The thread it was moved out of, for a refile. Kept so a later attempt
+        at learning from moves can be measured; folding these into thread
+        descriptions was tried on 30 Oct 2026 and sorted worse (12/15 vs
+        14/15 on Cerebras), so nothing reads it yet. */
+    fromThreadId?: string;
   };
   /** A distilled rule the correction implies ("threads get renamed to…"). */
   rule?: string;

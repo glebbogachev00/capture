@@ -35,7 +35,6 @@ import {
   pad,
 } from "@/lib/model";
 import { snapshotLabel } from "@/lib/snapshots";
-import type { RulePreference } from "@/lib/rules";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { ReportBugForm } from "@/components/ReportBug";
 import { ProfileSignature } from "@/components/ProfileSignature";
@@ -572,8 +571,6 @@ export function RecordScreen({
   day,
   onDayChange,
   onBack,
-  rules,
-  onToggleRule,
   threads,
   onOpenThread,
   profile,
@@ -596,8 +593,6 @@ export function RecordScreen({
   wrap?: DayWrap | null;
   onWrapSeen?: () => void;
   /* Advisory sorting preferences remain reversible and hidden until asked. */
-  rules: RulePreference[];
-  onToggleRule: (key: string, enabled: boolean) => void;
   /** The threads used for both landing names and the recurring profile reading. */
   threads: Thread[];
   onOpenThread: (id: string) => void;
@@ -610,7 +605,6 @@ export function RecordScreen({
 }) {
   const [openWrap, setOpenWrap] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [showRules, setShowRules] = useState(false);
   /* The page's real subject: ONE day. Its owner is the Capture shell so the
      global header and the heat map always use the same scope. */
   const stats = recordStats(ledger);
@@ -822,56 +816,6 @@ export function RecordScreen({
           </div>
 
           <VoiceSection threads={threads} ledger={ledger} voice={profile?.voice} onProfileChange={onProfileChange} />
-
-          {rules.length > 0 && (
-            <div className="record-section">
-              <button
-                className="record-disclosure"
-                onClick={() => setShowRules((value) => !value)}
-                aria-expanded={showRules}
-                aria-label={showRules ? t("Hide sorting preferences") : t("Show sorting preferences")}
-              >
-                <span className="record-disclosure-title">
-                  {t("Sorting preferences")}
-                </span>
-                <span className="record-disclosure-meta">
-                  {rules.length === 1
-                    ? rules[0].enabled
-                      ? t("on")
-                      : t("off")
-                    : t("{count} on", { count: rules.filter((rule) => rule.enabled).length })}
-                </span>
-                {showRules ? (
-                  <ChevronUp size={21} strokeWidth={1.7} />
-                ) : (
-                  <ChevronDown size={21} strokeWidth={1.7} />
-                )}
-              </button>
-
-              {showRules && (
-                <div className="record-disclosure-body">
-                  <ul className="learned-list">
-                    {rules.map((rule) => (
-                      <li key={rule.key} className={rule.enabled ? "" : "off"}>
-                        <span className="learned-text">{rule.text}</span>
-                        <button
-                          className={"rule-switch" + (rule.enabled ? " on" : "")}
-                          role="switch"
-                          aria-checked={rule.enabled}
-                          aria-label={rule.text}
-                          onClick={() =>
-                            onToggleRule(rule.key, !rule.enabled)
-                          }
-                        >
-                          <span />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
         </>
       )}
 
