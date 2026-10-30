@@ -165,8 +165,6 @@ import {
   type CaptureEntry,
   type CorrectionEntry,
 } from "@/lib/ledger";
-import { setRuleEnabled, type RulePreference } from "@/lib/rules";
-import { deriveCorrectionExamples } from "@/lib/correctionExamples";
 import {
   scanStale,
   type OrganizeProposal,
@@ -3047,7 +3045,7 @@ export function useBoard(now: number) {
           proposalKind: "refiled",
           accepted: true,
           context: out.movedText.slice(0, 160),
-          routing: { kind: "thread", threadId: toId, threadName: out.toName },
+          routing: { kind: "thread", threadId: toId, threadName: out.toName, fromThreadId: fromId },
         })
       : out.board;
     if (!await commit(next)) return false;
@@ -4155,34 +4153,6 @@ export function useBoard(now: number) {
   const intention = data.intentions.find((i) => i.id === openIntention);
   const hits = useMemo(() => search(data, debouncedQuery), [data, debouncedQuery]);
   const searching = debouncedQuery.trim().length > 0;
-  /* All correction examples remain visible so an off switch can be turned
-     back on. Only enabled examples reach the sort prompt above. */
-  const learnedRules: RulePreference[] = useMemo(
-    () =>
-      deriveCorrectionExamples(data.corrections ?? [], data.threads).map((example) => ({
-        key: example.key,
-        text: example.text,
-        accepts: 1,
-        dismisses: 0,
-        confidence: 1,
-        lastAt: example.lastAt,
-        enabled: !forgottenRules.includes(example.key),
-      })),
-    [data.corrections, data.threads, forgottenRules]
-  );
-
-  /** Enable or disable one advisory sorting preference. The correction
-      history stays intact, and this device remembers only the switch state. */
-  const toggleLearnedRule = async (key: string, enabled: boolean) => {
-    const next = setRuleEnabled(forgottenRules, key, enabled);
-    setForgottenRules(next);
-    try {
-      await set(FORGOTTEN_RULES_KEY, JSON.stringify(next));
-    } catch {
-      /* disk hiccup; the next toggle retries */
-    }
-  };
-
   const updateProfile = async (update: ProfileUpdate): Promise<void> => {
     const durable = await transactDurable((current) => ({
       next: applyProfileUpdate(current, update), value: undefined,
@@ -4356,8 +4326,6 @@ export function useBoard(now: number) {
     sortAgainAs: guardMutation(sortAgainAs),
     sortAgainIntoThread: guardMutation(sortAgainIntoThread),
     dismissMisfiled: guardMutation(() => setMisfiled(null)),
-    learnedRules,
-    toggleLearnedRule: guardMutation(toggleLearnedRule),
     leaveSettings,
   };
 }

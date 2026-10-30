@@ -1,9 +1,8 @@
 /** @vitest-environment jsdom */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { RecordScreen } from "@/app/Intentions";
 import type { CaptureEntry } from "@/lib/ledger";
-import type { RulePreference } from "@/lib/rules";
 import type { Thread } from "@/lib/model";
 
 const now = new Date(2026, 8, 2, 12).getTime();
@@ -22,15 +21,6 @@ const entry: CaptureEntry = {
   source: "typed",
   targetId: thread.id,
 };
-const rule: RulePreference = {
-  key: "capture bugs belong in bugs",
-  text: "Capture bugs belong in Bugs",
-  accepts: 2,
-  dismisses: 0,
-  confidence: 1,
-  lastAt: now,
-  enabled: true,
-};
 
 afterEach(cleanup);
 
@@ -43,7 +33,7 @@ describe("RecordScreen disclosures", () => {
     ];
     const original = JSON.stringify(ledger);
     const { container } = render(<RecordScreen ledger={ledger} now={now} day="2026-09-02"
-      onDayChange={() => {}} onBack={() => {}} rules={[]} onToggleRule={() => {}}
+      onDayChange={() => {}} onBack={() => {}}
       threads={[]} onOpenThread={() => {}} onRestore={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Show today's history" }));
     expect([...container.querySelectorAll(".record-filed")].map(node => node.textContent))
@@ -64,8 +54,6 @@ describe("RecordScreen disclosures", () => {
         day="2026-09-02"
         onDayChange={() => {}}
         onBack={() => {}}
-        rules={[]}
-        onToggleRule={() => {}}
         threads={[thread]}
         onOpenThread={() => {}}
         onRestore={() => {}}
@@ -76,8 +64,7 @@ describe("RecordScreen disclosures", () => {
     expect(screen.queryByText(/a long text message/)).toBeNull();
   });
 
-  it("keeps history and sorting preferences quiet until opened", () => {
-    const onToggleRule = vi.fn();
+  it("keeps history quiet until opened, with no sorting-preference switches", () => {
     render(
       <RecordScreen
         ledger={[entry]}
@@ -85,8 +72,6 @@ describe("RecordScreen disclosures", () => {
         day="2026-09-02"
         onDayChange={() => {}}
         onBack={() => {}}
-        rules={[rule]}
-        onToggleRule={onToggleRule}
         threads={[thread]}
         onOpenThread={() => {}}
         onRestore={() => {}}
@@ -96,16 +81,7 @@ describe("RecordScreen disclosures", () => {
     expect(screen.queryByText("Clean up the record")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show today's history" }));
     expect(screen.getByText("Clean up the record")).toBeTruthy();
-
-    expect(screen.queryByText(rule.text)).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Show sorting preferences" })
-    );
-    expect(screen.getByText(rule.text)).toBeTruthy();
-
-    const toggle = screen.getByRole("switch", { name: rule.text });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(toggle);
-    expect(onToggleRule).toHaveBeenCalledWith(rule.key, false);
+    /* The examples behind those switches no longer reach the sorter (30 Oct 2026). */
+    expect(screen.queryByRole("button", { name: "Show sorting preferences" })).toBeNull();
   });
 });

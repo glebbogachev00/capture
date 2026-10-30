@@ -278,8 +278,6 @@ export function Capture() {
     dismissMisfiled,
     undo,
     undoManual,
-    learnedRules,
-    toggleLearnedRule,
   } = useBoard(now);
   const intentionNumbers = useMemo(() => intentionDisplayNumbers(data.intentions), [data.intentions]);
   useMissingSummaries(loaded, data.threads, scheduleSummary);
@@ -855,8 +853,6 @@ export function Capture() {
             wrap={wrap}
             onWrapSeen={() => void dismissWrap()}
             onBack={() => setShowRecord(false)}
-            rules={learnedRules}
-            onToggleRule={(key, enabled) => void toggleLearnedRule(key, enabled)}
             threads={data.threads} profile={data.profile} onProfileChange={updateProfile} profileMigrationReady={PLAYGROUND || sync?.ok === true}
             onRestore={(said) => {
               setText((x) => (x ? x + " " : "") + said);

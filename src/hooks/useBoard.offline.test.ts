@@ -55,7 +55,7 @@ it("offline baseline: model-free capture, edit, find, manual move, downloaded ph
   expect(hook.result.current.data.corrections).toEqual(expect.arrayContaining([
     expect.objectContaining({
       context: "photo note",
-      routing: { kind: "thread", threadId: "two", threadName: "Second" },
+      routing: { kind: "thread", threadId: "two", threadName: "Second", fromThreadId: "one" },
     }),
   ]));
   expect(hook.result.current.data.corrections.some(correction => correction.rule)).toBe(false);
