@@ -640,8 +640,12 @@ export async function POST(request: Request) {
         ? await withFallback((tier) => formatCapture(body.raw, { tier, abortSignal: planningAbortSignal }), preferredFor("sort"), { abortSignal: planningAbortSignal })
           .then((result) => result.value, () => body.raw)
         : body.raw;
+      /* No correction examples: one refile (a note on "a movement" moved into
+         Capture.) taught the sorter to send purpose-sounding notes there, and
+         on the owner's captures it filed 9/20 right without them against 6/20
+         with. Their corrections still shape each thread's own description. */
       const prompt = simpleSortPrompt({
-        raw, threads: body.threads, actions: body.actions, corrections: body.correctionExamples, force: body.force, now, tzOffset: body.tzOffset,
+        raw, threads: body.threads, actions: body.actions, force: body.force, now, tzOffset: body.tzOffset,
       });
       const { value: sorted, via } = await withFallback(async (tier) =>
         normalizeSimpleSort(

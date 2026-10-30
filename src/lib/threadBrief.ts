@@ -1,4 +1,4 @@
-import type { Thread } from "./model";
+import { isTemporaryThread, type Thread } from "./model";
 
 /**
  * What the sorter is told about each thread.
@@ -36,7 +36,7 @@ export function brief(summary: string | undefined, limit: number): string {
 }
 
 export function semanticThreads(threads: Thread[]): Thread[] {
-  return threads.filter((thread) => !thread.temporaryName);
+  return threads.filter((thread) => !isTemporaryThread(thread));
 }
 
 export function semanticSiblingNames(threads: Thread[], targetId: string): string[] {

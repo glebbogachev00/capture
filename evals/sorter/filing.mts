@@ -1,7 +1,8 @@
 /**
  * Does the sorter file thoughts where the person would?
  *   npx tsx --conditions=react-server evals/sorter/filing.mts
- * Subscription by default (see tier.ts); CAPTURE_EVAL_ALL=1 for every case.
+ * Subscription by default (see tier.ts); CAPTURE_EVAL_ALL=1 for every case;
+ * CAPTURE_EVAL_CORRECTIONS=1 adds the correction examples production used to send.
  * Prints "refiled a/b control c/d errors e" and saves results to ~/.capture-eval/results.
  */
 import { shouldFormat } from "@/lib/captureFormat";
@@ -23,7 +24,9 @@ for (const c of cases) {
     const actions = board.actions.filter((a) => !a.unsorted && !a.done && !a.faded).map((a) => ({ id: a.id, text: a.text }));
     const context = semanticSortContext(board, c.raw, [], c.at);
     const raw = shouldFormat(c.raw) ? await formatCapture(c.raw, { tier }).catch(() => c.raw) : c.raw;
-    const prompt = simpleSortPrompt({ raw, threads: context.threads, actions, now: c.at, tzOffset: -420 });
+    /* Production sends none since 30 Oct 2026; CAPTURE_EVAL_CORRECTIONS=1 adds them back to compare. */
+    const corrections = process.env.CAPTURE_EVAL_CORRECTIONS === "1" ? context.correctionExamples : [];
+    const prompt = simpleSortPrompt({ raw, threads: context.threads, actions, corrections, now: c.at, tzOffset: -420 });
     const sorted = normalizeSimpleSort(await generateSimpleSort({ tier, prompt }), { threads: context.threads, actions, raw, now: c.at, tzOffset: -420 });
     const filing = { threads: context.threads, latest: context.latest };
     const filed = await fileThoughts(sorted, filing, (note) => fileThought(note, raw, filing, { tier }));

@@ -233,7 +233,10 @@ describe("authoritative manual routing settlement", () => {
     ]);
   });
 
-  it("uses the person's bounded picker name while keeping the Thread semantically isolated", () => {
+  /* A name the person typed is a real name: the thread takes part in sorting
+     and gets a description. Keeping it isolated "until renamed" hid the
+     owner's "Mountain Lion" thread from the sorter for good (30 Oct 2026). */
+  it("uses the person's bounded picker name as the Thread's real name", () => {
     const result = settleManualRouting(board(), {
       captureId,
       revision: 1,
@@ -250,7 +253,7 @@ describe("authoritative manual routing settlement", () => {
     const created = result.board.threads.find((thread) => thread.id === result.target.id)!;
     expect(created.name.startsWith("Named subject")).toBe(true);
     expect(created.name.length).toBeLessThanOrEqual(100);
-    expect(created.temporaryName).toBe(true);
+    expect(created).not.toHaveProperty("temporaryName");
     expect(created.summary).toBe("");
     expect(created).not.toHaveProperty("belongs");
   });

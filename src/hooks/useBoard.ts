@@ -36,7 +36,7 @@ import {
   hydrate,
   pad,
   sweep,
-  uid,
+  uid, isTemporaryThread,
 } from "@/lib/model";
 import { actionViews } from "@/lib/actionViews";
 import { applyProfileUpdate } from "@/lib/intentionShowcasePrefs";
@@ -1265,7 +1265,7 @@ export function useBoard(now: number) {
   const freshThreadFor = useRef<string | undefined>(undefined);
   const regenerate = async (board: Board, threadId: string): Promise<Board> => {
     const target = board.threads.find((t) => t.id === threadId);
-    if (!target?.frags.length || target.temporaryName) return board;
+    if (!target?.frags.length || isTemporaryThread(target)) return board;
     activeSummaries.current += 1;
     setSummarising(t("Updating what this thread says now"));
     let result = board;
@@ -1308,7 +1308,7 @@ export function useBoard(now: number) {
    */
   const refreshSummary = async (threadId: string) => {
     const target = latest.current.threads.find((t) => t.id === threadId);
-    if (!target?.frags.length || target.temporaryName) return;
+    if (!target?.frags.length || isTemporaryThread(target)) return;
     setErr("");
     setBusy(t("Updating what this thread says now"));
     try {
@@ -4215,7 +4215,7 @@ export function useBoard(now: number) {
     err,
     landed, landedLines,
     pendingReceiptId,
-    autoSortingIds, waitingIds: waiting.waitingIds,
+    autoSortingIds, waitingIds: waiting.waitingIds, scheduleSummary,
     landedIds,
     summarising,
     suggestion,

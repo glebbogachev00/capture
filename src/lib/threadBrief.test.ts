@@ -64,3 +64,10 @@ describe("what the sorter is told about each thread", () => {
     expect(threadBriefs(threads)[0].about.length).toBeGreaterThan(160);
   });
 });
+
+it("routes a thread the person named even when it was flagged temporary, and keeps a placeholder out", async () => {
+  const { threadBriefs } = await import("./threadBrief");
+  const named = { id: "ml", name: "Mountain Lion", temporaryName: true, summary: "", frags: [{ id: "f", at: 1, text: "For Mountain Lion" }] };
+  const placeholder = { id: "tmp", name: "Temporary — For Mountain Lion I", temporaryName: true, summary: "", frags: [{ id: "g", at: 1, text: "x" }] };
+  expect(threadBriefs([named, placeholder]).map((brief) => brief.id)).toEqual(["ml"]);
+});

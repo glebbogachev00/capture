@@ -583,3 +583,14 @@ export async function sweep(data: Board) {
 
   return { next: { ...data, actions: kept }, faded, cleared, clearedIds };
 }
+
+/** The start of the placeholder name a thread gets when it is made without
+ * one (lib/manualRoutingSettlement). */
+export const TEMPORARY_THREAD_PREFIX = "Temporary — ";
+
+/** Still waiting for a real name: flagged, and still called by its
+ * placeholder. Such a thread is kept out of sorting and descriptions until
+ * renamed. A thread the person named when making it is not one, even if it
+ * was flagged: that was a bug, and it hid "Mountain Lion" from the sorter. */
+export const isTemporaryThread = (thread: Pick<Thread, "temporaryName" | "name">) =>
+  !!thread.temporaryName && thread.name.startsWith(TEMPORARY_THREAD_PREFIX);
