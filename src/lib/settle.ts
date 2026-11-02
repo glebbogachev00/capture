@@ -71,8 +71,10 @@ export function settleUnsortedCapture(
      reversible, visibly marked, resortable later. A failed sort never
      invents a thread (an error path must not make structural decisions),
      and the record says "pending" because no classification exists yet. If a
-     thread was explicitly open, retain that destination on the envelope so
-     a later successful thread/both sort can honour the person's choice. */
+     thread was explicitly chosen, retain that destination on the envelope so
+     a later successful thread/both sort can honour it. A thread merely open
+     on screen is not a choice: treating it as one sent a note back to the
+     open thread after the person tapped "A new thread". */
   const action: Action = {
     id: ids.itemId,
     text: body,

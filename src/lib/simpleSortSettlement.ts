@@ -27,6 +27,9 @@ export function settleSimpleSort(board: Board, input: {
   items: SimpleSortItem[];
   now: number;
   via?: string;
+  /** The person asked for a new thread: a name matching an existing thread
+   * must not file it there. */
+  alwaysNew?: boolean;
 }): PlannedSettlementResult {
   const { captureId, items, now } = input;
   if (board.ledger.some((entry) => captureIdentity(entry) === captureId && entry.kind !== "pending" && !entry.undone)) {
@@ -56,9 +59,16 @@ export function settleSimpleSort(board: Board, input: {
   const createdThreads: Thread[] = [];
   const threadFor = (target: SimpleSortTarget): string | null => {
     if ("id" in target) return board.threads.some((thread) => thread.id === target.id) ? target.id : null;
-    const existing = [...createdThreads, ...board.threads].find((thread) => nameKey(thread.name) === nameKey(target.name));
+    /* Asked for a new thread, and the sorter's name is already taken: a second
+       "Walking" would read as if it went to the old one, so the note's own
+       opening words name it instead. */
+    const taken = board.threads.some((thread) => nameKey(thread.name) === nameKey(target.name));
+    const name = input.alwaysNew && taken
+      ? raw.trim().split(/\s+/).slice(0, 6).join(" ").replace(/[.,;:!?]+$/, "")
+      : target.name.trim();
+    const existing = [...createdThreads, ...(input.alwaysNew ? [] : board.threads)].find((thread) => nameKey(thread.name) === nameKey(name));
     if (existing) return existing.id;
-    const thread: Thread = { id: plannedId(key, "thread", nameKey(target.name)), name: target.name.trim(), summary: "", frags: [], updatedAt: now };
+    const thread: Thread = { id: plannedId(key, "thread", nameKey(name)), name, summary: "", frags: [], updatedAt: now };
     createdThreads.push(thread);
     return thread.id;
   };

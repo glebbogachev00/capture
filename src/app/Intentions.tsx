@@ -612,6 +612,7 @@ export function RecordScreen({
   const months = monthLabels(grid);
   const caught = caughtWords(ledger);
   const selectedCaptures = dayCaptures(ledger, day).reverse();
+  const standingCaptures = selectedCaptures.filter((capture) => !capture.undone).length;
   const today = day === dayKey(now);
   const dayName = (day: string) =>
     new Date(day + "T12:00:00").toLocaleDateString(undefined, {
@@ -748,8 +749,8 @@ export function RecordScreen({
                 {today ? t("Today's history") : dayName(day)}
               </span>
               <span className="record-disclosure-meta">
-                {selectedCaptures.length
-                  ? countOf(selectedCaptures.length, ["capture", "captures"], ["запись", "записи", "записей"])
+                {standingCaptures
+                  ? countOf(standingCaptures, ["capture", "captures"], ["запись", "записи", "записей"])
                   : t("quiet")}
               </span>
               {showHistory ? (

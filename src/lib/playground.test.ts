@@ -124,13 +124,14 @@ describe("daily trial limit", () => {
     expect(remaining(ledger)).toBe(0);
   });
 
-  it("does not replenish today's allowance after Undo", () => {
+  it("gives today's allowance back after Undo: undoing and saying it again is one capture", () => {
     const ledger = [
       entry("a", { undone: true }),
       entry("b"),
       entry("c"),
     ];
-    expect(used(ledger)).toBe(3);
+    expect(used(ledger)).toBe(2);
+    expect(used([entry("again", { captureId: "cap", undone: true }), entry("kept", { captureId: "cap" })])).toBe(1);
   });
 
   it("does not count imports or backup restores as captures", () => {
@@ -146,14 +147,14 @@ describe("daily trial limit", () => {
     expect(used([entry("distilled", { source: "distill" })])).toBe(1);
   });
 
-  it("counts an undone split capture once", () => {
+  it("does not count a split capture that was undone", () => {
     const ledger = [
       entry("e1", { captureId: "cap1", undone: true }),
       entry("e2", { captureId: "cap1", undone: true }),
       ...Array.from({ length: 14 }, (_, i) => entry("x" + i)),
     ];
-    expect(used(ledger)).toBe(15);
-    expect(exhausted(ledger)).toBe(true);
+    expect(used(ledger)).toBe(14);
+    expect(exhausted(ledger)).toBe(false);
   });
 
   it("starts a fresh allowance on the next local calendar day", () => {

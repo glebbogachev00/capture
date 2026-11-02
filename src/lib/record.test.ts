@@ -226,3 +226,33 @@ describe("the record shows a day's story, not the whole history", () => {
     ], "2026-08-30")).toEqual([]);
   });
 });
+
+describe("undoing a capture", () => {
+  const at = new Date(2026, 10, 2, 9).getTime();
+  const said = (id: string, words: string, undone: boolean, offset = 0): CaptureEntry =>
+    ({ id, captureId: id, at: at + offset, raw: words, clean: words, kind: "thread", source: "typed", targetId: "t", ...(undone ? { undone: true } : {}) }) as CaptureEntry;
+  const attempts = [
+    said("a", "Slow Boat radio idea", true, 1), said("b", "Slow Boat radio idea", true, 2),
+    said("c", "Slow Boat radio idea", true, 3), said("d", "Slow Boat radio idea", false, 4),
+  ];
+
+  it("counts what stands, not each attempt", () => {
+    expect(recordStats(attempts).total).toBe(1);
+    expect(heatGrid(attempts, at).flat().find((cell) => cell.day === "2026-11-02")?.count).toBe(1);
+  });
+
+  it("shows the words once when they were said again and stand", () => {
+    expect(dayCaptures(attempts, "2026-11-02").map((row) => row.id)).toEqual(["d"]);
+  });
+
+  it("keeps one undone attempt to say again when the words stand nowhere", () => {
+    const rows = dayCaptures(attempts.slice(0, 3), "2026-11-02");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].undone).toBe(true);
+  });
+
+  it("leaves undone words out of the words caught", () => {
+    const long = (id: string, undone: boolean) => said(id, "word ".repeat(600).trim(), undone);
+    expect(caughtWords([long("kept", false), long("gone", true)])?.words).toBe(caughtWords([long("kept", false)])?.words);
+  });
+});

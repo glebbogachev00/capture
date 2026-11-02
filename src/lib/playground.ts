@@ -75,6 +75,7 @@ export function trialUsed(
 ): number {
   const today = dayKey(now);
   const firstSeen = new Map<string, number>();
+  const stands = new Set<string>();
   for (const e of ledger) {
     /* Imports and restores describe data movement, not a thought captured in
        the playground, so they do not spend today's allowance. */
@@ -82,8 +83,11 @@ export function trialUsed(
     const id = e.captureId ?? e.id;
     const first = firstSeen.get(id);
     if (first === undefined || e.at < first) firstSeen.set(id, e.at);
+    if (!e.undone) stands.add(id);
   }
-  return [...firstSeen.values()].filter((at) => dayKey(at) === today).length;
+  /* A capture wholly undone spends nothing: undoing and saying it again is
+     one capture. The server's own limits still bound the model calls. */
+  return [...firstSeen].filter(([id, at]) => stands.has(id) && dayKey(at) === today).length;
 }
 
 export function trialRemaining(
