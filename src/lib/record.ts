@@ -21,10 +21,14 @@ export type RecordStats = {
   dictated: number;
 };
 
+/** What the day's numbers count. An undone capture was said but became
+ * nothing, and undoing and saying it again is one thought, not two. */
+const standing = (entry: CaptureEntry) => entry.kind !== "pending" && !entry.undone;
+
 export function recordStats(ledger: CaptureEntry[]): RecordStats {
   const settled = ledger.filter((entry) => entry.kind !== "pending");
   const stats: RecordStats = {
-    total: settled.length,
+    total: settled.filter(standing).length,
     since: null,
     actions: 0,
     threads: 0,
@@ -109,10 +113,17 @@ export function recentCaptures(
  * the recent feed this is chronological.
  */
 export function dayCaptures(ledger: CaptureEntry[], day: string): RecordEntry[] {
-  return ledger
-    .filter((e) => e.kind !== "pending" && dayKey(e.at) === day)
-    .sort((a, b) => a.at - b.at)
-    .map(asEntry);
+  const rows = ledger.filter((e) => e.kind !== "pending" && dayKey(e.at) === day).sort((a, b) => a.at - b.at);
+  /* An undone attempt stays visible, to say again, only while those words
+     stand nowhere else that day, and only once however often it was undone. */
+  const words = (e: CaptureEntry) => (e.raw || e.clean || "").trim();
+  const said = new Set(rows.filter(standing).map(words));
+  return rows.filter((e) => {
+    if (!e.undone) return true;
+    if (said.has(words(e))) return false;
+    said.add(words(e));
+    return true;
+  }).map(asEntry);
 }
 
 export type HeatCell = {
@@ -165,7 +176,7 @@ export function heatGrid(
   const days = weeks * 7;
   const counts = new Map<string, number>();
   for (const e of ledger) {
-    if (e.kind === "pending") continue;
+    if (!standing(e)) continue;
     const key = dayKey(e.at);
     counts.set(key, (counts.get(key) || 0) + 1);
   }
@@ -215,7 +226,7 @@ export type CaughtWords = { words: number; like: string } | null;
 export function caughtWords(ledger: CaptureEntry[]): CaughtWords {
   let words = 0;
   for (const e of ledger) {
-    if (e.kind === "pending") continue;
+    if (!standing(e)) continue;
     const said = (e.raw || e.clean || "").trim();
     if (said) words += said.split(/\s+/).length;
   }

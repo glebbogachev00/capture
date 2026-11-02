@@ -1788,7 +1788,7 @@ describe("local-first planned capture", () => {
     expect(hook.result.current.data.corrections).toEqual([]);
   });
 
-  it("survives reload during inference with raw text, transcript, image, destination, captureId and revision", async () => {
+  it("survives reload during inference with raw text, transcript, image, captureId and revision", async () => {
     const waiting = deferred<Response>();
     stubSortFetch(vi.fn((url: unknown) =>
       String(url) === "/api/sort"
@@ -1810,18 +1810,19 @@ describe("local-first planned capture", () => {
         text: "Reload-safe source",
         src: "Reload-safe source",
         imgs: ["photo-reload"],
-        threadId: "destination",
         pendingRevision: 1,
       }),
     ]);
+    /* The thread was only open on screen, which is not choosing it. */
+    expect(reopened.result.current.unsorted[0]).not.toHaveProperty("threadId");
     const pending = reopened.result.current.data.ledger.find((entry) => entry.kind === "pending" && !entry.undone)!;
     expect(pending).toMatchObject({
       raw: "Reload-safe source",
       transcript: "Reload safe, um, source",
       imgs: ["photo-reload"],
-      openThreadId: "destination",
       pendingRevision: 1,
     });
+    expect(pending).not.toHaveProperty("openThreadId");
     expect(pending.captureId).toEqual(expect.any(String));
     expect(await storage.get(IMG("photo-reload"))).toBe("data:image/png;base64,reload");
   });

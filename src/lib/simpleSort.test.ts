@@ -147,6 +147,19 @@ describe("settleSimpleSort", () => {
     expect(parsePersistedBoard(JSON.parse(JSON.stringify(board)))).not.toBeNull();
   });
 
+  it("makes a new thread when asked, named from the note if the name is taken", () => {
+    const items = [{ kind: "thought" as const, text: raw, threads: [{ name: "Aquarium" }] }];
+    const usual = settleSimpleSort(pending(), { captureId: "cap", revision: 1, now: 10, items });
+    const asked = settleSimpleSort(pending(), { captureId: "cap", revision: 1, now: 10, items, alwaysNew: true });
+    if (usual.status !== "applied" || asked.status !== "applied") throw new Error("not applied");
+    expect(usual.board.threads).toHaveLength(2);
+    expect(asked.board.threads).toHaveLength(3);
+    expect(asked.board.threads.find((thread) => thread.id === "tank")?.frags).toEqual([]);
+    /* Named from the note, so it cannot read as the old thread. */
+    expect(asked.board.threads.filter((thread) => thread.name === "Aquarium")).toHaveLength(1);
+    expect(asked.board.threads.map((thread) => thread.name)).toContain("Check the heater Friday. A magnetic");
+  });
+
   it("never lands twice and never lands a stale revision", () => {
     const first = settleSimpleSort(pending(), { captureId: "cap", revision: 1, now: 10, items: [{ kind: "action", text: "Check the heater" }] });
     if (first.status !== "applied") throw new Error("not applied");

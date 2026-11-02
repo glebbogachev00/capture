@@ -19,8 +19,10 @@ import { z } from "zod";
 export const FILE_SYSTEM =
   "Someone just captured a note in their notes app. Decide which ONE of their existing threads it continues. " +
   "Each thread has a name, what belongs in it, and the start of the note they last added there. Judge by what " +
-  "the note is about and what they are working on, not by shared words. If the capture says where it goes " +
-  "(\"add this to X\"), that thread is the answer. If no thread holds this subject, the answer is null. " +
+  "the note is about and what they are working on, not by shared words: a note on a new idea that merely shares a " +
+  "word or a broad topic with a thread starts its own thread. If the capture says " +
+  "where it goes (\"add this to X\"), that thread is the answer. If no thread holds this same subject, or you are " +
+  "not sure, the answer is null. " +
   "Return JSON {\"threadId\": string | null}.";
 
 type Brief = { id: string; name: string; about: string };

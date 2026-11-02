@@ -1543,7 +1543,7 @@ export function useBoard(now: number) {
           revision: input.revision,
           items,
           now: stamp(),
-          via: response.via,
+          via: response.via, alwaysNew: freshThreadFor.current === input.captureId,
         });
         return settled.status === "applied"
           ? { next: settled.board, tombstones: settled.tombstones, value: settled }
@@ -1683,7 +1683,7 @@ export function useBoard(now: number) {
           imageIds: origin?.imgs,
           at: origin?.at ?? at,
           dictated: origin?.source === "dictated" || dictated,
-          openThreadId: pinnedThread ?? open ?? undefined,
+          openThreadId: pinnedThread, /* chosen, not merely open on screen */
         }, ids);
         let pendingBoard = preserveDraftOrigin(current, staged.board, origin);
         if (force) pendingBoard = {

@@ -111,3 +111,22 @@ it("files Undo's \"A new thread\" in a fresh Thread, not one the sorter reuses",
   expect(hook.result.current.data.threads.find((thread) => thread.id === "operations")?.frags).toHaveLength(1);
   expect(hook.result.current.data.threads.find((thread) => thread.id === "capture")?.frags).toHaveLength(1);
 });
+
+it("files \"A new thread\" in a fresh Thread even with the wrong Thread open on screen", async () => {
+  const hook = renderHook(() => useBoard(Date.now()));
+  await waitFor(() => expect(hook.result.current.loaded).toBe(true));
+
+  await act(async () => { await hook.result.current.submit(false, undefined, raw); });
+  await waitFor(() => expect(
+    hook.result.current.data.threads.find((thread) => thread.id === "operations")?.frags.at(-1)?.text
+  ).toBe(raw));
+  /* Looking at where it landed, then undoing: how the owner met this. */
+  act(() => hook.result.current.setOpen("operations"));
+  await act(async () => { await hook.result.current.undo(); });
+  await act(async () => { await hook.result.current.sortAgainAs("thread", true); });
+
+  await waitFor(() => expect(
+    hook.result.current.data.threads.find((thread) => thread.name === "Release handoff")?.frags.map((frag) => frag.text)
+  ).toEqual([raw]));
+  expect(hook.result.current.data.threads.find((thread) => thread.id === "operations")?.frags).toHaveLength(1);
+});
