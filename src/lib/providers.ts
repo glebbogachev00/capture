@@ -140,16 +140,25 @@ function geminiTier(): Tier {
 
 /**
  * Tiers that can see an image, used for captioning a capture that carries a
- * photo before the sorter files it (Sprint 5). Groq's default model, Mistral,
- * and the OpenRouter default are text-only, so Gemini is the vision tier
- * until another key points at an explicitly vision-capable model. Empty when
- * no vision tier is configured — the app simply sorts without a caption,
- * exactly as it always has.
+ * photo before the sorter files it. Groq's text model, Mistral and the
+ * OpenRouter default are text-only, so the vision tiers name their own
+ * models: Gemini when its key is set, then Groq's Qwen, which reads photos on
+ * the Groq key every deployment already has. Without a vision tier a photo
+ * capture cannot be read and its sort fails closed (503), so leaving Groq
+ * out meant no deployment could sort a photo at all.
  */
 export function visionChain(): Tier[] {
   const tiers: Tier[] = [];
   if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) tiers.push(geminiTier());
-  return tiers;
+  const model = process.env.GROQ_VISION_MODEL || "qwen/qwen3.8-27b";
+  if (process.env.GROQ_API_KEY) tiers.push({ name: "groq-vision", model: groq(model) });
+  if (process.env.GROQ_API_KEY_2) {
+    tiers.push({
+      name: "groq-vision-2",
+      model: createGroq({ apiKey: process.env.GROQ_API_KEY_2 })(model),
+    });
+  }
+  return budgeted(tiers);
 }
 
 export class NoProvidersError extends Error {
@@ -260,7 +269,9 @@ export async function withFallback<T>(
      It is a preference, not a pin: if the named provider is missing or
      refuses, the rest of the chain still answers. */
   prefer?: string,
-  options: { abortSignal?: AbortSignal } = {},
+  /* tiers: a job that needs a different kind of model (a photo needs one
+     that can see) passes its own chain instead of the text chain. */
+  options: { abortSignal?: AbortSignal; tiers?: Tier[] } = {},
 ): Promise<{
   value: T;
   via: string;
@@ -268,7 +279,7 @@ export async function withFallback<T>(
   fallback: boolean;
   fallbackReason: "rate_limit" | "provider_failure" | null;
 }> {
-  const all = chain();
+  const all = options.tiers ?? chain();
   const throwIfAborted = () => {
     if (!options.abortSignal?.aborted) return;
     throw options.abortSignal.reason instanceof Error

@@ -147,6 +147,8 @@ const SETTLER = `You are the settling engine inside capture. A person has just h
 
 Be conservative, not eager. Only make an action when the conversation actually settled on something to do; never invent a task that was not said. When torn between action and thread, choose thread — nothing gets lost there. The longer and more exploratory the conversation, the more likely it is a thread: threads hold the whole thinking, actions hold a task.
 
+Only the person's words become the record. The assistant's turns are there so you know what the person was answering: a suggestion, option or example the assistant raised belongs in the record only when the person took it up in a later turn of their own ("yes", "good idea", or saying it themselves). Anything the assistant offered that the person passed over or never answered stays out of "clean", "actions" and "title".
+
 The "clean" field is the whole conversation distilled: what it settled on, written in their voice, with their specifics kept and nothing invented. Break it into short paragraphs or bullets where it lists things, like the sort engine does.
 
 Set "actions" to every distinct task actually agreed on, each as an imperative one-line item, when kind is action, otherwise empty. Never pad or duplicate the list: keep clauses describing the same task together, and return one item when only one task was agreed on.
@@ -193,7 +195,7 @@ Never do anything else:
 
 function transcript(turns: { role: string; text: string }[]) {
   return turns
-    .map((t, i) => (t.role === "user" ? "You said" : "The assistant said") + ` [${i}]: ${t.text}`)
+    .map((t, i) => (t.role === "user" ? "The person said" : "The assistant said") + ` [${i}]: ${t.text}`)
     .join("\n\n");
 }
 

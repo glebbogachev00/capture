@@ -265,8 +265,10 @@ function boundedCorrectionEvidence(
  * incomplete image evidence and leave the capture pending.
  */
 async function captionImage(dataUrl: string): Promise<string | null> {
-  if (!visionChain().length) return null;
+  const tiers = visionChain();
+  if (!tiers.length) return null;
   try {
+    /* Only tiers that can see: the text chain would reject the photo. */
     const { value } = await withFallback(async (tier) => {
       const out = await generateText({
         model: tier.model,
@@ -283,7 +285,7 @@ async function captionImage(dataUrl: string): Promise<string | null> {
         ],
       });
       return { text: out.text };
-    });
+    }, undefined, { tiers });
     return tidyCaption(value.text);
   } catch {
     /* Missing image meaning is represented as null and fails the sort closed. */

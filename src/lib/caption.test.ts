@@ -48,6 +48,10 @@ describe("mergeCaptions", () => {
 });
 
 describe("tidyCaption", () => {
+  it("drops a reasoning model's inline thinking", () => {
+    expect(tidyCaption("<think>It is a desk.</think>\nA desk with a notebook.")).toBe("A desk with a notebook.");
+    expect(tidyCaption("<think>unfinished")).toBeNull();
+  });
   it("trims and collapses whitespace", () => {
     expect(tidyCaption("  A   sentence.  ")).toBe("A sentence.");
   });

@@ -6,7 +6,7 @@ import {
   type PlannedRoutingPlan,
 } from "./plannedRouting";
 import { generatePlannedRoutingCandidate } from "./plannedRoutingGeneration";
-import { chain } from "./providers";
+import { chain, visionChain, withFallback } from "./providers";
 
 const ALL_KEYS = [
   "OPENROUTER_API_KEY",
@@ -132,6 +132,40 @@ describe("chain", () => {
     expect(idOf(chain().find((t) => t.name === "openrouter"))).toBe(
       "anthropic/claude-sonnet-4.5"
     );
+  });
+});
+
+describe("visionChain", () => {
+  it("reads photos on the Groq keys a deployment already has, after Gemini", () => {
+    for (const k of ALL_KEYS) vi.stubEnv(k, "test-key");
+    expect(visionChain().map((t) => t.name)).toEqual(["gemini", "groq-vision", "groq-vision-2"]);
+  });
+
+  it("can read photos with only a Groq key", () => {
+    for (const k of ALL_KEYS) vi.stubEnv(k, "");
+    vi.stubEnv("GROQ_API_KEY", "test-key");
+    const tiers = visionChain();
+    expect(tiers.map((t) => t.name)).toEqual(["groq-vision"]);
+    expect((tiers[0].model as { modelId: string }).modelId).toBe("qwen/qwen3.8-27b");
+  });
+
+  it("never offers a text-only model as a vision tier", () => {
+    for (const k of ALL_KEYS) vi.stubEnv(k, "");
+    vi.stubEnv("CEREBRAS_API_KEY", "test-key");
+    vi.stubEnv("MISTRAL_API_KEY", "test-key");
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    expect(visionChain()).toEqual([]);
+  });
+
+  it("runs a job on the tiers it passes instead of the text chain", async () => {
+    for (const k of ALL_KEYS) vi.stubEnv(k, "test-key");
+    const seen: string[] = [];
+    const { via } = await withFallback(async (tier) => {
+      seen.push(tier.name);
+      return "ok";
+    }, undefined, { tiers: visionChain() });
+    expect(seen).toEqual(["gemini"]);
+    expect(via).toBe("gemini");
   });
 });
 
