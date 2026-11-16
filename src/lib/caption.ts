@@ -96,7 +96,8 @@ function normalizedCaptionSentinel(text: string): string {
 /** Trim a model's caption to something the sorter can carry without padding
     the prompt — a sentence, not an essay. */
 export function tidyCaption(text: string): string | null {
-  const t = (text || "").trim().replace(/\s+/g, " ");
+  /* A reasoning model can return its thinking inline; only the answer is the caption. */
+  const t = (text || "").replace(/<think>[\s\S]*?(<\/think>|$)/gi, "").trim().replace(/\s+/g, " ");
   if (!t || CAPTION_SENTINELS.has(normalizedCaptionSentinel(t))) return null;
   return t.slice(0, 300);
 }
